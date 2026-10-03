@@ -33,7 +33,7 @@ public sealed class Vehicle
     readonly GroundHit[] _hits = new GroundHit[4];
     readonly Vector3[] _mounts = new Vector3[4]; // body space, wheel centre at full droop + Travel
     readonly Vector3 _inertia;                   // body-space principal moments
-    float _steer, _shiftTimer;
+    float _steer, _shiftTimer, _rearGrip = 1, _prevBeta;
 
     public Vehicle(CarSpec spec)
     {
@@ -79,7 +79,8 @@ public sealed class Vehicle
         Velocity = AngularVelocity = Vector3.Zero;
         Gear = 1;
         Rpm = Spec.IdleRpm;
-        _steer = _shiftTimer = 0;
+        _steer = _shiftTimer = _prevBeta = 0;
+        _rearGrip = 1;
         SlipAngle = 0;
         for (var i = 0; i < 4; i++)
             _wheels[i] = new WheelState { LocalCenter = _mounts[i] - Vector3.UnitY * Spec.Travel };
@@ -91,6 +92,7 @@ public sealed class Vehicle
         var brake = Math.Clamp(input.Brake, 0, 1);
         UpdateGear(input.Shift, dt);
         UpdateSteer(Math.Clamp(input.Steer, -1, 1), dt);
+        UpdateDriftGrip(Math.Abs(input.Steer), throttle, input.Handbrake);
         WallContacts = 0;
         var h = dt / Spec.Substeps;
         for (var s = 0; s < Spec.Substeps; s++)
@@ -101,6 +103,37 @@ public sealed class Vehicle
 
         var vb = Vector3.Transform(Velocity, Quaternion.Conjugate(Orientation));
         SlipAngle = vb.X * vb.X + vb.Z * vb.Z < 1 ? 0 : MathF.Atan2(-vb.X, vb.Z);
+        DriftStabilise(dt, input.Handbrake);
+    }
+
+    /// <summary>
+    ///     Arcade: rear tyres lose some grip at full lock + full throttle at speed, and keep it reduced while the car
+    ///     slides on throttle — drifts start from steering and hold. Part throttle = grip cornering; lift off and grip returns.
+    /// </summary>
+    void UpdateDriftGrip(float steerInput, float throttle, bool handbrake)
+    {
+        var fwd = Vector3.Dot(Velocity, Vector3.Transform(Vector3.UnitZ, Orientation));
+        var sliding = MathF.Abs(SlipAngle) > 0.09f;
+        var entering = steerInput > 0.8f && throttle > 0.8f && fwd > Spec.DriftEntrySpeed;
+        var target = handbrake ? Spec.HandbrakeRearGrip
+            : entering || sliding && throttle > 0.3f && steerInput > 0.3f ? Spec.DriftRearGrip : 1f; // let go of the wheel = grip back
+        _rearGrip += (target - _rearGrip) * 0.15f;
+    }
+
+    /// <summary>
+    ///     Arcade: damps the rate of change of the body slip angle (pendulum snap-back, spins) without touching a
+    ///     steady drift, and springs the slip back beyond <see cref="CarSpec.MaxDriftAngle"/>.
+    /// </summary>
+    void DriftStabilise(float dt, bool handbrake)
+    {
+        var betaRate = (SlipAngle - _prevBeta) / dt;
+        _prevBeta = SlipAngle;
+        if (Velocity.LengthSquared() < 25) return;
+        var over = MathF.Max(MathF.Abs(SlipAngle) - Spec.MaxDriftAngle, 0) * MathF.Sign(SlipAngle);
+        // +yaw (nose left) raises β, so the corrective yaw acceleration has the opposite sign of β's change/excess
+        var yawAcc = -Spec.DriftDamping * (handbrake ? Spec.HandbrakeDamping : 1) * betaRate - 20f * over; // handbrake = deliberate rotation
+        var up = Vector3.Transform(Vector3.UnitY, Orientation);
+        AngularVelocity += up * (yawAcc * dt);
     }
 
     float Ratio => Gear switch
@@ -131,7 +164,16 @@ public sealed class Vehicle
     {
         var fwd = Vector3.Dot(Velocity, Vector3.Transform(Vector3.UnitZ, Orientation));
         var target = steer * Spec.MaxSteer / (1 + MathF.Abs(fwd) * Spec.SteerSpeedFactor);
-        if (fwd > 2) target += Spec.CounterSteerAssist * SlipAngle; // steer into the slide
+        if (fwd > 2)
+        {
+            target += Spec.CounterSteerAssist * SlipAngle; // steer into the slide
+            // never ask the front tyres for much more than their peak slip angle (full key = max cornering, not plough)
+            var vb = Vector3.Transform(Velocity + Vector3.Cross(AngularVelocity, Vector3.Transform(_mounts[0] with { X = 0 }, Orientation)),
+                Quaternion.Conjugate(Orientation));
+            var travel = MathF.Atan2(-vb.X, vb.Z); // front axle travel direction, + = right
+            var lim = Spec.SteerSlipLimit * Spec.PeakSlipAngle;
+            target = Math.Clamp(target, travel - lim, travel + lim);
+        }
         target = Math.Clamp(target, -Spec.MaxSteer, Spec.MaxSteer);
         var rate = Spec.SteerRate * dt;
         _steer += Math.Clamp(target - _steer, -rate, rate);
@@ -228,7 +270,8 @@ public sealed class Vehicle
                 var kappa = (omega * r - vx) / denom;
                 var alpha = MathF.Atan(vy / denom);
 
-                var mu = s.Grip * (SurfaceGrip?.Invoke(hit.Surface) ?? 1) * MathF.Max(0.3f, 1 - s.LoadSensitivity * (fs / s.NominalLoad - 1));
+                var mu = s.Grip * (SurfaceGrip?.Invoke(hit.Surface) ?? 1) * MathF.Max(0.3f, 1 - s.LoadSensitivity * (fs / s.NominalLoad - 1))
+                         * (front ? 1 : s.RearGripFactor * _rearGrip);
                 var sx = kappa / s.PeakSlipRatio;
                 var sy = alpha / s.PeakSlipAngle;
                 var sigma = MathF.Sqrt(sx * sx + sy * sy);

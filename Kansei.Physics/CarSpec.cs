@@ -10,7 +10,7 @@ public sealed record CarSpec
 
     // Body
     public float Mass { get; init; } = 940f;
-    public float CogHeight { get; init; } = 0.48f;           // above ground at rest
+    public float CogHeight { get; init; } = 0.36f;           // above ground at rest; lower than real (0.48) so arcade grip does not roll the car
     public float FrontWeight { get; init; } = 0.53f;          // static share on the front axle
     public float Wheelbase { get; init; } = 2.40f;
     public float Track { get; init; } = 1.35f;
@@ -31,7 +31,8 @@ public sealed record CarSpec
     // Wheels / tyres (185/70R13)
     public float WheelRadius { get; init; } = 0.29f;
     public float WheelInertia { get; init; } = 1.0f;          // kg·m², wheel + tyre + brake
-    public float Grip { get; init; } = 1.05f;                 // peak μ (Magic Formula D / Fz)
+    public float Grip { get; init; } = 1.7f;                  // peak μ (Magic Formula D / Fz); arcade level (~1.45 g cornering), a road tyre is ~1.05
+    public float RearGripFactor { get; init; } = 1.12f;         // rear μ multiplier: >1 = stable/understeer bias, drift comes from the drift layer
     public float PeakSlipRatio { get; init; } = 0.10f;
     public float PeakSlipAngle { get; init; } = 0.14f;        // ~8°
     public float TyreB { get; init; } = 2.35f;                // with C=1.35, E=0 the peak sits at normalised slip 1
@@ -63,13 +64,22 @@ public sealed record CarSpec
     // Brakes
     public float BrakeTorque { get; init; } = 3200f;          // Nm, all four wheels together
     public float BrakeBias { get; init; } = 0.65f;            // front share
-    public float HandbrakeTorque { get; init; } = 1200f;      // Nm per rear wheel
+    public float HandbrakeTorque { get; init; } = 800f;       // Nm per rear wheel (enough to slide, not an instant lock)
 
     // Steering
     public float MaxSteer { get; init; } = 0.61f;             // ~35° full lock
     public float SteerSpeedFactor { get; init; } = 0.05f;     // input lock = MaxSteer / (1 + v·factor)
     public float SteerRate { get; init; } = 3f;               // rad/s at the wheels
     public float CounterSteerAssist { get; init; } = 0.8f;    // steer added per rad of body slip, 0 = off
+    public float SteerSlipLimit { get; init; } = 1.15f;       // front wheels steer at most this × PeakSlipAngle past their travel direction
+
+    // Arcade drift layer (Initial D feel: steer-in drifts, slides that hold and settle instead of snapping)
+    public float DriftDamping { get; init; } = 5f;            // yaw torque per rad/s of body-slip-angle change, × yaw inertia
+    public float HandbrakeDamping { get; init; } = 0.5f;      // DriftDamping factor while the handbrake is pulled
+    public float HandbrakeRearGrip { get; init; } = 0.4f;     // rear grip factor while the handbrake is pulled (arcade: rotates the car)
+    public float MaxDriftAngle { get; init; } = 0.75f;        // rad (~43°); beyond it a spring pushes the slip back
+    public float DriftRearGrip { get; init; } = 0.75f;        // rear grip factor while drifting/entering on throttle
+    public float DriftEntrySpeed { get; init; } = 20f;        // m/s; full lock + full throttle above this starts a drift
 
     // Integration
     public int Substeps { get; init; } = 2;
