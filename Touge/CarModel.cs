@@ -1,0 +1,67 @@
+using System.Numerics;
+using Kansei.Graphics;
+using Touge.Formats;
+
+namespace Touge;
+
+/// <summary>
+///     A car from HCAR.AFS with paint from CAR_ENV.BIN: default body parts as one mesh, one wheel mesh
+///     (tire + brake disk; calipers left out) and the four wheel transforms in car space (fr_l, fr_r, re_l, re_r).
+/// </summary>
+public sealed record CarModel(StaticMesh Body, StaticMesh Wheel, Matrix4x4[] Wheels, float WheelRadius) : IDisposable
+{
+    public static CarModel Load(Iso9660 iso, string car, int paint, WorldRenderer renderer)
+    {
+        var hcar = Afs.FromBytes(iso.ReadFile("CDVD/DATA/MODEL/HCAR.AFS"), iso.ReadFile("CDVD/DATA/MODEL/HCAR.TBL"));
+        var pac = hcar.Read(hcar.Find(car + ".PAC") ?? throw new FileNotFoundException(car + ".PAC"));
+        var colours = CarPaint.Parse(iso.ReadFile("CDVD/DATA/BINARY/CAR_ENV.BIN"))[Array.IndexOf(CarPaint.Cars, car)];
+        var entries = Pac.Entries(pac);
+
+        var textures = new Dictionary<string, int> { [""] = renderer.AddTexture(1, 1, [255, 255, 255, 255], "white") };
+        foreach (var e in entries.Where(e => e.Type == 1))
+        {
+            var (w, h, rgba) = Gim.Decode(pac.AsSpan(e.Offset, e.Size));
+            textures[e.Name] = renderer.AddTexture(w, h, rgba, e.Name);
+        }
+        var parts = entries.Where(e => e.Type == 3 && Mesh.IsCmd(pac.AsSpan(e.Offset, e.Size)))
+            .ToDictionary(e => e.Name[(car.Length + 1)..], e => CarPaint.Apply(Mesh.Parse(pac.AsSpan(e.Offset, e.Size)), colours[paint]));
+
+        var tire = parts["tire00FL"];
+        var radius = tire.Materials.SelectMany(m => m.Triangles).Max(v => v.Position.Y);
+        return new CarModel(
+            Build(renderer.Device, parts.Where(p => CarParts.IsDefaultBody(p.Key)).Select(p => p.Value), textures),
+            Build(renderer.Device, [tire, parts["Bdisk00"]], textures),
+            CarParts.Wheels(parts["body00"]), radius);
+    }
+
+    /// <summary>
+    ///     One batch per material; decal materials (flag 0x400, second pass in the game) go last so they win
+    ///     against the coplanar body under reversed-Z GreaterEqual. Material RGB (0x80 = 1.0) is baked into the
+    ///     vertex colour, alpha carries gloss (paint 1, other dark untextured parts = glass 0.5, unverified).
+    /// </summary>
+    private static StaticMesh Build(Penelope.IPenelopeDevice device, IEnumerable<Mesh> meshes, Dictionary<string, int> textures)
+    {
+        var verts = new List<CarVertex>();
+        var batches = new List<MeshBatch>();
+        foreach (var decals in new[] { false, true })
+        foreach (var mesh in meshes)
+        foreach (var m in mesh.Materials.Where(m => (m.Flags & 0x400) != 0 == decals))
+        {
+            var tex = textures[m.Texture >= 0 && m.Texture < mesh.Textures.Length ? mesh.Textures[m.Texture] : ""];
+            var rgb = new Vector3(m.Rgba & 0xFF, (m.Rgba >> 8) & 0xFF, (m.Rgba >> 16) & 0xFF) / 128f;
+            var gloss = (m.Flags & CarPaint.PaintFlag) != 0 ? 1f : m.Flags == 0x1000 && m.Texture < 0 ? 0.5f : 0f;
+            var first = verts.Count;
+            foreach (var v in m.Triangles) verts.Add(new CarVertex(v.Position, v.Normal, v.Uv, new Vector4(rgb, gloss)));
+            if (verts.Count > first) batches.Add(new MeshBatch(tex, first, verts.Count - first));
+        }
+        var indices = new uint[verts.Count];
+        for (var i = 0; i < indices.Length; i++) indices[i] = (uint)i;
+        return new StaticMesh(device, verts.ToArray(), indices, batches);
+    }
+
+    public void Dispose()
+    {
+        Body.Dispose();
+        Wheel.Dispose();
+    }
+}

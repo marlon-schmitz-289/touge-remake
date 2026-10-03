@@ -27,6 +27,9 @@ public sealed class WorldRenderer : IDisposable
     private int _w, _h;
 
     public IPenelopeDevice Device => _device;
+    internal BindGroupLayoutHandle TextureLayout => _layout;
+    internal static TextureFormat Depth => DepthFormat;
+    internal BindGroupHandle TextureGroup(int texture) => _textures[texture].Group;
     public Vector3 FogColor = new(0.62f, 0.72f, 0.85f);
     public float FogDistance = 1200f;
 
