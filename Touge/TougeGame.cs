@@ -10,7 +10,7 @@ namespace Touge;
 ///     Phase-1 sandbox: course from the ISO, free-fly camera.
 ///     WASD fly, Q/E down/up, right mouse or arrow keys look, Shift fast, Space jump to driving line, Esc quit.
 /// </summary>
-public sealed class TougeGame(string isoPath, string courseTime, string? shotPath = null) : KanseiGame
+public sealed class TougeGame(string isoPath, string courseTime, string? shotPath = null, int startPoint = 0) : KanseiGame
 {
     private FrameCapture? _capture;
     private int _shotState; // 0 none, 1 render next frame into capture, 2 read back
@@ -29,7 +29,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         var sw = System.Diagnostics.Stopwatch.StartNew();
         _course = CourseLoader.Load(iso, courseTime, _renderer);
         Console.WriteLine($"[Touge] {courseTime} geladen in {sw.ElapsedMilliseconds} ms, {_course.World.Batches.Count} Batches");
-        JumpToLine(0);
+        JumpToLine(startPoint);
         if (shotPath != null) (_capture, _shotState) = (new FrameCapture(Device, 1280, 720), 1);
     }
 
@@ -98,8 +98,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         var aspect = shot != null ? (float)shot.Width / shot.Height
             : ctx.Viewport.Height > 0 ? (float)ctx.Viewport.Width / ctx.Viewport.Height : 16f / 9f;
         // Game data is right-handed (y up). Vulkan clip space is Y-down, Metal/GL Y-up.
-        var proj = Matrix4x4.CreatePerspectiveFieldOfView(MathF.PI / 3f, aspect, 0.3f, 5000f);
-        if (Device.Backend == Penelope.BackendKind.Vulkan) proj.M22 *= -1f;
+        var proj = WorldRenderer.Perspective(MathF.PI / 3f, aspect, 0.3f, Device.Backend == Penelope.BackendKind.Vulkan);
         var view = Matrix4x4.CreateLookAt(_pos, _pos + Forward(), Vector3.UnitY);
 
         var pass = _renderer.BeginScene(ctx.Encoder, _renderer.FogColor, shot);

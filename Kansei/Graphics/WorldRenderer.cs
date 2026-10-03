@@ -6,8 +6,10 @@ namespace Kansei.Graphics;
 
 /// <summary>
 ///     Forward renderer for prelit static geometry: texture × vertex colour, alpha test, distance fog.
-///     No backface culling (the PS2 draws foliage cards from both sides); coplanar duplicates must be removed
-///     by the caller, else they z-fight. Owns textures and a depth buffer.
+///     No backface culling (the PS2 draws foliage cards from both sides); exact duplicates must be removed by
+///     the caller. Reversed-Z (use <see cref="Perspective"/>) with GreaterEqual: overlay layers a few cm apart
+///     stay stable at distance, exactly coplanar layers resolve by draw order (later wins), like on the PS2.
+///     Owns textures and a depth buffer.
 /// </summary>
 public sealed class WorldRenderer : IDisposable
 {
@@ -37,9 +39,23 @@ public sealed class WorldRenderer : IDisposable
         _sampler = device.GetSampler(SamplerDesc.LinearWrap);
         _pipeline = device.CreateRenderPipeline(new RenderPipelineDesc(
             _shader, WorldVertex.Layout, PrimitiveTopology.TriangleList,
-            RasterizerState.Default, DepthStencilState.DepthLessWrite, MultisampleState.Disabled,
+            RasterizerState.Default, DepthStencilState.DepthLessWrite with { DepthCompare = CompareFunc.GreaterEqual }, MultisampleState.Disabled,
             [new ColorTargetState(device.SwapchainFormat, BlendState.Opaque)], DepthFormat,
             [_layout], [new PushConstantRange(ShaderStage.Vertex | ShaderStage.Fragment, 0, PushBytes)], "world"));
+    }
+
+    /// <summary>
+    ///     Right-handed, infinite far plane, reversed-Z (depth 1 at <paramref name="near"/>, 0 at infinity, range 0..1).
+    ///     <paramref name="flipY"/> for Y-down clip space (Vulkan).
+    /// </summary>
+    public static Matrix4x4 Perspective(float fovY, float aspect, float near, bool flipY)
+    {
+        var f = 1f / MathF.Tan(fovY / 2);
+        return new Matrix4x4(
+            f / aspect, 0, 0, 0,
+            0, flipY ? -f : f, 0, 0,
+            0, 0, 0, -1,
+            0, 0, near, 0);
     }
 
     /// <summary>Uploads an RGBA8 texture, returns its index for <see cref="MeshBatch.Texture"/>.</summary>
@@ -59,7 +75,7 @@ public sealed class WorldRenderer : IDisposable
         var view = target?.View ?? _device.CurrentSwapchainView;
         var pass = encoder.BeginRenderPass(new RenderPassDesc(
             [new ColorAttachment(view, LoadOp.Clear, StoreOp.Store, new ClearColor(clear.X, clear.Y, clear.Z, 1f))],
-            new DepthStencilAttachment(_depthView, LoadOp.Clear, StoreOp.Store, 1f, LoadOp.Load, StoreOp.DontCare, 0, false, false),
+            new DepthStencilAttachment(_depthView, LoadOp.Clear, StoreOp.Store, 0f, LoadOp.Load, StoreOp.DontCare, 0, false, false),
             DebugName: "world"));
         pass.SetViewport(0, 0, _w, _h);
         return pass;
