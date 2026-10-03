@@ -45,3 +45,31 @@ public class LzTests
         Assert.Equal("ABABABAB"u8.ToArray(), Lz.Decompress(d));
     }
 }
+
+public class CarPaintTests
+{
+    /// <summary>Two CEB blocks; colour RGB at +0/+4/+8 of each 0x70 record; Apply only touches flag-0x100 materials.</summary>
+    [Fact]
+    public void Parses_blocks_and_paints_flagged_materials()
+    {
+        var d = new byte[2 * 0x10 + 3 * 0x70];
+        void Block(int p, short car, short n)
+        {
+            "CEB\0"u8.CopyTo(d.AsSpan(p));
+            BinaryPrimitives.WriteInt16LittleEndian(d.AsSpan(p + 4), car);
+            BinaryPrimitives.WriteInt16LittleEndian(d.AsSpan(p + 6), n);
+        }
+        Block(0, 23, 2);
+        d[0x10] = 0xD7; d[0x14] = 0xC3; d[0x18] = 0x12; // colour 0
+        d[0x80] = 0xB9;                                 // colour 1
+        Block(0xF0, 25, 1);
+        d[0x100] = 0xDC; d[0x104] = 0xDC; d[0x108] = 0xDC;
+
+        var cars = CarPaint.Parse(d);
+        Assert.Equal([0x12C3D7u, 0xB9u], cars[23]);
+        Assert.Equal([0xDCDCDCu], cars[25]);
+
+        var m = new Mesh { Textures = [], Nodes = [], Materials = [new(-1, 0x1100, 0x40FFFFFF, []), new(-1, 0x3000, 0x80111111, [])] };
+        Assert.Equal([0x4012C3D7u, 0x80111111u], CarPaint.Apply(m, cars[23][0]).Materials.Select(x => x.Rgba));
+    }
+}

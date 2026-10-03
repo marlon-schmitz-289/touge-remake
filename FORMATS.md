@@ -30,8 +30,15 @@ Eintrag 0x20: char name[16], u32 offset (ab PAC-Start), u32 size, u32 type, u32 
 `"CMD\0" "1.02V"`; 0x10 #Texturen, 0x14 #Knoten, 0x18 #Materialien, 0x20 Textur-Namen (16 B), 0x24 Knoten (name[16] + 4×4-Matrix), danach Materialien (0x20 B: Offset, QWC, Textur-Index, ?, Flags, RGBA, #Dreiecke, #Vertices), 0x30 BBox.
 - Daten = VIF-Stream, pro Batch: V4-32 → addr 1 (xyz + ADC-Bit 0x8000 in w), V3-32 → addr 2 (Normale), V2-32 → addr 3 (UV), V3-32 → addr 4 (?), MSCAL. Triangle-Strips.
 - Vertices im Auto-Koordinatensystem (Meter, +Z vorne, +Y oben). Räder lokal, Knoten `fr_l/fr_r/re_l/re_r` am `body00` geben die Position. AE86: `fr_rk_close/open` = Klappscheinwerfer.
-- Material-Flags: 0x1100 + Alpha 0x40 = Glas; Lack ohne Textur nur über RGBA.
+- Material-Flags (Zeichnen `0x1860E0`): **0x100 = Lack** (RGB kommt zur Laufzeit aus `CAR_ENV.BIN`, siehe unten; das sind die 0x1100/Alpha-0x40-Materialien, *kein* Glas), 0x200 = RGB aus Material, Alpha von der Instanz, 0x400 = zweiter Durchgang (Decals). 0x1000/0x2000/0x800/0x4000/0x8000 nicht genau geklärt.
 - Teile mit Varianten-Suffix `00`–`05` (Tuning), `tire00FL`…, `Bcali00FR`… (Bremssättel).
+
+## CAR_ENV.BIN (Lackfarben) – geknackt
+`BINARY/CAR_ENV.BIN`, geladen in `0x15CBB0`, angewendet in `0x15D060` (Auto-ID, Farbindex). 32 Blöcke hintereinander: `"CEB\0"`, s16 Auto-ID, s16 #Farben, 8 B 0; dann #Farben × 0x70: u32 R, G, B, A (0xFF), 0x60 B Tabelle (12 Lichtzustände × 2 × 2 × Bytepaar, Standard Zeile 11 = `52 52`).
+- Auto-ID = Index in der Namensliste im ELF (`0x2C4978`: AE86T, AE86L, AE85, MR2 … CAPPU), siehe `CarPaint.Cars`.
+- Farbe 0 = Standard (Anime-Farbe: FD3S gelb, FC3S weiß, R32 schwarz, AE86T weiß – die schwarze Panda-Unterseite ist im Mesh). 1–7 Farben je Auto.
+- Das Spiel setzt RGB auf alle Teile (`0x193E90`), nur Materialien mit Flag 0x100 übernehmen es. Das Bytepaar geht an `0x193F00` → Alpha der Lackfarbe bzw. zweiter Alpha-Wert (vermutlich Reflexionsstärke, nicht verifiziert).
+- Sonderfälle in `0x15D060` nicht umgesetzt: AE86T Farbe 1 tauscht `_emblem00/01`; SIL80, S2000, FD3S (und S13) bekommen bei Teile-Byte 0x13 = 5 fest kodierte Farben.
 
 ## LZ (gepackte PAC-Einträge) – geknackt
 u32 `0x01DA3D12` (Byte 3: 1 = gepackt, 0 = roh), u32 entpackte Größe, u32 gepackte Größe. LZSS mit 64-KB-Fenster (Start `0xFEFD`, genullt), Flag-Byte LSB zuerst (1 = Literal), Match = u16 absolute Fensterposition + u8 Länge−4. Im Spiel `0x1C54F0`. Siehe `Lz.cs`.
@@ -64,4 +71,5 @@ Loader `0x15F340`. Header 0x30 (u32): `"1LCR"`, Version 1, #Materialien, Off, #V
 
 ## Offen
 - NAVI, INFO (`CIF`); zweites u32 im ROAD-Header
-- Bedeutung von VU addr 4, Material-Flags im Detail
+- Bedeutung von VU addr 4, Material-Flags außer 0x100/0x200/0x400
+- CAR_ENV-Bytepaar-Tabelle: welcher Lichtzustand welche Zeile

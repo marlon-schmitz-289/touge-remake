@@ -5,7 +5,7 @@ using Touge.Formats;
 // idss textures <file.PAC> <outDir>      – alle GIM-Texturen als PNG
 // idss check <PAC...>                   – alle Texturen und Meshes testweise dekodieren
 // idss course <COURSE.PAC> <outDir>     – Strecke (crs/tree/gate/mnt/sky, ohne LOD/Schatten) als OBJ
-// idss car <CAR.PAC> <outDir>            – Standard-Teile (…00) + Räder als OBJ, Texturen als PNG
+// idss car <CAR.PAC> <outDir> [<CAR_ENV.BIN> [n]] – Standard-Teile (…00) + Räder als OBJ, Texturen als PNG; Lack Nr. n (0 = Standard)
 // idss coli <CRS_COLI_*.BIN> <out.obj>  – Kollisionsfläche als OBJ (Gruppe je Material), Histogramm
 // idss drv <CRS_DRV_*.BIN>               – gültige Fahrlinienpunkte: i x y z
 // idss road <CRS_ROAD_*.BIN> [CRS_ENV_*.BIN] [CRS_FLR_*.BIN] – i x y z [top bottom left right] [flare]
@@ -55,8 +55,8 @@ switch (args)
         ExportCourse(path, outDir);
         break;
 
-    case ["car", var path, var outDir]:
-        ExportCar(path, outDir);
+    case ["car", var path, var outDir, .. var paint] when paint.Length <= 2:
+        ExportCar(path, outDir, paint.Length == 0 ? null : Paint(path, paint[0], paint.Length > 1 ? int.Parse(paint[1]) : 0));
         break;
 
     case ["coli", var path, var outObj]:
@@ -107,7 +107,7 @@ switch (args)
         return bad == 0 ? 0 : 1;
 
     default:
-        Console.Error.WriteLine("usage: idss list <AFS|PAC> | extract <AFS> <outDir> | textures <PAC> <outDir> | car <PAC> <outDir> | check <PAC...> | course <PAC> <outDir> | drv <CRS_DRV> | road <CRS_ROAD> [CRS_ENV] [CRS_FLR] | coli <BIN> <out.obj>");
+        Console.Error.WriteLine("usage: idss list <AFS|PAC> | extract <AFS> <outDir> | textures <PAC> <outDir> | car <PAC> <outDir> [<CAR_ENV.BIN> [n]] | check <PAC...> | course <PAC> <outDir> | drv <CRS_DRV> | road <CRS_ROAD> [CRS_ENV] [CRS_FLR] | coli <BIN> <out.obj>");
         return 1;
 }
 return 0;
@@ -123,7 +123,16 @@ static void PrintPac(byte[] d, string indent)
     }
 }
 
-static void ExportCar(string path, string outDir)
+static uint Paint(string carPac, string envBin, int index)
+{
+    var car = Array.IndexOf(CarPaint.Cars, Path.GetFileNameWithoutExtension(carPac).ToUpperInvariant());
+    var cols = CarPaint.Parse(File.ReadAllBytes(envBin)).GetValueOrDefault(car)
+               ?? throw new ArgumentException($"{carPac}: keine Lackfarben für dieses Auto");
+    if ((uint)index >= cols.Length) throw new ArgumentException($"Lack {index}: nur 0–{cols.Length - 1}");
+    return cols[index];
+}
+
+static void ExportCar(string path, string outDir, uint? paint)
 {
     var pac = File.ReadAllBytes(path);
     var name = Path.GetFileNameWithoutExtension(path);
@@ -136,7 +145,8 @@ static void ExportCar(string path, string outDir)
     }
 
     var parts = entries.Where(e => e.Type == 3 && Mesh.IsCmd(pac.AsSpan(e.Offset, e.Size)))
-        .ToDictionary(e => e.Name[(name.Length + 1)..], e => Mesh.Parse(pac.AsSpan(e.Offset, e.Size)));
+        .ToDictionary(e => e.Name[(name.Length + 1)..], e => Mesh.Parse(pac.AsSpan(e.Offset, e.Size)))
+        .ToDictionary(p => p.Key, p => paint is { } rgb ? CarPaint.Apply(p.Value, rgb) : p.Value);
     using var obj = new Obj(Path.Combine(outDir, name + ".obj"));
     foreach (var (part, cmd) in parts.Where(p => p.Key.EndsWith("00") && !p.Key.Contains("shd") && !p.Key.StartsWith("tire") && !p.Key.StartsWith("Bdisk")))
         obj.Add(part, cmd, System.Numerics.Matrix4x4.Identity);
