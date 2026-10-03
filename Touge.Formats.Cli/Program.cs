@@ -148,14 +148,14 @@ static void ExportCar(string path, string outDir, uint? paint)
         .ToDictionary(e => e.Name[(name.Length + 1)..], e => Mesh.Parse(pac.AsSpan(e.Offset, e.Size)))
         .ToDictionary(p => p.Key, p => paint is { } rgb ? CarPaint.Apply(p.Value, rgb) : p.Value);
     using var obj = new Obj(Path.Combine(outDir, name + ".obj"));
-    foreach (var (part, cmd) in parts.Where(p => p.Key.EndsWith("00") && !p.Key.Contains("shd") && !p.Key.StartsWith("tire") && !p.Key.StartsWith("Bdisk")))
+    foreach (var (part, cmd) in parts.Where(p => CarParts.IsDefaultBody(p.Key)))
         obj.Add(part, cmd, System.Numerics.Matrix4x4.Identity);
 
     // Räder an den Achs-Knoten der Karosserie; rechte Seite um 180° gedreht
-    var wheels = parts["body00"].Nodes.Where(n => n.Name is "fr_l" or "fr_r" or "re_l" or "re_r");
-    foreach (var (node, m) in wheels)
+    var wheels = CarParts.Wheels(parts["body00"]);
+    for (var i = 0; i < wheels.Length; i++)
     {
-        var t = node.EndsWith("_r") ? System.Numerics.Matrix4x4.CreateRotationY(MathF.PI) * m : m;
+        var (node, t) = (CarParts.WheelNodes[i], wheels[i]);
         foreach (var w in new[] { "tire00FL", "Bdisk00" })
             if (parts.TryGetValue(w, out var c)) obj.Add($"{w}_{node}", c, t);
         var cali = "Bcali00" + node.ToUpperInvariant().Replace("_", "")[..2].Replace("FR", "F").Replace("RE", "R") + (node.EndsWith("_l") ? "L" : "R");

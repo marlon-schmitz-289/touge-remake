@@ -9,16 +9,17 @@ Assets kommen zur Laufzeit aus der eigenen ISO (SLPM-65268), nie ins Repo.
 | Projekt | Inhalt |
 |---|---|
 | `Penelope` | GPU-Abstraktion (Vulkan/Metal/OpenGL), aus MEFactory übernommen |
-| `Kansei` | Engine: Fenster, Input, Loop mit fester Tick-Rate, World-Renderer |
+| `Kansei` | Engine: Fenster, Input, Loop mit fester Tick-Rate, World- und Car-Renderer |
 | `Touge.Formats` | Spielformate: ISO, AFS, PAC, LZ, GIM, CMD/SMD, Kollision, Fahrlinie, Lack |
 | `Touge.Formats.Cli` | `idss` – Formate untersuchen/exportieren |
-| `Touge` | Das Spiel (derzeit: Strecke abfliegen) |
+| `Touge` | Das Spiel (derzeit: Strecke abfliegen, AE86 steht an der Startlinie) |
 
 ## Starten
 
 ```sh
 dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso" [AKINA_DAY|AKINA_NIT|USUI_NIT|…]
 dotnet run --project Touge -- "<iso>" --shot out/akina.png   # ein Frame als PNG, dann Ende
+dotnet run --project Touge -- "<iso>" --shot out/ae86.png --orbit 35   # Kamera ums Auto (0 vorne, 90 links, 180 hinten)
 ```
 
 Steuerung: WASD fliegen, Q/E runter/hoch, rechte Maustaste oder Pfeiltasten umschauen, Shift schnell,
