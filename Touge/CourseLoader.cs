@@ -29,11 +29,15 @@ public static class CourseLoader
         var world = Build(renderer.Device, meshes.Where(m => m.Name != "sky").Select(m => m.Mesh), textures, white);
         var sky = Build(renderer.Device, meshes.Where(m => m.Name == "sky").Select(m => m.Mesh), textures, white);
 
-        var name = courseTime[..courseTime.LastIndexOf('_')];
+        return new Course(world, sky, ReadDrivingLine(iso, courseTime[..courseTime.LastIndexOf('_')]));
+    }
+
+    /// <summary>CRS_DRV_&lt;course&gt;_I.BIN, valid points only.</summary>
+    public static Vector3[] ReadDrivingLine(Iso9660 iso, string course)
+    {
         var data = Afs.FromBytes(iso.ReadFile("CDVD/DATA/COURSE/CRS_DATA.AFS"), iso.ReadFile("CDVD/DATA/COURSE/CRS_DATA.TBL"));
-        var drv = data.Find($"CRS_DRV_{name}_I.BIN") ?? throw new FileNotFoundException($"CRS_DRV_{name}_I.BIN");
-        var line = DrivingLine.Read(data.Read(drv), DrivingLine.PointCount(name));
-        return new Course(world, sky, line);
+        var drv = data.Find($"CRS_DRV_{course}_I.BIN") ?? throw new FileNotFoundException($"CRS_DRV_{course}_I.BIN");
+        return DrivingLine.Read(data.Read(drv), DrivingLine.PointCount(course));
     }
 
     /// <summary>

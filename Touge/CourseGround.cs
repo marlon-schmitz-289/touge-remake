@@ -30,8 +30,7 @@ public static class CourseGround
         var (g, c) = Load(iso, course);
         Console.WriteLine($"[Ground] {course}: {c.Faces.Length} Dreiecke, {g.Walls.Length} Wandsegmente, gebaut in {sw.ElapsedMilliseconds} ms");
 
-        var data = Afs.FromBytes(iso.ReadFile("CDVD/DATA/COURSE/CRS_DATA.AFS"), iso.ReadFile("CDVD/DATA/COURSE/CRS_DATA.TBL"));
-        var line = DrivingLine.Read(data.Read(data.Find($"CRS_DRV_{course}_I.BIN")!.Value), DrivingLine.PointCount(course));
+        var line = CourseLoader.ReadDrivingLine(iso, course);
         const int n = 1_000_000;
         var rng = new Random(1);
         var origins = new Vector3[n];

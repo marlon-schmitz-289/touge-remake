@@ -66,6 +66,8 @@ public sealed class Vehicle
     /// <summary>Body slip angle β in rad; + = travelling to the right of the nose.</summary>
     public float SlipAngle { get; private set; }
     public float SpeedKmh => Velocity.Length() * 3.6f;
+    /// <summary>Wall contacts summed over the substeps of the last <see cref="Step" />.</summary>
+    public int WallContacts { get; private set; }
     public Matrix4x4 Pose => Matrix4x4.CreateFromQuaternion(Orientation) * Matrix4x4.CreateTranslation(Position);
     public ReadOnlySpan<WheelState> Wheels => _wheels;
 
@@ -89,6 +91,7 @@ public sealed class Vehicle
         var brake = Math.Clamp(input.Brake, 0, 1);
         UpdateGear(input.Shift, dt);
         UpdateSteer(Math.Clamp(input.Steer, -1, 1), dt);
+        WallContacts = 0;
         var h = dt / Spec.Substeps;
         for (var s = 0; s < Spec.Substeps; s++)
         {
@@ -276,6 +279,7 @@ public sealed class Vehicle
             probes[i] = Position + Vector3.Transform(new Vector3(i % 2 == 0 ? px : -px, 0, i < 2 ? pz : -pz), Orientation);
         Span<WallContact> contacts = stackalloc WallContact[8];
         var count = ground.CollideWalls(probes, ProbeRadius, contacts);
+        WallContacts += count;
         var moved = Vector3.Zero;
         Span<float> target = stackalloc float[count];
         Span<float> total = stackalloc float[count];
