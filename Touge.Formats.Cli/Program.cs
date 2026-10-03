@@ -3,6 +3,7 @@ using Touge.Formats;
 // idss list <file.AFS|file.PAC>          – Einträge auflisten (PACs in AFS werden mit aufgelöst)
 // idss extract <file.AFS> <outDir>       – alle Einträge als Dateien schreiben
 // idss textures <file.PAC> <outDir>      – alle GIM-Texturen als PNG
+// idss car <CAR.PAC> <outDir>            – Standard-Teile (…00) + Räder als OBJ, Texturen als PNG
 switch (args)
 {
     case ["list", var path]:
@@ -45,8 +46,12 @@ switch (args)
         Console.WriteLine($"{ok} PNG -> {outDir}, {fail} übersprungen");
         break;
 
+    case ["car", var path, var outDir]:
+        ExportCar(path, outDir);
+        break;
+
     default:
-        Console.Error.WriteLine("usage: idss list <AFS|PAC> | extract <AFS> <outDir> | textures <PAC> <outDir>");
+        Console.Error.WriteLine("usage: idss list <AFS|PAC> | extract <AFS> <outDir> | textures <PAC> <outDir> | car <PAC> <outDir>");
         return 1;
 }
 return 0;
@@ -58,4 +63,35 @@ static void PrintPac(byte[] d, string indent)
         var magic = System.Text.Encoding.ASCII.GetString(d, p.Offset, 4).TrimEnd('\0');
         Console.WriteLine($"{indent}{p.Name,-16} type={p.Type} 0x{p.Offset:X6} {p.Size,9} {magic}");
     }
+}
+
+static void ExportCar(string path, string outDir)
+{
+    var pac = File.ReadAllBytes(path);
+    var name = Path.GetFileNameWithoutExtension(path);
+    Directory.CreateDirectory(outDir);
+    var entries = Pac.Entries(pac);
+    foreach (var e in entries.Where(e => e.Type == 1))
+    {
+        var (w, h, rgba) = Gim.Decode(pac.AsSpan(e.Offset, e.Size));
+        Png.Write(Path.Combine(outDir, e.Name + ".png"), w, h, rgba);
+    }
+
+    var parts = entries.Where(e => e.Type == 3 && Cmd.IsCmd(pac.AsSpan(e.Offset, e.Size)))
+        .ToDictionary(e => e.Name[(name.Length + 1)..], e => Cmd.Parse(pac.AsSpan(e.Offset, e.Size)));
+    using var obj = new Obj(Path.Combine(outDir, name + ".obj"));
+    foreach (var (part, cmd) in parts.Where(p => p.Key.EndsWith("00") && !p.Key.Contains("shd") && !p.Key.StartsWith("tire") && !p.Key.StartsWith("Bdisk")))
+        obj.Add(part, cmd, System.Numerics.Matrix4x4.Identity);
+
+    // Räder an den Achs-Knoten der Karosserie; rechte Seite um 180° gedreht
+    var wheels = parts["body00"].Nodes.Where(n => n.Name is "fr_l" or "fr_r" or "re_l" or "re_r");
+    foreach (var (node, m) in wheels)
+    {
+        var t = node.EndsWith("_r") ? System.Numerics.Matrix4x4.CreateRotationY(MathF.PI) * m : m;
+        foreach (var w in new[] { "tire00FL", "Bdisk00" })
+            if (parts.TryGetValue(w, out var c)) obj.Add($"{w}_{node}", c, t);
+        var cali = "Bcali00" + node.ToUpperInvariant().Replace("_", "")[..2].Replace("FR", "F").Replace("RE", "R") + (node.EndsWith("_l") ? "L" : "R");
+        if (parts.TryGetValue(cali, out var cc)) obj.Add(cali, cc, t);
+    }
+    Console.WriteLine($"{name}: {parts.Count} Teile -> {outDir}");
 }
