@@ -77,7 +77,7 @@ Jede Phase endet mit etwas Sichtbarem/Fahrbarem.
 ### Phase 2 – Fahrphysik
 - Raycast-Wheels, Feder/Dämpfer, Reifenmodell (Längs-/Querschlupf kombiniert), Differenzial (offen/LSD), Gewichtsverlagerung, Motor-Drehmomentkurve, Getriebe (Auto/manuell)
 - `CarSpec` als JSON: Masse, Leistung, Radstand, Schwerpunkt, Antrieb (FR/FF/4WD) – Werte aus `CARPARTS` + realen Daten (AE86, FD3S, R32 …)
-- Kollision gegen Strecken-BVH, Leitplanken
+- Kollision gegen Strecken-BVH, Leitplanken – Boden/Wände da: `TriangleGround` (XZ-Grid statt BVH, Wände = Kanten Straße/`W…`), `Touge/CourseGround`
 - Verfolgerkamera, Cockpit-Kamera
 - Unit-Tests für Reifenmodell, Getriebe, Raycast-BVH (reine Mathe)
 - **Fertig:** AE86 driftet kontrolliert durch Akinas Haarnadeln mit Pad.
