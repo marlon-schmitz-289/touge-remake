@@ -69,7 +69,42 @@ Loader `0x15F340`. Header 0x30 (u32): `"1LCR"`, Version 1, #Materialien, Off, #V
 - Akina `_0`: 9851 Vertices, 18925 Dreiecke, 524 Sektoren; road 6396, W14hard 4789, r_grass 4462, gutter 2298, btm 488, r_bump 320, r_redline 172.
 - Unbekannt: u16 bei Face+0xC, Sinn der u32-Liste, Physik-Werte je Material (nicht in der Datei).
 
+## Audio – geknackt
+Kein Code dafür im EE-ELF außer der CRI-Middleware (`ADXF/ADXT/ADXB`, Ver. 2001); dekodiert wird im IOP (`CRI_ADXI.IRX`, ADX) bzw. von der SPU2 (VAG). `0ADX.DIR`/`1ADX.DIR` sind nur Listen der AFS-Dateien (ADXF-Partitionen), `PS2SE.AFS` aus `1ADX.DIR` gibt es auf der Disc nicht. `MANGA/ST_BGM.AFS` ist byte-gleich mit `SOUND/ST_BGM_N.AFS`. Film `MOVIE/D_HIGH_1.SFD` (Sofdec, ADX im MPEG-PS) nicht angefasst.
+
+**ADX** (alle `*.AFS` außer CARSE): Big Endian, `80 00`, u16 Offset der `(c)CRI`-Kennung (Daten ab Offset+4), u8 3 (Typ), u8 18 (Frame), u8 4 (Bit), u8 Kanäle, u32 Rate, u32 Samples, u16 Hochpass 500 Hz, u8 Version (alle 3), u8 Flags (alle 0 = unverschlüsselt). Loop-Block v3 ab 0x14: u16 Ausrichtung, u16 ?, u32 an, u32 Start-Sample, u32 Start-Byte, u32 End-Sample, u32 End-Byte. Frames je Kanal abwechselnd: u16 Skala, 32 Nibbles (hohes zuerst), `s = n·Skala + (c1·s1 + c2·s2) >> 12`, `c1/c2` aus Hochpass und Rate (12-bit-Festkomma, 48 kHz → 7400/−3343). Skala mit Bit 15 = Ende. Beim Loop wird der Prädiktorzustand vom ersten Durchlauf an der Loop-Startstelle wiederhergestellt. Geprüft: `Adx.cs` ist sample-genau gleich mit ffmpegs ADX-Decoder (NO_ONE_SLEEP_IN_TOKYO 20,3 M Samples, eine RACEVOIC-Stimme).
+
+**VAG / SPU-ADPCM** (SYSSE, CARSE): 16-B-Frames, u8 Prädiktor<<4|Shift, u8 Flags (4 Loop-Start, 1 Ende, 1+2 Ende mit Sprung zurück), 28 Nibbles (niedriges zuerst), Filter {0,0},{60,0},{115,−52},{98,−55},{122,−60}, `s = (n<<12>>shift) + (s1·f0 + s2·f1 + 32) >> 6` wie die Hardware. ffmpegs `adpcm_psx` rundet anders (bis ±62 Abweichung); Wellenform sonst gleich.
+- `SOUND/SYSSE.BIN`: u32 n (38), u32 Pos Offsettabelle (0x10), u32 Pos Pitch-Tabelle (0xB0), u32 Datenstart (0x150); n × u32 Offset ab Datenstart, n × u32 SPU-Pitch (0x1000 = 48 kHz; hier 0x759 ≈ 22 kHz, 0x3AC ≈ 11 kHz). Namen in `SYSSE.TBL` (Format wie AFS-.TBL).
+- `SOUND/CARSE.AFS`: Paare `<AUTO>_D/_U.DAT` + `.MRG`. **MRG** = u32 3, 3 × u32 Offset, u32 Größe direkt vor jedem Teil: `mrg.lst` (Text: Namen der Teile), Sony `*.bd` (VAG-Rohdaten), `*.hd` (Sony-Bankheader `IECSsreV`/`IECSdaeH`/`IECSigaV`/`IECSlpmS`/`IECSteSS`/`IECSgorP`). Im `IECSigaV`-Chunk: u32 Größe, u32 letzter Index, Offsets (ab Chunk) auf 8-B-Einträge u32 BD-Offset, u16 Rate in Hz (≈ 22050, je Sample leicht verstimmt), u8 Loop, u8 0xFF.
+- **DAT** (`"SECTver0.502"`): 16 × 0x90-B-Blöcke (Offsettabelle ab 0x20), darin je 6 Punktpaare (x 0…0xFF, y) – vermutlich Lautstärke-/Pitch-Kurven pro Schicht über Drehzahl. **Nicht entschlüsselt.** `TU_<AUTO>` hat dieselbe MRG (byte-gleich) wie `<AUTO>`, nur andere DAT (getunte Kurven); `SRIP_A`/`SRIP_B` gleiche MRG, andere DAT.
+
+### Katalog (`idss sound <ISO>`, `idss wav <ISO> <filter> <outDir>`)
+| Archiv | Einträge | Format | Kanäle | Rate (Hz) | Gesamt (min–max je Datei) | mit Loop |
+|---|---|---|---|---|---|---|
+| SOUND/BGM | 9 | ADX | 2 | 48000 | 6,9 min (10–120 s) | 4 |
+| SOUND/RACEBGM | 31 | ADX | 2 | 48000 | 109,5 min (143–297 s) | 31 |
+| SOUND/ST_BGM_N | 39 | ADX | 2 | 48000 | 41,9 min (15–137 s) | 0 |
+| SOUND/IKETANI | 33 (1 `ren_intro.bat`) | ADX | 1 | 24000 | 26,0 min (34–66 s) | 0 |
+| SOUND/RACEVOIC | 1483 | ADX | 1 | 24000, 22050 | 76,3 min (0,2–15 s) | 0 |
+| MANGA/MG_BGM | 30 | ADX | 2 | 48000 | 20,8 min (31–57 s) | 30 |
+| MANGAV/MG_VC00–07 | 4770 (7 leer/Dummy) | ADX | 1 | 24000 (vereinzelt 48000) | 217 min (0,2–7,3 s) | 0 |
+| SOUND/CARSE | 50 MRG → 380 Samples (+ 50 DAT) | VAG | 1 | ≈ 22050 (SRIP 18900) | 9,3 min (0,4–3,3 s) | 376 |
+| SOUND/SYSSE.BIN | 38 | VAG | 1 | 22043, 11016, 22500 | 0,9 min (0,2–7 s) | 2 |
+
+Rollen (aus Dateinamen; „?" = geraten):
+- **Renn-BGM** (RACEBGM, Eurobeat, alle mit Loop): 100, BACK ON THE ROCKS, BEAT OF THE RISING SUN, BIG IN JAPAN, BURNING DESIRE, CRAZY FOR LOVE, CRAZY FOR YOUR LOVE, CRAZY NIGHT, DONT STAND SO CLOSE, DONT STOP THE MUSIC, DONT YOU, EXPRESS LOVE, GET ME POWER, GRAND PRIX, HEART BEAT, I NEED YOUR LOVE, KILLING MY LOVE, LOVE IS IN DANGER, MIKADO, NIGHT OF FIRE, NO ONE SLEEP IN TOKYO, REMEMBER ME, ROCK ME TO THE TOP, RUNNING IN THE 90S, SAVE ME, SPACEBOY, SPEED SPEED BOY, STATION TO STATION, STAY, WEST END GUY, WHITE LIGHT.
+- **Menü/Ergebnis** (BGM): gam, JOY, LOSE, PANIC, THERACEISOVER, TIMEUP, TOKYO, WIN, WORRY. **Story**: ST_BGM_N (`STORY_MONO01–05`, `STORY_ST01–31`, `WIN02–04`), MG_BGM (Figurenthemen `TAKUMI01`, `RYOSUKE`, `BUNTA` …).
+- **Auto-Ansagen** IKETANI `INTRO_<AUTO>.ADX` (32 Autos, 34–66 s, Sprache?).
+- **Rennstimmen** RACEVOIC `b_<figur>_<situation>_NNN` (Situation: `start`, `front`, `rear`, `ppass`/`rpass` = überholt/wird überholt?, `fwin`/`rwin`/`pwin`, `flose`, `meter`, `special` …; ~40 Figuren). Story-Stimmen MG_VC `K<kapitel>_<szene>_NNN`.
+- **Motor** CARSE `<AUTO>_U` / `_D` (= Gas / Schub?), je 8 geloopte Schichten. Autos: AE86, AL (Altezza), CP (Cappuccino), EK9, EVO, FD, GC8, GTR, MR2, MRS (MR-S), NA6, S13 – mehrere Wagen teilen sich eine Bank (Zuordnung im ELF nicht gesucht). AE86: Schichten 4–7 haben tonale Grundfrequenz 65 → 237 Hz (4-Zylinder ≈ 1950 → 7100 U/min), 0–3 sind breitbandiger (Ansaug/Auspuff?); `_U` und `_D` teilen sich die Hälfte der Samples (D0=U0, D2=U1, D4=U4, D7=U6, dekodiert byte-gleich).
+- **Reifen** CARSE `SRIP_A/B` (4 Samples, 2 davon 18,9 kHz ohne Loop), `RAIN_SRIP` (nass), **Turbo** `TURBO` (1 Loop).
+- **SYSSE**: `backfire001`, `zbackfire002a–h`, `popoff`, `Blow` (Fehlzündung/Abblasventil), `cr001/002` (Crash?), `rain`, `water`, `Steam`, `jump`, UI/System (`BEEP001`, `SKIP001`, `NAME001–003`, `CAR001–012`, `parts_ch`, `sys002`, `SYS005/006`, `alarm_01/02`).
+
+Stichprobe (WAV-Export + Spektrum, Python/numpy): alle Exporte nicht still (RMS −18 … −2 dBFS) und tonal statt Rauschen (spektrale Flachheit 0,000–0,39; weißes Rauschen 1,0). Musik Schwerpunkt ~1,4–1,7 kHz, Stimme ~1,1 kHz, Reifen-Quietschen Spitze bei ~1 kHz.
+
 ## Offen
 - NAVI, INFO (`CIF`); zweites u32 im ROAD-Header
 - Bedeutung von VU addr 4, Material-Flags außer 0x100/0x200/0x400
 - CAR_ENV-Bytepaar-Tabelle: welcher Lichtzustand welche Zeile
+- CARSE `.DAT` (SECT-Kurven), Zuordnung Auto → Motor-Bank, Bedeutung `_U`/`_D`, HD-Chunks außer `IECSigaV`

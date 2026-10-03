@@ -9,6 +9,8 @@ using Touge.Formats;
 // idss coli <CRS_COLI_*.BIN> <out.obj>  – Kollisionsfläche als OBJ (Gruppe je Material), Histogramm
 // idss drv <CRS_DRV_*.BIN>               – gültige Fahrlinienpunkte: i x y z
 // idss road <CRS_ROAD_*.BIN> [CRS_ENV_*.BIN] [CRS_FLR_*.BIN] – i x y z [top bottom left right] [flare]
+// idss sound <ISO>                       – alle Audio-Assets: Format, Kanäle, Rate, Dauer, Loop, Rolle
+// idss wav <ISO> <filter> <outDir>       – Assets, deren Id <filter> enthält, als WAV + RMS/Peak
 switch (args)
 {
     case ["list", var path]:
@@ -83,6 +85,29 @@ switch (args)
         }
         break;
 
+    case ["sound", var isoPath]:
+        using (var iso = new Iso9660(isoPath))
+            foreach (var snd in Sound.Assets(iso))
+            {
+                var loop = snd.Loop is var (ls, le) ? F($"{ls / (double)snd.Rate:0.00}-{le / (double)snd.Rate:0.00}") : "-";
+                Console.WriteLine(F($"{snd.Id,-44} {snd.Format,-4} {snd.Channels}ch {snd.Rate,5} Hz {snd.Samples / (double)snd.Rate,7:0.00} s  loop {loop,-13} {Sound.Role(snd.Id)}"));
+            }
+        break;
+
+    case ["wav", var isoPath, var filter, var outDir]:
+        Directory.CreateDirectory(outDir);
+        using (var iso = new Iso9660(isoPath))
+            foreach (var snd in Sound.Assets(iso).Where(x => x.Id.Contains(filter, StringComparison.OrdinalIgnoreCase)))
+            {
+                var pcm = snd.Pcm();
+                var file = Path.Combine(outDir, snd.Id.Replace('/', '_').Replace('#', '_') + ".wav");
+                Sound.WriteWav(file, pcm, snd.Channels, snd.Rate);
+                var rms = Math.Sqrt(pcm.Average(s => (double)s * s)) / 32768;
+                var peak = pcm.Max(s => Math.Abs((int)s)) / 32768.0;
+                Console.WriteLine(F($"{file}: {pcm.Length / snd.Channels / (double)snd.Rate:0.00} s, RMS {20 * Math.Log10(rms + 1e-12):0.0} dBFS, Peak {20 * Math.Log10(peak + 1e-12):0.0} dBFS"));
+            }
+        break;
+
     case ["check", .. var paths]:
         int good = 0, bad = 0;
         foreach (var path in paths)
@@ -107,7 +132,7 @@ switch (args)
         return bad == 0 ? 0 : 1;
 
     default:
-        Console.Error.WriteLine("usage: idss list <AFS|PAC> | extract <AFS> <outDir> | textures <PAC> <outDir> | car <PAC> <outDir> [<CAR_ENV.BIN> [n]] | check <PAC...> | course <PAC> <outDir> | drv <CRS_DRV> | road <CRS_ROAD> [CRS_ENV] [CRS_FLR] | coli <BIN> <out.obj>");
+        Console.Error.WriteLine("usage: idss list <AFS|PAC> | extract <AFS> <outDir> | textures <PAC> <outDir> | car <PAC> <outDir> [<CAR_ENV.BIN> [n]] | check <PAC...> | course <PAC> <outDir> | drv <CRS_DRV> | road <CRS_ROAD> [CRS_ENV] [CRS_FLR] | coli <BIN> <out.obj> | sound <ISO> | wav <ISO> <filter> <outDir>");
         return 1;
 }
 return 0;

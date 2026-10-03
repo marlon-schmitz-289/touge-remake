@@ -102,6 +102,7 @@ Jede Phase endet mit etwas Sichtbarem/Fahrbarem.
 ### Phase 5 – Feinschliff
 - Alle Strecken/Varianten, alle Autos tunen
 - Sound: Motorsound pro Drehzahl (Platzhalter → Original-ADX aus der ISO über denselben Cache-Weg)
+- Stand Audio-Basis: `Kansei/Audio/AudioDevice` (OpenAL Soft, Musik-Stream im Hintergrund-Thread, 16 SFX-Stimmen, Loop-Stimmen mit Pitch/Gain und Loop-Punkten, Master/Musik/SFX), Decoder ADX + VAG + Banken in `Touge.Formats`, Katalog in FORMATS.md, `--audiotest`. Original-Ton ist damit doch in Reichweite (statt Platzhalter). Fehlt: Einbau ins Spiel (Motor-Schichten über Drehzahl überblenden – SECT-Kurven nicht entschlüsselt, Reifen, Crash, BGM-Auswahl), Zuordnung Auto → Motor-Bank.
 - Nacht mit Scheinwerfern, Schatten, Ghosts, KI (Ideallinie aus `CRS_DATA`), Replays
 
 ## 6. Repo-Struktur (geplant)
