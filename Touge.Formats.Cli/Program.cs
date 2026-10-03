@@ -7,6 +7,8 @@ using Touge.Formats;
 // idss course <COURSE.PAC> <outDir>     – Strecke (crs/tree/gate/mnt/sky, ohne LOD/Schatten) als OBJ
 // idss car <CAR.PAC> <outDir>            – Standard-Teile (…00) + Räder als OBJ, Texturen als PNG
 // idss coli <CRS_COLI_*.BIN> <out.obj>  – Kollisionsfläche als OBJ (Gruppe je Material), Histogramm
+// idss drv <CRS_DRV_*.BIN>               – gültige Fahrlinienpunkte: i x y z
+// idss road <CRS_ROAD_*.BIN> [CRS_ENV_*.BIN] [CRS_FLR_*.BIN] – i x y z [top bottom left right] [flare]
 switch (args)
 {
     case ["list", var path]:
@@ -61,6 +63,26 @@ switch (args)
         ExportCollision(path, outObj);
         break;
 
+    case ["drv", var path]:
+        var line = DrivingLine.Read(File.ReadAllBytes(path), DrivingLine.PointCount(DrivingLine.CourseOf(path)));
+        for (var i = 0; i < line.Length; i++) Console.WriteLine(F($"{i} {line[i].X} {line[i].Y} {line[i].Z}"));
+        break;
+
+    case ["road", var path, .. var extra]:
+        var road = CourseRoad.Read(File.ReadAllBytes(path));
+        var envPath = extra.FirstOrDefault(p => Path.GetFileName(p).StartsWith("CRS_ENV_", StringComparison.OrdinalIgnoreCase));
+        var flrPath = extra.FirstOrDefault(p => Path.GetFileName(p).StartsWith("CRS_FLR_", StringComparison.OrdinalIgnoreCase));
+        var env = envPath == null ? null : CourseRoad.ReadEnv(File.ReadAllBytes(envPath));
+        var flr = flrPath == null ? null : CourseRoad.ReadFlare(File.ReadAllBytes(flrPath), road.Length);
+        for (var i = 0; i < road.Length; i++)
+        {
+            var s = F($"{i} {road[i].X} {road[i].Y} {road[i].Z}");
+            if (env != null) s += i < env.Length ? $" {env[i].Top} {env[i].Bottom} {env[i].Left} {env[i].Right}" : " - - - -";
+            if (flr != null) s += flr[i] ? " 1" : " 0";
+            Console.WriteLine(s);
+        }
+        break;
+
     case ["check", .. var paths]:
         int good = 0, bad = 0;
         foreach (var path in paths)
@@ -85,10 +107,12 @@ switch (args)
         return bad == 0 ? 0 : 1;
 
     default:
-        Console.Error.WriteLine("usage: idss list <AFS|PAC> | extract <AFS> <outDir> | textures <PAC> <outDir> | car <PAC> <outDir> | check <PAC...> | course <PAC> <outDir> | coli <BIN> <out.obj>");
+        Console.Error.WriteLine("usage: idss list <AFS|PAC> | extract <AFS> <outDir> | textures <PAC> <outDir> | car <PAC> <outDir> | check <PAC...> | course <PAC> <outDir> | drv <CRS_DRV> | road <CRS_ROAD> [CRS_ENV] [CRS_FLR] | coli <BIN> <out.obj>");
         return 1;
 }
 return 0;
+
+static string F(FormattableString s) => s.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
 static void PrintPac(byte[] d, string indent)
 {

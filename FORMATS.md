@@ -42,9 +42,14 @@ Strecken-PACs: `crsNN` (Abschnitte), `crslodNN` (LOD), `shdNN` (Schatten), `tree
 GIM kann auch 32-bit Truecolor sein (psm 0, ohne CLUT).
 
 ## CRS_DATA (nicht gepackt)
-- `CRS_DRV_<KURS>_I/O.BIN`: Fahrlinie innen/außen, xyz-Floats, ~10 m Abstand, gleiche Weltkoordinaten wie die Strecke. Danach Müll/Nullen – echte Punktanzahl noch unbekannt (Behelf: beim ersten Sprung > 60 m abschneiden).
+Kursreihenfolge im ELF (Tabelle `0x24CD00`, Index = Byte `0x328156`): MYOUGI0, USUI0, AKAGI, AKINA, HAPPOU, IROHA, MYOUGI, USUI, MOMIJI, SHIONA, SHOMARU.
+- `CRS_ROAD_<KURS>[_L|_R].BIN` – geknackt: u32 n, u32 ? (0/3, vom Loader `0x164A50` ignoriert), n × xyz. Straßenmitte/linker/rechter Rand, ~2 m Abstand. ENV, FLR, SHD sind Tabellen pro ROAD-Punkt. Siehe `CourseRoad.cs`.
+- `CRS_DRV_<KURS>_I/O.BIN` – geknackt: n × xyz (12 B, sonst nichts pro Punkt), ~10 m. `_I` = Fahrtrichtung entlang ROAD, `_O` = Gegenrichtung (Flag `+0x1D6` im Kurs-Struct). Datei immer 1000 Punkte (USUI0 916); **gültige Anzahl hartkodiert im ELF** (`0x2C4920`, je Kurs u32 + u32 0, gleich für I/O), genutzt vom Nächster-Punkt-Suchlauf `0x157170` (sucht ±8 um den letzten Index, nur x/z, wrap bei n). Danach Auslauf hinter dem Ziel, dann Speichermüll. Rundkurse (MYOUGI0, USUI0) enthalten mehrere Runden (3 bzw. 2). Siehe `DrivingLine.cs`.
+- `CRS_ENV_<KURS>.BIN` – geknackt: 4 × s8 pro ROAD-Punkt = Index der Env-Map-Textur `ENV_TOP%02d`, `ENV_BOTTOM%02d`, `ENV_LEFT%02d`, `ENV_RIGHT%02d` aus `ENV_TEX_<KURS>_<ZEIT>.PAC` (Auto-Reflexion, `0x163E50`). Länge passt nicht immer zu ROAD (MOMIJI 2781 vs 2627); Spiel liest mit Index mod n.
+- `CRS_FLR_<KURS>.BIN` – geknackt: 1 Byte pro ROAD-Punkt, ≠ 0 = Sonnen-**Flare** sichtbar (`0x161F70` → Effekt 0x15 = 11 Flare-Elemente zwischen Sonnenposition je Kurs und Kamera). Nur Kurse mit `_DAY` haben FLR; ohne Datei ist Flare immer an. Akina/Akagi/Iroha-Dateien sind kürzer als ROAD (z. B. 3955 von 4089) – Spiel liest dahinter fremden Speicher, hier als „aus“ gewertet.
+- `CRS_SHD_<KURS>.BIN`: f32 pro ROAD-Punkt, Helligkeitsfaktor (interpoliert, `0x163C00`). `CRS_LIGHT_*`: u32 n, 12 B ?, n × 16 B Lichtpunkte (Aufhellung im 16-m-Radius). Nur aus dem Code gelesen, kein Reader.
+- `CRS_NAVI_<KURS>.BIN`: u32 n + 12 B, n × 16 B (normierte 2D-Koordinaten, vermutlich Minimap). Nicht weiter analysiert.
 - `CRS_COLI_<KURS>_0/1.BIN`: Kollision, siehe unten.
-- `CRS_ENV_*`, `CRS_FLR_*`: noch nicht analysiert.
 
 ## Kollision `CRS_COLI_<KURS>_0/1.BIN` – geknackt
 Loader `0x15F340`. Header 0x30 (u32): `"1LCR"`, Version 1, #Materialien, Off, #Vertices, Off, #Faces, Off, #u32-Liste, Off (immer leer), #Sektoren, Off.
@@ -58,5 +63,5 @@ Loader `0x15F340`. Header 0x30 (u32): `"1LCR"`, Version 1, #Materialien, Off, #V
 - Unbekannt: u16 bei Face+0xC, Sinn der u32-Liste, Physik-Werte je Material (nicht in der Datei).
 
 ## Offen
-- ENV, FLR; Punktanzahl der Fahrlinie
+- NAVI, INFO (`CIF`); zweites u32 im ROAD-Header
 - Bedeutung von VU addr 4, Material-Flags im Detail
