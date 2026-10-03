@@ -60,7 +60,7 @@ public class VehicleTests(ITestOutputHelper log)
         var p = car.Position;
         log.WriteLine($"rest: pos {p}, |v| {car.Velocity.Length():F5}, comp {car.Wheels[0].Compression:F3}/{car.Wheels[2].Compression:F3}");
         Assert.InRange(new Vector2(p.X, p.Z).Length(), 0, 0.01f);
-        Assert.InRange(p.Y, 0.40f, 0.56f);
+        Assert.InRange(p.Y, CarSpec.AE86.CogHeight - 0.08f, CarSpec.AE86.CogHeight + 0.08f); // settles near the spec CoG height
         Assert.InRange(car.Velocity.Length(), 0, 0.01f);
         foreach (var w in car.Wheels) Assert.True(w.Contact);
     }
@@ -103,7 +103,7 @@ public class VehicleTests(ITestOutputHelper log)
         Assert.True(up.Y > 0.95f);
         Assert.InRange(car.SpeedKmh, 20, 120);
         Assert.True(car.AngularVelocity.Y < -0.1f); // steering right = negative yaw about +Y
-        Assert.InRange(maxLat / 9.81f, 0.2f, 1.3f);
+        Assert.InRange(maxLat / 9.81f, 0.2f, 1.7f); // arcade grip (μ 1.7), not a road tyre
     }
 
     [Fact]
