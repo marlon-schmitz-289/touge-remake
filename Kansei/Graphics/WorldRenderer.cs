@@ -6,7 +6,8 @@ namespace Kansei.Graphics;
 
 /// <summary>
 ///     Forward renderer for prelit static geometry: texture × vertex colour, alpha test, distance fog.
-///     No backface culling — PS2 strip winding is not consistent. Owns textures and a depth buffer.
+///     No backface culling (the PS2 draws foliage cards from both sides); coplanar duplicates must be removed
+///     by the caller, else they z-fight. Owns textures and a depth buffer.
 /// </summary>
 public sealed class WorldRenderer : IDisposable
 {

@@ -5,7 +5,7 @@ namespace Touge.Formats.Tests;
 
 public class MeshTests
 {
-    /// <summary>One material, one batch of 4 strip vertices (first two with ADC) -> 2 triangles, alternating winding.</summary>
+    /// <summary>One material, one batch of 4 strip vertices (first two with ADC) -> 2 triangles, winding from w bit 2.</summary>
     [Fact]
     public void Parses_strip_into_triangles()
     {
@@ -13,7 +13,7 @@ public class MeshTests
         void U32(uint v) { var b = new byte[4]; BinaryPrimitives.WriteUInt32LittleEndian(b, v); vif.AddRange(b); }
         void F(float v) { var b = new byte[4]; BinaryPrimitives.WriteSingleLittleEndian(b, v); vif.AddRange(b); }
         U32(0x6C04_8001); // UNPACK V4-32, n=4, addr=1 (flg)
-        int[] adc = [0x8000, 0x8000, 0, 0];
+        int[] adc = [0x8000, 0x8000, 4, 0]; // bit 15 = no kick, bit 2 = winding
         for (var i = 0; i < 4; i++) { F(i); F(0); F(0); U32((uint)adc[i]); }
         U32(0x6804_8002); // UNPACK V3-32 normals
         for (var i = 0; i < 4; i++) { F(0); F(1); F(0); }

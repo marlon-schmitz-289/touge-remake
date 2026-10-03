@@ -13,7 +13,7 @@ namespace Touge.Formats;
 ///     materials follow the nodes, 0x20 B each: data offset, qword count, texture index (-1 none), ?, flags,
 ///     RGBA (alpha 0x80 = opaque), triangle count, vertex count.
 ///     Material data = VIF stream of batches: UNPACK V4-32 to VU addr 1 (xyz + ADC flag in w), V3-32 addr 2 (normal),
-///     V2-32 addr 3 (uv), V3-32 addr 4 (unused here), then MSCAL. Vertices form triangle strips; w bit 15 = no kick.
+///     V2-32 addr 3 (uv), V3-32 addr 4 (unused here), then MSCAL. Vertices form triangle strips; w bit 15 = no kick, w bit 2 = winding.
 ///     SMD header: 0x08 #triangles, 0x0C #vertices, 0x10 #textures, 0x14 #materials, 0x18 texture table, 0x1C material
 ///     table, 0x20 bbox. Materials as in CMD (flags/RGBA zero). Payload: addr 1 xyz+ADC, addr 2 uv, addr 3 V4-8 vertex
 ///     colour (prelit, 0x80 = 1.0); positions are world space in metres.
@@ -127,7 +127,7 @@ public sealed class Mesh
                 for (var i = 2; i < pos.Length; i++)
                 {
                     if (((int)pos[i].W & 0x8000) != 0) continue;
-                    var (a, b) = (i & 1) == 0 ? (i - 2, i - 1) : (i - 1, i - 2);
+                    var (a, b) = ((int)pos[i].W & 4) != 0 ? (i - 2, i - 1) : (i - 1, i - 2); // w bit 2 = strip winding, survives restarts
                     tris.Add(Vert(a)); tris.Add(Vert(b)); tris.Add(Vert(i));
                 }
                 pos = [];
