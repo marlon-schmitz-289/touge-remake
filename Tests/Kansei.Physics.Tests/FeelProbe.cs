@@ -62,6 +62,17 @@ public class FeelProbe(ITestOutputHelper log)
         Assert.True(MathF.Abs(car.SlipAngle * Deg) < 15, "did not recover");
     }
 
+    /// <summary>Held drift (full throttle, lock held) for 4 s: arcade keeps the momentum.</summary>
+    [Fact]
+    public void Held_drift_keeps_speed()
+    {
+        var car = CarAt(100);
+        var (beta, _, _, v) = Drive(car, 4, 1, 1);
+        log.WriteLine($"held drift 4 s @100: max β {beta:F0}°, end β {car.SlipAngle * Deg:F0}°, 100→{v:F0} km/h");
+        Assert.True(beta > 10, "no drift");
+        Assert.True(v > 90, $"lost too much speed: {v:F0} km/h");
+    }
+
     [Fact]
     public void Steer_in_drift_at_speed()
     {

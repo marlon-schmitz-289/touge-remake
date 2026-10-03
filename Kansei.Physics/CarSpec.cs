@@ -79,6 +79,7 @@ public sealed record CarSpec
     public float HandbrakeRearGrip { get; init; } = 0.4f;     // rear grip factor while the handbrake is pulled (arcade: rotates the car)
     public float MaxDriftAngle { get; init; } = 0.75f;        // rad (~43°); beyond it a spring pushes the slip back
     public float DriftRearGrip { get; init; } = 0.75f;        // rear grip factor while drifting/entering on throttle
+    public float DriftMomentum { get; init; } = 0.75f;        // share of the tyre drag against the travel direction cancelled while drifting on throttle
     public float DriftEntrySpeed { get; init; } = 20f;        // m/s; full lock + full throttle above this starts a drift
 
     // Integration

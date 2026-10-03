@@ -34,6 +34,7 @@ public sealed class Vehicle
     readonly Vector3[] _mounts = new Vector3[4]; // body space, wheel centre at full droop + Travel
     readonly Vector3 _inertia;                   // body-space principal moments
     float _steer, _shiftTimer, _rearGrip = 1, _prevBeta;
+    bool _drifting;
 
     public Vehicle(CarSpec spec)
     {
@@ -115,6 +116,7 @@ public sealed class Vehicle
         var fwd = Vector3.Dot(Velocity, Vector3.Transform(Vector3.UnitZ, Orientation));
         var sliding = MathF.Abs(SlipAngle) > 0.09f;
         var entering = steerInput > 0.8f && throttle > 0.8f && fwd > Spec.DriftEntrySpeed;
+        _drifting = sliding && throttle > 0.3f && steerInput > 0.3f && !handbrake;
         var target = handbrake ? Spec.HandbrakeRearGrip
             : entering || sliding && throttle > 0.3f && steerInput > 0.3f ? Spec.DriftRearGrip : 1f; // let go of the wheel = grip back
         _rearGrip += (target - _rearGrip) * 0.15f;
@@ -230,6 +232,7 @@ public sealed class Vehicle
 
         // Pass 2: forces.
         var force = new Vector3(0, -s.Mass * G, 0);
+        var tyreForce = Vector3.Zero;
         var torque = Vector3.Zero;
         var speed = Velocity.Length();
         force -= Velocity * (0.5f * AirDensity * s.DragArea * speed);
@@ -293,6 +296,7 @@ public sealed class Vehicle
 
                 var f3 = up * fs + tf * fx + tr * fy;
                 force += f3;
+                tyreForce += tf * fx + tr * fy;
                 torque += Vector3.Cross(arm, f3);
                 force -= Velocity * (s.RollingResistance * fs / MathF.Max(speed, 1));
                 w.Load = fs;
@@ -303,6 +307,14 @@ public sealed class Vehicle
 
             w.AngularVelocity = omega;
             w.SpinAngle = (w.SpinAngle + omega * h) % MathF.Tau;
+        }
+
+        // Arcade: a held drift keeps its momentum — cancel part of the tyre force that brakes along the travel direction.
+        if (_drifting && speed > 1)
+        {
+            var dir = Velocity / speed;
+            var along = Vector3.Dot(tyreForce, dir);
+            if (along < 0) force -= dir * (along * s.DriftMomentum);
         }
 
         Velocity += force * (h / s.Mass);
