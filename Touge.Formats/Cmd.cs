@@ -67,16 +67,27 @@ public sealed class Cmd
             {
                 var n = num == 0 ? 256 : num;
                 var comps = ((cmd >> 2) & 3) + 1;
-                if ((cmd & 3) != 0) throw new NotSupportedException($"VIF unpack 0x{cmd:X2} (only 32-bit)");
+                var size = 4 >> (cmd & 3); // 32/16/8 bit
+                if ((cmd & 3) == 3) throw new NotSupportedException("VIF unpack V4-5");
+                var unsigned = (imm & 0x4000) != 0;
                 var data = new Vector4[n];
                 for (var i = 0; i < n; i++)
                 {
                     Span<float> f = stackalloc float[4];
-                    for (var k = 0; k < comps; k++) f[k] = BinaryPrimitives.ReadSingleLittleEndian(v[(p + (i * comps + k) * 4)..]);
-                    if (comps == 4) f[3] = BinaryPrimitives.ReadInt32LittleEndian(v[(p + (i * 4 + 3) * 4)..]);
+                    for (var k = 0; k < comps; k++)
+                    {
+                        var o = p + (i * comps + k) * size;
+                        f[k] = size switch
+                        {
+                            4 when !(comps == 4 && k == 3) => BinaryPrimitives.ReadSingleLittleEndian(v[o..]),
+                            4 => BinaryPrimitives.ReadInt32LittleEndian(v[o..]), // w carries flags
+                            2 => unsigned ? BinaryPrimitives.ReadUInt16LittleEndian(v[o..]) : BinaryPrimitives.ReadInt16LittleEndian(v[o..]),
+                            _ => unsigned ? v[o] : (sbyte)v[o],
+                        };
+                    }
                     data[i] = new Vector4(f[0], f[1], f[2], f[3]);
                 }
-                p += n * comps * 4;
+                p += (n * comps * size + 3) & ~3;
                 switch (imm & 0x3FF)
                 {
                     case 1: pos = data; break;

@@ -3,6 +3,7 @@ using Touge.Formats;
 // idss list <file.AFS|file.PAC>          – Einträge auflisten (PACs in AFS werden mit aufgelöst)
 // idss extract <file.AFS> <outDir>       – alle Einträge als Dateien schreiben
 // idss textures <file.PAC> <outDir>      – alle GIM-Texturen als PNG
+// idss check <PAC...>                   – alle Texturen und Meshes testweise dekodieren
 // idss car <CAR.PAC> <outDir>            – Standard-Teile (…00) + Räder als OBJ, Texturen als PNG
 switch (args)
 {
@@ -50,8 +51,31 @@ switch (args)
         ExportCar(path, outDir);
         break;
 
+    case ["check", .. var paths]:
+        int good = 0, bad = 0;
+        foreach (var path in paths)
+        {
+            var file = File.ReadAllBytes(path);
+            foreach (var e in Pac.Entries(file))
+                try
+                {
+                    var d = file.AsSpan(e.Offset, e.Size);
+                    if (e.Type == 1) Gim.Decode(d);
+                    else if (Cmd.IsCmd(d)) Cmd.Parse(d);
+                    else continue;
+                    good++;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"{Path.GetFileName(path)}/{e.Name}: {ex.Message}");
+                    bad++;
+                }
+        }
+        Console.WriteLine($"{good} ok, {bad} Fehler");
+        return bad == 0 ? 0 : 1;
+
     default:
-        Console.Error.WriteLine("usage: idss list <AFS|PAC> | extract <AFS> <outDir> | textures <PAC> <outDir> | car <PAC> <outDir>");
+        Console.Error.WriteLine("usage: idss list <AFS|PAC> | extract <AFS> <outDir> | textures <PAC> <outDir> | car <PAC> <outDir> | check <PAC...>");
         return 1;
 }
 return 0;
