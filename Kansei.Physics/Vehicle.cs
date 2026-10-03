@@ -69,6 +69,8 @@ public sealed class Vehicle
     public float SpeedKmh => Velocity.Length() * 3.6f;
     /// <summary>Wall contacts summed over the substeps of the last <see cref="Step" />.</summary>
     public int WallContacts { get; private set; }
+    /// <summary>Highest closing speed (m/s) into a wall over the substeps of the last <see cref="Step" />; 0 without contact.</summary>
+    public float WallImpactSpeed { get; private set; }
     public Matrix4x4 Pose => Matrix4x4.CreateFromQuaternion(Orientation) * Matrix4x4.CreateTranslation(Position);
     public ReadOnlySpan<WheelState> Wheels => _wheels;
 
@@ -107,6 +109,7 @@ public sealed class Vehicle
         UpdateSteer(Math.Clamp(input.Steer, -1, 1), dt);
         UpdateDriftGrip(Math.Abs(input.Steer), throttle, input.Handbrake);
         WallContacts = 0;
+        WallImpactSpeed = 0;
         var h = dt / Spec.Substeps;
         for (var s = 0; s < Spec.Substeps; s++)
         {
@@ -372,6 +375,7 @@ public sealed class Vehicle
             if (depth > 0) moved += contacts[i].Normal * depth;
             var vn = Vector3.Dot(PointVelocity(contacts[i].Point), contacts[i].Normal);
             target[i] = vn < 0 ? -WallRestitution * vn : 0;
+            WallImpactSpeed = MathF.Max(WallImpactSpeed, -vn);
             total[i] = 0;
         }
 

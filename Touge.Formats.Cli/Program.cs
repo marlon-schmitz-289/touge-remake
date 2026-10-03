@@ -101,7 +101,7 @@ switch (args)
             {
                 var pcm = snd.Pcm();
                 var file = Path.Combine(outDir, snd.Id.Replace('/', '_').Replace('#', '_') + ".wav");
-                Sound.WriteWav(file, pcm, snd.Channels, snd.Rate);
+                Wav.Write(file, pcm, snd.Channels, snd.Rate);
                 var rms = Math.Sqrt(pcm.Average(s => (double)s * s)) / 32768;
                 var peak = pcm.Max(s => Math.Abs((int)s)) / 32768.0;
                 Console.WriteLine(F($"{file}: {pcm.Length / snd.Channels / (double)snd.Rate:0.00} s, RMS {20 * Math.Log10(rms + 1e-12):0.0} dBFS, Peak {20 * Math.Log10(peak + 1e-12):0.0} dBFS"));

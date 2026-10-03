@@ -1,4 +1,5 @@
 using System.Numerics;
+using Kansei.Audio;
 using Kansei.Core;
 using Kansei.Graphics;
 using Kansei.Input;
@@ -13,11 +14,18 @@ namespace Touge;
 ///     R reset onto the driving line, C chase/bumper camera. Pad: left stick, triggers, A handbrake, bumpers shift.
 ///     Fly: WASD, Q/E down/up, right mouse or arrow keys look, Shift fast, Space jump along the driving line. Esc quit.
 ///     <paramref name="orbit"/> (degrees, 0 = front, 90 = left, 180 = rear) puts the fly camera around the car;
-///     <paramref name="autodrive"/> lets the line pilot drive that many seconds before the first frame (for --shot).
+///     <paramref name="autodrive"/> lets the line pilot drive that many seconds before the first frame (for --shot);
+///     <paramref name="bench"/> lets it drive live for that many seconds, then logs avg/max frame time and quits.
+///     Sound: engine, tyres, walls, wind, race BGM (M next track, F3 music on/off); none for --shot.
 /// </summary>
-public sealed class TougeGame(string isoPath, string courseTime, string? shotPath = null, int startPoint = 0, float? orbit = null, float? autodrive = null)
+public sealed class TougeGame(string isoPath, string courseTime, string? shotPath = null, int startPoint = 0, float? orbit = null, float? autodrive = null, float? bench = null)
     : KanseiGame
 {
+    private AudioDevice? _audioDevice;
+    private GameAudio? _audio;
+    private double _benchTime, _benchMax;
+    private int _benchFrames, _benchSlow;
+
     private CarRenderer _carRenderer = null!;
     private CarModel _car = null!;
     private Matrix4x4 _carBody, _carPose, _modelToBody;
@@ -73,6 +81,12 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             OrbitCar(deg * MathF.PI / 180);
         }
         if (shotPath != null) (_capture, _shotState) = (new FrameCapture(Device, 1280, 720), 1);
+        else
+        {
+            _audioDevice = new AudioDevice();
+            _audio = new GameAudio(iso, courseTime, _audioDevice);
+            _audio.PlayTrack(background: true);
+        }
     }
 
     private void SyncPose() => (_prevPos, _prevRot, _camSnap) = (_drive.Car.Position, _drive.Car.Orientation, true);
@@ -81,11 +95,12 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     {
         var car = _drive.Car;
         (_prevPos, _prevRot) = (car.Position, car.Orientation);
-        var input = autodrive != null ? _drive.Pilot.Drive(car)
+        var input = autodrive != null || bench != null ? _drive.Pilot.Drive(car)
             : _fly ? new VehicleInput(0, 0, 0, true)
             : new VehicleInput(_throttle, _brake, _steer, _handbrake, _pendingShift);
         _pendingShift = 0;
         car.Step(input, _drive.Ground, dt);
+        _audio?.Update(car, input.Throttle, input.Handbrake, dt);
     }
 
     private void JumpToLine(int i)
@@ -120,6 +135,18 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         var k = Input.Keyboard;
         var dt = time.DeltaTime;
         if (k.IsKeyPressed(Key.Escape)) Window.ShouldClose = true;
+        if (_audio != null && k.IsKeyPressed(Key.M)) _audio.NextTrack();
+        if (_audio != null && k.IsKeyPressed(Key.F3)) _audio.MusicOn = !_audio.MusicOn;
+        if (bench is { } benchSeconds && time.TotalTime > 1) // first second: window/pipeline warm-up hitches (also without audio)
+        {
+            (_benchTime, _benchMax, _benchFrames) = (_benchTime + dt, Math.Max(_benchMax, dt), _benchFrames + 1);
+            if (dt > 0.025) _benchSlow++; // a missed vsync at 60 Hz shows as ≥ 33 ms
+            if (_benchTime >= benchSeconds)
+            {
+                Console.WriteLine($"\n[Bench] {_benchFrames} Frames in {_benchTime:F1} s (nach 1 s Aufwärmen): Ø {_benchTime / _benchFrames * 1000:F2} ms ({_benchFrames / _benchTime:F1} fps), max {_benchMax * 1000:F2} ms, {_benchSlow} Frames > 25 ms");
+                Window.ShouldClose = true;
+            }
+        }
         if (k.IsKeyPressed(Key.F1))
         {
             _fly = !_fly;
@@ -277,6 +304,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
 
     public override void Dispose()
     {
+        _audio?.Dispose();
+        _audioDevice?.Dispose();
         _course.World.Dispose();
         _course.Sky.Dispose();
         _car.Dispose();

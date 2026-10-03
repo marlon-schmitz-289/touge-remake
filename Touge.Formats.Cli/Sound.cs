@@ -64,22 +64,12 @@ internal static class Sound
             "MG_VC00" or "MG_VC01" or "MG_VC02" or "MG_VC03" or "MG_VC04" or "MG_VC05" or "MG_VC06" or "MG_VC07" => "Story-Stimme",
             "CARSE" when stem.Contains("SRIP") => stem.StartsWith("RAIN") ? "Reifen quietschen (nass)" : "Reifen quietschen",
             "CARSE" when stem.StartsWith("TURBO") => "Turbo",
-            "CARSE" => $"Motor {stem.Split('#')[0]} Schicht {stem.Split('#')[1]} (_U Last / _D Schub?)",
+            "CARSE" => $"Motor {stem.Split('#')[0]} Schicht {stem.Split('#')[1]} ({(stem.Contains("_U") ? "Last" : "Schub")})",
             "SYSSE" when stem.Contains("BACKFIRE") || stem == "POPOFF" || stem == "BLOW" => "Fehlzündung/Abblasen",
             "SYSSE" when stem.StartsWith("CR0") => "Crash?",
             "SYSSE" when stem is "RAIN" or "WATER" or "STEAM" => "Umgebung",
             "SYSSE" => "System/UI",
             _ => "-",
         };
-    }
-
-    public static void WriteWav(string path, short[] pcm, int channels, int rate)
-    {
-        using var w = new BinaryWriter(File.Create(path));
-        w.Write("RIFF"u8); w.Write(36 + pcm.Length * 2); w.Write("WAVEfmt "u8);
-        w.Write(16); w.Write((short)1); w.Write((short)channels); w.Write(rate); w.Write(rate * channels * 2);
-        w.Write((short)(channels * 2)); w.Write((short)16);
-        w.Write("data"u8); w.Write(pcm.Length * 2);
-        foreach (var s in pcm) w.Write(s);
     }
 }

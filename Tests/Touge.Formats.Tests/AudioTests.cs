@@ -65,4 +65,21 @@ public class AudioTests
         Assert.Equal((0, 56), v.Loop);
         Assert.Equal(22043, Vag.PitchToRate(0x759)); // SYSSE pitch 0x759 ≈ 22.05 kHz
     }
+
+    [Fact]
+    public void Sect_expands_curve_points_piecewise_linear()
+    {
+        // header + 16 offsets, all entries share one 0x90 block: pitch flat 64, volume window 0→100 (x 10..20) → 0 (x 40), pan 64
+        var d = new byte[0x60 + 0x90];
+        "SECTver0.502"u8.CopyTo(d);
+        for (var e = 0; e < 16; e++) BinaryPrimitives.WriteInt32LittleEndian(d.AsSpan(0x20 + e * 4), 0x60);
+        int[][] curves = [[0, 64, 51, 64, 102, 64, 153, 64, 204, 64, 255, 64], [0, 0, 10, 0, 20, 100, 30, 100, 40, 0, 255, 0], [0, 64, 51, 64, 102, 64, 153, 64, 204, 64, 255, 64]];
+        for (var c = 0; c < 3; c++)
+        for (var k = 0; k < 12; k++) BinaryPrimitives.WriteInt32LittleEndian(d.AsSpan(0x60 + c * 0x30 + k * 4), curves[c][k]);
+
+        var s = new Sect(d);
+        Assert.Equal(64, s.Value(3, Sect.Pitch, 200));
+        Assert.Equal([0, 0, 50, 100, 100, 50, 0, 0], new[] { 0, 10, 15, 20, 30, 35, 40, 300 }.Select(x => s.Value(15, Sect.Volume, x)));
+        Assert.Equal(64, s.Value(0, Sect.Pan, -5));
+    }
 }

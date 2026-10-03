@@ -1,3 +1,4 @@
+using System.Numerics;
 using Silk.NET.OpenAL;
 
 namespace Kansei.Audio;
@@ -10,6 +11,8 @@ public delegate int PcmSource(Span<short> dst);
 ///     a pool of one-shot SFX voices and looping voices with live pitch/gain (engine, tyres).
 ///     Volumes: <see cref="Master"/> = listener gain; <see cref="Music"/>/<see cref="Sfx"/> scale their voices.
 ///     Without an output device everything stays a silent no-op.
+///     With a <c>loopbackRate</c> nothing is played: <see cref="Render"/> mixes the same voices offline (ALC_SOFT_loopback),
+///     the music stream is fed from <see cref="Render"/> instead of a thread.
 /// </summary>
 public sealed unsafe class AudioDevice : IDisposable
 {
@@ -29,6 +32,7 @@ public sealed unsafe class AudioDevice : IDisposable
     private volatile bool _quit;
     private float _master = 1, _music = 1, _sfxVolume = 1;
     private int _nextSfx;
+    private readonly delegate* unmanaged[Cdecl]<Device*, void*, int, void> _renderSamples;
 
     // music stream, guarded by _lock
     private uint _musicSource;
@@ -40,23 +44,33 @@ public sealed unsafe class AudioDevice : IDisposable
 
     public bool Enabled => _device != null;
 
-    public AudioDevice()
+    /// <param name="loopbackRate">0 = default output device; &gt; 0 = offline stereo PCM16 mix at this rate via <see cref="Render"/>.</param>
+    public AudioDevice(int loopbackRate = 0)
     {
         _alc = ALContext.GetApi(soft: true);
         _al = AL.GetApi(soft: true);
-        _device = _alc.OpenDevice(string.Empty);
+        if (loopbackRate > 0 && _alc.IsExtensionPresent(null, "ALC_SOFT_loopback"))
+        {
+            var open = (delegate* unmanaged[Cdecl]<byte*, Device*>)_alc.GetProcAddress(null, "alcLoopbackOpenDeviceSOFT");
+            _renderSamples = (delegate* unmanaged[Cdecl]<Device*, void*, int, void>)_alc.GetProcAddress(null, "alcRenderSamplesSOFT");
+            _device = open(null);
+        }
+        else if (loopbackRate == 0) _device = _alc.OpenDevice(string.Empty);
         if (_device == null)
         {
             Console.Error.WriteLine("[Kansei] Kein Audiogerät – Ton aus.");
             return;
         }
-        _context = _alc.CreateContext(_device, null);
+        // ALC_FORMAT_CHANNELS_SOFT = ALC_STEREO_SOFT, ALC_FORMAT_TYPE_SOFT = ALC_SHORT_SOFT, ALC_FREQUENCY
+        var attrs = stackalloc int[] { 0x1990, 0x1501, 0x1991, 0x1402, 0x1007, loopbackRate, 0 };
+        _context = _alc.CreateContext(_device, loopbackRate > 0 ? attrs : null);
         _alc.MakeContextCurrent(_context);
         _loopPoints = _al.IsExtensionPresent("AL_SOFT_loop_points");
         Console.WriteLine($"[Kansei] Audio: {_alc.GetContextProperty(_device, GetContextString.DeviceSpecifier)}, {_al.GetStateProperty(StateString.Renderer)}, Loop-Punkte {(_loopPoints ? "ja" : "nein")}");
         for (var i = 0; i < SfxVoices; i++) _sfx[i] = _al.GenSource();
         _musicSource = _al.GenSource();
         for (var i = 0; i < StreamBuffers; i++) _streamBuffers[i] = _al.GenBuffer();
+        if (loopbackRate > 0) return;
         _feeder = new Thread(Feed) { IsBackground = true, Name = "Kansei music" };
         _feeder.Start();
     }
@@ -185,30 +199,40 @@ public sealed unsafe class AudioDevice : IDisposable
     {
         while (!_quit)
         {
-            lock (_lock)
-                if (_stream != null)
-                {
-                    _al.GetSourceProperty(_musicSource, GetSourceInteger.BuffersProcessed, out var done);
-                    for (; done > 0; done--)
-                    {
-                        uint b;
-                        _al.SourceUnqueueBuffers(_musicSource, 1, &b);
-                        if (Fill(b)) _al.SourceQueueBuffers(_musicSource, 1, &b);
-                    }
-                    _al.GetSourceProperty(_musicSource, GetSourceInteger.SourceState, out var st);
-                    _al.GetSourceProperty(_musicSource, GetSourceInteger.BuffersQueued, out var queued);
-                    if ((SourceState)st != SourceState.Playing && queued > 0) _al.SourcePlay(_musicSource); // underrun: resume
-                    if (queued == 0) _stream = null; // track ended
-                }
+            lock (_lock) PumpMusicLocked();
             Thread.Sleep(20); // 4 × 8192 frames ≥ 680 ms buffered at 48 kHz
         }
+    }
+
+    private void PumpMusicLocked()
+    {
+        if (_stream == null) return;
+        _al.GetSourceProperty(_musicSource, GetSourceInteger.BuffersProcessed, out var done);
+        for (; done > 0; done--)
+        {
+            uint b;
+            _al.SourceUnqueueBuffers(_musicSource, 1, &b);
+            if (Fill(b)) _al.SourceQueueBuffers(_musicSource, 1, &b);
+        }
+        _al.GetSourceProperty(_musicSource, GetSourceInteger.SourceState, out var st);
+        _al.GetSourceProperty(_musicSource, GetSourceInteger.BuffersQueued, out var queued);
+        if ((SourceState)st != SourceState.Playing && queued > 0) _al.SourcePlay(_musicSource); // underrun: resume
+        if (queued == 0) _stream = null; // track ended
+    }
+
+    /// <summary>Loopback only: mixes <c>dst.Length / 2</c> stereo frames of everything playing (music fed first).</summary>
+    public void Render(Span<short> dst)
+    {
+        if (_renderSamples == null) throw new InvalidOperationException("Render needs a loopback AudioDevice");
+        lock (_lock) PumpMusicLocked();
+        fixed (short* p = dst) _renderSamples(_device, p, dst.Length / 2);
     }
 
     public void Dispose()
     {
         if (!Enabled) return;
         _quit = true;
-        _feeder!.Join();
+        _feeder?.Join();
         StopMusicLocked();
         foreach (var l in _loops.ToArray()) l.Dispose();
         _al.DeleteSource(_musicSource);
@@ -219,12 +243,23 @@ public sealed unsafe class AudioDevice : IDisposable
         _alc.CloseDevice(_device);
     }
 
-    /// <summary>Uploaded PCM. Dispose after every voice using it has stopped.</summary>
+    /// <summary>Uploaded PCM. Dispose loop voices using it first; one-shots still playing it are stopped.</summary>
     public sealed class Clip(AudioDevice owner, uint buffer, float seconds) : IDisposable
     {
         internal uint Buffer => buffer;
         public float Seconds => seconds;
-        public void Dispose() { if (buffer != 0) owner._al.DeleteBuffer(buffer); }
+        public void Dispose()
+        {
+            if (buffer == 0) return;
+            foreach (var src in owner._sfx) // a one-shot still holding the buffer would make the delete fail
+            {
+                owner._al.GetSourceProperty(src, GetSourceInteger.Buffer, out var b);
+                if (b != buffer) continue;
+                owner._al.SourceStop(src);
+                owner._al.SetSourceProperty(src, SourceInteger.Buffer, 0);
+            }
+            owner._al.DeleteBuffer(buffer);
+        }
     }
 
     /// <summary>Looping voice in the SFX group with real-time gain and pitch.</summary>
@@ -251,6 +286,12 @@ public sealed unsafe class AudioDevice : IDisposable
         {
             get => _pitch;
             set { _pitch = value; if (_o.Enabled) _o._al.SetSourceProperty(_src, SourceFloat.Pitch, value); }
+        }
+
+        /// <summary>World position for later 3D voices (other cars); the default origin with the listener there = plain 2D.</summary>
+        public Vector3 Position
+        {
+            set { if (_o.Enabled) _o._al.SetSourceProperty(_src, SourceVector3.Position, in value); }
         }
 
         public void Play() { if (_o.Enabled) _o._al.SourcePlay(_src); }
