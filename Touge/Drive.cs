@@ -60,11 +60,25 @@ public sealed class Drive
 
     public void ResetNearest() => ResetTo(Pilot.Nearest(Car.Position));
 
+    /// <summary>--drift: every 7 s (from 4.5 s on) the pilot's input becomes a 2.5 s handbrake-flick drift, for effect tests.</summary>
+    public bool ForceDrift { get; set; }
+
+    /// <summary>Pilot input at simulation time <paramref name="time"/> (s), with the scripted drift of <see cref="ForceDrift"/>.</summary>
+    public VehicleInput PilotInput(float time)
+    {
+        var input = Pilot.Drive(Car);
+        var phase = time % 7;
+        if (!ForceDrift || phase < 4.5f) return input;
+        // full lock towards the pilot's steering, full throttle, handbrake for the first 0.5 s
+        return new VehicleInput(1, 0, input.Steer < 0 ? -1 : 1, phase < 5.0f);
+    }
+
     /// <summary>
     ///     --autodrive: the pilot drives for <paramref name="seconds"/> from the current position, one log line per
-    ///     second and a summary. Returns false if the simulation blew up (NaN or car fell off the world).
+    ///     second and a summary, <paramref name="afterTick"/> after every tick. Returns false if the simulation blew
+    ///     up (NaN or car fell off the world).
     /// </summary>
-    public bool AutoDrive(float seconds)
+    public bool AutoDrive(float seconds, Action? afterTick = null)
     {
         var (s0, _) = Pilot.Track(Car.Position);
         int ticks = (int)(seconds / Dt), inside = 0, wallTicks = 0, wallTicksSecond = 0;
@@ -72,7 +86,8 @@ public sealed class Drive
         Console.WriteLine("   t  km/h  soll  gang    rpm  strecke_m  quer_m  wand_ticks  schräg_°");
         for (var n = 1; n <= ticks; n++)
         {
-            Car.Step(Pilot.Drive(Car), Ground, Dt);
+            Car.Step(PilotInput(n * Dt), Ground, Dt);
+            afterTick?.Invoke();
             var (s, lat) = Pilot.Track(Car.Position);
             if (!float.IsFinite(Car.Position.X + Car.Position.Y + Car.Position.Z + Car.Velocity.X) || Car.Position.Y < -500)
             {

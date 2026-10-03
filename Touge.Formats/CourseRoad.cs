@@ -41,4 +41,17 @@ public static class CourseRoad
         for (var i = 0; i < Math.Min(roadCount, d.Length); i++) f[i] = d[i] != 0;
         return f;
     }
+
+    /// <summary>
+    /// CRS_LIGHT: u32 n, 12 B ?, n × (f32 x, y, z, w = 1). Points the game brightens the car around (16-m radius); Akina has
+    /// two groups of four (start and bottom), USUI's two entries lie 79 km off the course (placeholders).
+    /// </summary>
+    public static Vector3[] ReadLights(ReadOnlySpan<byte> d)
+    {
+        var n = BinaryPrimitives.ReadInt32LittleEndian(d);
+        if (16 + n * 16 > d.Length) throw new InvalidDataException($"LIGHT: {n} Punkte > {d.Length} Bytes");
+        var p = new Vector3[n];
+        for (var i = 0; i < n; i++) p[i] = DrivingLine.Vec3(d[(16 + i * 16)..]);
+        return p;
+    }
 }

@@ -15,6 +15,7 @@
     <ItemGroup>
         <PenelopeShader Include="Shaders\**\*.vert"/>
         <PenelopeShader Include="Shaders\**\*.frag"/>
+        <PenelopeShaderInclude Include="Shaders\**\*.glsl"/>
     </ItemGroup>
 
     <Import Project="..\Penelope\Penelope.targets"/>

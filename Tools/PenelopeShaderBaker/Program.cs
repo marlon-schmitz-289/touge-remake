@@ -58,7 +58,11 @@ internal static class Program
             _ => throw new ArgumentException($"Unknown shader stage extension '.{ext}' (expected .vert/.frag/.comp)"),
         };
 
-        var source = File.ReadAllText(sourcePath);
+        // `#include "file"` (relative to the source) is pasted in textually; list included files as
+        // <PenelopeShaderInclude> so edits to them trigger a re-bake.
+        var source = System.Text.RegularExpressions.Regex.Replace(File.ReadAllText(sourcePath), "^#include \"([^\"]+)\"",
+            m => File.ReadAllText(Path.Combine(Path.GetDirectoryName(sourcePath)!, m.Groups[1].Value)),
+            System.Text.RegularExpressions.RegexOptions.Multiline);
         var spirv = CompileToSpirv(source, stage, sourcePath);
 
         // Bake names mirror the existing glslc convention: "<base>.<ext>.spv" so existing
@@ -155,6 +159,9 @@ internal static class Program
         {
             platform = Platform.MacOS,
             msl_version = (2, 3, 0),
+            // [[texture(n)]]/[[sampler(n)]] = GLSL binding n, which is the slot the Metal encoder binds
+            // (default numbering follows first use and breaks shaders whose bindings are not used in order)
+            enableDecorationBinding = true,
         };
         var msl = mslCompiler.Compile();
 
