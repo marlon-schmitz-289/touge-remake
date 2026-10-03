@@ -5,6 +5,7 @@
   <Folder Name="/Tools/">
     <Project Path="Tools/PenelopeShaderBaker/PenelopeShaderBaker.csproj" />
   </Folder>
+  <Project Path="Kansei.Physics/Kansei.Physics.csproj" />
   <Project Path="Kansei/Kansei.csproj" />
   <Project Path="Penelope/Penelope.csproj" />
   <Project Path="Touge.Formats.Cli/Touge.Formats.Cli.csproj" />
