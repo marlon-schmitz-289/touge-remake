@@ -318,6 +318,22 @@ public sealed class Vehicle
         }
 
         Velocity += force * (h / s.Mass);
+
+        // Arcade: while drifting the path carves toward the nose (keeps speed, tightens the arc instead of skating).
+        if (_drifting && speed > 5)
+        {
+            var vh = Velocity with { Y = 0 };
+            var nose = Vector3.Normalize(fwd with { Y = 0 });
+            var vLen = vh.Length();
+            var dirV = vh / vLen;
+            var slip = MathF.Acos(Math.Clamp(Vector3.Dot(dirV, nose), -1, 1));
+            if (slip is > 1e-4f and < MathF.PI / 2)
+            {
+                var t = MathF.Min(s.DriftCarve * h / slip, 1);
+                var dir = Vector3.Normalize(Vector3.Lerp(dirV, nose, t));
+                Velocity = dir * vLen + Vector3.UnitY * Velocity.Y;
+            }
+        }
         AngularVelocity += InvInertia(torque) * h;
         Position += Velocity * h;
         var angle = AngularVelocity.Length() * h;

@@ -77,9 +77,10 @@ public sealed record CarSpec
     public float DriftDamping { get; init; } = 5f;            // yaw torque per rad/s of body-slip-angle change, × yaw inertia
     public float HandbrakeDamping { get; init; } = 0.5f;      // DriftDamping factor while the handbrake is pulled
     public float HandbrakeRearGrip { get; init; } = 0.4f;     // rear grip factor while the handbrake is pulled (arcade: rotates the car)
-    public float MaxDriftAngle { get; init; } = 0.75f;        // rad (~43°); beyond it a spring pushes the slip back
+    public float MaxDriftAngle { get; init; } = 0.6f;         // rad (~34°); beyond it a spring pushes the slip back
     public float DriftRearGrip { get; init; } = 0.75f;        // rear grip factor while drifting/entering on throttle
-    public float DriftMomentum { get; init; } = 0.75f;        // share of the tyre drag against the travel direction cancelled while drifting on throttle
+    public float DriftMomentum { get; init; } = 0.4f;         // share of the tyre drag against the travel direction cancelled while drifting on throttle
+    public float DriftCarve { get; init; } = 0.3f;            // rad/s the travel direction turns toward the nose while drifting (speed kept)
     public float DriftEntrySpeed { get; init; } = 20f;        // m/s; full lock + full throttle above this starts a drift
 
     // Integration

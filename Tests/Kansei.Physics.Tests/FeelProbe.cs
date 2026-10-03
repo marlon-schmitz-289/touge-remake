@@ -67,10 +67,15 @@ public class FeelProbe(ITestOutputHelper log)
     public void Held_drift_keeps_speed()
     {
         var car = CarAt(100);
-        var (beta, _, _, v) = Drive(car, 4, 1, 1);
-        log.WriteLine($"held drift 4 s @100: max β {beta:F0}°, end β {car.SlipAngle * Deg:F0}°, 100→{v:F0} km/h");
+        var (beta, _, _, _) = Drive(car, 3, 1, 1);
+        var dir0 = Vector3.Normalize(car.Velocity);
+        var (_, _, _, v) = Drive(car, 1, 1, 1);
+        var turn = MathF.Acos(Math.Clamp(Vector3.Dot(dir0, Vector3.Normalize(car.Velocity)), -1, 1)); // path turn in the last second
+        var radius = car.Velocity.Length() / MathF.Max(turn, 1e-3f);
+        log.WriteLine($"held drift 4 s @100: max β {beta:F0}°, end β {car.SlipAngle * Deg:F0}°, path radius {radius:F0} m, 100→{v:F0} km/h");
         Assert.True(beta > 10, "no drift");
-        Assert.True(v > 90, $"lost too much speed: {v:F0} km/h");
+        Assert.True(v > 85, $"lost too much speed: {v:F0} km/h");
+        Assert.True(radius < 70, $"slides wide instead of turning: path radius {radius:F0} m");
     }
 
     [Fact]
