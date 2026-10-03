@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <RootNamespace>Penelope</RootNamespace>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Silk.NET.Vulkan" Version="2.22.0"/>
+        <PackageReference Include="Silk.NET.Vulkan.Extensions.KHR" Version="2.22.0"/>
+        <PackageReference Include="Silk.NET.Vulkan.Extensions.EXT" Version="2.22.0"/>
+        <PackageReference Include="Silk.NET.OpenGL" Version="2.22.0"/>
+        <PackageReference Include="SPIRV-Cross.NET" Version="1.0.1"/>
+        <PackageReference Include="glslang.net" Version="1.2.0"/>
+        <!-- SharpMetal is macOS-only at runtime (P/Invokes Metal.framework). The managed
+             assembly compiles on any platform, so we always reference it; the Metal backend
+             code uses [SupportedOSPlatform("macos")] so the analyzer keeps quiet elsewhere. -->
+        <PackageReference Include="SharpMetal" Version="1.1.0"/>
+    </ItemGroup>
+
+</Project>

@@ -85,6 +85,7 @@ public sealed class Mesh
     {
         var tris = new List<Vertex>();
         Vector4[] pos = [], nrm = [], uv = [], col = [];
+        Span<float> f = stackalloc float[4];
         var p = 0;
         while (p + 4 <= v.Length)
         {
@@ -100,7 +101,7 @@ public sealed class Mesh
                 var data = new Vector4[n];
                 for (var i = 0; i < n; i++)
                 {
-                    Span<float> f = stackalloc float[4];
+                    f.Clear();
                     for (var k = 0; k < comps; k++)
                     {
                         var o = p + (i * comps + k) * size;

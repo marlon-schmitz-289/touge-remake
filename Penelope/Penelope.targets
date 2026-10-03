@@ -1,0 +1,81 @@
+<Project>
+
+    <!--
+        Penelope shader bake target. Include via:
+            <Import Project="..\Penelope\Penelope.targets"/>
+        Then mark your shaders:
+            <ItemGroup>
+                <PenelopeShader Include="Shaders\**\*.vert" />
+                <PenelopeShader Include="Shaders\**\*.frag" />
+                <PenelopeShader Include="Shaders\**\*.comp" />
+            </ItemGroup>
+
+        Per shader source, the PenelopeShaderBaker tool emits three baked outputs into
+        $(IntermediateOutputPath)spv\:
+            <name>.<stage>.spv   — Vulkan SPIR-V (binary)
+            <name>.<stage>.glsl  — OpenGL 4.5 core GLSL (cross-translated by SPIRV-Cross)
+            <name>.<stage>.msl   — Metal Shading Language for macOS (cross-translated by SPIRV-Cross)
+        All three are embedded as resources under Shaders/<name>.<stage>.{spv,glsl,msl}; the
+        runtime backend picks the one matching its API. No glslc / Vulkan SDK install needed.
+    -->
+
+    <ItemGroup Condition="'@(PenelopeShader)' != ''">
+        <!-- Build-order dep: ensure PenelopeShaderBaker is built before this project so the
+             bake target below can invoke its DLL. ReferenceOutputAssembly=false keeps it as
+             a build-time tool, not a runtime assembly reference. -->
+        <ProjectReference Include="$(MSBuildThisFileDirectory)..\Tools\PenelopeShaderBaker\PenelopeShaderBaker.csproj"
+                          ReferenceOutputAssembly="false"
+                          Private="false"
+                          OutputItemType="" />
+    </ItemGroup>
+
+    <Target Name="PenelopeBakeShaders"
+            BeforeTargets="PrepareResourceNames;AssignTargetPaths;CoreCompile"
+            Condition="'@(PenelopeShader)' != ''"
+            Inputs="@(PenelopeShader)"
+            Outputs="@(PenelopeShader -> '$(MSBuildProjectDirectory)\$(IntermediateOutputPath)spv\%(RelativeDir)%(Filename)%(Extension).spv')">
+
+        <!-- Late-binding: $(IntermediateOutputPath) and $(Configuration) are only set once the
+             standard targets initialise, so the path properties live inside the target rather
+             than a top-level PropertyGroup. -->
+        <PropertyGroup>
+            <PenelopeShaderOutDir>$(MSBuildProjectDirectory)\$(IntermediateOutputPath)spv\</PenelopeShaderOutDir>
+            <PenelopeShaderBakerDll Condition="'$(PenelopeShaderBakerDll)' == ''">$(MSBuildThisFileDirectory)..\Tools\PenelopeShaderBaker\bin\$(Configuration)\net10.0\PenelopeShaderBaker.dll</PenelopeShaderBakerDll>
+        </PropertyGroup>
+
+        <Error Text="PenelopeShaderBaker not built yet at '$(PenelopeShaderBakerDll)'. Build the solution (or Tools/PenelopeShaderBaker explicitly) first."
+               Condition="!Exists('$(PenelopeShaderBakerDll)')" />
+
+        <MakeDir Directories="$(PenelopeShaderOutDir)%(PenelopeShader.RelativeDir)" />
+
+        <!-- One baker invocation per shader source. Baker writes <basename>.<stage>.{spv,glsl,msl}
+             into $(PenelopeShaderOutDir). Inputs/Outputs above make this incremental — only re-runs
+             when a source is newer than its baked .spv. -->
+        <Exec
+            Command="dotnet &quot;$(PenelopeShaderBakerDll)&quot; &quot;%(PenelopeShader.FullPath)&quot; &quot;$(PenelopeShaderOutDir)%(PenelopeShader.RelativeDir).&quot;" />
+
+        <ItemGroup>
+            <FileWrites Include="$(PenelopeShaderOutDir)%(PenelopeShader.RelativeDir)%(PenelopeShader.Filename)%(PenelopeShader.Extension).spv" />
+            <FileWrites Include="$(PenelopeShaderOutDir)%(PenelopeShader.RelativeDir)%(PenelopeShader.Filename)%(PenelopeShader.Extension).glsl" />
+            <FileWrites Include="$(PenelopeShaderOutDir)%(PenelopeShader.RelativeDir)%(PenelopeShader.Filename)%(PenelopeShader.Extension).msl" />
+        </ItemGroup>
+    </Target>
+
+    <Target Name="PenelopeEmbedBakedShaders"
+            AfterTargets="PenelopeBakeShaders"
+            BeforeTargets="PrepareResourceNames;AssignTargetPaths;CoreCompile"
+            Condition="'@(PenelopeShader)' != ''">
+        <PropertyGroup>
+            <PenelopeShaderOutDir>$(MSBuildProjectDirectory)\$(IntermediateOutputPath)spv\</PenelopeShaderOutDir>
+        </PropertyGroup>
+        <ItemGroup>
+            <_PenelopeBaked Include="$(PenelopeShaderOutDir)**\*.spv" />
+            <_PenelopeBaked Include="$(PenelopeShaderOutDir)**\*.glsl" />
+            <_PenelopeBaked Include="$(PenelopeShaderOutDir)**\*.msl" />
+            <EmbeddedResource Include="@(_PenelopeBaked)">
+                <LogicalName>Shaders/%(Filename)%(Extension)</LogicalName>
+            </EmbeddedResource>
+        </ItemGroup>
+    </Target>
+
+</Project>
