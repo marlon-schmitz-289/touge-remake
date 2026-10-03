@@ -42,9 +42,14 @@ public static class CarPaint
     }
 
     /// <summary>Copy of the mesh with RGB of all paint materials replaced (alpha kept).</summary>
-    public static Mesh Apply(Mesh m, uint rgb) => new()
+    /// <summary>Paint is 0xFF = full colour; material RGBA uses the PS2 scale 0x80 = 1.0, so it is halved.</summary>
+    public static Mesh Apply(Mesh m, uint rgb)
     {
-        Textures = m.Textures, Nodes = m.Nodes,
-        Materials = [.. m.Materials.Select(x => (x.Flags & PaintFlag) != 0 ? x with { Rgba = x.Rgba & 0xFF000000 | rgb } : x)],
-    };
+        var half = (rgb >> 1) & 0x7F7F7F;
+        return new Mesh
+        {
+            Textures = m.Textures, Nodes = m.Nodes,
+            Materials = [.. m.Materials.Select(x => (x.Flags & PaintFlag) != 0 ? x with { Rgba = x.Rgba & 0xFF000000 | half } : x)],
+        };
+    }
 }

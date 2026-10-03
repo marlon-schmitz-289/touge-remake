@@ -70,6 +70,6 @@ public class CarPaintTests
         Assert.Equal([0xDCDCDCu], cars[25]);
 
         var m = new Mesh { Textures = [], Nodes = [], Materials = [new(-1, 0x1100, 0x40FFFFFF, []), new(-1, 0x3000, 0x80111111, [])] };
-        Assert.Equal([0x4012C3D7u, 0x80111111u], CarPaint.Apply(m, cars[23][0]).Materials.Select(x => x.Rgba));
+        Assert.Equal([0x4009616Bu, 0x80111111u], CarPaint.Apply(m, cars[23][0]).Materials.Select(x => x.Rgba));
     }
 }
