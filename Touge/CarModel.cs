@@ -29,27 +29,29 @@ public sealed record CarModel(StaticMesh Body, StaticMesh Wheel, Matrix4x4[] Whe
         var tire = parts["tire00FL"];
         var radius = tire.Materials.SelectMany(m => m.Triangles).Max(v => v.Position.Y);
         return new CarModel(
-            Build(renderer.Device, parts.Where(p => CarParts.IsDefaultBody(p.Key)).Select(p => p.Value), textures),
-            Build(renderer.Device, [tire, parts["Bdisk00"]], textures),
+            Build(renderer.Device, parts.Where(p => CarParts.IsDefaultBody(p.Key)).Select(p => (p.Key, p.Value)), textures),
+            Build(renderer.Device, [("tire00FL", tire), ("Bdisk00", parts["Bdisk00"])], textures),
             CarParts.Wheels(parts["body00"]), radius);
     }
 
     /// <summary>
     ///     One batch per material; decal materials (flag 0x400, second pass in the game) go last so they win
     ///     against the coplanar body under reversed-Z GreaterEqual. Material RGB (0x80 = 1.0) is baked into the
-    ///     vertex colour, alpha carries gloss (paint 1, other dark untextured parts = glass 0.5, unverified).
+    ///     vertex colour, alpha carries the kind for car.frag: paint 1 (flag 0x100, and the untextured 0x1000 parts =
+    ///     the near-black lower body), windows (part <c>wind</c>) 0.5, rear lamps (part <c>Blamp</c>) 2, else 0 (matte).
     /// </summary>
-    private static StaticMesh Build(Penelope.IPenelopeDevice device, IEnumerable<Mesh> meshes, Dictionary<string, int> textures)
+    private static StaticMesh Build(Penelope.IPenelopeDevice device, IEnumerable<(string Name, Mesh Mesh)> meshes, Dictionary<string, int> textures)
     {
         var verts = new List<CarVertex>();
         var batches = new List<MeshBatch>();
         foreach (var decals in new[] { false, true })
-        foreach (var mesh in meshes)
+        foreach (var (name, mesh) in meshes)
         foreach (var m in mesh.Materials.Where(m => (m.Flags & 0x400) != 0 == decals))
         {
             var tex = textures[m.Texture >= 0 && m.Texture < mesh.Textures.Length ? mesh.Textures[m.Texture] : ""];
             var rgb = new Vector3(m.Rgba & 0xFF, (m.Rgba >> 8) & 0xFF, (m.Rgba >> 16) & 0xFF) / 128f;
-            var gloss = (m.Flags & CarPaint.PaintFlag) != 0 ? 1f : m.Flags == 0x1000 && m.Texture < 0 ? 0.5f : 0f;
+            var gloss = name.StartsWith("Blamp") ? 2f : name.StartsWith("wind") ? 0.5f
+                : (m.Flags & CarPaint.PaintFlag) != 0 || m.Flags == 0x1000 && m.Texture < 0 && !name.StartsWith("tire") ? 1f : 0f;
             var first = verts.Count;
             foreach (var v in m.Triangles) verts.Add(new CarVertex(v.Position, v.Normal, v.Uv, new Vector4(rgb, gloss)));
             if (verts.Count > first) batches.Add(new MeshBatch(tex, first, verts.Count - first));

@@ -28,7 +28,7 @@ dotnet run --project Touge -- "<iso>" --bench 30 [--quality off]   # Pilot fähr
 
 Fahren (Standard): W/S oder ↑/↓ Gas/Bremse, A/D oder ←/→ lenken, Leertaste Handbremse, S im Stand halten = Rückwärts (Automatik), T Automatik/Manuell,
 Shift/Strg hoch-/runterschalten (manuell, auch in R), R zurück auf die Fahrlinie, C Verfolger-/Stoßstangenkamera,
-F2 Grafikqualität hoch/niedrig (4× MSAA + Bloom an/aus; `--quality off` startet niedrig).
+F2 Grafikqualität hoch/niedrig (4× MSAA, Bloom und Sonnenschatten an/aus; `--quality off` startet niedrig).
 Pad: linker Stick lenken, Trigger Gas/Bremse, A Handbremse, Schultertasten schalten.
 F1 Freiflug: WASD fliegen, Q/E runter/hoch, rechte Maustaste oder Pfeiltasten umschauen, Shift schnell,
 Leertaste ~400 m weiter auf der Fahrlinie. F11 Vollbild, Esc Ende.
@@ -38,6 +38,14 @@ Grafik: Szene in HDR (RGBA16F, 4× MSAA mit Resolve, Alpha-to-Coverage für Laub
 Belichtung, Farbstimmung und Vignette je Tageszeit (`_DAY`/`_NIT`/`_RIN`, `TougeGame.AtmosphereFor`). Texturen sRGB mit
 Mipmaps (CPU, Alpha-Abdeckung bleibt erhalten) und 8× anisotrop. Himmel: analytischer Verlauf + Sonne hinter dem Sky-Mesh,
 Nebel in der Horizontfarbe.
+
+Licht: Streckennormalen beim Laden (winkelgewichtet, Kante ab 60°), Vertexfarbe bleibt das gebackene Licht und wird nur
+neu verteilt: `gebacken × (Rest + Sonne × Schatten × N·L)` (`Atmosphere.BakedKeep/BakedSun`). Sonnenschatten: 3 Kaskaden
+(bis 12/40/150 m) in einem 6144×2048-Tiefenatlas, texelgenau eingerastet, 3×3-PCF; Auto, Bäume, Schilder und Gebäude
+werfen Schatten, gebackene Schatten werden nicht doppelt abgedunkelt. Auto: Klarlack mit Fresnel, Spiegelung der
+Env-Maps des Kurses (`ENV_TEX_*`, je Straßenpunkt per `CRS_ENV` gewählt), Scheiben dunkel + spiegelnd, Rücklichter
+leuchten beim Bremsen (Bloom). Nacht: zwei Scheinwerfer-Kegel (flach/breit) und die `CRS_LIGHT`-Punkte als
+Straßenlaternen (4 nächste). Regen: flache Flächen dunkler, Horizont-Spiegelung und Glanzlichter.
 
 ## Werkzeuge
 

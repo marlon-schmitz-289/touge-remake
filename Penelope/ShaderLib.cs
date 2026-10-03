@@ -96,6 +96,9 @@ public static class ShaderLib
             {
                 platform = iosTarget ? Platform.IOS : Platform.MacOS,
                 msl_version = (2, 3, 0),
+                // [[texture(n)]]/[[sampler(n)]] = GLSL binding n, which is the slot the Metal encoder binds
+                // (default numbering follows first use and breaks shaders whose bindings are not used in order)
+                enableDecorationBinding = true,
             };
 
             var source = compiler.Compile();

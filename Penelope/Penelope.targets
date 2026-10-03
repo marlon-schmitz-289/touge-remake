@@ -32,7 +32,7 @@
     <Target Name="PenelopeBakeShaders"
             BeforeTargets="PrepareResourceNames;AssignTargetPaths;CoreCompile"
             Condition="'@(PenelopeShader)' != ''"
-            Inputs="@(PenelopeShader)"
+            Inputs="@(PenelopeShader);@(PenelopeShaderInclude)"
             Outputs="@(PenelopeShader -> '$(MSBuildProjectDirectory)\$(IntermediateOutputPath)spv\%(RelativeDir)%(Filename)%(Extension).spv')">
 
         <!-- Late-binding: $(IntermediateOutputPath) and $(Configuration) are only set once the

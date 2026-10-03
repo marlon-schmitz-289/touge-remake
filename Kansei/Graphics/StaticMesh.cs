@@ -5,21 +5,23 @@ using Penelope;
 namespace Kansei.Graphics;
 
 [StructLayout(LayoutKind.Sequential)]
-public struct WorldVertex(Vector3 position, Vector2 uv, Vector4 color)
+public struct WorldVertex(Vector3 position, Vector2 uv, Vector4 color, Vector3 normal)
 {
     public Vector3 Position = position;
     public Vector2 Uv = uv;
     public Vector4 Color = color;
+    public Vector3 Normal = normal;
 
-    public const int Size = 36;
+    public const int Size = 48;
 
     public static readonly VertexLayout Layout = VertexLayout.Interleaved(Size,
         new VertexAttribute(0, VertexFormat.Float3, 0),
         new VertexAttribute(1, VertexFormat.Float2, 12),
-        new VertexAttribute(2, VertexFormat.Float4, 20));
+        new VertexAttribute(2, VertexFormat.Float4, 20),
+        new VertexAttribute(3, VertexFormat.Float3, 36));
 }
 
-/// <summary>Lit vertex (cars): <see cref="Color"/> rgb = material colour, a = gloss (0 matte, 1 paint).</summary>
+/// <summary>Lit vertex (cars): <see cref="Color"/> rgb = material colour, a = kind (0 matte, 0.5 glass, 1 paint, 2 rear lamp).</summary>
 [StructLayout(LayoutKind.Sequential)]
 public struct CarVertex(Vector3 position, Vector3 normal, Vector2 uv, Vector4 color)
 {

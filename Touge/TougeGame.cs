@@ -10,7 +10,7 @@ namespace Touge;
 /// <summary>
 ///     Course from the ISO with a drivable AE86 (default) and a free-fly camera (F1).
 ///     Drive: W/S or ↑/↓ throttle/brake (automatic: hold S at standstill to reverse), A/D or ←/→ steer, Space handbrake, T auto/manual, Shift/Ctrl gear up/down (manual),
-///     R reset onto the driving line, C chase/bumper camera, F2 graphics quality (MSAA + bloom) on/off. Pad: left stick, triggers, A handbrake, bumpers shift.
+///     R reset onto the driving line, C chase/bumper camera, F2 graphics quality (MSAA, bloom, shadows) on/off. Pad: left stick, triggers, A handbrake, bumpers shift.
 ///     Fly: WASD, Q/E down/up, right mouse or arrow keys look, Shift fast, Space jump along the driving line. Esc quit.
 ///     <paramref name="orbit"/> (degrees, 0 = front, 90 = left, 180 = rear) puts the fly camera around the car;
 ///     <paramref name="autodrive"/> lets the line pilot drive that many seconds before the first frame (for --shot);
@@ -35,7 +35,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     private Quaternion _prevRot;
 
     // driver input, sampled per frame, consumed per tick
-    private float _throttle, _brake, _steer;
+    private float _throttle, _brake, _steer, _brakeLight;
     private bool _handbrake;
     private int _pendingShift;
 
@@ -57,6 +57,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _drive = new Drive(iso, courseTime);
         Console.WriteLine($"[Touge] {courseTime} geladen in {sw.ElapsedMilliseconds} ms, {_course.World.Batches.Count} Batches, {_drive.Ground.Walls.Length} Wandsegmente");
         _carRenderer = new CarRenderer(_renderer);
+        SetupLights(courseTime.EndsWith("_NIT"));
         _car = CarModel.Load(iso, "AE86T", 0, _renderer);
 
         // model space → physics body space (origin CoG): model wheel centres onto the physics wheel centres at rest
@@ -66,7 +67,11 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _modelToBody = Matrix4x4.CreateTranslation(new Vector3(0, spec.WheelRadius - spec.CogHeight, spec.Wheelbase * (0.5f - spec.FrontWeight)) - modelWheels);
 
         _drive.ResetTo(startPoint);
-        if (autodrive is { } seconds) _drive.AutoDrive(seconds);
+        if (autodrive is { } seconds)
+        {
+            _drive.AutoDrive(seconds);
+            _brakeLight = _drive.Pilot.Drive(_drive.Car).Brake; // the shot frame may come before the first tick
+        }
         SyncPose();
         JumpToLine(startPoint);
         if (orbit is { } deg)
@@ -88,6 +93,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             : _fly ? new VehicleInput(0, 0, 0, true)
             : new VehicleInput(_throttle, _brake, _steer, _handbrake, _pendingShift);
         _pendingShift = 0;
+        _brakeLight = input.Brake;
         car.Step(input, _drive.Ground, dt);
     }
 
@@ -126,7 +132,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         if (k.IsKeyPressed(Key.F2))
         {
             _renderer.HighQuality = !_renderer.HighQuality;
-            Console.WriteLine($"\n[Touge] Grafik: {(_renderer.HighQuality ? "hoch (4× MSAA, Bloom)" : "niedrig (ohne MSAA/Bloom)")}");
+            Console.WriteLine($"\n[Touge] Grafik: {(_renderer.HighQuality ? "hoch (4× MSAA, Bloom, Schatten)" : "niedrig (ohne MSAA/Bloom/Schatten)")}");
         }
         if (bench is { } benchSeconds && Bench(time, benchSeconds)) return;
         if (k.IsKeyPressed(Key.F1))
@@ -160,6 +166,37 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         return true;
     }
 
+    /// <summary>
+    ///     Night: headlights on, CRS_LIGHT points as sodium street lights (on Akina they sit 6–7 m above and 5–10 m beside
+    ///     the road: lamp heads; the game itself only brightens the car near them). Intensities tuned by eye.
+    /// </summary>
+    private void SetupLights(bool night)
+    {
+        var l = _renderer.Lights;
+        l.HeadlightColor = night ? new Vector3(1f, 0.92f, 0.8f) * 700 : Vector3.Zero;
+        l.StreetLights = _course.Lights;
+        l.StreetLightColor = night ? new Vector3(1f, 0.62f, 0.3f) * 50 : Vector3.Zero;
+    }
+
+    /// <summary>Per frame: headlights from the car pose, brake lamps, env maps of the road point nearest to the car.</summary>
+    private void UpdateLights()
+    {
+        var l = _renderer.Lights;
+        var dir = Vector3.Normalize(Vector3.TransformNormal(new Vector3(0, -0.03f, 1), _carBody));
+        for (var i = 0; i < 2; i++)
+        {
+            // AE86 pop-up lamps, model space (x left, z front), placed by eye on the mesh
+            l.HeadlightPosition[i] = Vector3.Transform(new Vector3(i == 0 ? 0.55f : -0.55f, 0.62f, 2.0f), _carBody);
+            l.HeadlightDirection[i] = dir;
+        }
+        l.Brake = _fly ? 0 : _brakeLight;
+        if (_course.Env is { } env)
+        {
+            var e = env[_course.NearestRoadPoint(_carBody.Translation)];
+            _renderer.SetEnvironment(e[0], e[1], e[2], e[3]);
+        }
+    }
+
     /// <summary>Sky, fog, light and grading per time of day (_DAY, _NIT, _RIN). Tuned by eye, not from game data.</summary>
     private static Atmosphere AtmosphereFor(string courseTime) => courseTime[(courseTime.LastIndexOf('_') + 1)..] switch
     {
@@ -167,13 +204,14 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         {
             Zenith = new(0.004f, 0.006f, 0.016f), Horizon = new(0.018f, 0.022f, 0.035f),
             SunDirection = Vector3.Normalize(new Vector3(-0.5f, 0.45f, 0.6f)), SunDisk = new(1.2f, 1.3f, 1.5f), // moon
-            SunIntensity = 0.12f, Ambient = new(0.025f, 0.03f, 0.045f), FogDistance = 900,
+            SunIntensity = 0.12f, Ambient = new(0.025f, 0.03f, 0.045f), FogDistance = 900, BakedKeep = 0.88f, BakedSun = 0.15f, EnvStrength = 2f,
             Exposure = 3.2f, BloomThreshold = 0.5f, BloomStrength = 1.0f, Tint = new(0.92f, 0.97f, 1.1f), Saturation = 0.9f, Vignette = 0.35f,
         },
         "RIN" => new Atmosphere
         {
             Zenith = new(0.22f, 0.24f, 0.27f), Horizon = new(0.40f, 0.42f, 0.45f), SunDisk = Vector3.Zero,
-            SunIntensity = 0.35f, Ambient = new(0.32f, 0.34f, 0.37f), FogDistance = 700,
+            SunIntensity = 0.35f, Ambient = new(0.32f, 0.34f, 0.37f), FogDistance = 700, BakedKeep = 0.85f, BakedSun = 0.2f, Wetness = 0.85f,
+            SunDirection = Vector3.Normalize(new Vector3(0.2f, 1f, 0.15f)),
             Exposure = 1.45f, Tint = new(0.96f, 0.99f, 1.03f), Saturation = 0.8f, Vignette = 0.3f,
         },
         _ => new Atmosphere(),
@@ -300,6 +338,12 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         var proj = WorldRenderer.Perspective(_fov, aspect, 0.3f, Device.Backend == Penelope.BackendKind.Vulkan);
         var view = Matrix4x4.CreateLookAt(_pos, _camLook, Vector3.UnitY);
 
+        UpdateLights();
+        Span<(StaticMesh, Matrix4x4)> casters =
+        [
+            (_car.Body, _carBody), (_car.Wheel, _carWheels[0]), (_car.Wheel, _carWheels[1]), (_car.Wheel, _carWheels[2]), (_car.Wheel, _carWheels[3]),
+        ];
+        _renderer.RenderShadows(ctx.Encoder, _pos, Vector3.Normalize(_camLook - _pos), _fov, aspect, _course.World, casters);
         var pass = _renderer.BeginScene(ctx.Encoder, view, proj, shot);
         _renderer.DrawSky(pass, _course.Sky, Matrix4x4.CreateTranslation(_pos with { Y = 0 }) * view * proj); // follows the camera
         _renderer.Draw(pass, _course.World, view * proj, _pos);

@@ -14,6 +14,17 @@ public sealed class Atmosphere
     public float SunIntensity = 1.1f;
     /// <summary>Ambient light on lit objects (cars) and the colour they reflect.</summary>
     public Vector3 Ambient = new(0.30f, 0.34f, 0.40f);
+    /// <summary>
+    ///     Track lighting: baked vertex light × (<see cref="BakedKeep"/> + <see cref="BakedSun"/> × shadow × N·L).
+    ///     Keep + sun × (N·L of a flat road) ≈ 1 preserves the original brightness in the sun.
+    /// </summary>
+    public float BakedKeep = 0.45f, BakedSun = 0.7f;
+    /// <summary>Cascaded sun shadows (also needs <see cref="WorldRenderer.HighQuality"/>).</summary>
+    public bool Shadows = true;
+    /// <summary>Rain: 0 dry … 1 wet (darker, reflective flat surfaces).</summary>
+    public float Wetness;
+    /// <summary>Brightness of the env-map reflections on cars (the maps are LDR).</summary>
+    public float EnvStrength = 5f;
     public float FogDistance = 1600f;
     public float Exposure = 1.2f;
     public float BloomThreshold = 1.4f, BloomStrength = 0.6f;
