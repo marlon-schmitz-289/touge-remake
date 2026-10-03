@@ -80,6 +80,7 @@ Jede Phase endet mit etwas Sichtbarem/Fahrbarem.
 - Kollision gegen Strecken-BVH, Leitplanken
 - Verfolgerkamera, Cockpit-Kamera
 - Unit-Tests für Reifenmodell, Getriebe, Raycast-BVH (reine Mathe)
+- Stand: `Kansei.Physics/Vehicle.cs` steht (Raycast-Wheels, Magic Formula mit Reibkreis, LSD, Auto/Manuell, Gegenlenkhilfe, Wand-Impulse), getestet nur auf Flachebene (AE86 0–100 ≈ 8,4 s). Fehlt: Einbau ins Spiel, Kameras, Tuning auf Akina, Auto-vs-Auto.
 - **Fertig:** AE86 driftet kontrolliert durch Akinas Haarnadeln mit Pad.
 
 ### Phase 3 – Lenkrad

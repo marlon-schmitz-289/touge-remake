@@ -10,6 +10,7 @@ Assets kommen zur Laufzeit aus der eigenen ISO (SLPM-65268), nie ins Repo.
 |---|---|
 | `Penelope` | GPU-Abstraktion (Vulkan/Metal/OpenGL), aus MEFactory übernommen |
 | `Kansei` | Engine: Fenster, Input, Loop mit fester Tick-Rate, World-Renderer |
+| `Kansei.Physics` | Fahrzeugphysik gegen `IGround`: `Vehicle` + `CarSpec` (Default AE86) |
 | `Touge.Formats` | Spielformate: ISO, AFS, PAC, LZ, GIM, CMD/SMD, Kollision, Fahrlinie, Lack |
 | `Touge.Formats.Cli` | `idss` – Formate untersuchen/exportieren |
 | `Touge` | Das Spiel (derzeit: Strecke abfliegen) |

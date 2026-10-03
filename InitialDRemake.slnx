@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/Tests/">
+    <Project Path="Tests/Kansei.Physics.Tests/Kansei.Physics.Tests.csproj" />
     <Project Path="Tests/Touge.Formats.Tests/Touge.Formats.Tests.csproj" />
   </Folder>
   <Folder Name="/Tools/">
