@@ -18,7 +18,7 @@ Eintrag 0x20: char name[16], u32 offset (ab PAC-Start), u32 size, u32 type, u32 
 - `MODEL/HCAR.AFS` 39 Autos (`AE85.PAC`, `AE86L.PAC`, `AE86T.PAC` …), je ~1700 GIM + CMD gesamt → Teile + Tuning-Varianten
 - `MODEL/CAR.AFS` 70 Autos (In-Race)
 - `MODEL/COURSE.AFS` Strecken je `_DAY` / `_NIT` / `_RIN` (Regen) + `ENV_TEX_*` (Env-Maps)
-- `COURSE/CRS_DATA.AFS` keine PACs: `1LCR`, `CIF`, Float-Tabellen → Kollision/Pfade (offen)
+- `COURSE/CRS_DATA.AFS` keine PACs: `1LCR` (Kollision), `CIF`, Float-Tabellen (Pfade)
 
 ## GIM (Textur) – geknackt
 `"GIM\0"`[16], name[16], 0x30 Bild: u16 w, h, psm, upload-w, upload-h, upload-psm, u32 Daten-Offset; 0x40 CLUT gleich aufgebaut.
@@ -43,9 +43,20 @@ GIM kann auch 32-bit Truecolor sein (psm 0, ohne CLUT).
 
 ## CRS_DATA (nicht gepackt)
 - `CRS_DRV_<KURS>_I/O.BIN`: Fahrlinie innen/außen, xyz-Floats, ~10 m Abstand, gleiche Weltkoordinaten wie die Strecke. Danach Müll/Nullen – echte Punktanzahl noch unbekannt (Behelf: beim ersten Sprung > 60 m abschneiden).
-- `CRS_COLI_<KURS>_0/1.BIN`: Kollision, Magic `1LCR` – noch nicht analysiert.
+- `CRS_COLI_<KURS>_0/1.BIN`: Kollision, siehe unten.
 - `CRS_ENV_*`, `CRS_FLR_*`: noch nicht analysiert.
 
+## Kollision `CRS_COLI_<KURS>_0/1.BIN` – geknackt
+Loader `0x15F340`. Header 0x30 (u32): `"1LCR"`, Version 1, #Materialien, Off, #Vertices, Off, #Faces, Off, #u32-Liste, Off (immer leer), #Sektoren, Off.
+- Material 0x24: name[16] + 20 B Null. Index = Zahl im Namen (`R16road`, `W14hard`, `R25r_grass`, `R32gutter`, `R21r_bump` …), Lücken leer. `R` = befahrbar, `W` = Wand.
+- Vertex 0x20: xyz, Normale xyz, 2 × 0. Weltkoordinaten wie die Strecke (Straßen-Vertices ±1 cm identisch mit `crsNN`).
+- Face 0x10: s16 v[3], s16 Nachbar-Face über Kante v2v0/v0v1/v1v2 (−1 = offener Rand), u16 immer 0xFFFF (?), u16 Attribut = Material | 0x8000 bei Wand.
+- Nur Dreiecke, eine zusammenhängende 2.5D-Fläche (fast alle Normalen nach oben). Wände sind keine senkrechten Flächen, sondern ein ~30 m breites Band `W…`-Faces neben der Straße; Kante Straße/Wand = Leitplanke. Kein Grid/BVH: das Spiel läuft über die Nachbarn in XZ zum Face unter dem Auto (`0x15F7D0`), Variante `0x15F960` stoppt an 0x8000-Faces.
+- Sektor 0x38: Ebene (n, d), Dreieck xyz[3], s32 Start-Face – grobes Band entlang der Strecke (~40 m unter der Straße), `0x15F600` sucht den Sektor (ab dem letzten, vor/zurück) und startet dort den Walk.
+- `_0`/`_1` = Fahrtrichtung (Byte 0x1D6 im Kursobjekt, auch Vorzeichen ±1). Gleiche Fläche (Vertex-Reihenfolge teils anders), nur Endzonen anders: Akina `_0` unten `R80btm` befahrbar, `_1` oben `R64top` und unten Wand. `MYOUGI0`/`USUI0` nur `_0`.
+- Akina `_0`: 9851 Vertices, 18925 Dreiecke, 524 Sektoren; road 6396, W14hard 4789, r_grass 4462, gutter 2298, btm 488, r_bump 320, r_redline 172.
+- Unbekannt: u16 bei Face+0xC, Sinn der u32-Liste, Physik-Werte je Material (nicht in der Datei).
+
 ## Offen
-- Kollision (`1LCR`), ENV, FLR; Punktanzahl der Fahrlinie
+- ENV, FLR; Punktanzahl der Fahrlinie
 - Bedeutung von VU addr 4, Material-Flags im Detail

@@ -6,6 +6,7 @@ using Touge.Formats;
 // idss check <PAC...>                   – alle Texturen und Meshes testweise dekodieren
 // idss course <COURSE.PAC> <outDir>     – Strecke (crs/tree/gate/mnt/sky, ohne LOD/Schatten) als OBJ
 // idss car <CAR.PAC> <outDir>            – Standard-Teile (…00) + Räder als OBJ, Texturen als PNG
+// idss coli <CRS_COLI_*.BIN> <out.obj>  – Kollisionsfläche als OBJ (Gruppe je Material), Histogramm
 switch (args)
 {
     case ["list", var path]:
@@ -56,6 +57,10 @@ switch (args)
         ExportCar(path, outDir);
         break;
 
+    case ["coli", var path, var outObj]:
+        ExportCollision(path, outObj);
+        break;
+
     case ["check", .. var paths]:
         int good = 0, bad = 0;
         foreach (var path in paths)
@@ -80,7 +85,7 @@ switch (args)
         return bad == 0 ? 0 : 1;
 
     default:
-        Console.Error.WriteLine("usage: idss list <AFS|PAC> | extract <AFS> <outDir> | textures <PAC> <outDir> | car <PAC> <outDir> | check <PAC...> | course <PAC> <outDir>");
+        Console.Error.WriteLine("usage: idss list <AFS|PAC> | extract <AFS> <outDir> | textures <PAC> <outDir> | car <PAC> <outDir> | check <PAC...> | course <PAC> <outDir> | coli <BIN> <out.obj>");
         return 1;
 }
 return 0;
@@ -144,4 +149,21 @@ static void ExportCourse(string path, string outDir)
         n++;
     }
     Console.WriteLine($"{name}: {n} Meshes -> {outDir}");
+}
+
+static void ExportCollision(string path, string outObj)
+{
+    var c = Collision.Parse(File.ReadAllBytes(path));
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    using var w = new StreamWriter(outObj);
+    foreach (var p in c.Positions) w.WriteLine(string.Create(inv, $"v {p.X} {p.Y} {p.Z}"));
+    foreach (var n in c.Normals) w.WriteLine(string.Create(inv, $"vn {n.X} {n.Y} {n.Z}"));
+    Console.WriteLine($"{Path.GetFileName(path)}: {c.Positions.Length} Vertices, {c.Faces.Length} Dreiecke, {c.Sectors.Length} Sektoren");
+    foreach (var g in c.Faces.GroupBy(f => f.Attribute).OrderBy(g => g.Key))
+    {
+        var name = c.Materials[g.First().Material];
+        Console.WriteLine($"  0x{g.Key:X4} {name,-20} {g.Count(),6}");
+        w.WriteLine($"g {name}");
+        foreach (var f in g) w.WriteLine($"f {f.A + 1}//{f.A + 1} {f.B + 1}//{f.B + 1} {f.C + 1}//{f.C + 1}");
+    }
 }
