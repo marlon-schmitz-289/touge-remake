@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/Tests/">
+    <Project Path="Tests/Touge.Formats.Tests/Touge.Formats.Tests.csproj" />
+  </Folder>
+  <Project Path="Touge.Formats.Cli/Touge.Formats.Cli.csproj" />
+  <Project Path="Touge.Formats/Touge.Formats.csproj" />
+</Solution>
