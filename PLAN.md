@@ -72,6 +72,7 @@ Jede Phase endet mit etwas Sichtbarem/Fahrbarem.
 - 3D-Renderer: Kamera, Mesh/Material (Textur × Vertex-Farbe, Original-Look), Depth, Backface-Culling, Frustum-Culling, Skybox
 - Cache-Format laden (eigenes Binärformat, direkt in GPU-Buffer)
 - Debug: Freiflug-Kamera, FPS/Frametime-Overlay
+- Stand Frame-Pipeline (`WorldRenderer` + `PostProcess`): HDR RGBA16F mit 4× MSAA + Resolve läuft auf Metal (Penelope-Fix: `Type2DMultisample`, Store-Action mit Resolve), Bloom (Schwelle, 6 Down-/Up-Stufen), ACES, Grading/Vignette je Tageszeit, `--shot` geht durch die ganze Pipeline. Licht linear (Vertexfarben ^2.2, sRGB-Texturen). Sky-Mesh ohne Vertex-Alpha (Tag/Regen haben Alpha 0) und ohne Tiefe vor dem analytischen Himmel; NIT `sky00/sky01` gehören jetzt zum Himmel statt zur Welt. `--bench 30` auf M4, Fenster 1600×900 (Drawable 3200×1800), VSync: Akina Tag hoch avg 16,67 ms / p99 18,4 / max 19,3 ms, niedrig max 18,6 ms, Nacht hoch max 18,8 ms, kein Frame > 25 ms. Vulkan/OpenGL hier nicht getestet (kein MoltenVK, GL-Kontext scheitert schon vorher).
 - **Fertig:** Akina in Originalgrafik mit 144 fps abfliegen, auf Mac (Metal) und Windows (Vulkan).
 
 ### Phase 2 – Fahrphysik

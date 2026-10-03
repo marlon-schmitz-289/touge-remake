@@ -69,6 +69,7 @@ internal sealed unsafe class MetalCommandEncoder : ICommandEncoder
             {
                 var rv = _dev.GetTextureView(a.ResolveTarget);
                 attach.ResolveTexture = _dev.GetViewTexture(rv);
+                attach.StoreAction = a.Store == StoreOp.Store ? MTLStoreAction.StoreAndMultisampleResolve : MTLStoreAction.MultisampleResolve;
             }
             if (i == 0)
             {

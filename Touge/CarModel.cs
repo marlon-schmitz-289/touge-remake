@@ -21,7 +21,7 @@ public sealed record CarModel(StaticMesh Body, StaticMesh Wheel, Matrix4x4[] Whe
         foreach (var e in entries.Where(e => e.Type == 1))
         {
             var (w, h, rgba) = Gim.Decode(pac.AsSpan(e.Offset, e.Size));
-            textures[e.Name] = renderer.AddTexture(w, h, rgba, e.Name);
+            textures[e.Name] = renderer.AddTexture(w, h, rgba, e.Name, 0.5f); // car.frag alpha test
         }
         var parts = entries.Where(e => e.Type == 3 && Mesh.IsCmd(pac.AsSpan(e.Offset, e.Size)))
             .ToDictionary(e => e.Name[(car.Length + 1)..], e => CarPaint.Apply(Mesh.Parse(pac.AsSpan(e.Offset, e.Size)), colours[paint]));

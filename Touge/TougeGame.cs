@@ -10,12 +10,14 @@ namespace Touge;
 /// <summary>
 ///     Course from the ISO with a drivable AE86 (default) and a free-fly camera (F1).
 ///     Drive: W/S or ↑/↓ throttle/brake (automatic: hold S at standstill to reverse), A/D or ←/→ steer, Space handbrake, T auto/manual, Shift/Ctrl gear up/down (manual),
-///     R reset onto the driving line, C chase/bumper camera. Pad: left stick, triggers, A handbrake, bumpers shift.
+///     R reset onto the driving line, C chase/bumper camera, F2 graphics quality (MSAA + bloom) on/off. Pad: left stick, triggers, A handbrake, bumpers shift.
 ///     Fly: WASD, Q/E down/up, right mouse or arrow keys look, Shift fast, Space jump along the driving line. Esc quit.
 ///     <paramref name="orbit"/> (degrees, 0 = front, 90 = left, 180 = rear) puts the fly camera around the car;
-///     <paramref name="autodrive"/> lets the line pilot drive that many seconds before the first frame (for --shot).
+///     <paramref name="autodrive"/> lets the line pilot drive that many seconds before the first frame (for --shot);
+///     <paramref name="bench"/> lets it drive in real time with the chase camera for that many seconds, then logs frame times and quits.
 /// </summary>
-public sealed class TougeGame(string isoPath, string courseTime, string? shotPath = null, int startPoint = 0, float? orbit = null, float? autodrive = null)
+public sealed class TougeGame(string isoPath, string courseTime, string? shotPath = null, int startPoint = 0, float? orbit = null, float? autodrive = null,
+    float? bench = null, bool highQuality = true)
     : KanseiGame
 {
     private CarRenderer _carRenderer = null!;
@@ -44,11 +46,12 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     private int _lastMouseX, _lastMouseY, _linePoint;
     private double _statusTime;
     private int _frames;
+    private readonly List<float> _frameTimes = [];
 
     public override void Load()
     {
         using var iso = new Iso9660(isoPath);
-        _renderer = new WorldRenderer(Device);
+        _renderer = new WorldRenderer(Device) { Atmosphere = AtmosphereFor(courseTime), HighQuality = highQuality };
         var sw = System.Diagnostics.Stopwatch.StartNew();
         _course = CourseLoader.Load(iso, courseTime, _renderer);
         _drive = new Drive(iso, courseTime);
@@ -81,7 +84,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     {
         var car = _drive.Car;
         (_prevPos, _prevRot) = (car.Position, car.Orientation);
-        var input = autodrive != null ? _drive.Pilot.Drive(car)
+        var input = autodrive != null || bench != null ? _drive.Pilot.Drive(car)
             : _fly ? new VehicleInput(0, 0, 0, true)
             : new VehicleInput(_throttle, _brake, _steer, _handbrake, _pendingShift);
         _pendingShift = 0;
@@ -120,6 +123,12 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         var k = Input.Keyboard;
         var dt = time.DeltaTime;
         if (k.IsKeyPressed(Key.Escape)) Window.ShouldClose = true;
+        if (k.IsKeyPressed(Key.F2))
+        {
+            _renderer.HighQuality = !_renderer.HighQuality;
+            Console.WriteLine($"\n[Touge] Grafik: {(_renderer.HighQuality ? "hoch (4× MSAA, Bloom)" : "niedrig (ohne MSAA/Bloom)")}");
+        }
+        if (bench is { } benchSeconds && Bench(time, benchSeconds)) return;
         if (k.IsKeyPressed(Key.F1))
         {
             _fly = !_fly;
@@ -137,6 +146,38 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             (_statusTime, _frames) = (time.TotalTime, 0);
         }
     }
+
+    /// <summary>--bench: frame intervals after a 2 s warm-up; at the end avg/p99/max and frames over 25 ms.</summary>
+    private bool Bench(in GameTime time, float seconds)
+    {
+        if (time.TotalTime > 2) _frameTimes.Add(time.DeltaTime * 1000);
+        if (time.TotalTime < seconds + 2) return false;
+        var sorted = _frameTimes.Order().ToArray();
+        Console.WriteLine($"\n[Bench] {courseTime} {Device.SwapchainWidth}x{Device.SwapchainHeight} Qualität {(_renderer.HighQuality ? "hoch" : "niedrig")}: " +
+                          $"{sorted.Length} Frames in {seconds:F0} s, Frametime avg {sorted.Average():F2} ms, p99 {sorted[(int)(sorted.Length * 0.99)]:F2} ms, " +
+                          $"max {sorted[^1]:F2} ms, > 25 ms: {sorted.Count(t => t > 25)}");
+        Window.ShouldClose = true;
+        return true;
+    }
+
+    /// <summary>Sky, fog, light and grading per time of day (_DAY, _NIT, _RIN). Tuned by eye, not from game data.</summary>
+    private static Atmosphere AtmosphereFor(string courseTime) => courseTime[(courseTime.LastIndexOf('_') + 1)..] switch
+    {
+        "NIT" => new Atmosphere
+        {
+            Zenith = new(0.004f, 0.006f, 0.016f), Horizon = new(0.018f, 0.022f, 0.035f),
+            SunDirection = Vector3.Normalize(new Vector3(-0.5f, 0.45f, 0.6f)), SunDisk = new(1.2f, 1.3f, 1.5f), // moon
+            SunIntensity = 0.12f, Ambient = new(0.025f, 0.03f, 0.045f), FogDistance = 900,
+            Exposure = 3.2f, BloomThreshold = 0.5f, BloomStrength = 1.0f, Tint = new(0.92f, 0.97f, 1.1f), Saturation = 0.9f, Vignette = 0.35f,
+        },
+        "RIN" => new Atmosphere
+        {
+            Zenith = new(0.22f, 0.24f, 0.27f), Horizon = new(0.40f, 0.42f, 0.45f), SunDisk = Vector3.Zero,
+            SunIntensity = 0.35f, Ambient = new(0.32f, 0.34f, 0.37f), FogDistance = 700,
+            Exposure = 1.45f, Tint = new(0.96f, 0.99f, 1.03f), Saturation = 0.8f, Vignette = 0.3f,
+        },
+        _ => new Atmosphere(),
+    };
 
     private void UpdateDriver(float dt)
     {
@@ -259,15 +300,11 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         var proj = WorldRenderer.Perspective(_fov, aspect, 0.3f, Device.Backend == Penelope.BackendKind.Vulkan);
         var view = Matrix4x4.CreateLookAt(_pos, _camLook, Vector3.UnitY);
 
-        var pass = _renderer.BeginScene(ctx.Encoder, _renderer.FogColor, shot);
-        // sky follows the camera, no fog
-        var fog = _renderer.FogDistance;
-        _renderer.FogDistance = float.MaxValue;
-        _renderer.Draw(pass, _course.Sky, Matrix4x4.CreateTranslation(_pos with { Y = 0 }) * view * proj, Vector3.Zero);
-        _renderer.FogDistance = fog;
+        var pass = _renderer.BeginScene(ctx.Encoder, view, proj, shot);
+        _renderer.DrawSky(pass, _course.Sky, Matrix4x4.CreateTranslation(_pos with { Y = 0 }) * view * proj); // follows the camera
         _renderer.Draw(pass, _course.World, view * proj, _pos);
         _carRenderer.Draw(pass, _car.Body, _car.Wheel, _carBody, _carWheels, view * proj, _pos);
-        pass.Dispose();
+        _renderer.EndScene(ctx.Encoder, pass, shot);
         if (shot != null)
         {
             shot.Copy(ctx.Encoder);

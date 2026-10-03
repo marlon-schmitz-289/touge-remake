@@ -26,8 +26,8 @@ public static class CourseLoader
         // tree* are local-space templates (placement data not decoded yet), lod/shd are not drawn
         var meshes = entries.Where(e => e.Type == 3 && !e.Name.Contains("lod") && !e.Name.StartsWith("shd") && !e.Name.StartsWith("tree"))
             .Select(e => (e.Name, Mesh: Mesh.Parse(pac.AsSpan(e.Offset, e.Size)))).ToList();
-        var world = Build(renderer.Device, meshes.Where(m => m.Name != "sky").Select(m => m.Mesh), textures, white);
-        var sky = Build(renderer.Device, meshes.Where(m => m.Name == "sky").Select(m => m.Mesh), textures, white);
+        var world = Build(renderer.Device, meshes.Where(m => !m.Name.StartsWith("sky")).Select(m => m.Mesh), textures, white);
+        var sky = Build(renderer.Device, meshes.Where(m => m.Name.StartsWith("sky")).Select(m => m.Mesh), textures, white);
 
         return new Course(world, sky, ReadDrivingLine(iso, courseTime[..courseTime.LastIndexOf('_')]));
     }

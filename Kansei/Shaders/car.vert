@@ -9,9 +9,10 @@ layout(location = 3) in vec4 aColor; // rgb material colour, a gloss
 
 layout(push_constant) uniform Push {
     mat4 uMvp;
-    vec4 uSun; // xyz towards the sun (model space)
+    vec4 uSun; // xyz towards the sun (model space), w = intensity
     vec4 uEye; // xyz camera (model space)
     vec4 uUp;  // xyz world up (model space)
+    vec4 uSky; // rgb ambient / reflected sky colour (linear)
 } pc;
 
 layout(location = 0) out vec3 vPos;
@@ -25,5 +26,5 @@ void main()
     vPos = aPos;
     vNormal = aNormal;
     vUv = aUv;
-    vColor = aColor;
+    vColor = vec4(pow(aColor.rgb, vec3(2.2)), aColor.a); // gamma-space material colour → linear
 }

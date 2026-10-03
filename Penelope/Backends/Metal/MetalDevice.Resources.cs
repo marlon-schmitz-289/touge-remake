@@ -98,7 +98,7 @@ public sealed unsafe partial class MetalDevice
         // a `using` variable. The descriptor releases via the autorelease pool.
         var td = MTLTextureDescriptor.Texture2DDescriptor(pixelFmt,
             (ulong)desc.Width, (ulong)desc.Height, desc.MipLevels > 1);
-        td.TextureType = MetalConvert.ToMetal(desc.Dimension);
+        td.TextureType = desc.SampleCount > 1 ? MTLTextureType.Type2DMultisample : MetalConvert.ToMetal(desc.Dimension);
         td.Width = (ulong)desc.Width;
         td.Height = (ulong)desc.Height;
         td.Depth = (ulong)desc.Depth;

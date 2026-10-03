@@ -1,6 +1,7 @@
 #version 450
 
-// texture × material colour × (ambient + sun); gloss adds a fake sky/ground reflection (Fresnel) + sun highlight.
+// Linear light: texture × material colour × (sky ambient + sun); gloss adds a sky/ground reflection (Schlick Fresnel)
+// and an HDR sun highlight that feeds the bloom.
 
 layout(location = 0) in vec3 vPos;
 layout(location = 1) in vec3 vNormal;
@@ -11,9 +12,10 @@ layout(set = 0, binding = 0) uniform sampler2D uTexture;
 
 layout(push_constant) uniform Push {
     mat4 uMvp;
-    vec4 uSun;
-    vec4 uEye;
-    vec4 uUp;
+    vec4 uSun; // xyz towards the sun (model space), w = sun intensity
+    vec4 uEye; // xyz camera (model space)
+    vec4 uUp;  // xyz world up (model space)
+    vec4 uSky; // rgb ambient / reflected sky colour (linear)
 } pc;
 
 layout(location = 0) out vec4 FragColor;
@@ -27,13 +29,12 @@ void main()
     if (dot(n, v) < 0.0) n = -n; // no culling: shade the side we see
     vec3 l = pc.uSun.xyz;
     vec3 base = t.rgb * vColor.rgb;
-    vec3 c = base * (0.45 + 0.75 * max(dot(n, l), 0.0));
+    vec3 c = base * (pc.uSky.rgb + pc.uSun.w * max(dot(n, l), 0.0));
 
     vec3 r = reflect(-v, n);
-    float h = dot(r, pc.uUp.xyz);
-    vec3 env = mix(vec3(0.25, 0.24, 0.22), vec3(0.75, 0.85, 1.0), smoothstep(-0.15, 0.25, h));
-    float fresnel = 0.08 + 0.5 * pow(1.0 - max(dot(n, v), 0.0), 4.0);
-    float spec = pow(max(dot(r, l), 0.0), 80.0);
+    vec3 env = pc.uSky.rgb * mix(0.25, 1.6, smoothstep(-0.15, 0.25, dot(r, pc.uUp.xyz)));
+    float fresnel = 0.05 + 0.6 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
+    float spec = pow(max(dot(r, l), 0.0), 120.0) * 6.0 * pc.uSun.w;
     c += vColor.a * (env * fresnel + spec);
     FragColor = vec4(c, 1.0);
 }
