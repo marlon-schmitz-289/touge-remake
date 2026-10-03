@@ -6,6 +6,8 @@
         <Nullable>enable</Nullable>
         <RootNamespace>Penelope</RootNamespace>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <!-- Übernommener Code: Switch-Stubs, ungenutzte Fence-Felder, veraltete Metal-Properties -->
+        <NoWarn>$(NoWarn);CS0612;CS0649;CS0414</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>
