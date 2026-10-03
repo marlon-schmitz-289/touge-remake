@@ -15,9 +15,12 @@ public sealed class LinePilot
     int _seg;
 
     /// <summary>Lateral acceleration the pilot plans corners for (m/s²) and its braking deceleration.</summary>
-    public float CornerAccel = 0.85f * G;
-    public float BrakeDecel = 0.85f * G;
+    public float CornerAccel = 0.8f * G;
+    public float BrakeDecel = 0.6f * G; // planned below the tyres' limit: braking into a corner shares the friction circle
     public float TopSpeed = 160 / 3.6f;
+
+    /// <summary>Speed the last <see cref="Drive" /> call aimed for (m/s).</summary>
+    public float TargetSpeed { get; private set; }
 
     public LinePilot(Vector3[] line)
     {
@@ -102,9 +105,11 @@ public sealed class LinePilot
         }
         if (s >= Length - 1) target = 0;
 
+        TargetSpeed = target;
         var err = target - v;
-        // traction/stability aid: ease off throttle and brake when the body starts to slide (β 3° … 9°)
-        var calm = Math.Clamp(1 - (MathF.Abs(car.SlipAngle) - 0.05f) / 0.1f, 0, 1);
+        // traction/stability aid: ease off throttle and brake when the body starts to slide (β 3° … 9°);
+        // not at crawling speed, where β is noise and cutting throttle leaves the car parked against a wall
+        var calm = v < 8 ? 1 : Math.Clamp(1 - (MathF.Abs(car.SlipAngle) - 0.05f) / 0.1f, 0, 1);
         return new VehicleInput(Math.Clamp(err * 0.25f, 0, 1) * calm, Math.Clamp(-err * 0.5f, 0, 1) * calm, steer);
     }
 

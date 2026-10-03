@@ -33,14 +33,29 @@ public sealed class Drive
         : 1f;
 
     /// <summary>Car at rest on driving-line point <paramref name="i"/>, facing along the line, settled on its springs.</summary>
+    /// <remarks>
+    ///     Some lines start off the drivable faces (IROHA point 0 lies ~30 m before the road, on W faces): the first
+    ///     point from <paramref name="i" /> on with drivable ground under both axles is used instead, with a warning.
+    /// </remarks>
     public void ResetTo(int i)
     {
-        i = Math.Clamp(i, 0, Line.Length - 2);
-        Vector3 a = Line[i], d = Line[i + 1] - a;
-        var ground = Ground.Raycast(a + Vector3.UnitY * 5, -Vector3.UnitY, 20, out var hit) ? hit.Point : a;
-        Car.Reset(ground, MathF.Atan2(d.X, d.Z));
+        var want = i = Math.Clamp(i, 0, Line.Length - 2);
+        GroundHit hit = default;
+        while (i < Line.Length - 1 && !OnRoad(i, out hit)) i++;
+        if (i == Line.Length - 1) throw new InvalidOperationException($"Kein befahrbarer Boden unter der Fahrlinie ab Punkt {want}");
+        if (i != want) Console.WriteLine($"[Drive] Fahrlinie Punkt {want} ohne befahrbaren Boden, starte bei Punkt {i}");
+        var d = Line[i + 1] - Line[i];
+        Car.Reset(hit.Point, MathF.Atan2(d.X, d.Z));
         for (var t = 0; t < 60; t++) Car.Step(new VehicleInput(0, 1, 0), Ground, Dt);
         Pilot.Nearest(Car.Position);
+    }
+
+    private bool OnRoad(int i, out GroundHit hit)
+    {
+        var axle = Vector3.Normalize(Line[i + 1] - Line[i]) * 3;
+        return Ground.Raycast(Line[i] + Vector3.UnitY * 5, -Vector3.UnitY, 20, out hit)
+               && Ground.Raycast(Line[i] - axle + Vector3.UnitY * 5, -Vector3.UnitY, 20, out _)
+               && Ground.Raycast(Line[i] + axle + Vector3.UnitY * 5, -Vector3.UnitY, 20, out _);
     }
 
     public void ResetNearest() => ResetTo(Pilot.Nearest(Car.Position));
@@ -54,7 +69,7 @@ public sealed class Drive
         var (s0, _) = Pilot.Track(Car.Position);
         int ticks = (int)(seconds / Dt), inside = 0, wallTicks = 0, wallTicksSecond = 0;
         float maxLat = 0;
-        Console.WriteLine("   t  km/h  gang    rpm  strecke_m  quer_m  wand_ticks  schräg_°");
+        Console.WriteLine("   t  km/h  soll  gang    rpm  strecke_m  quer_m  wand_ticks  schräg_°");
         for (var n = 1; n <= ticks; n++)
         {
             Car.Step(Pilot.Drive(Car), Ground, Dt);
@@ -69,7 +84,7 @@ public sealed class Drive
             if (Car.WallContacts > 0) (wallTicks, wallTicksSecond) = (wallTicks + 1, wallTicksSecond + 1);
             if (n % 120 == 0)
             {
-                Console.WriteLine($"{n * Dt,4:F0} {Car.SpeedKmh,5:F0} {Gear(Car),5} {Car.Rpm,6:F0} {s - s0,10:F0} {lat,7:F1} {wallTicksSecond,11} {Car.SlipAngle * 180 / MathF.PI,9:F1}");
+                Console.WriteLine($"{n * Dt,4:F0} {Car.SpeedKmh,5:F0} {Pilot.TargetSpeed * 3.6f,5:F0} {Gear(Car),5} {Car.Rpm,6:F0} {s - s0,10:F0} {lat,7:F1} {wallTicksSecond,11} {Car.SlipAngle * 180 / MathF.PI,9:F1}");
                 wallTicksSecond = 0;
             }
         }

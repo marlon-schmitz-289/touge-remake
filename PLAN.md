@@ -81,7 +81,8 @@ Jede Phase endet mit etwas Sichtbarem/Fahrbarem.
 - Verfolgerkamera, Cockpit-Kamera
 - Unit-Tests für Reifenmodell, Getriebe, Raycast-BVH (reine Mathe)
 - Stand: `Kansei.Physics/Vehicle.cs` (Raycast-Wheels, Magic Formula mit Reibkreis, LSD, Auto/Manuell, Gegenlenkhilfe, Wand-Impulse) ist im Spiel: Fahrmodus mit Tastatur/Pad, Verfolger- und Stoßstangenkamera, Render-Interpolation, Grip je Kollisionsmaterial (geschätzt), `--autodrive` mit `LinePilot`.
-- Akina `--autodrive 60` ab Start: ~1,26 km, |quer| ≤ 6 m 100 %, max 4,8 m, 0,3 % Ticks mit Wandkontakt, kein NaN; ganze Strecke 7,68 km in ~348 s. Ziel 1,5 km in 60 s nicht erreicht – limitiert durch Serien-4A-GE (Beschleunigung) und Kurvenspeed ~0,85 g genau auf der Fahrlinie (linke Spur, Pilot schneidet keine Kurven).
+- `--autodrive 60` ab Start (Pilot plant 0,8 g quer, 0,6 g Bremsen), alle 9 `_DAY`/`USUI_NIT`-Kurse: 0,9–1,26 km, |quer| ≤ 6 m in 100 % der Ticks (max 5,8 m IROHA), Wandkontakt 0–1,6 % der Ticks, kein NaN. Akina 1257 m, max 4,9 m, 0,1 %. Ziel 1,5 km in 60 s nicht erreicht – limitiert durch Serien-4A-GE (Beschleunigung); mehr Kurven-g brachte ≤ 3 % Strecke, aber Ausritte über 6 m.
+- Fahrlinien von IROHA, AKAGI, MOMIJI beginnen 3–5 Punkte vor befahrbarem Boden (auf `W`-Flächen): `Drive.ResetTo` nimmt den ersten Punkt mit Boden unter beiden Achsen und meldet das.
 - Fehlt: Fahrgefühl mit echtem Pad/Tastatur tunen, Cockpit-Kamera, Rückwärts im Automatik-Modus, Auto-vs-Auto.
 - **Fertig:** AE86 driftet kontrolliert durch Akinas Haarnadeln mit Pad.
 
