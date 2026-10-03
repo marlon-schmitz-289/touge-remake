@@ -33,6 +33,19 @@ Eintrag 0x20: char name[16], u32 offset (ab PAC-Start), u32 size, u32 type, u32 
 - Material-Flags: 0x1100 + Alpha 0x40 = Glas; Lack ohne Textur nur über RGBA.
 - Teile mit Varianten-Suffix `00`–`05` (Tuning), `tire00FL`…, `Bcali00FR`… (Bremssättel).
 
+## LZ (gepackte PAC-Einträge) – geknackt
+u32 `0x01DA3D12` (Byte 3: 1 = gepackt, 0 = roh), u32 entpackte Größe, u32 gepackte Größe. LZSS mit 64-KB-Fenster (Start `0xFEFD`, genullt), Flag-Byte LSB zuerst (1 = Literal), Match = u16 absolute Fensterposition + u8 Länge−4. Im Spiel `0x1C54F0`. Siehe `Lz.cs`.
+
+## SMD (Strecken-Mesh) – geknackt
+`"SMD\0" "0.00"`; 0x08 #Dreiecke, 0x0C #Vertices, 0x10 #Texturen, 0x14 #Materialien, 0x18 Texturtabelle, 0x1C Materialtabelle, 0x20 BBox. VIF wie CMD, aber addr 2 = UV, addr 3 = V4-8 Vertexfarbe (vorbeleuchtet), keine Normalen. Weltkoordinaten in Metern.
+Strecken-PACs: `crsNN` (Abschnitte), `crslodNN` (LOD), `shdNN` (Schatten), `tree*`, `gate*`, `mnt00`, `sky`. Varianten `_DAY`, `_NIT`, `_RIN`.
+GIM kann auch 32-bit Truecolor sein (psm 0, ohne CLUT).
+
+## CRS_DATA (nicht gepackt)
+- `CRS_DRV_<KURS>_I/O.BIN`: Fahrlinie innen/außen, xyz-Floats, ~10 m Abstand, gleiche Weltkoordinaten wie die Strecke. Danach Müll/Nullen – echte Punktanzahl noch unbekannt (Behelf: beim ersten Sprung > 60 m abschneiden).
+- `CRS_COLI_<KURS>_0/1.BIN`: Kollision, Magic `1LCR` – noch nicht analysiert.
+- `CRS_ENV_*`, `CRS_FLR_*`: noch nicht analysiert.
+
 ## Offen
-- Strecken-Mesh-Format (type 3 ohne CMD-Magic), CRS_DATA (Kollision/Pfade)
+- Kollision (`1LCR`), ENV, FLR; Punktanzahl der Fahrlinie
 - Bedeutung von VU addr 4, Material-Flags im Detail

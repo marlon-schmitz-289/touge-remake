@@ -4,6 +4,7 @@ using Touge.Formats;
 // idss extract <file.AFS> <outDir>       – alle Einträge als Dateien schreiben
 // idss textures <file.PAC> <outDir>      – alle GIM-Texturen als PNG
 // idss check <PAC...>                   – alle Texturen und Meshes testweise dekodieren
+// idss course <COURSE.PAC> <outDir>     – Strecke (crs/tree/gate/mnt/sky, ohne LOD/Schatten) als OBJ
 // idss car <CAR.PAC> <outDir>            – Standard-Teile (…00) + Räder als OBJ, Texturen als PNG
 switch (args)
 {
@@ -47,6 +48,10 @@ switch (args)
         Console.WriteLine($"{ok} PNG -> {outDir}, {fail} übersprungen");
         break;
 
+    case ["course", var path, var outDir]:
+        ExportCourse(path, outDir);
+        break;
+
     case ["car", var path, var outDir]:
         ExportCar(path, outDir);
         break;
@@ -61,7 +66,7 @@ switch (args)
                 {
                     var d = file.AsSpan(e.Offset, e.Size);
                     if (e.Type == 1) Gim.Decode(d);
-                    else if (Cmd.IsCmd(d)) Cmd.Parse(d);
+                    else if (Mesh.IsCmd(d) || Mesh.IsSmd(d) || Lz.IsCompressed(d)) Mesh.Parse(d);
                     else continue;
                     good++;
                 }
@@ -75,7 +80,7 @@ switch (args)
         return bad == 0 ? 0 : 1;
 
     default:
-        Console.Error.WriteLine("usage: idss list <AFS|PAC> | extract <AFS> <outDir> | textures <PAC> <outDir> | car <PAC> <outDir> | check <PAC...>");
+        Console.Error.WriteLine("usage: idss list <AFS|PAC> | extract <AFS> <outDir> | textures <PAC> <outDir> | car <PAC> <outDir> | check <PAC...> | course <PAC> <outDir>");
         return 1;
 }
 return 0;
@@ -101,8 +106,8 @@ static void ExportCar(string path, string outDir)
         Png.Write(Path.Combine(outDir, e.Name + ".png"), w, h, rgba);
     }
 
-    var parts = entries.Where(e => e.Type == 3 && Cmd.IsCmd(pac.AsSpan(e.Offset, e.Size)))
-        .ToDictionary(e => e.Name[(name.Length + 1)..], e => Cmd.Parse(pac.AsSpan(e.Offset, e.Size)));
+    var parts = entries.Where(e => e.Type == 3 && Mesh.IsCmd(pac.AsSpan(e.Offset, e.Size)))
+        .ToDictionary(e => e.Name[(name.Length + 1)..], e => Mesh.Parse(pac.AsSpan(e.Offset, e.Size)));
     using var obj = new Obj(Path.Combine(outDir, name + ".obj"));
     foreach (var (part, cmd) in parts.Where(p => p.Key.EndsWith("00") && !p.Key.Contains("shd") && !p.Key.StartsWith("tire") && !p.Key.StartsWith("Bdisk")))
         obj.Add(part, cmd, System.Numerics.Matrix4x4.Identity);
@@ -118,4 +123,25 @@ static void ExportCar(string path, string outDir)
         if (parts.TryGetValue(cali, out var cc)) obj.Add(cali, cc, t);
     }
     Console.WriteLine($"{name}: {parts.Count} Teile -> {outDir}");
+}
+
+static void ExportCourse(string path, string outDir)
+{
+    var pac = File.ReadAllBytes(path);
+    var name = Path.GetFileNameWithoutExtension(path);
+    Directory.CreateDirectory(outDir);
+    var entries = Pac.Entries(pac);
+    foreach (var e in entries.Where(e => e.Type == 1))
+    {
+        var (w, h, rgba) = Gim.Decode(pac.AsSpan(e.Offset, e.Size));
+        Png.Write(Path.Combine(outDir, e.Name + ".png"), w, h, rgba);
+    }
+    using var obj = new Obj(Path.Combine(outDir, name + ".obj"));
+    var n = 0;
+    foreach (var e in entries.Where(e => e.Type == 3 && !e.Name.Contains("lod") && !e.Name.StartsWith("shd")))
+    {
+        obj.Add(e.Name, Mesh.Parse(pac.AsSpan(e.Offset, e.Size)), System.Numerics.Matrix4x4.Identity);
+        n++;
+    }
+    Console.WriteLine($"{name}: {n} Meshes -> {outDir}");
 }

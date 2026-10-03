@@ -18,6 +18,12 @@ public static class Gim
         int w = U16(g, 0x30), h = U16(g, 0x32), psm = U16(g, 0x34), tw = U16(g, 0x36), th = U16(g, 0x38), tpsm = U16(g, 0x3A);
         var dataOff = BinaryPrimitives.ReadInt32LittleEndian(g[0x3C..]);
         int cpsm = U16(g, 0x44), clutOff = BinaryPrimitives.ReadInt32LittleEndian(g[0x4C..]);
+        if (psm == PsmCt32 && tpsm == PsmCt32) // truecolor, linear, no CLUT
+        {
+            var px = g.Slice(dataOff, w * h * 4).ToArray();
+            for (var i = 3; i < px.Length; i += 4) px[i] = (byte)Math.Min(255, px[i] * 2);
+            return (w, h, px);
+        }
         if (psm is not (PsmT8 or PsmT4) || cpsm != PsmCt32)
             throw new NotSupportedException($"psm 0x{psm:X} / clut psm 0x{cpsm:X}");
         var bits = psm == PsmT8 ? 8 : 4;

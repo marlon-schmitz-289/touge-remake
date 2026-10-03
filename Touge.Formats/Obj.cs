@@ -17,7 +17,7 @@ public sealed class Obj : IDisposable
         _obj.WriteLine($"mtllib {Path.GetFileName(Path.ChangeExtension(objPath, ".mtl"))}");
     }
 
-    public void Add(string name, Cmd cmd, Matrix4x4 transform)
+    public void Add(string name, Mesh cmd, Matrix4x4 transform)
     {
         _obj.WriteLine($"o {name}");
         var nt = Matrix4x4.Invert(transform, out var inv) ? Matrix4x4.Transpose(inv) : transform;
@@ -38,7 +38,7 @@ public sealed class Obj : IDisposable
             {
                 var p = Vector3.Transform(v.Position, transform);
                 var n = Vector3.Normalize(Vector3.TransformNormal(v.Normal, nt));
-                _obj.WriteLine(F($"v {p.X} {p.Y} {p.Z}"));
+                _obj.WriteLine(F($"v {p.X} {p.Y} {p.Z} {v.Color.X} {v.Color.Y} {v.Color.Z}"));
                 _obj.WriteLine(F($"vn {n.X} {n.Y} {n.Z}"));
                 _obj.WriteLine(F($"vt {v.Uv.X} {1 - v.Uv.Y}"));
             }

@@ -3,7 +3,7 @@ using Touge.Formats;
 
 namespace Touge.Formats.Tests;
 
-public class CmdTests
+public class MeshTests
 {
     /// <summary>One material, one batch of 4 strip vertices (first two with ADC) -> 2 triangles, alternating winding.</summary>
     [Fact]
@@ -29,7 +29,19 @@ public class CmdTests
         BinaryPrimitives.WriteInt32LittleEndian(c.AsSpan(0x58), -1);
         vif.CopyTo(c, 0x70);
 
-        var tris = Cmd.Parse(c).Materials.Single().Triangles;
+        var tris = Mesh.Parse(c).Materials.Single().Triangles;
         Assert.Equal([0f, 1, 2, 2, 1, 3], tris.Select(v => v.Position.X));
+    }
+}
+
+public class LzTests
+{
+    [Fact]
+    public void Decompresses_literals_and_window_match()
+    {
+        // "ABAB" + match(pos 0xFEFD, len 4) -> "ABABABAB"
+        byte[] d = [0x12, 0x3D, 0xDA, 0x01, 8, 0, 0, 0, 8, 0, 0, 0,
+                    0b0_1111, (byte)'A', (byte)'B', (byte)'A', (byte)'B', 0xFD, 0xFE, 0];
+        Assert.Equal("ABABABAB"u8.ToArray(), Lz.Decompress(d));
     }
 }
