@@ -131,4 +131,21 @@ public class VehicleTests(ITestOutputHelper log)
         log.WriteLine($"wall: z {car.Position.Z:F2}, {car.SpeedKmh:F1} km/h");
         Assert.InRange(car.Position.Z, 0, 30 - CarSpec.AE86.Length / 2 + 0.05f);
     }
+
+    [Fact]
+    public void AutomaticReversesOnBrakeAtStandstill()
+    {
+        var car = NewCar();
+        Run(car, new VehicleInput(0, 1, 0), 3);
+        var back = Vector3.Dot(car.Velocity, Vector3.Transform(Vector3.UnitZ, car.Orientation));
+        var up = Vector3.Transform(Vector3.UnitY, car.Orientation);
+        log.WriteLine($"reverse: gear {car.Gear}, {back * 3.6f:F1} km/h, heading z {Vector3.Transform(Vector3.UnitZ, car.Orientation).Z:F2}");
+        Assert.Equal(-1, car.Gear);
+        Assert.True(back < -2, "not driving backwards");
+        Assert.True(Vector3.Transform(Vector3.UnitZ, car.Orientation).Z > 0.95f && up.Y > 0.95f, "turned around while reversing");
+
+        Run(car, new VehicleInput(1, 0, 0), 4);
+        var fwd = Vector3.Dot(car.Velocity, Vector3.Transform(Vector3.UnitZ, car.Orientation));
+        Assert.True(car.Gear >= 1 && fwd > 2, $"did not switch back to forward: gear {car.Gear}, {fwd * 3.6f:F1} km/h");
+    }
 }

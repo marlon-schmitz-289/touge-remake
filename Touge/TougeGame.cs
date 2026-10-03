@@ -9,7 +9,7 @@ namespace Touge;
 
 /// <summary>
 ///     Course from the ISO with a drivable AE86 (default) and a free-fly camera (F1).
-///     Drive: W/S or ↑/↓ throttle/brake, A/D or ←/→ steer, Space handbrake, T auto/manual, Shift/Ctrl gear up/down (manual),
+///     Drive: W/S or ↑/↓ throttle/brake (automatic: hold S at standstill to reverse), A/D or ←/→ steer, Space handbrake, T auto/manual, Shift/Ctrl gear up/down (manual),
 ///     R reset onto the driving line, C chase/bumper camera. Pad: left stick, triggers, A handbrake, bumpers shift.
 ///     Fly: WASD, Q/E down/up, right mouse or arrow keys look, Shift fast, Space jump along the driving line. Esc quit.
 ///     <paramref name="orbit"/> (degrees, 0 = front, 90 = left, 180 = rear) puts the fly camera around the car;

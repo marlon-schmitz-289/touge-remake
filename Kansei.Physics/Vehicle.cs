@@ -64,7 +64,7 @@ public sealed class Vehicle
     public Vector3 AngularVelocity { get; private set; }
     public float Rpm { get; private set; }
     public int Gear { get; private set; } // −1 R, 0 N, 1..n
-    /// <summary>Body slip angle β in rad; + = travelling to the right of the nose.</summary>
+    /// <summary>Body slip angle β in rad; + = travelling to the right of the nose. 0 when not moving forward.</summary>
     public float SlipAngle { get; private set; }
     public float SpeedKmh => Velocity.Length() * 3.6f;
     /// <summary>Wall contacts summed over the substeps of the last <see cref="Step" />.</summary>
@@ -91,6 +91,18 @@ public sealed class Vehicle
     {
         var throttle = Math.Clamp(input.Throttle, 0, 1);
         var brake = Math.Clamp(input.Brake, 0, 1);
+        if (AutomaticGearbox)
+        {
+            // Arcade automatic: brake held at standstill engages reverse, throttle at standstill goes back to 1st.
+            // In reverse the pedals swap: brake drives backwards, throttle brakes.
+            var fwdSpeed = Vector3.Dot(Velocity, Vector3.Transform(Vector3.UnitZ, Orientation));
+            if (MathF.Abs(fwdSpeed) < 0.5f)
+            {
+                if (Gear >= 1 && brake > 0.5f && throttle < 0.1f) Gear = -1;
+                else if (Gear == -1 && throttle > 0.5f && brake < 0.1f) Gear = 1;
+            }
+            if (Gear == -1) (throttle, brake) = (brake, throttle);
+        }
         UpdateGear(input.Shift, dt);
         UpdateSteer(Math.Clamp(input.Steer, -1, 1), dt);
         UpdateDriftGrip(Math.Abs(input.Steer), throttle, input.Handbrake);
@@ -103,7 +115,7 @@ public sealed class Vehicle
         }
 
         var vb = Vector3.Transform(Velocity, Quaternion.Conjugate(Orientation));
-        SlipAngle = vb.X * vb.X + vb.Z * vb.Z < 1 ? 0 : MathF.Atan2(-vb.X, vb.Z);
+        SlipAngle = vb.Z < 1 ? 0 : MathF.Atan2(-vb.X, vb.Z); // forward travel only: reversing is not a 180° drift
         DriftStabilise(dt, input.Handbrake);
     }
 
