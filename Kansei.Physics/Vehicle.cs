@@ -69,6 +69,9 @@ public sealed class Vehicle
     public float SpeedKmh => Velocity.Length() * 3.6f;
     /// <summary>Wall contacts summed over the substeps of the last <see cref="Step" />.</summary>
     public int WallContacts { get; private set; }
+    /// <summary>Point and normal of the last wall contact (valid while <see cref="WallContacts" /> &gt; 0).</summary>
+    public Vector3 WallPoint { get; private set; }
+    public Vector3 WallNormal { get; private set; }
     public Matrix4x4 Pose => Matrix4x4.CreateFromQuaternion(Orientation) * Matrix4x4.CreateTranslation(Position);
     public ReadOnlySpan<WheelState> Wheels => _wheels;
 
@@ -363,6 +366,7 @@ public sealed class Vehicle
         Span<WallContact> contacts = stackalloc WallContact[8];
         var count = ground.CollideWalls(probes, ProbeRadius, contacts);
         WallContacts += count;
+        if (count > 0) (WallPoint, WallNormal) = (contacts[0].Point, contacts[0].Normal);
         var moved = Vector3.Zero;
         Span<float> target = stackalloc float[count];
         Span<float> total = stackalloc float[count];

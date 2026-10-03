@@ -14,13 +14,21 @@ namespace Touge;
 ///     Fly: WASD, Q/E down/up, right mouse or arrow keys look, Shift fast, Space jump along the driving line. Esc quit.
 ///     <paramref name="orbit"/> (degrees, 0 = front, 90 = left, 180 = rear) puts the fly camera around the car;
 ///     <paramref name="autodrive"/> lets the line pilot drive that many seconds before the first frame (for --shot);
-///     <paramref name="bench"/> lets it drive in real time with the chase camera for that many seconds, then logs frame times and quits.
+///     <paramref name="bench"/> lets it drive in real time with the chase camera for that many seconds, then logs frame times and quits;
+///     <paramref name="drift"/> makes the pilot throw in a scripted handbrake drift every 7 s (<see cref="Drive.ForceDrift"/>).
+///     Tyre smoke, skid marks and sparks come from the car's wheel/wall state every tick (<see cref="TickEffects"/>).
 /// </summary>
 public sealed class TougeGame(string isoPath, string courseTime, string? shotPath = null, int startPoint = 0, float? orbit = null, float? autodrive = null,
-    float? bench = null, bool highQuality = true)
+    float? bench = null, bool highQuality = true, bool drift = false)
     : KanseiGame
 {
     private CarRenderer _carRenderer = null!;
+    private EffectsRenderer _fxRenderer = null!;
+    private readonly Effects _fx = new();
+    private readonly Random _rng = new(3);
+    private readonly float[] _smokeDebt = new float[4];
+    private float _simTime, _shake;
+    private Vector3 _prevVelocity, _shakeOffset;
     private CarModel _car = null!;
     private Matrix4x4 _carBody, _carPose, _modelToBody;
     private readonly Matrix4x4[] _carWheels = new Matrix4x4[4];
@@ -47,6 +55,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     private double _statusTime;
     private int _frames;
     private readonly List<float> _frameTimes = [];
+    private (int Smoke, int Skids, int Sparks) _fxPeak;
 
     public override void Load()
     {
@@ -57,6 +66,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _drive = new Drive(iso, courseTime);
         Console.WriteLine($"[Touge] {courseTime} geladen in {sw.ElapsedMilliseconds} ms, {_course.World.Batches.Count} Batches, {_drive.Ground.Walls.Length} Wandsegmente");
         _carRenderer = new CarRenderer(_renderer);
+        _fxRenderer = new EffectsRenderer(_renderer);
         SetupLights(courseTime.EndsWith("_NIT"));
         _car = CarModel.Load(iso, "AE86T", 0, _renderer);
 
@@ -67,9 +77,11 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _modelToBody = Matrix4x4.CreateTranslation(new Vector3(0, spec.WheelRadius - spec.CogHeight, spec.Wheelbase * (0.5f - spec.FrontWeight)) - modelWheels);
 
         _drive.ResetTo(startPoint);
+        _drive.ForceDrift = drift;
         if (autodrive is { } seconds)
         {
-            _drive.AutoDrive(seconds);
+            _drive.AutoDrive(seconds, () => TickEffects(Drive.Dt));
+            _simTime = seconds;
             _brakeLight = _drive.Pilot.Drive(_drive.Car).Brake; // the shot frame may come before the first tick
         }
         SyncPose();
@@ -89,12 +101,60 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     {
         var car = _drive.Car;
         (_prevPos, _prevRot) = (car.Position, car.Orientation);
-        var input = autodrive != null || bench != null ? _drive.Pilot.Drive(car)
+        var input = autodrive != null || bench != null ? _drive.PilotInput(_simTime)
             : _fly ? new VehicleInput(0, 0, 0, true)
             : new VehicleInput(_throttle, _brake, _steer, _handbrake, _pendingShift);
         _pendingShift = 0;
         _brakeLight = input.Brake;
         car.Step(input, _drive.Ground, dt);
+        _simTime += dt;
+        TickEffects(dt);
+    }
+
+    /// <summary>
+    ///     Per physics tick: smoke and skid marks from each wheel's slide speed (slip ratio/angle × speed, scaled by
+    ///     load), sparks and camera shake from wall contacts, then the particles move. Thresholds tuned by eye.
+    /// </summary>
+    private void TickEffects(float dt)
+    {
+        var car = _drive.Car;
+        var spec = car.Spec;
+        var pose = car.Pose;
+        var up = Vector3.TransformNormal(Vector3.UnitY, pose);
+        var side = Vector3.TransformNormal(Vector3.UnitX, pose) * 0.1f; // half tread width
+        var speed = MathF.Max(car.Velocity.Length(), 3); // the tyre model's slip denominator (VMin)
+        for (var i = 0; i < 4; i++)
+        {
+            var w = car.Wheels[i];
+            var contact = Vector3.Transform(w.LocalCenter, pose) - up * spec.WheelRadius;
+            var tan = MathF.Tan(w.SlipAngle);
+            var slide = w.Contact ? speed * MathF.Sqrt(w.SlipRatio * w.SlipRatio + tan * tan) : 0; // m/s
+            var load = Math.Clamp(w.Load / spec.NominalLoad, 0, 1.5f);
+            _fx.Skid(i, contact, side, up, Math.Clamp((slide - 2f) / 3, 0, 1) * Math.Clamp(load * 4, 0, 1));
+            var smoke = Math.Clamp((slide - 4.5f) / 7, 0, 1) * load;
+            _smokeDebt[i] += smoke * 45 * dt; // puffs per second per wheel at full slide
+            for (; _smokeDebt[i] >= 1; _smokeDebt[i]--)
+            {
+                var jitter = new Vector3(_rng.NextSingle() - 0.5f, _rng.NextSingle() * 0.5f, _rng.NextSingle() - 0.5f);
+                _fx.EmitSmoke(contact + up * 0.2f + jitter * 0.3f, car.Velocity * 0.12f + jitter * 1.5f + up * 0.5f, 0.3f, 0.12f + 0.25f * smoke);
+            }
+        }
+
+        var impact = (car.Velocity - _prevVelocity).Length();
+        _prevVelocity = car.Velocity;
+        if (car.WallContacts > 0)
+        {
+            _shake = MathF.Max(_shake, Math.Clamp((impact - 0.5f) / 4, 0, 1));
+            var scrape = car.Velocity - car.WallNormal * Vector3.Dot(car.Velocity, car.WallNormal);
+            var sparks = (int)MathF.Min(scrape.Length() / 3, 6);
+            for (var i = 0; i < sparks; i++)
+            {
+                var r = new Vector3(_rng.NextSingle() - 0.5f, _rng.NextSingle(), _rng.NextSingle() - 0.5f);
+                _fx.EmitSpark(car.WallPoint + car.WallNormal * 0.05f - up * 0.2f,
+                    scrape * (0.3f + 0.5f * _rng.NextSingle()) + car.WallNormal * (1 + 2 * r.Y) + r * 4);
+            }
+        }
+        _fx.Update(dt);
     }
 
     private void JumpToLine(int i)
@@ -153,15 +213,16 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         }
     }
 
-    /// <summary>--bench: frame intervals after a 2 s warm-up; at the end avg/p99/max and frames over 25 ms.</summary>
+    /// <summary>--bench: frame intervals after a 2 s warm-up; at the end avg/p99/max, frames over 25 ms and the effect peaks.</summary>
     private bool Bench(in GameTime time, float seconds)
     {
         if (time.TotalTime > 2) _frameTimes.Add(time.DeltaTime * 1000);
+        _fxPeak = (Math.Max(_fxPeak.Smoke, _fx.SmokeCount), Math.Max(_fxPeak.Skids, _fx.SkidCount), Math.Max(_fxPeak.Sparks, _fx.SparkCount));
         if (time.TotalTime < seconds + 2) return false;
         var sorted = _frameTimes.Order().ToArray();
         Console.WriteLine($"\n[Bench] {courseTime} {Device.SwapchainWidth}x{Device.SwapchainHeight} Qualität {(_renderer.HighQuality ? "hoch" : "niedrig")}: " +
                           $"{sorted.Length} Frames in {seconds:F0} s, Frametime avg {sorted.Average():F2} ms, p99 {sorted[(int)(sorted.Length * 0.99)]:F2} ms, " +
-                          $"max {sorted[^1]:F2} ms, > 25 ms: {sorted.Count(t => t > 25)}");
+                          $"max {sorted[^1]:F2} ms, > 25 ms: {sorted.Count(t => t > 25)}; Effekte max {_fxPeak.Smoke} Rauch, {_fxPeak.Skids} Spursegmente, {_fxPeak.Sparks} Funken");
         Window.ShouldClose = true;
         return true;
     }
@@ -325,6 +386,9 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _camLook = Vector3.Lerp(_camLook, look, b);
         _fov = MathF.PI / 3 + MathF.Min(car.SpeedKmh / 180, 1) * 0.2f;
         _camSnap = false;
+        // wall hits shake the camera briefly (up to 12 cm, decays in ~0.3 s)
+        _shake *= MathF.Exp(-10 * dt);
+        _shakeOffset = new Vector3(MathF.Sin(_simTime * 53), MathF.Sin(_simTime * 47 + 1), MathF.Sin(_simTime * 61 + 2)) * (0.12f * _shake);
     }
 
     public override void Render(in FrameContext ctx)
@@ -336,7 +400,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         if (!_fly) UpdateDriveCamera(ctx.Time.DeltaTime);
         // Game data is right-handed (y up). Vulkan clip space is Y-down, Metal/GL Y-up.
         var proj = WorldRenderer.Perspective(_fov, aspect, 0.3f, Device.Backend == Penelope.BackendKind.Vulkan);
-        var view = Matrix4x4.CreateLookAt(_pos, _camLook, Vector3.UnitY);
+        var shake = _fly ? Vector3.Zero : _shakeOffset; // moves the view only, not the camera spring
+        var view = Matrix4x4.CreateLookAt(_pos + shake, _camLook + shake * 0.5f, Vector3.UnitY);
 
         UpdateLights();
         Span<(StaticMesh, Matrix4x4)> casters =
@@ -348,6 +413,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _renderer.DrawSky(pass, _course.Sky, Matrix4x4.CreateTranslation(_pos with { Y = 0 }) * view * proj); // follows the camera
         _renderer.Draw(pass, _course.World, view * proj, _pos);
         _carRenderer.Draw(pass, _car.Body, _car.Wheel, _carBody, _carWheels, view * proj, _pos);
+        _fxRenderer.Draw(pass, _fx, view, view * proj, _pos);
         _renderer.EndScene(ctx.Encoder, pass, shot);
         if (shot != null)
         {
@@ -362,6 +428,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _course.Sky.Dispose();
         _car.Dispose();
         _carRenderer.Dispose();
+        _fxRenderer.Dispose();
         _capture?.Dispose();
         _renderer.Dispose();
     }

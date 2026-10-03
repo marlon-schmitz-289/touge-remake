@@ -10,6 +10,7 @@ using Touge;
 // --ground <png>: Kollision des Kurses laden, Raycasts timen, Draufsicht mit Wandsegmenten schreiben (ohne Fenster).
 // --bench <s>: Pilot fährt <s> Sekunden in Echtzeit mit Verfolgerkamera, danach Frametimes (avg/p99/max) und Ende.
 // --quality off: ohne MSAA/Bloom starten (F2 schaltet um).
+// --drift: Pilot reißt alle 7 s (ab 4,5 s) einen 2,5-s-Handbremsdrift (Reifenrauch/Bremsspuren testen), z. B. --autodrive 6.3 --drift --shot.
 var iso = args.FirstOrDefault(a => a.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
           ?? Environment.GetEnvironmentVariable("INITIALD_ISO");
 if (iso == null || !File.Exists(iso))
@@ -31,6 +32,7 @@ if (autodrive is { } seconds && shot == null)
     using var isoFile = new Touge.Formats.Iso9660(iso);
     var drive = new Drive(isoFile, course.ToUpperInvariant());
     drive.ResetTo(at);
+    drive.ForceDrift = args.Contains("--drift");
     return drive.AutoDrive(seconds) ? 0 : 2;
 }
 if (Arg("--ground") is { } groundPng)
@@ -41,7 +43,7 @@ if (Arg("--ground") is { } groundPng)
     return 0;
 }
 
-KanseiApp.Run(new TougeGame(iso, course.ToUpperInvariant(), shot, at, orbit, autodrive, bench, Arg("--quality") != "off"), new WindowSettings
+KanseiApp.Run(new TougeGame(iso, course.ToUpperInvariant(), shot, at, orbit, autodrive, bench, Arg("--quality") != "off", args.Contains("--drift")), new WindowSettings
 {
     Title = $"Touge – {course}",
     WindowPixelWidth = 1600,
