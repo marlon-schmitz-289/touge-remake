@@ -2,6 +2,7 @@ using Touge.Formats;
 
 // idss list <file.AFS|file.PAC>          – Einträge auflisten (PACs in AFS werden mit aufgelöst)
 // idss extract <file.AFS> <outDir>       – alle Einträge als Dateien schreiben
+// idss textures <file.PAC> <outDir>      – alle GIM-Texturen als PNG
 switch (args)
 {
     case ["list", var path]:
@@ -25,8 +26,27 @@ switch (args)
         Console.WriteLine($"{a.Entries.Count} Dateien -> {outDir}");
         break;
 
+    case ["textures", var path, var outDir]:
+        var pac = File.ReadAllBytes(path);
+        Directory.CreateDirectory(outDir);
+        int ok = 0, fail = 0;
+        foreach (var e in Pac.Entries(pac).Where(e => e.Type == 1))
+            try
+            {
+                var (w, h, rgba) = Gim.Decode(pac.AsSpan(e.Offset, e.Size));
+                Png.Write(Path.Combine(outDir, e.Name + ".png"), w, h, rgba);
+                ok++;
+            }
+            catch (Exception ex) when (ex is NotSupportedException or InvalidDataException)
+            {
+                Console.Error.WriteLine($"{e.Name}: {ex.Message}");
+                fail++;
+            }
+        Console.WriteLine($"{ok} PNG -> {outDir}, {fail} übersprungen");
+        break;
+
     default:
-        Console.Error.WriteLine("usage: idss list <AFS|PAC> | idss extract <AFS> <outDir>");
+        Console.Error.WriteLine("usage: idss list <AFS|PAC> | extract <AFS> <outDir> | textures <PAC> <outDir>");
         return 1;
 }
 return 0;
