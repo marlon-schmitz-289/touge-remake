@@ -90,23 +90,26 @@ public sealed partial class TougeGame
         _playerDriver.Input = input;
         race.Tick(dt);
         var rival = race.Cars[1];
-        _rivalLights.Tick(dt);
-        if (_rivalAudio != null)
-        {
-            // heard from the camera: inverse distance beyond RivalNear, doppler from both velocities, panned in camera space
-            var to = rival.Vehicle.Position - _pos;
-            var d = MathF.Max(to.Length(), 0.1f);
-            var dir = to / d;
-            var gain = MathF.Min(1, RivalNear / d) * Math.Clamp((300 - d) / 100, 0, 1);
-            var doppler = Math.Clamp((SoundSpeed + Vector3.Dot(_camVelocity, dir)) / (SoundSpeed + Vector3.Dot(rival.Vehicle.Velocity, dir)), 0.5f, 2);
-            var fwd = Vector3.Normalize(_camLook - _pos);
-            var right = Vector3.Normalize(Vector3.Cross(fwd, Vector3.UnitY));
-            var pan = new Vector3(Vector3.Dot(dir, right), 0, -Vector3.Dot(dir, fwd));
-            _rivalAudio.Spatial(gain, doppler, pan.LengthSquared() > 1e-6f ? Vector3.Normalize(pan) : -Vector3.UnitZ);
-            _rivalAudio.Update(rival.Vehicle, rival.Input.Throttle, rival.Input.Handbrake, dt);
-        }
+        RivalSound(rival.Vehicle, rival.Input, dt);
         if (race.LastContact is { } hit) _audio?.Bump(hit.ImpactSpeed);
         return race.Cars[0].Input;
+    }
+
+    /// <summary>The rival's engine/tyres heard from the camera: inverse distance beyond RivalNear, doppler from both velocities, panned in camera space (also in replays).</summary>
+    private void RivalSound(Vehicle rival, VehicleInput input, float dt)
+    {
+        _rivalLights.Tick(dt);
+        if (_rivalAudio == null) return;
+        var to = rival.Position - _pos;
+        var d = MathF.Max(to.Length(), 0.1f);
+        var dir = to / d;
+        var gain = MathF.Min(1, RivalNear / d) * Math.Clamp((300 - d) / 100, 0, 1);
+        var doppler = Math.Clamp((SoundSpeed + Vector3.Dot(_camVelocity, dir)) / (SoundSpeed + Vector3.Dot(rival.Velocity, dir)), 0.5f, 2);
+        var fwd = Vector3.Normalize(_camLook - _pos);
+        var right = Vector3.Normalize(Vector3.Cross(fwd, Vector3.UnitY));
+        var pan = new Vector3(Vector3.Dot(dir, right), 0, -Vector3.Dot(dir, fwd));
+        _rivalAudio.Spatial(gain, doppler, pan.LengthSquared() > 1e-6f ? Vector3.Normalize(pan) : -Vector3.UnitZ);
+        _rivalAudio.Update(rival, input.Throttle, input.Handbrake, dt);
     }
 
     private Vector3 _rivalPrevVelocity;
@@ -153,7 +156,7 @@ public sealed partial class TougeGame
     /// <summary>The rival's body and wheels as sun-shadow casters into <paramref name="dst"/>; returns how many.</summary>
     private int RivalCasters(Span<(StaticMesh, Matrix4x4)> dst)
     {
-        if (_race == null || _rivalModel == null) return 0;
+        if (_race == null || _rivalModel == null) return ShowCasters(dst);
         dst[0] = (RivalShell.Body, _rivalBody);
         for (var i = 0; i < 4; i++) dst[1 + i] = (_rivalModel.Wheel, _rivalWheels[i]);
         return 5;
@@ -209,6 +212,7 @@ public sealed partial class TougeGame
 
     private void DisposeRival()
     {
+        DisposeShowCars(); // loaded after the rival: freed first
         _rivalModel?.Dispose();
         _rivalModel = null;
     }

@@ -38,6 +38,11 @@ using Touge;
 // --sim-wheel: virtuelles Lenkrad (Lenkung pendelt, Pedale pumpen) für Bilder/Tests ohne Hardware; --menu controls:keyboard|pad|wheel öffnet die Steuerungsseite.
 // --battle <rivale|auto> [--rule race|chase] [--lead player|rival]: Schnellbattle gegen die KI (Telop, Countdown, Battle-HUD, Ergebnis);
 //   mit --autodrive <s> ohne Fenster: Autopilot gegen die KI, Log je Sekunde (Abstand, Führung, Kontakte) + Zusammenfassung.
+// --replay-test <s> [--battle <rivale>] [--drift] [--save <datei.rpl>]: Lauf ohne Fenster aufnehmen, Datei schreiben/lesen, auf frischen Autos abspielen,
+//   Positionsfehler je Tick (mit Keyframes) und nur aus Eingaben (Determinismus), Sprünge; optional die Replay-Datei.
+// --replay <datei.rpl> [--replay-at <s>] [--replay-cam tv|chase|bumper|free]: Replay im Viewer öffnen (z. B. mit --shot).
+// --ghost <datei.rpl>: dieser Lauf fährt als Geist mit (sonst mit Menüs der Bestzeit-Lauf); --replay-dir/--save-dir: andere Ordner für Replays/Spielstände (Belegbilder).
+// --menu replay|replay-best|replay-records|replay-delete|saveload|saveload-actions|saveload-name|photo: REPLAY & RECORD, SAVE & LOAD, Fotomodus (Bilder).
 // --drift: Pilot reißt alle 7 s (ab 4,5 s) einen 2,5-s-Handbremsdrift (Reifenrauch/Bremsspuren testen), z. B. --autodrive 6.3 --drift --shot.
 var iso = args.FirstOrDefault(a => a.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
           ?? Environment.GetEnvironmentVariable("INITIALD_ISO");
@@ -46,7 +51,7 @@ if (iso == null || !File.Exists(iso))
     Console.Error.WriteLine("usage: touge <Initial D Special Stage (SLPM-65268).iso> [KURS_ZEIT, z. B. AKINA_DAY]  (oder INITIALD_ISO setzen)");
     return 1;
 }
-string[] valueFlags = ["--battle", "--rule", "--lead", "--flow", "--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--hud-scale", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture", "--lights", "--render-scale", "--jukebox"];
+string[] valueFlags = ["--battle", "--rule", "--lead", "--flow", "--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--hud-scale", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture", "--lights", "--render-scale", "--jukebox", "--replay-test", "--replay", "--replay-at", "--replay-cam", "--save", "--replay-dir", "--save-dir", "--ghost"];
 string? Arg(string flag) { var i = Array.IndexOf(args, flag); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
 // --car: HCAR name (AE86T, FD3S, R32, EVO3, …) or index 0–31 in that list (Touge.Formats.CarPaint.Cars)
 var carArg = Arg("--car") ?? "AE86T";
@@ -119,6 +124,12 @@ if (Arg("--battle") is { } rivalArg)
         return 1;
     }
 }
+if (Arg("--replay-test") is { } replaySeconds)
+{
+    using var isoFile = new Touge.Formats.Iso9660(iso);
+    return Touge.Replays.ReplayProof.Run(isoFile, course.ToUpperInvariant(), args.Contains("--reverse"), car, float.Parse(replaySeconds, CultureInfo.InvariantCulture), battle,
+        args.Contains("--drift"), Arg("--save")) ? 0 : 2;
+}
 if (autodrive is { } battleSeconds && shot == null && battle != null)
 {
     using var isoFile = new Touge.Formats.Iso9660(iso);
@@ -148,6 +159,9 @@ if (Arg("--ground") is { } groundPng)
     return 0;
 }
 
+// --replay-dir / --save-dir: other folders for the replay files and the save slots (proof screenshots without touching the real ones)
+if (Arg("--replay-dir") is { } replayDir) Touge.Replays.ReplayStore.Root = replayDir;
+if (Arg("--save-dir") is { } saveDir) Touge.SaveSlots.Default = new Touge.SaveSlots(saveDir);
 // menus (and the saved settings) only when started plainly: any course or test flag means a scripted run
 var plain = args.Where((a, i) => a != iso && a != "--backend" && (i == 0 || args[i - 1] != "--backend")).All(a => a is "--menu" or "--input-debug" or "--sim-wheel" || a == Arg("--menu"));
 // a plain start opens the window as saved (Options: SCREEN), test runs always in a 1600×900 window
@@ -157,6 +171,8 @@ KanseiApp.Run(new TougeGame(iso, course.ToUpperInvariant(), shot, at, orbit, aut
       Battle = battle, ShotBattleResult = args.Contains("--battle-result"), Lights = Arg("--lights") is { } lights ? Enum.Parse<Headlights.Mode>(lights, true) : null,
       RenderScale = Arg("--render-scale") is { } rs ? int.Parse(rs) : 100,
       InputDebug = args.Contains("--input-debug"), SimWheel = args.Contains("--sim-wheel"),
+      ReplayFile = Arg("--replay"), GhostFile = Arg("--ghost"), ReplayAt = Arg("--replay-at") is { } ra ? float.Parse(ra, CultureInfo.InvariantCulture) : 0,
+      ReplayCam = Enum.TryParse<Touge.Ui.ReplayViewer.Camera>(Arg("--replay-cam") ?? "tv", true, out var rc) ? rc : Touge.Ui.ReplayViewer.Camera.Tv,
       UseMenus = plain, StartMenu = Arg("--menu"), Flow = Arg("--flow"), Offscreen = args.Contains("--offscreen"),
       ShotSize = Arg("--shot-size") is { } size && size.Split('x') is [var sw, var sh] ? (int.Parse(sw), int.Parse(sh)) : (1280, 720) }, new WindowSettings
 {

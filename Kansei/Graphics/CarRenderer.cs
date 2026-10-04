@@ -13,7 +13,14 @@ public sealed class CarRenderer : IDisposable
 {
     private readonly WorldRenderer _world;
     private readonly ShaderHandle _shader;
-    private readonly RenderPipelineHandle[] _pipeline = new RenderPipelineHandle[2], _blend = new RenderPipelineHandle[2];
+    private readonly RenderPipelineHandle[] _pipeline = new RenderPipelineHandle[2], _blend = new RenderPipelineHandle[2], _ghost = new RenderPipelineHandle[2], _ghostDepth = new RenderPipelineHandle[2];
+
+    /// <summary>See-through blend for <see cref="DrawGhost"/>: colour × constant colour (tint × alpha) + scene × (1 − constant alpha).</summary>
+    private static readonly BlendState GhostBlend = new(true, BlendFactor.ConstantColor, BlendFactor.OneMinusConstantAlpha, BlendOp.Add,
+        BlendFactor.Zero, BlendFactor.One, BlendOp.Add, ColorWriteMask.All);
+
+    /// <summary>Depth only (the ghost's nearest surface, so only that one blends).</summary>
+    private static readonly BlendState DepthOnly = BlendState.Opaque with { WriteMask = ColorWriteMask.None };
 
     public CarRenderer(WorldRenderer world)
     {
@@ -25,6 +32,8 @@ public sealed class CarRenderer : IDisposable
             var ms = MultisampleState.Disabled with { SampleCount = WorldRenderer.Samples(q) };
             _pipeline[q] = world.ScenePipeline(_shader, CarVertex.Layout, ms, true, "car");
             _blend[q] = world.ScenePipeline(_shader, CarVertex.Layout, ms, true, "car-decals", BlendState.AlphaBlend);
+            _ghost[q] = world.ScenePipeline(_shader, CarVertex.Layout, ms with { AlphaToCoverageEnabled = false }, true, "car-ghost", GhostBlend);
+            _ghostDepth[q] = world.ScenePipeline(_shader, CarVertex.Layout, ms with { AlphaToCoverageEnabled = false }, true, "car-ghost-depth", DepthOnly, depthWrite: true);
         }
     }
 
@@ -41,6 +50,23 @@ public sealed class CarRenderer : IDisposable
         if (decalMesh.Batches.Count == 0) return;
         pass.SetPipeline(_blend[_world.Quality]);
         DrawMesh(pass, decalMesh, body, viewProj, eye);
+    }
+
+    /// <summary>
+    ///     A see-through car (time attack ghost): first its depth alone, then body and wheels lit as usual and blended over
+    ///     the scene where they are nearest (one layer, not every inner face), tinted by <paramref name="tint"/> at
+    ///     <paramref name="alpha"/>. No decals.
+    /// </summary>
+    public void DrawGhost(IRenderPassEncoder pass, StaticMesh bodyMesh, StaticMesh wheelMesh, in Matrix4x4 body, ReadOnlySpan<Matrix4x4> wheels,
+        in Matrix4x4 viewProj, Vector3 eye, float alpha, Vector3 tint)
+    {
+        for (var p = 0; p < 2; p++)
+        {
+            pass.SetPipeline(p == 0 ? _ghostDepth[_world.Quality] : _ghost[_world.Quality]);
+            pass.SetBlendConstant(tint.X * alpha, tint.Y * alpha, tint.Z * alpha, alpha);
+            DrawMesh(pass, bodyMesh, body, viewProj, eye);
+            foreach (ref readonly var w in wheels) DrawMesh(pass, wheelMesh, w, viewProj, eye);
+        }
     }
 
     /// <summary>A rigid part on its own matrix (pop-up headlamps), opaque, after <see cref="Draw"/>.</summary>
@@ -61,7 +87,7 @@ public sealed class CarRenderer : IDisposable
 
     public void Dispose()
     {
-        foreach (var p in _pipeline.Concat(_blend)) _world.Device.DestroyRenderPipeline(p);
+        foreach (var p in _pipeline.Concat(_blend).Concat(_ghost).Concat(_ghostDepth)) _world.Device.DestroyRenderPipeline(p);
         _world.Device.DestroyShader(_shader);
     }
 }

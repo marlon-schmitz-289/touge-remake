@@ -120,13 +120,13 @@ public sealed class WorldRenderer : IDisposable
 
     /// <summary>
     ///     Pipeline into the HDR scene pass: no culling, reversed-Z GreaterEqual (or no depth at all for the sky).
-    ///     With a <paramref name="blend"/> state it tests depth but does not write it (transparent effects).
+    ///     With a <paramref name="blend"/> state it tests depth but does not write it (transparent effects), unless <paramref name="depthWrite"/>.
     /// </summary>
     internal RenderPipelineHandle ScenePipeline(ShaderHandle shader, VertexLayout layout, MultisampleState ms, bool depth, string name,
-        BlendState? blend = null) =>
+        BlendState? blend = null, bool? depthWrite = null) =>
         _device.CreateRenderPipeline(new RenderPipelineDesc(
             shader, layout, PrimitiveTopology.TriangleList, RasterizerState.Default,
-            depth ? DepthStencilState.DepthLessWrite with { DepthCompare = CompareFunc.GreaterEqual, DepthWriteEnabled = blend == null } : DepthStencilState.Disabled, ms,
+            depth ? DepthStencilState.DepthLessWrite with { DepthCompare = CompareFunc.GreaterEqual, DepthWriteEnabled = depthWrite ?? blend == null } : DepthStencilState.Disabled, ms,
             [new ColorTargetState(PostProcess.HdrFormat, blend ?? BlendState.Opaque), new ColorTargetState(PostProcess.GbufFormat, blend ?? BlendState.Opaque)], DepthFormat,
             [_layout, _sceneLayout], [], name));
 

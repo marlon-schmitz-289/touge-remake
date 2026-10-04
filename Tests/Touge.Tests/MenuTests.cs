@@ -92,7 +92,12 @@ public class MenuTests
         Assert.Equal("JOY.adx", m.Music(null));
         Run(Menu.ButtonsAt);
         Assert.Equal(8, sounds.Count(s => s == "NAME001"));
-        for (var i = 0; i < 3; i++) Run(0.1f, (1, 0, false, false)); // EXIT
+        Run(0.1f, (1, 0, false, false)); // REPLAY: the game opens the viewer, the sheet stays
+        actions.Clear();
+        Run(0.1f, ok);
+        Assert.Contains(Menu.Action.Replay, actions);
+        Assert.Equal(Menu.Screen.Result, m.Current);
+        for (var i = 1; i < Menu.ResultButtons.Length - 1; i++) Run(0.1f, (1, 0, false, false)); // EXIT
         actions.Clear();
         Run(Menu.Fade + 0.1f, ok);
         Assert.Contains(Menu.Action.Exit, actions);
@@ -100,7 +105,13 @@ public class MenuTests
 
         // pause: Quit Game (desktop) asks first; NO keeps the pause, YES quits
         m.Open(Menu.Screen.Pause, "AKINA_DAY", false, "AE86T", 0);
-        for (var i = 0; i < 3; i++) Run(0.1f, (1, 0, false, false));
+        for (var i = 0; i < 2; i++) Run(0.1f, (1, 0, false, false));
+        actions.Clear();
+        Run(0.1f, ok); // Replay
+        Run(0.1f, (1, 0, false, false));
+        Run(0.1f, ok); // Photo
+        Assert.Equal([Menu.Action.Replay, Menu.Action.Photo], actions.Where(a => a != Menu.Action.None));
+        for (var i = 3; i < Menu.PauseButtons.Length - 1; i++) Run(0.1f, (1, 0, false, false));
         actions.Clear();
         Run(0.1f, ok);
         Run(0.1f, ok);

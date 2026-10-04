@@ -31,7 +31,7 @@ public struct WheelState
 ///     (normalised slip vector → friction circle), engine curve, gearbox, clutch-type LSD, brakes, handbrake.
 ///     World: metres, right-handed, +Y up. Body: +Z forward, origin at CoG.
 /// </summary>
-public sealed class Vehicle
+public sealed partial class Vehicle
 {
     public const float ProbeRadius = 0.3f;
     const float G = 9.81f, VMin = 3f, AirDensity = 1.225f, WallRestitution = 0.2f, WallFriction = 0.3f;
