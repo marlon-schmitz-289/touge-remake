@@ -25,6 +25,7 @@ public sealed class LapTimer(float length, float[]? best)
     public bool NewRecord { get; private set; }
     public event Action<float[]>? Record;
     private float _prev = float.MaxValue;
+    private float? _armedAt;
     private float[]? _ref = best; // the best run this run is compared with (Best may become this run at the finish)
 
     /// <summary>Car at <paramref name="along"/> metres along the line, <paramref name="dt"/> seconds after the last update.</summary>
@@ -33,8 +34,12 @@ public sealed class LapTimer(float length, float[]? best)
         SinceSplit += dt;
         switch (Phase)
         {
-            case State.Ready when _prev <= Gate && along > Gate && along < length / Sectors:
-                (Phase, Time, Sector, NewRecord, _ref) = (State.Running, 0, 0, false, Best);
+            case State.Ready:
+                // armed where the car stands: some lines start off the road, so the car spawns past point 0
+                _armedAt ??= along;
+                var gate = MathF.Max(Gate, _armedAt.Value + Gate);
+                if (_prev <= gate && along > gate && along < length / Sectors)
+                    (Phase, Time, Sector, NewRecord, _ref) = (State.Running, 0, 0, false, Best);
                 break;
             case State.Running:
                 Time += dt;
@@ -54,7 +59,7 @@ public sealed class LapTimer(float length, float[]? best)
                 }
                 break;
             case State.Finished when along <= Gate:
-                Phase = State.Ready;
+                (Phase, _armedAt) = (State.Ready, null);
                 break;
         }
         _prev = along;
@@ -64,5 +69,5 @@ public sealed class LapTimer(float length, float[]? best)
     public float? Delta(int i) => _ref != null && i < Sector ? Splits[i] - _ref[i] : null;
 
     /// <summary>Back to armed (car reset to the start).</summary>
-    public void Restart() => (Phase, Time, Sector, SinceSplit, _prev, _ref) = (State.Ready, 0, 0, float.MaxValue, 0, Best);
+    public void Restart() => (Phase, Time, Sector, SinceSplit, _prev, _ref, _armedAt) = (State.Ready, 0, 0, float.MaxValue, 0, Best, null);
 }

@@ -136,4 +136,17 @@ public class UiTests
         var twice = MapWidget.Along(road, line.Concat(line[1..]).ToArray(), 2);
         for (var i = 0; i < along.Length; i++) Assert.Equal(along[i], twice[i], 0.04f); // the 15 m jump back to the start counts in each lap
     }
+
+    /// <summary>A car spawned past the start (line starts off the road) still starts the clock once it drives off.</summary>
+    [Fact]
+    public void LapTimer_StartsWhenSpawnedPastTheStartLine()
+    {
+        var t = new LapTimer(1000, null);
+        for (var i = 0; i < 10; i++) t.Update(50, 0.1f); // standing at 50 m
+        Assert.Equal(LapTimer.State.Ready, t.Phase);
+        t.Update(53, 0.1f);
+        Assert.Equal(LapTimer.State.Running, t.Phase);
+        t.Update(60, 0.5f);
+        Assert.Equal(0.5f, t.Time, 0.001f);
+    }
 }
