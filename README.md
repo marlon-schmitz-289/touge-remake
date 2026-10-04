@@ -26,7 +26,7 @@ dotnet run --project Touge -- "<iso>" --frontend-capture out/proof/fe.wav   # ga
 dotnet run --project Touge -- "<iso>" --shot out/akina.png   # ein Frame als PNG, dann Ende
 dotnet run --project Touge -- "<iso>" --ground out/g.png [--at 300] [--reverse]   # Kollision: Raycast-Timing + Draufsicht mit Wänden, Sperren, Fahrlinie/Auslauf; Ausschnitte _at300/_start/_goal
 dotnet run --project Touge -- "<iso>" --shot out/ae86.png --orbit 35[:20]   # Kamera ums Auto (0 vorne, 90 links, 180 hinten), optional Abstand in m (Standard 5,5)
-dotnet run --project Touge -- "<iso>" AKINA_NIT --lights off|low|high --shot out/l.png   # Autolicht beim Start (Standard: nachts/Regen Abblendlicht, tags aus)
+dotnet run --project Touge -- "<iso>" AKINA_NIT --lights off|low|high --shot out/l.png   # Autolicht beim Start (Standard: nachts/Regen/Nebel Abblendlicht, klarer Tag aus)
 dotnet run --project Touge -- "<iso>" --autodrive 60 [--shot out/ad.png]   # Pilot fährt 60 s die Fahrlinie ab, Log pro Sekunde
 dotnet run --project Touge -- "<iso>" AKINA_DAY --at 710 --autodrive 40 [--ram] [--reverse]   # hinter dem Ziel: Auslauf bis vor die Endsperre bzw. mit --ram Vollgas in die Sperre; Zusammenfassung (Weg hinter dem Ziel, Abstand zur Sperre, Wandkontakt, Höhe)
 dotnet run --project Touge -- "<iso>" AKINA_DAY --reverse [--autodrive 60|--shot …|--ground …]   # Gegenrichtung (bergauf): CRS_COLI_<KURS>_1 + CRS_DRV_<KURS>_O, Start am anderen Ende
@@ -171,8 +171,10 @@ Nebel-Wetter (FOG, eigene Ergänzung; Menü Wetter oder `--fog`, gespeichert als
 `TougeGame.FogAtmosphere`): exponentieller Höhennebel mit σ = 0,05/m auf Höhe des Autos (Sicht ≈ 3/σ ≈ 60 m, Basis folgt dem
 Auto, nach oben ×1/e alle 50 m dünner, Täler dichter), langsam ziehende Nebelbänke (Rauschen ±30 % der Dichte, `FogDrift`),
 Himmel in jeder Richtung verhüllt (`skyFog` mindestens der Nebel der ersten 150 m). Tag: hellgrau-weiß, bedeckt und flach (keine
-Sonne/Schatten, weiches Ambient), Sonne nur als hellerer Fleck im Dunst, Scheinwerfer an, aber schwach (kein Lichtfleck auf der Straße).
-Nacht: fast schwarzer Nebel, Lichthof der Lampen und Scheinwerferkegel im Dunst. Allgemein für alle Lichter: die Extinktion des
+Sonne/Schatten, weiches Ambient), Sonne nur als hellerer Fleck im Dunst, Scheinwerfer an (Abblendlicht), aber nur die Gläser glühen (tags kein Licht auf
+der Straße, `LocalLightShare`).
+Nacht: fast schwarzer Nebel, Lichthof der Lampen und Scheinwerferkegel im Dunst (nur bei dichtem Nebel, σ > 0: 8 Proben über 60 m in
+glow.frag, Form wie das Licht auf der Straße – Abblendlicht mit scharfer Oberkante, Fernlicht als heller Schleier). Allgemein für alle Lichter: die Extinktion des
 Nebels an der Kamera schluckt Lampenlicht mit der Entfernung (`uTailPos[0].w`, auf Flächen und im Lichthof), was durchkommt, ist
 weich gedeckelt (`FogLightCap`: Kegel als Schleier statt weißem Fleck). Nebelbänke im Volumen abgetastet (15/45 m entlang des
 Strahls, nicht an der Fläche), die ersten 3 m vor der Kamera klar (Auto behält Kontrast).
