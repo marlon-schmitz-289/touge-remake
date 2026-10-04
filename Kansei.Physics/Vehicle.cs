@@ -27,7 +27,8 @@ public struct WheelState
 /// </summary>
 public sealed class Vehicle
 {
-    const float G = 9.81f, VMin = 3f, AirDensity = 1.225f, ProbeRadius = 0.3f, WallRestitution = 0.2f, WallFriction = 0.3f;
+    public const float ProbeRadius = 0.3f;
+    const float G = 9.81f, VMin = 3f, AirDensity = 1.225f, WallRestitution = 0.2f, WallFriction = 0.3f;
 
     readonly WheelState[] _wheels = new WheelState[4];
     readonly GroundHit[] _hits = new GroundHit[4];
@@ -359,13 +360,21 @@ public sealed class Vehicle
             Orientation = Quaternion.Normalize(Quaternion.Concatenate(q, Quaternion.CreateFromAxisAngle(Vector3.Normalize(AngularVelocity), angle)));
     }
 
-    void CollideWalls(IGround ground)
+    /// <summary>
+    ///     Wall probes in world space: body corners inset by <see cref="ProbeRadius" />, as a loop FL, FR, RR, RL
+    ///     (the ground also tests the capsules between them, so the whole rounded body outline collides).
+    /// </summary>
+    public void WallProbes(Span<Vector3> probes)
     {
         float px = Spec.Width / 2 - ProbeRadius, pz = Spec.Length / 2 - ProbeRadius;
-        Span<Vector3> probes = stackalloc Vector3[4];
-        // ponytail: 4 corner probes; a post between the front corners slips through — add bumper-centre probes if it matters.
         for (var i = 0; i < 4; i++)
-            probes[i] = Position + Vector3.Transform(new Vector3(i % 2 == 0 ? px : -px, 0, i < 2 ? pz : -pz), Orientation);
+            probes[i] = Position + Vector3.Transform(new Vector3(i is 0 or 3 ? px : -px, 0, i < 2 ? pz : -pz), Orientation);
+    }
+
+    void CollideWalls(IGround ground)
+    {
+        Span<Vector3> probes = stackalloc Vector3[4];
+        WallProbes(probes);
         Span<WallContact> contacts = stackalloc WallContact[8];
         var count = ground.CollideWalls(probes, ProbeRadius, contacts);
         WallContacts += count;

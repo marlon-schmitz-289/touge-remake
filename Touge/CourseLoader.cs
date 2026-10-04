@@ -110,11 +110,12 @@ public static class CourseLoader
         ];
     }
 
-    /// <summary>CRS_DRV_&lt;course&gt;_I.BIN, valid points only.</summary>
-    public static Vector3[] ReadDrivingLine(Iso9660 iso, string course)
+    /// <summary>CRS_DRV_&lt;course&gt;_I.BIN (_O with <paramref name="reverse"/>), valid points only.</summary>
+    public static Vector3[] ReadDrivingLine(Iso9660 iso, string course, bool reverse = false)
     {
         var data = Afs.FromBytes(iso.ReadFile("CDVD/DATA/COURSE/CRS_DATA.AFS"), iso.ReadFile("CDVD/DATA/COURSE/CRS_DATA.TBL"));
-        var drv = data.Find($"CRS_DRV_{course}_I.BIN") ?? throw new FileNotFoundException($"CRS_DRV_{course}_I.BIN");
+        var name = $"CRS_DRV_{course}_{(reverse ? 'O' : 'I')}.BIN";
+        var drv = data.Find(name) ?? throw new FileNotFoundException(name);
         return DrivingLine.Read(data.Read(drv), DrivingLine.PointCount(course));
     }
 

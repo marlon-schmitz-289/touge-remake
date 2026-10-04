@@ -14,6 +14,7 @@ using Touge;
 // --flicker <prefix>: Z-Fighting im Bild messen (8 Punkte der Fahrlinie + 8 Winkel ums Auto, je 3× mit verschobener Rundung), Ausschnitte als <prefix>_course/_car.png.
 // --zfight [filter]: Z-Fighting-Kandidaten (fast koplanar, überlappend) aller Kurse und Autos auflisten (ohne Fenster).
 // --hud north|overview|off: Minimap nordausgerichtet / ganze Strecke / HUD aus (Standard: mitdrehend; N und F4 schalten um).
+// --reverse: Gegenrichtung (bergauf): CRS_COLI_<KURS>_1 (Rundkurse _0) + CRS_DRV_<KURS>_O, Start am anderen Ende; im Spiel B.
 // --drift: Pilot reißt alle 7 s (ab 4,5 s) einen 2,5-s-Handbremsdrift (Reifenrauch/Bremsspuren testen), z. B. --autodrive 6.3 --drift --shot.
 var iso = args.FirstOrDefault(a => a.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
           ?? Environment.GetEnvironmentVariable("INITIALD_ISO");
@@ -46,7 +47,7 @@ if (Arg("--audio-capture") is { } wav)
 if (autodrive is { } seconds && shot == null)
 {
     using var isoFile = new Touge.Formats.Iso9660(iso);
-    var drive = new Drive(isoFile, course.ToUpperInvariant());
+    var drive = new Drive(isoFile, course.ToUpperInvariant(), args.Contains("--reverse"));
     drive.ResetTo(at);
     drive.ForceDrift = args.Contains("--drift");
     return drive.AutoDrive(seconds) ? 0 : 2;
@@ -62,11 +63,11 @@ if (Arg("--ground") is { } groundPng)
 {
     using var isoFile = new Touge.Formats.Iso9660(iso);
     var c = course.ToUpperInvariant();
-    CourseGround.Proof(isoFile, c[..c.LastIndexOf('_')], groundPng, at);
+    CourseGround.Proof(isoFile, c[..c.LastIndexOf('_')], groundPng, at, args.Contains("--reverse"));
     return 0;
 }
 
-KanseiApp.Run(new TougeGame(iso, course.ToUpperInvariant(), shot, at, orbit, autodrive, bench, Arg("--quality") != "off", args.Contains("--drift"), Arg("--flicker")) { HudMode = Arg("--hud") }, new WindowSettings
+KanseiApp.Run(new TougeGame(iso, course.ToUpperInvariant(), shot, at, orbit, autodrive, bench, Arg("--quality") != "off", args.Contains("--drift"), Arg("--flicker")) { HudMode = Arg("--hud"), Reverse = args.Contains("--reverse") }, new WindowSettings
 {
     Title = $"Touge – {course}",
     WindowPixelWidth = 1600,

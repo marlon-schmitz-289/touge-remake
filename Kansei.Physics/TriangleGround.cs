@@ -30,6 +30,11 @@ public sealed class TriangleGround : IGround
         if (surfaces.Length != triCount || isWall.Length != triCount) throw new ArgumentException("one surface id and wall flag per triangle");
 
         // edge (lo, hi) → drivable-tri count, wall-tri count, opposite corner in a drivable tri (gives the side)
+        // vertices at the same position count as one: material seams in the game's collision repeat their vertices
+        // (MYOUGI 591, IROHA _0 99, USUI 6), which would otherwise turn into back-to-back walls across drivable ground
+        var weld = new Dictionary<Vector3, int>();
+        var same = new int[positions.Length];
+        for (var v = 0; v < positions.Length; v++) same[v] = weld.TryAdd(positions[v], v) ? v : weld[positions[v]];
         var edges = new Dictionary<(int, int), (int Road, int Wall, int Apex)>();
         var drivable = new List<int>();
         for (var t = 0; t < triCount; t++)
@@ -37,7 +42,7 @@ public sealed class TriangleGround : IGround
             if (!isWall[t]) drivable.Add(t);
             for (var k = 0; k < 3; k++)
             {
-                int i = indices[t * 3 + k], j = indices[t * 3 + (k + 1) % 3], apex = indices[t * 3 + (k + 2) % 3];
+                int i = same[indices[t * 3 + k]], j = same[indices[t * 3 + (k + 1) % 3]], apex = indices[t * 3 + (k + 2) % 3];
                 var key = i < j ? (i, j) : (j, i);
                 edges.TryGetValue(key, out var e);
                 edges[key] = isWall[t] ? e with { Wall = e.Wall + 1 } : (e.Road + 1, e.Wall, apex);
@@ -129,7 +134,8 @@ public sealed class TriangleGround : IGround
     }
 
     /// <summary>
-    ///     Sphere vs vertical wall quads. At most one contact per probe (the deepest).
+    ///     Sphere vs vertical wall quads at every probe, then wall end points vs the capsules between neighbouring
+    ///     probes (closed loop, <see cref="CollideEdge" />). At most one contact per probe (the deepest) and one per edge.
     ///     A probe counts only while its centre is less than <paramref name="radius" /> behind the wall,
     ///     so a body that already tunnelled through is not pulled back across.
     /// </summary>
@@ -172,7 +178,55 @@ public sealed class TriangleGround : IGround
             }
             if (best.ProbeIndex >= 0) contacts[count++] = best;
         }
+        if (probes.Length < 3) return count;
+        var centre = Vector2.Zero;
+        foreach (var p in probes) centre += Xz(p) / probes.Length;
+        for (var e = 0; e < probes.Length && count < contacts.Length; e++)
+            if (CollideEdge(probes[e], probes[(e + 1) % probes.Length], centre, radius, probes.Length + e, out var c))
+                contacts[count++] = c;
         return count;
+    }
+
+    /// <summary>
+    ///     Wall end points (posts, guardrail ends, convex corners) inside the capsule <paramref name="p0" />→<paramref name="p1" />
+    ///     that the probe spheres at its ends miss. Pushes along the edge's normal away from <paramref name="centre" />
+    ///     (the body), deepest point only. Points past the capsule core (inside the body) are ignored, so a thin wall under
+    ///     the car does not pin it between both sides; at 150 km/h the body moves 0.17 m per substep, less than the radius.
+    /// </summary>
+    private bool CollideEdge(Vector3 p0, Vector3 p1, Vector2 centre, float radius, int index, out WallContact contact)
+    {
+        contact = new WallContact(default, default, 0, index);
+        var d = Xz(p1 - p0);
+        var len = d.Length();
+        if (len < 1e-4f) return false;
+        var u = d / len;
+        var outN = new Vector2(-u.Y, u.X);
+        if (Vector2.Dot(outN, Xz(p0) - centre) < 0) outN = -outN;
+        var g = _walls;
+        Vector2 lo = (Vector2.Min(Xz(p0), Xz(p1)) - g.Min - new Vector2(radius)) / g.Cell,
+            hi = (Vector2.Max(Xz(p0), Xz(p1)) - g.Min + new Vector2(radius)) / g.Cell;
+        for (var cz = (int)MathF.Floor(lo.Y); cz <= (int)MathF.Floor(hi.Y); cz++)
+        for (var cx = (int)MathF.Floor(lo.X); cx <= (int)MathF.Floor(hi.X); cx++)
+        {
+            if (!g.TryCell(cx, cz, out var start, out var end)) continue;
+            for (var k = start; k < end; k++)
+            {
+                var w = Walls[g.Items[k]];
+                if (w.Normal.X * outN.X + w.Normal.Z * outN.Y > 0.5f) continue; // wall faces away: the body is behind it
+                for (var j = 0; j < 2; j++)
+                {
+                    var v = j == 0 ? w.A : w.B;
+                    var rel = Xz(v - p0);
+                    var t = Vector2.Dot(rel, u);
+                    if (t <= 0 || t >= len) continue; // ends are the probes' job
+                    var depth = radius - Vector2.Dot(rel, outN);
+                    var y = p0.Y + (p1.Y - p0.Y) * (t / len);
+                    if (depth <= contact.Depth || depth > radius || y < v.Y - WallBelow - radius || y > v.Y + WallAbove + radius) continue;
+                    contact = new WallContact(new Vector3(v.X, y, v.Z), new Vector3(-outN.X, 0, -outN.Y), depth, index);
+                }
+            }
+        }
+        return contact.Depth > 0;
     }
 
     private static Vector2 Xz(Vector3 v) => new(v.X, v.Z);

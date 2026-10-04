@@ -28,4 +28,14 @@ public class TriangleGroundTests
         Assert.Equal(-Vector3.UnitX, c[0].Normal);
         Assert.Equal(0.2f, c[0].Depth, 1e-5f);
     }
+
+    [Fact]
+    public void Seam_with_repeated_vertices_is_no_wall()
+    {
+        // two road quads meeting at x = 10, the second with its own copies of the seam vertices (like MYOUGI's material seams)
+        Vector3[] pos = [new(0, 0, 0), new(10, 0, 0), new(10, 0, 10), new(0, 0, 10), new(10, 0, 0), new(20, 0, 0), new(20, 0, 10), new(10, 0, 10)];
+        var g = new TriangleGround(pos, [0, 3, 2, 0, 2, 1, 4, 7, 6, 4, 6, 5], [0, 0, 1, 1], [false, false, false, false]);
+        Assert.Equal(6, g.Walls.Length); // outer border only
+        Assert.DoesNotContain(g.Walls, w => w.A.X == 10 && w.B.X == 10);
+    }
 }

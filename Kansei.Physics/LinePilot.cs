@@ -28,14 +28,25 @@ public sealed class LinePilot
         _along = new float[line.Length];
         for (var i = 1; i < line.Length; i++) _along[i] = _along[i - 1] + Xz(line[i] - line[i - 1]).Length();
         _curvature = new float[line.Length];
+        _wide = new Vector3[line.Length];
         for (var i = 0; i < line.Length; i++)
         {
             // Menger curvature over ±2 points (~10 m spacing on the game's lines)
             Vector2 a = Xz(line[Math.Max(i - 2, 0)]), b = Xz(line[i]), c = Xz(line[Math.Min(i + 2, line.Length - 1)]);
             var den = Vector2.Distance(a, b) * Vector2.Distance(b, c) * Vector2.Distance(a, c);
-            _curvature[i] = den < 1e-6f ? 0 : 2 * MathF.Abs(Cross(b - a, c - a)) / den;
+            var cross = Cross(b - a, c - a);
+            _curvature[i] = den < 1e-6f ? 0 : 2 * MathF.Abs(cross) / den;
+            // outward = left of the travel direction for a right turn (cross > 0), right for a left turn
+            var dir = c - a;
+            if (dir.LengthSquared() > 1e-6f)
+                _wide[i] = new Vector3(dir.Y, 0, -dir.X) / dir.Length() * (MathF.Sign(cross) * MathF.Min(WideMax, WidePerCurvature * _curvature[i]));
         }
     }
+
+    // Pure pursuit cuts corners, and the game's lines run within a metre of some hairpin apexes (IROHA uphill):
+    // the pursuit point is moved outward by up to 2 m in tight corners (r 6 m → 2 m, r 100 m → 0.12 m).
+    const float WideMax = 3.5f, WidePerCurvature = 20f;
+    readonly Vector3[] _wide;
 
     public float Length => _along[^1];
 
@@ -49,6 +60,37 @@ public sealed class LinePilot
             if (d < best) (best, _seg) = (d, i);
         }
         return _seg;
+    }
+
+    /// <summary>Segment found by the last <see cref="Track" />/<see cref="Nearest" />.</summary>
+    public int Segment => _seg;
+
+    /// <summary>
+    ///     Puts <paramref name="car" /> at rest on line point <paramref name="i" />, facing along the line, settled on its springs.
+    ///     Points without drivable ground under both axles (some lines start on wall faces) or where the body would
+    ///     overlap a wall are skipped: first forward, then backward from <paramref name="i" />. Returns the point used, -1 if none.
+    /// </summary>
+    public int Spawn(Vehicle car, IGround ground, int i)
+    {
+        i = Math.Clamp(i, 0, _line.Length - 2);
+        Span<Vector3> probes = stackalloc Vector3[4];
+        Span<WallContact> contacts = stackalloc WallContact[8];
+        for (var k = 0; k < 2 * _line.Length; k++)
+        {
+            var at = k < _line.Length - 1 - i ? i + k : i - (k - (_line.Length - 1 - i)) - 1; // i, i+1, …, end, then i-1, i-2, …
+            if (at < 0) return -1;
+            var axle = Vector3.Normalize(_line[at + 1] - _line[at]) * 3;
+            if (!ground.Raycast(_line[at] + Vector3.UnitY * 5, -Vector3.UnitY, 20, out var hit)
+                || !ground.Raycast(_line[at] - axle + Vector3.UnitY * 5, -Vector3.UnitY, 20, out _)
+                || !ground.Raycast(_line[at] + axle + Vector3.UnitY * 5, -Vector3.UnitY, 20, out _)) continue;
+            car.Reset(hit.Point, MathF.Atan2(axle.X, axle.Z));
+            car.WallProbes(probes);
+            if (ground.CollideWalls(probes, Vehicle.ProbeRadius, contacts) > 0) continue;
+            for (var t = 0; t < 60; t++) car.Step(new VehicleInput(0, 0, 0, Handbrake: true), ground, 1f / 120); // handbrake: brake at standstill engages reverse
+            Nearest(car.Position);
+            return at;
+        }
+        return -1;
     }
 
     /// <summary>Distance along the line and signed lateral offset (+ = left of the line direction) of <paramref name="p"/>.</summary>
@@ -70,14 +112,16 @@ public sealed class LinePilot
     }
 
     /// <summary>Point at distance <paramref name="s"/> along the line (clamped).</summary>
-    public Vector3 PointAt(float s)
+    public Vector3 PointAt(float s) => At(_line, s);
+
+    Vector3 At(Vector3[] values, float s)
     {
         s = Math.Clamp(s, 0, Length);
         var i = _seg;
         while (i > 0 && _along[i] > s) i--;
         while (i < _line.Length - 2 && _along[i + 1] < s) i++;
         var len = _along[i + 1] - _along[i];
-        return Vector3.Lerp(_line[i], _line[i + 1], len < 1e-6f ? 0 : (s - _along[i]) / len);
+        return Vector3.Lerp(values[i], values[i + 1], len < 1e-6f ? 0 : (s - _along[i]) / len);
     }
 
     /// <summary>Throttle/brake/steer to follow the line. Call once per tick before <see cref="Vehicle.Step" />.</summary>
@@ -88,7 +132,7 @@ public sealed class LinePilot
 
         // pure pursuit: arc through the look-ahead point, steer angle = atan(wheelbase · curvature)
         var look = Math.Clamp(5 + 0.5f * v, 8, 30);
-        var local = Vector3.Transform(PointAt(s + look) - car.Position, Quaternion.Conjugate(car.Orientation));
+        var local = Vector3.Transform(PointAt(s + look) + At(_wide, s + look) - car.Position, Quaternion.Conjugate(car.Orientation));
         var d2 = MathF.Max(local.X * local.X + local.Z * local.Z, 1);
         var delta = MathF.Atan(car.Spec.Wheelbase * 2 * local.X / d2); // + = left (+X)
         // Vehicle scales the input lock down with speed and adds counter-steer from body slip; undo both

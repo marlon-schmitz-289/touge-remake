@@ -8,11 +8,12 @@ namespace Touge;
 /// <summary>Course collision (CRS_COLI_&lt;COURSE&gt;_&lt;dir&gt;.BIN) as <see cref="IGround" />. Surface = material index (see <see cref="Collision.Materials" />).</summary>
 public static class CourseGround
 {
+    /// <remarks>Direction 1 without its own file (circuits MYOUGI0/USUI0) uses _0, like the game (0x1649C0).</remarks>
     public static (TriangleGround Ground, Collision Collision) Load(Iso9660 iso, string course, int direction = 0)
     {
         var data = Afs.FromBytes(iso.ReadFile("CDVD/DATA/COURSE/CRS_DATA.AFS"), iso.ReadFile("CDVD/DATA/COURSE/CRS_DATA.TBL"));
         var name = $"CRS_COLI_{course}_{direction}.BIN";
-        var c = Collision.Parse(data.Read(data.Find(name) ?? throw new FileNotFoundException(name)));
+        var c = Collision.Parse(data.Read(data.Find(name) ?? data.Find($"CRS_COLI_{course}_0.BIN") ?? throw new FileNotFoundException(name)));
         var f = c.Faces;
         var indices = new int[f.Length * 3];
         for (var i = 0; i < f.Length; i++) (indices[i * 3], indices[i * 3 + 1], indices[i * 3 + 2]) = (f[i].A, f[i].B, f[i].C);
@@ -24,13 +25,13 @@ public static class CourseGround
     ///     image (road grey, other drivable green, wall faces dark, derived wall segments red with blue
     ///     normal ticks) of the whole course plus a 200 m detail around driving-line point <paramref name="at" />.
     /// </summary>
-    public static void Proof(Iso9660 iso, string course, string png, int at)
+    public static void Proof(Iso9660 iso, string course, string png, int at, bool reverse = false)
     {
         var sw = Stopwatch.StartNew();
-        var (g, c) = Load(iso, course);
+        var (g, c) = Load(iso, course, reverse ? 1 : 0);
         Console.WriteLine($"[Ground] {course}: {c.Faces.Length} Dreiecke, {g.Walls.Length} Wandsegmente, gebaut in {sw.ElapsedMilliseconds} ms");
 
-        var line = CourseLoader.ReadDrivingLine(iso, course);
+        var line = CourseLoader.ReadDrivingLine(iso, course, reverse);
         const int n = 1_000_000;
         var rng = new Random(1);
         var origins = new Vector3[n];

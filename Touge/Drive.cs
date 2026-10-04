@@ -4,25 +4,38 @@ using Touge.Formats;
 
 namespace Touge;
 
-/// <summary>The drivable part of a course: collision as ground, driving line + pilot, one AE86 on it.</summary>
+/// <summary>
+///     The drivable part of a course: collision as ground, driving line + pilot, one AE86 on it.
+///     <see cref="Reverse" /> = uphill/reverse direction like the original's flag 0x1D6 (FORMATS.md): CRS_COLI_&lt;COURSE&gt;_1
+///     (falls back to _0 for the circuits MYOUGI0/USUI0, as the game does) and CRS_DRV_&lt;COURSE&gt;_O.
+/// </summary>
 public sealed class Drive
 {
     public const float Dt = 1f / 120;
 
-    public TriangleGround Ground { get; }
-    public Vector3[] Line { get; }
-    public LinePilot Pilot { get; }
+    private readonly string _course;
+    private float[] _grip = [];
+
+    public TriangleGround Ground { get; private set; } = null!;
+    public Vector3[] Line { get; private set; } = null!;
+    public LinePilot Pilot { get; private set; } = null!;
+    public bool Reverse { get; private set; }
     public Vehicle Car { get; } = new(CarSpec.AE86);
 
-    public Drive(Iso9660 iso, string courseTime)
+    public Drive(Iso9660 iso, string courseTime, bool reverse = false)
     {
-        var course = courseTime[..courseTime.LastIndexOf('_')];
-        var (ground, collision) = CourseGround.Load(iso, course);
-        Ground = ground;
-        Line = CourseLoader.ReadDrivingLine(iso, course);
+        _course = courseTime[..courseTime.LastIndexOf('_')];
+        SetDirection(iso, reverse);
+        Car.SurfaceGrip = id => (uint)id < (uint)_grip.Length ? _grip[id] : 1;
+    }
+
+    /// <summary>Loads ground and driving line of a direction; the car stays where it is (call <see cref="ResetNearest" />).</summary>
+    public void SetDirection(Iso9660 iso, bool reverse)
+    {
+        var (ground, collision) = CourseGround.Load(iso, _course, reverse ? 1 : 0);
+        (Ground, Reverse, _grip) = (ground, reverse, Array.ConvertAll(collision.Materials, Grip));
+        Line = CourseLoader.ReadDrivingLine(iso, _course, reverse);
         Pilot = new LinePilot(Line);
-        var grip = Array.ConvertAll(collision.Materials, Grip);
-        Car.SurfaceGrip = id => (uint)id < (uint)grip.Length ? grip[id] : 1;
     }
 
     /// <summary>Grip factor per collision material name (R16road, R32gutter, R25r_grass, R21r_bump, …). Guessed, not from game data.</summary>
@@ -32,33 +45,24 @@ public sealed class Drive
         : material.Contains("bump") || material.Contains("redline") ? 0.95f
         : 1f;
 
-    /// <summary>Car at rest on driving-line point <paramref name="i"/>, facing along the line, settled on its springs.</summary>
-    /// <remarks>
-    ///     Some lines start off the drivable faces (IROHA point 0 lies ~30 m before the road, on W faces): the first
-    ///     point from <paramref name="i" /> on with drivable ground under both axles is used instead, with a warning.
-    /// </remarks>
+    /// <summary>Car at rest on driving-line point <paramref name="i"/> (or the next clear one, <see cref="LinePilot.Spawn" />), facing along the line.</summary>
+    /// <remarks>Some lines start off the drivable faces (IROHA point 0 lies ~30 m before the road, on W faces).</remarks>
     public void ResetTo(int i)
     {
-        var want = i = Math.Clamp(i, 0, Line.Length - 2);
-        GroundHit hit = default;
-        while (i < Line.Length - 1 && !OnRoad(i, out hit)) i++;
-        if (i == Line.Length - 1) throw new InvalidOperationException($"Kein befahrbarer Boden unter der Fahrlinie ab Punkt {want}");
-        if (i != want) Console.WriteLine($"[Drive] Fahrlinie Punkt {want} ohne befahrbaren Boden, starte bei Punkt {i}");
-        var d = Line[i + 1] - Line[i];
-        Car.Reset(hit.Point, MathF.Atan2(d.X, d.Z));
-        for (var t = 0; t < 60; t++) Car.Step(new VehicleInput(0, 0, 0, Handbrake: true), Ground, Dt); // handbrake, not brake: brake at standstill engages reverse
-        Pilot.Nearest(Car.Position);
+        var at = Pilot.Spawn(Car, Ground, i);
+        if (at < 0) throw new InvalidOperationException($"Kein freier befahrbarer Boden an der Fahrlinie ab Punkt {i}");
+        if (at != i) Console.WriteLine($"[Drive] Fahrlinie Punkt {i} ohne befahrbaren Boden oder an der Wand, starte bei Punkt {at}");
     }
 
-    private bool OnRoad(int i, out GroundHit hit)
+    /// <summary>
+    ///     R: back onto the driving line where the car is, facing the current direction. Local tracking keeps the place
+    ///     along the course (no jump to the other leg of a hairpin); far off the line (beyond a wall) the global nearest point.
+    /// </summary>
+    public void ResetNearest()
     {
-        var axle = Vector3.Normalize(Line[i + 1] - Line[i]) * 3;
-        return Ground.Raycast(Line[i] + Vector3.UnitY * 5, -Vector3.UnitY, 20, out hit)
-               && Ground.Raycast(Line[i] - axle + Vector3.UnitY * 5, -Vector3.UnitY, 20, out _)
-               && Ground.Raycast(Line[i] + axle + Vector3.UnitY * 5, -Vector3.UnitY, 20, out _);
+        var (_, lateral) = Pilot.Track(Car.Position);
+        ResetTo(MathF.Abs(lateral) < 15 ? Pilot.Segment : Pilot.Nearest(Car.Position));
     }
-
-    public void ResetNearest() => ResetTo(Pilot.Nearest(Car.Position));
 
     /// <summary>--drift: every 7 s (from 4.5 s on) the pilot's input becomes a 2.5 s handbrake-flick drift, for effect tests.</summary>
     public bool ForceDrift { get; set; }

@@ -11,7 +11,7 @@ namespace Touge;
 /// <summary>
 ///     Course from the ISO with a drivable AE86 (default) and a free-fly camera (F1).
 ///     Drive: W/S or ↑/↓ throttle/brake (automatic: hold S at standstill to reverse), A/D or ←/→ steer, Space handbrake, T auto/manual, Shift/Ctrl gear up/down (manual),
-///     R reset onto the driving line, C chase/bumper camera, F2 graphics quality (MSAA, bloom, shadows) on/off,
+///     R reset onto the driving line, B reset in the other direction (downhill/uphill), C chase/bumper camera, F2 graphics quality (MSAA, bloom, shadows) on/off,
 ///     F4 HUD on/off, N minimap mode (<see cref="Hud"/>). Pad: left stick, triggers, A handbrake, bumpers shift.
 ///     Fly: WASD, Q/E down/up, right mouse or arrow keys look, Shift fast, Space jump along the driving line. Esc quit.
 ///     <paramref name="orbit"/> (degrees, 0 = front, 90 = left, 180 = rear) puts the fly camera around the car;
@@ -37,6 +37,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     private Hud _hud = null!;
     /// <summary>--hud: "north", "overview" (minimap mode at start) or "off"; default rotating map, HUD on.</summary>
     public string? HudMode { get; init; }
+    /// <summary>--reverse: start in the reverse (uphill) direction; B switches direction at runtime (<see cref="Drive.Reverse"/>).</summary>
+    public bool Reverse { get; init; }
     private readonly Effects _fx = new();
     private readonly Random _rng = new(3);
     private readonly float[] _smokeDebt = new float[4], _sprayDebt = new float[4];
@@ -80,7 +82,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _course = CourseLoader.Load(iso, courseTime, _renderer);
         SetupFog(_renderer.Atmosphere);
         if (!courseTime.EndsWith("_NIT") && _course.SunDirection is { } sun) _renderer.Atmosphere.SunDirection = sun; // the original's key light
-        _drive = new Drive(iso, courseTime);
+        _drive = new Drive(iso, courseTime, Reverse);
         Console.WriteLine($"[Touge] {courseTime} geladen in {sw.ElapsedMilliseconds} ms, {_course.World.Batches.Count} Batches, {_drive.Ground.Walls.Length} Wandsegmente");
         _carRenderer = new CarRenderer(_renderer);
         _fxRenderer = new EffectsRenderer(_renderer);
@@ -418,6 +420,14 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         if (k.IsKeyPressed(Key.R))
         {
             _drive.ResetNearest();
+            SyncPose();
+        }
+        if (k.IsKeyPressed(Key.B))
+        {
+            using (var iso = new Iso9660(isoPath)) _drive.SetDirection(iso, !_drive.Reverse);
+            _drive.ResetNearest();
+            _hud = new Hud(_course.Road, _drive.Line) { Visible = _hud.Visible, Mode = _hud.Mode };
+            Console.WriteLine($"\n[Touge] Richtung: {(_drive.Reverse ? "rückwärts (CRS_COLI _1, DRV _O)" : "vorwärts (_0, _I)")}");
             SyncPose();
         }
         if (k.IsKeyPressed(Key.C))

@@ -18,8 +18,8 @@ public interface IGround
     bool Raycast(Vector3 origin, Vector3 direction, float maxDistance, out GroundHit hit);
 
     /// <summary>
-    ///     Tests probe spheres (e.g. body corners) against walls/guardrails. Writes up to
-    ///     <c>contacts.Length</c> contacts, returns how many.
+    ///     Tests probe spheres (e.g. body corners) against walls/guardrails; 3+ probes are a closed outline and the
+    ///     capsules between neighbours count too (posts between corners). Writes up to <c>contacts.Length</c> contacts, returns how many.
     /// </summary>
     int CollideWalls(ReadOnlySpan<Vector3> probes, float radius, Span<WallContact> contacts);
 }
