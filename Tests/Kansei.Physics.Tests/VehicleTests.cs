@@ -148,4 +148,15 @@ public class VehicleTests(ITestOutputHelper log)
         var fwd = Vector3.Dot(car.Velocity, Vector3.Transform(Vector3.UnitZ, car.Orientation));
         Assert.True(car.Gear >= 1 && fwd > 2, $"did not switch back to forward: gear {car.Gear}, {fwd * 3.6f:F1} km/h");
     }
+
+    [Fact]
+    public void AutomaticDoesNotUpshiftOnHandbrakeRevs()
+    {
+        var car = NewCar();
+        AccelerateTo(car, 50);
+        var gear = car.Gear;
+        Run(car, new VehicleInput(1, 0, 0.5f, Handbrake: true), 1.5f);
+        log.WriteLine($"handbrake revs: gear {gear} -> {car.Gear}, rpm {car.Rpm:F0}");
+        Assert.True(car.Gear <= gear, $"upshifted on free revs: {gear} -> {car.Gear}");
+    }
 }

@@ -109,7 +109,7 @@ public sealed class Vehicle
             }
             if (Gear == -1) (throttle, brake) = (brake, throttle);
         }
-        UpdateGear(input.Shift, dt);
+        UpdateGear(input.Shift, dt, input.Handbrake);
         UpdateSteer(Math.Clamp(input.Steer, -1, 1), dt);
         UpdateDriftGrip(Math.Abs(input.Steer), throttle, input.Handbrake);
         WallContacts = 0;
@@ -164,13 +164,13 @@ public sealed class Vehicle
         _ => 0,
     };
 
-    void UpdateGear(int shift, float dt)
+    void UpdateGear(int shift, float dt, bool clutchOpen)
     {
         _shiftTimer = MathF.Max(_shiftTimer - dt, -1); // < 0: time since the shift finished
         var target = Gear;
         if (shift != 0)
             target = Math.Clamp(Gear + Math.Sign(shift), -1, Spec.Gears.Length);
-        else if (AutomaticGearbox && Gear >= 1 && _shiftTimer <= 0)
+        else if (AutomaticGearbox && Gear >= 1 && _shiftTimer <= 0 && !clutchOpen) // handbrake opens the clutch: free revs are no reason to shift
         {
             if (Rpm > Spec.AutoUpRpm && Gear < Spec.Gears.Length) target++;
             else if (Gear > 1 && _shiftTimer < -0.5f && Rpm < Spec.AutoDownRpm && Rpm * Spec.Gears[Gear - 2] / Spec.Gears[Gear - 1] < Spec.AutoUpRpm) target--;
