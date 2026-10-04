@@ -19,9 +19,9 @@ layout(location = 3) in vec4 vColor;
 layout(set = 0, binding = 0) uniform sampler2D uTexture;
 
 #include "scene_push.glsl"
+#include "noise.glsl"
 #include "fog.glsl"
 #include "lighting.glsl"
-#include "noise.glsl"
 
 layout(set = 1, binding = 2) uniform sampler2D uEnvTop;
 layout(set = 1, binding = 3) uniform sampler2D uEnvBottom;

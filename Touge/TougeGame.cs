@@ -74,6 +74,10 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     public string? HudMode { get; init; }
     /// <summary>--reverse: start in the reverse (uphill) direction; B switches direction at runtime (<see cref="Drive.Reverse"/>).</summary>
     public bool Reverse { get; init; }
+    /// <summary>--fog: dense fog over the day or night course (<see cref="FogAtmosphere"/>); chosen in the menus as weather FOG.</summary>
+    public bool Fog { get; init; }
+    /// <summary>The loaded course has fog.</summary>
+    private bool _fog;
     /// <summary>--car / --paint: HCAR name (<see cref="CarPaint.Cars"/>) and CAR_ENV colour at start; 1/2 cycle the car, 3 the paint (at standstill).</summary>
     public string Car { get; init; } = "AE86T";
     public int Paint { get; init; }
@@ -139,7 +143,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         else
             _settings = new Settings
             {
-                HighQuality = highQuality, HudOn = HudMode != "off" && flicker == null, Car = Car, Paint = Paint, Reverse = Reverse, Course = _courseTime,
+                HighQuality = highQuality, HudOn = HudMode != "off" && flicker == null, Car = Car, Paint = Paint, Reverse = Reverse, Course = _courseTime, Fog = Fog,
                 MapMode = HudMode switch { "north" => Hud.MapMode.NorthUp, "overview" => Hud.MapMode.Overview, _ => Hud.MapMode.Rotating }, Livery = Livery,
             };
         if (flicker == null && ContactSheet == null)
@@ -164,7 +168,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         }
         _bumperCam = _settings.BumperCam;
         // the front end shows Akina at night behind the title, like the original's photo; course select loads the choice
-        LoadCourse(iso, _front != null && (_persist || Flow != null) ? "AKINA_NIT" : _persist ? _settings.Course : _courseTime, _settings.Reverse, _settings.Car, _settings.Paint, startPoint);
+        var title = _front != null && (_persist || Flow != null);
+        LoadCourse(iso, title ? "AKINA_NIT" : _persist ? _settings.Course : _courseTime, _settings.Reverse, _settings.Car, _settings.Paint, startPoint, !title && _settings.Fog);
         _drive.ForceDrift = drift;
         if (autodrive is { } seconds)
         {
@@ -228,7 +233,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     ///     the car on line point <paramref name="at"/>, car renderers, HUD, effects and (with sound) the course's music.
     ///     A course change replaces the whole <see cref="WorldRenderer"/>, so its textures go with it.
     /// </summary>
-    private void LoadCourse(Iso9660 iso, string courseTime, bool reverse, string car, int paint, int at = 0)
+    private void LoadCourse(Iso9660 iso, string courseTime, bool reverse, string car, int paint, int at = 0, bool fog = false)
     {
         if (_renderer is not null)
         {
@@ -241,18 +246,19 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             _fxRenderer.Dispose();
             _renderer.Dispose();
         }
-        _courseTime = courseTime;
+        (_courseTime, _fog) = (courseTime, fog && !courseTime.EndsWith("_RIN"));
         _renderer = new WorldRenderer(Device) { Atmosphere = AtmosphereFor(courseTime), HighQuality = _settings.HighQuality };
         var sw = System.Diagnostics.Stopwatch.StartNew();
         _course = CourseLoader.Load(iso, courseTime, _renderer);
         SetupFog(_renderer.Atmosphere);
+        if (_fog) _renderer.Atmosphere = FogAtmosphere(courseTime.EndsWith("_NIT"));
         if (!courseTime.EndsWith("_NIT") && _course.SunDirection is { } sun) _renderer.Atmosphere.SunDirection = sun; // the original's key light
         _drive = new Drive(iso, courseTime, reverse, CarSpecs.All[car]);
         Console.WriteLine($"[Touge] {courseTime} geladen in {sw.ElapsedMilliseconds} ms, {_course.World.Batches.Count} Batches, {_drive.Ground.Walls.Length} Wandsegmente");
         _carRenderer = new CarRenderer(_renderer);
         _fxRenderer = new EffectsRenderer(_renderer);
         _fx = new Effects();
-        SetupLights(courseTime.EndsWith("_NIT"), courseTime.EndsWith("_RIN"));
+        SetupLights(courseTime.EndsWith("_NIT"), courseTime.EndsWith("_RIN"), _fog);
         (_carName, _paint) = (car, paint);
         LoadCarModel(iso);
         _drive.ResetTo(at);
@@ -558,8 +564,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     /// <summary>Opens a menu screen with the selection of the current run; <paramref name="fromFrontEnd"/>: with the saved choice.</summary>
     private void OpenMenu(Menu.Screen screen, bool fromFrontEnd = false)
     {
-        if (fromFrontEnd) _menu!.Open(screen, _settings.Course, _settings.Reverse, _carName, _paint, _settings.Manual);
-        else _menu!.Open(screen, _courseTime, _drive.Reverse, _carName, _paint, _settings.Manual);
+        if (fromFrontEnd) _menu!.Open(screen, _settings.Course, _settings.Reverse, _carName, _paint, _settings.Manual, _settings.Fog);
+        else _menu!.Open(screen, _courseTime, _drive.Reverse, _carName, _paint, _settings.Manual, _fog);
     }
 
     /// <summary>Front-end input; its results open the game-flow menus behind the main menu or quit.</summary>
@@ -611,12 +617,12 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         switch (menu.Update(keys, dt))
         {
             case Menu.Action.Load:
-                (_settings.Course, _settings.Reverse, _settings.Car, _settings.Paint, _settings.Manual) = (menu.CourseTime, menu.Reverse, menu.CarId, menu.Paint, menu.Manual);
+                (_settings.Course, _settings.Reverse, _settings.Car, _settings.Paint, _settings.Manual, _settings.Fog) = (menu.CourseTime, menu.Reverse, menu.CarId, menu.Paint, menu.Manual, menu.Fog);
                 if (_persist) _settings.Save();
-                if (menu.CourseTime != _courseTime || menu.Reverse != _drive.Reverse)
+                if (menu.CourseTime != _courseTime || menu.Reverse != _drive.Reverse || menu.Fog != _fog)
                 {
                     using var iso = new Iso9660(isoPath);
-                    LoadCourse(iso, menu.CourseTime, menu.Reverse, menu.CarId, menu.Paint);
+                    LoadCourse(iso, menu.CourseTime, menu.Reverse, menu.CarId, menu.Paint, fog: menu.Fog);
                 }
                 else if (menu.CarId != _carName || menu.Paint != _paint) SwitchCar(Array.IndexOf(CarPaint.Cars, menu.CarId), menu.Paint);
                 ResetRun();
@@ -806,12 +812,13 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
 
     /// <summary>
     ///     Night: headlights on, CRS_LIGHT points as sodium street lights (on Akina they sit 6–7 m above and 5–10 m beside
-    ///     the road: lamp heads; the game itself only brightens the car near them). Rain: headlights on (dimmer, it is day). Intensities tuned by eye.
+    ///     the road: lamp heads; the game itself only brightens the car near them). Rain: headlights on (dimmer, it is day);
+    ///     day fog: on but faint (a glow in the mist, barely a patch on the road). Intensities tuned by eye.
     /// </summary>
-    private void SetupLights(bool night, bool rain)
+    private void SetupLights(bool night, bool rain, bool fog)
     {
         var l = _renderer.Lights;
-        l.HeadlightColor = night ? new Vector3(1f, 0.92f, 0.8f) * 700 : rain ? new Vector3(1f, 0.92f, 0.8f) * 250 : Vector3.Zero;
+        l.HeadlightColor = new Vector3(1f, 0.92f, 0.8f) * (night ? 700 : rain ? 250 : fog ? 60 : 0);
         l.StreetLights = _course.Lights;
         l.StreetLightColor = night ? new Vector3(1f, 0.62f, 0.3f) * 50 : Vector3.Zero;
     }
@@ -875,6 +882,36 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             FogEnd = 6000, Exposure = 1.35f, Contrast = 1.12f, Saturation = 1.1f,
         },
     };
+
+    /// <summary>Extinction of the fog weather (1/m) where the car drives: visibility (5 % contrast) ≈ 3 / σ ≈ 60 m.</summary>
+    public const float FogDensity = 0.05f;
+
+    /// <summary>
+    ///     Weather FOG over the day or night course: dense exponential fog around the car's altitude (<see cref="FogDensity"/>,
+    ///     thinning ×1/e every 50 m upwards, thicker in the valleys below; the base follows the car), slowly drifting
+    ///     banks, the sky hidden. Day: bright grey-white, overcast and flat (no sun, no shadows, soft ambient), the sun only
+    ///     a faint brighter patch in the fog. Night: the night course's light in near-black fog, lamps glowing in it and
+    ///     their light swallowed with distance (lighting.glsl). Tuned by eye.
+    /// </summary>
+    private static Atmosphere FogAtmosphere(bool night)
+    {
+        var a = AtmosphereFor(night ? "_NIT" : "_DAY");
+        (a.Shadows, a.SunDisk, a.Specular, a.FogSun) = (false, Vector3.Zero, 0, Vector3.Zero);
+        (a.FogStart, a.FogEnd, a.HeightFogDensity, a.HeightFogScale, a.FogDrift) = (0, 1e6f, FogDensity, 50, 0.6f);
+        if (night)
+        {
+            (a.FogColor, a.LightGlow) = (new(0.006f, 0.007f, 0.010f), 0.0012f);
+            (a.Zenith, a.Horizon) = (a.FogColor, a.FogColor);
+            return a;
+        }
+        (a.FogColor, a.FogSun, a.LightGlow) = (new(0.50f, 0.52f, 0.54f), new(0.08f, 0.07f, 0.05f), 0.0006f);
+        (a.Zenith, a.Horizon) = (a.FogColor * 1.1f, a.FogColor);
+        (a.SunColor, a.ShadeSky, a.ShadeGround) = (Vector3.One, Vector3.One, Vector3.One);
+        (a.SunIntensity, a.BakedKeep, a.BakedSun, a.Ambient) = (0.15f, 0.92f, 0.08f, new(0.36f, 0.37f, 0.39f));
+        (a.ContactShadow, a.EnvStrength, a.Exposure, a.Contrast, a.Saturation, a.Vignette) = (0.7f, 3.5f, 1.3f, 1f, 0.82f, 0.3f);
+        (a.BloomThreshold, a.BloomStrength) = (1.6f, 0.35f);
+        return a;
+    }
 
     /// <summary>
     ///     Course-dependent fog: the original's linear start/end (CRS_INFO; negative starts = haze at the camera clamped
@@ -1039,6 +1076,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         }
 
         UpdateLights();
+        if (_fog) _renderer.Atmosphere.HeightFogBase = _carBody.Translation.Y; // the fog layer lies where the car drives
         Span<(StaticMesh, Matrix4x4)> casters =
         [
             (_car.Body, _carBody), (_car.Wheel, _carWheels[0]), (_car.Wheel, _carWheels[1]), (_car.Wheel, _carWheels[2]), (_car.Wheel, _carWheels[3]),

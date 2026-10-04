@@ -79,6 +79,7 @@ vec3 lightIn(int i, vec3 p, out vec3 l)
     l = d * inversesqrt(max(d2, 1e-4));
     float w = 1.0 - (d2 * d2) / (range * range * range * range);
     float att = w * w / (d2 + 1.0);
+    if (pc.uTailPos[0].w > 0.0) att *= exp(-pc.uTailPos[0].w * sqrt(d2)); // dense fog swallows the light on its way
     if (spot) att *= beam(i, -l);
     return colour * att;
 }
@@ -140,6 +141,7 @@ vec3 lightGlow(vec3 p)
     float len = length(d);
     vec3 rd = d / max(len, 1e-4);
     vec3 sum = vec3(0.0);
+    float sigma = pc.uTailPos[0].w; // fog extinction (0 = thin haze): dense fog swallows the lamps' light on its way
     for (int j = 0; j < 4; j++)
     {
         vec3 colour;
@@ -148,19 +150,22 @@ vec3 lightGlow(vec3 p)
         vec3 ol = lp.xyz - o;
         float tc = dot(ol, rd);
         float h = sqrt(max(dot(ol, ol) - tc * tc, 0.0)) + 0.1;
-        sum += colour * ((atan((len - tc) / h) + atan(tc / h)) / h);
+        float glow = (atan((len - tc) / h) + atan(tc / h)) / h;
+        sum += colour * (sigma > 0.0 ? glow * exp(-sigma * length(ol)) : glow);
     }
     if (dot(pc.uSpotColor.rgb, pc.uSpotColor.rgb) > 0.0)
     {
         float reach = min(len, 60.0), step = reach / 8.0;
-        for (int k = 0; k < 8; k++)
+        // lamp -> sample -> eye is about twice the sample's distance (the lamps sit near the camera): exp(-2 sigma t), stepped
+        float fade = exp(-sigma * step), decay = fade * fade;
+        for (int k = 0; k < 8; k++, fade *= decay)
         {
             vec3 q = o + rd * ((float(k) + 0.5) * step);
             for (int i = 0; i < 2; i++)
             {
                 vec3 dl = q - pc.uSpotPos[i].xyz;
                 float d2 = dot(dl, dl);
-                sum += pc.uSpotColor.rgb * (beam(i, dl * inversesqrt(max(d2, 1e-4))) * step / (d2 + 1.0));
+                sum += pc.uSpotColor.rgb * (beam(i, dl * inversesqrt(max(d2, 1e-4))) * step * fade / (d2 + 1.0));
             }
         }
     }

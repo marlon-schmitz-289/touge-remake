@@ -6,7 +6,7 @@ namespace Touge.Tests;
 public class MenuTests
 {
     /// <summary>
-    ///     The game flow as the original's Time Attack: course → route → (time/weather skipped when the course has one) →
+    ///     The game flow as the original's Time Attack: course → route → (time skipped when the course has one) → weather (DRY/FOG at night) →
     ///     maker → model → car → transmission → loading asks once for the load → telop and 3-2-1-GO hold the game until GO →
     ///     finish → result tally → Exit; back walks the visited steps, the locked grid slot beeps, music per screen.
     /// </summary>
@@ -43,12 +43,15 @@ public class MenuTests
         m.Open(Menu.Screen.Course, "HAPPOU_NIT", false, "AE86T", 0);
         Run(0.1f, ok);
         Assert.Equal(Menu.Screen.Route, m.Current); // same module: no fade
-        Run(Menu.Fade + 0.1f, ok); // night only: time and weather skipped, fade to the maker
+        Run(0.1f, ok); // night only: time skipped, weather DRY / FOG
+        Assert.Equal(Menu.Screen.Weather, m.Current);
+        Run(0.1f, (1, 0, false, false));
+        Run(Menu.Fade + 0.1f, ok); // FOG over the night course, fade to the maker
         Assert.Equal(Menu.Screen.Maker, m.Current);
-        Assert.Equal("HAPPOU_NIT", m.CourseTime);
+        Assert.Equal(("HAPPOU_NIT", true), (m.CourseTime, m.Fog));
         Assert.Equal("WORRY.adx", m.Music(null));
-        Run(Menu.Fade + 0.1f, back); // back across modules: the route again
-        Assert.Equal(Menu.Screen.Route, m.Current);
+        Run(Menu.Fade + 0.1f, back); // back across modules: the weather again
+        Assert.Equal(Menu.Screen.Weather, m.Current);
         Run(Menu.Fade + 0.1f, ok);
         Run(0.1f, ok); // into the model list
         Run(0.1f, (0, 1, false, false)); // LEVIN SR

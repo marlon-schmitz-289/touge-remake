@@ -19,6 +19,7 @@ using Touge;
 // --reverse: Gegenrichtung (bergauf): CRS_COLI_<KURS>_1 (Rundkurse _0) + CRS_DRV_<KURS>_O, Start am anderen Ende; im Spiel B.
 // --car <NAME|index> (HCAR-Name wie AE86T, FD3S, R32, EVO3 … oder 0–31), --paint <n> (CAR_ENV-Farbe, 0 = Standard).
 // --cars <png>: Kontaktbogen aller 32 Autos (Orbit 35°, 4 × 8 Kacheln in CarPaint.Cars-Reihenfolge), dann Ende; mit --hud off.
+// --fog: dichter Nebel über dem Tag- oder Nachtkurs (Sicht ~60 m; im Menü Wetter FOG).
 // --sun: freie Kamera am Startpunkt schaut zur Sonne (Blendung prüfen).
 // Ohne Kurs und ohne Test-Flags (außer --backend) startet das Spiel im Front-End (Ui/FrontEnd: Hinweis, Karten, Titel, Hauptmenü) mit den gespeicherten Einstellungen (Ui/Settings).
 // --menu boot|logo|disclaimer|title|mode|quit (Front-End; quit = QUIT GAME mit offener Abfrage) bzw. course|route|time|weather|maker|car|gearbox|intro|pause|records|options: diesen Schritt/dieses Menü beim Start öffnen (auch mit Test-Flags, z. B. --menu mode --shot out/m.png).
@@ -106,7 +107,7 @@ if (Arg("--ground") is { } groundPng)
 // menus (and the saved settings) only when started plainly: any course or test flag means a scripted run
 var plain = args.Where((a, i) => a != iso && a != "--backend" && (i == 0 || args[i - 1] != "--backend")).All(a => a == "--menu" || a == Arg("--menu"));
 KanseiApp.Run(new TougeGame(iso, course.ToUpperInvariant(), shot, at, orbit, autodrive, bench, Arg("--quality") != "off", args.Contains("--drift"), Arg("--flicker"))
-    { HudMode = Arg("--hud"), Reverse = args.Contains("--reverse"), Car = car, Paint = paint, Livery = livery, ContactSheet = Arg("--cars"), LookAtSun = args.Contains("--sun"),
+    { HudMode = Arg("--hud"), Reverse = args.Contains("--reverse"), Fog = args.Contains("--fog"), Car = car, Paint = paint, Livery = livery, ContactSheet = Arg("--cars"), LookAtSun = args.Contains("--sun"),
       UseMenus = plain, StartMenu = Arg("--menu"), Flow = Arg("--flow"),
       ShotSize = Arg("--shot-size") is { } size && size.Split('x') is [var sw, var sh] ? (int.Parse(sw), int.Parse(sh)) : (1280, 720) }, new WindowSettings
 {

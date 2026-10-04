@@ -18,6 +18,8 @@ public sealed class Settings
     public bool BumperCam { get; set; }
     public string Course { get; set; } = "AKINA_DAY";
     public bool Reverse { get; set; }
+    /// <summary>Weather FOG over <see cref="Course"/> (a _DAY or _NIT course).</summary>
+    public bool Fog { get; set; }
     public string Car { get; set; } = "AE86T";
     public int Paint { get; set; }
     /// <summary>Manual gearbox (the car flow's transmission choice).</summary>

@@ -9,7 +9,7 @@ namespace Touge.Ui;
 ///     The game-flow screens behind the main menu, rebuilt in the original's style with <see cref="Canvas"/> (no original
 ///     textures), flow after its game-flow controller 0x1702A0 (Time Attack: course first, then the car):
 ///     course select (3 × 4 grid as K_CRSSEL, map line in the carbon "monitor" instead of the photo) → route → time of
-///     day → weather (choice pairs as T_TRIAL, steps with one option skipped) → maker select (T_MKSEL: 7 chrome plates,
+///     day → weather (choice pairs as T_TRIAL, steps with one option skipped; FOG, an addition, over the day or night course) → maker select (T_MKSEL: 7 chrome plates,
 ///     carbon MODEL panel) → car (the 3D car turning behind, body colour) → transmission → loading (white, "Now Loading...")
 ///     → course telop and 3-2-1-GO (TLP_STG, CAR010/CAR011) → race; pause bar (Continue/Retry/Exit, PAUSE.PAC) →
 ///     finish banner (FINISH.PAC) → result sheet with tallied rows (RESULT.PAC, NAME001) and the action buttons
@@ -58,7 +58,7 @@ public sealed class Menu(Catalog catalog, Settings settings)
     public Action<string>? Sound { get; set; }
 
     private int _slot, _maker, _model, _car, _paint, _choice, _row;
-    private bool _reverse, _night, _wet, _manual, _inModels, _loadAsked, _fadeIn, _padHelp;
+    private bool _reverse, _night, _wet, _fog, _manual, _inModels, _loadAsked, _fadeIn, _padHelp;
     private float _t, _clock, _leave = -1;
     private Screen _next;
     private Action _then;
@@ -69,6 +69,8 @@ public sealed class Menu(Catalog catalog, Settings settings)
     private Catalog.Course SelectedCourse => catalog.Courses[Math.Min(_slot, catalog.Courses.Count - 1)];
     public string CourseTime => $"{SelectedCourse.Id}_{(_night ? "NIT" : _wet ? "RIN" : "DAY")}";
     public bool Reverse => _reverse;
+    /// <summary>Fog over <see cref="CourseTime"/> (always a _DAY or _NIT course).</summary>
+    public bool Fog => _fog;
     public string CarId => catalog.Cars[_car].Id;
     public int Paint => _paint;
     public bool Manual => _manual;
@@ -93,11 +95,11 @@ public sealed class Menu(Catalog catalog, Settings settings)
     };
 
     /// <summary>Opens <paramref name="s"/> with the selection at the given course/direction/car/paint; backing out of it leaves to the main menu.</summary>
-    public void Open(Screen s, string courseTime, bool reverse, string car, int paint, bool manual = false)
+    public void Open(Screen s, string courseTime, bool reverse, string car, int paint, bool manual = false, bool fog = false)
     {
         var id = courseTime[..courseTime.LastIndexOf('_')];
         _slot = Math.Max(0, catalog.Courses.ToList().FindIndex(c => c.Id == id));
-        (_night, _wet, _reverse) = (courseTime.EndsWith("_NIT"), courseTime.EndsWith("_RIN"), reverse);
+        (_night, _wet, _fog, _reverse) = (courseTime.EndsWith("_NIT"), courseTime.EndsWith("_RIN"), fog, reverse);
         _car = Math.Max(0, catalog.Cars.ToList().FindIndex(c => c.Id == car));
         (_paint, _manual) = (paint, manual);
         _maker = Array.IndexOf(Catalog.Makers, catalog.Cars[_car].Maker);
@@ -124,7 +126,7 @@ public sealed class Menu(Catalog catalog, Settings settings)
         (Current, _t, _fadeIn, _inModels, _loadAsked) = (s, 0, fadeIn, false, false);
         _choice = s switch
         {
-            Screen.Route => _reverse ? 1 : 0, Screen.Time => _night && Times().Length > 1 ? 1 : 0, Screen.Weather => _wet ? 1 : 0,
+            Screen.Route => _reverse ? 1 : 0, Screen.Time => _night && Times().Length > 1 ? 1 : 0, Screen.Weather => Math.Max(0, Array.IndexOf(Weathers(), _fog ? "FOG" : _wet ? "WET" : "DRY")),
             Screen.Gearbox => _manual ? 1 : 0, _ => 0,
         };
         _row = 0;
@@ -162,7 +164,7 @@ public sealed class Menu(Catalog catalog, Settings settings)
     private string[] Choices() => Current switch
     {
         Screen.Route => [Catalog.DirectionName(SelectedCourse, false), Catalog.DirectionName(SelectedCourse, true)],
-        Screen.Time => Times(), Screen.Weather => ["DRY", "WET"], Screen.Gearbox => ["AT", "MT"], _ => [],
+        Screen.Time => Times(), Screen.Weather => Weathers(), Screen.Gearbox => ["AT", "MT"], _ => [],
     };
 
     /// <summary>Time of day, or straight on when the course has only one.</summary>
@@ -177,13 +179,21 @@ public sealed class Menu(Catalog catalog, Settings settings)
         }
     }
 
-    private void StepWeather()
+    /// <summary>DRY (the day or night course), WET (its _RIN variant, day only) and FOG over the dry course, as present.</summary>
+    private string[] Weathers()
     {
         var t = SelectedCourse.Times;
-        if (!_night && t.Contains("DAY") && t.Contains("RIN")) Go(Screen.Weather);
+        var dry = t.Contains(_night ? "NIT" : "DAY");
+        return [.. new[] { dry ? "DRY" : null, !_night && t.Contains("RIN") ? "WET" : null, dry ? "FOG" : null }.OfType<string>()];
+    }
+
+    private void StepWeather()
+    {
+        var w = Weathers();
+        if (w.Length > 1) Go(Screen.Weather);
         else
         {
-            _wet = !_night && !t.Contains("DAY");
+            (_wet, _fog) = (w[0] == "WET", false);
             Go(Screen.Maker);
         }
     }
@@ -247,7 +257,7 @@ public sealed class Menu(Catalog catalog, Settings settings)
                             StepWeather();
                             break;
                         case Screen.Weather:
-                            _wet = _choice == 1;
+                            (_wet, _fog) = (Choices()[_choice] == "WET", Choices()[_choice] == "FOG");
                             Go(Screen.Maker);
                             break;
                         default:
@@ -637,12 +647,16 @@ public sealed class Menu(Catalog catalog, Settings settings)
         c.Carbon(56, y0, 456, y1, a);
         for (var i = 0; i < words.Length; i++)
         {
-            var x = words.Length == 1 ? 256 : 156 + i * 200;
+            // two words at 156/356 as the original, three (weather with FOG) at 133 apart in narrower frames
+            var step = words.Length > 2 ? 133 : 200;
+            var x = 256 + (i - (words.Length - 1) / 2f) * step;
+            var half = step == 200 ? 92 : 62;
             var sel = i == _choice;
-            var size = MathF.Min(46, 170 * c.Kx / c.O.Font!.Measure(words[i], c.Ky)) * (0.7f + 0.3f * a);
-            var (top, bottom) = i == 0 ? (Overlay.Rgba(1, 0.55f, 0.3f), Canvas.WordRed) : (Overlay.Rgba(0.45f, 0.6f, 1), Canvas.WordBlue);
+            var size = MathF.Min(46, (2 * half - 14) * c.Kx / c.O.Font!.Measure(words[i], c.Ky)) * (0.7f + 0.3f * a);
+            var (top, bottom) = words[i] == "FOG" ? (Overlay.Rgba(0.95f, 0.96f, 0.98f), Overlay.Rgba(0.42f, 0.45f, 0.5f))
+                : i == 0 ? (Overlay.Rgba(1, 0.55f, 0.3f), Canvas.WordRed) : (Overlay.Rgba(0.45f, 0.6f, 1), Canvas.WordBlue);
             c.Lettering(words[i], x, mid + 16 - sub, size, top, bottom, 0.5f, 0.15f, false, true, a * (sel ? 1 : 0.4f));
-            if (sel) c.Glow(x - 92, mid - 30 - sub, x + 92, mid + 32 - sub, Canvas.Pulse(Theta), a);
+            if (sel) c.Glow(x - half, mid - 30 - sub, x + half, mid + 32 - sub, Canvas.Pulse(Theta), a);
         }
         if (sub > 0)
             for (var i = 0; i < 2; i++) c.Text(i == 0 ? "Automatic" : "Manual, shift yourself", 156 + i * 200, mid + 44, 12, Style.Fade(Canvas.White, a), 0.5f, 0.15f);

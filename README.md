@@ -39,6 +39,7 @@ dotnet run --project Touge -- "<iso>" --hud off --cars out/proof/c_cars.png [--o
 dotnet run --project Touge -- "<iso>" --zfight [AKINA]   # Z-Fighting-Kandidaten aller Kurse/Autos (fast koplanar, überlappend), gruppiert je Batch-Paar
 dotnet run --project Touge -- "<iso>" USUI0_RIN --flicker out/proof/fl [--at n]   # Flackern messen: 8 Fahrlinienpunkte, 8 Winkel ums Auto, 8 Fundstellen, je 3× mit anderer Rundung (Schwelle nach Bildhelligkeit)
 dotnet run --project Touge -- "<iso>" --sun --shot out/sun.png   # freie Kamera hinter dem Auto, Blick zur Sonne (Blendung prüfen)
+dotnet run --project Touge -- "<iso>" AKINA_NIT --fog [--autodrive 25 --shot out/fog.png]   # Wetter FOG: dichter Nebel (Sicht ~60 m) über dem Tag- oder Nachtkurs
 ```
 
 Fahren (Standard): W/S oder ↑/↓ Gas/Bremse, A/D oder ←/→ lenken, Leertaste Handbremse, S im Stand halten = Rückwärts (Automatik), T Automatik/Manuell,
@@ -54,7 +55,7 @@ Enter/A entscheiden, Esc/B = NO), YES speichert die Einstellungen und schließt 
 graue Logo-Kachelwand, roter/blauer Laufschrift-Kopf, Chromplatten, Karbonpaneele, gelber Pulsrahmen, Verlaufswörter rot/blau, alles Englisch):
 TIME ATTACK = Kurswahl (3 × 4 Raster wie im Original, Streckenlinie im Karbon-„Monitor“ statt Foto, Länge/Höhe/Bestzeit; das 12. Feld „FOUR
 PASSES“ ist gesperrt) → Route (DOWNHILL/UPHILL bzw. CLOCKWISE/COUNTER-CLOCKWISE aus dem Drehsinn der Linie) → Tageszeit (DAY/NIGHT) → Wetter
-(DRY/WET) – Schritte mit nur einer Möglichkeit entfallen – → Hersteller (7 Chromplatten, Modellliste im Karbonpaneel) → Auto (3D-Auto dreht
+(DRY/WET/FOG, nachts DRY/FOG) – Schritte mit nur einer Möglichkeit entfallen – → Hersteller (7 Chromplatten, Modellliste im Karbonpaneel) → Auto (3D-Auto dreht
 sich, ←/→ Modell, ↑/↓ Lackfarbe, Antrieb FF/MR/FR/4WD) → Getriebe (AT/MT) → Laden (weiß, „Now Loading...“) → Streckentelop + 3-2-1-GO
 (CAR010/CAR011, Auto steht bis GO) → Rennen. Esc (Pad: Start) pausiert (alarm_02): Continue/Retry/Exit/Quit Game (Quit Game wie im Hauptmenü mit Abfrage, nur Desktop). Im Ziel (Zielbogen, nicht das Ende der
 Fahrlinie) „FINISH!!“ bzw. „NEW RECORD!!“ (das Spiel übernimmt das Auto wie ein Arcade-Racer: rollt aus und bremst gleichmäßig bis
@@ -148,6 +149,14 @@ um die Kamera umgebrochen), durch die Kamerabewegung gestreckt, von Scheinwerfer
 helle Tropfen auf Lack und Scheiben (Glanz + Himmel durch die Wölbung, kaum Nassfleck), nach Pixelgröße ausgeblendet
 statt zu flimmern. Scheinwerfer an, Gischt hinter den Hinterrädern nach Tempo (fällt im Bogen, `Effects.EmitSpray`), kaum
 Rauch/Bremsspuren. Ton: Regen-Loop `rain` (SYSSE) und nasses Reifenquietschen `RAIN_SRIP`.
+
+Nebel-Wetter (FOG, eigene Ergänzung; Menü Wetter oder `--fog`, gespeichert als `Settings.Fog`, über `_DAY`/`_NIT`,
+`TougeGame.FogAtmosphere`): exponentieller Höhennebel mit σ = 0,05/m auf Höhe des Autos (Sicht ≈ 3/σ ≈ 60 m, Basis folgt dem
+Auto, nach oben ×1/e alle 50 m dünner, Täler dichter), langsam ziehende Nebelbänke (Rauschen ±30 % der Dichte, `FogDrift`),
+Himmel in jeder Richtung verhüllt (`skyFog` mindestens der Nebel der ersten 150 m). Tag: hellgrau-weiß, bedeckt und flach (keine
+Sonne/Schatten, weiches Ambient), Sonne nur als hellerer Fleck im Dunst, Scheinwerfer an, aber schwach (kein Lichtfleck auf der Straße).
+Nacht: fast schwarzer Nebel, Lichthof der Lampen und Scheinwerferkegel im Dunst. Allgemein für alle Lichter: die Extinktion des
+Nebels an der Kamera schluckt Lampenlicht mit der Entfernung (`uTailPos[0].w`, auf Flächen und im Lichthof).
 
 Effekte (`Effects`/`EffectsRenderer`, effect.frag): Reifenrauch je Rad aus der Rutschgeschwindigkeit (Schlupf × Tempo,
 gewichtet mit Radlast) – weiche Billboards mit Rauschen, von Sonne (mit Schatten), Ambient und Scheinwerfern/Laternen
