@@ -45,6 +45,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     public bool UseMenus { get; init; }
     /// <summary>--shot-size WxH: size of the --shot frame (default 1280×720).</summary>
     public (int W, int H) ShotSize { get; init; } = (1280, 720);
+    /// <summary>--hud-scale <percent>: HUD size for test runs (menus use the stored Options value).</summary>
+    public float HudScale { get; init; } = 1;
     /// <summary>--menu: front-end step (boot, logo, disclaimer, title, mode) or menu screen (course … options, <see cref="Menu.Screen"/>) to open at start, e.g. for --shot.</summary>
     public string? StartMenu { get; init; }
     private Settings _settings = null!;
@@ -152,7 +154,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         else
             _settings = new Settings
             {
-                HighQuality = highQuality, HudOn = HudMode != "off" && flicker == null, Car = Car, Paint = Paint, Reverse = Reverse, Course = _courseTime, Fog = Fog,
+                HighQuality = highQuality, HudOn = HudMode != "off" && flicker == null, HudScale = HudScale, Car = Car, Paint = Paint, Reverse = Reverse, Course = _courseTime, Fog = Fog,
                 MapMode = HudMode switch { "north" => Hud.MapMode.NorthUp, "overview" => Hud.MapMode.Overview, _ => Hud.MapMode.Rotating }, Livery = Livery, RenderScale = RenderScale,
             };
         if (flicker == null && ContactSheet == null)
@@ -312,7 +314,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _previousBest = _settings.Best.GetValueOrDefault(key)?[^1];
         var hud = new Hud(_course.Road, _drive.Line, _drive.Pilot, _settings.Best.GetValueOrDefault(key), _drive.Start)
         {
-            Visible = _settings.HudOn, Mode = _settings.MapMode, Night = _courseTime.EndsWith("_NIT"), Mph = _settings.Mph,
+            Visible = _settings.HudOn, Mode = _settings.MapMode, Scale = _settings.HudScale, Night = _courseTime.EndsWith("_NIT"), Mph = _settings.Mph,
         };
         hud.Timer.Record += best =>
         {
@@ -713,7 +715,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         if (_audioDevice != null) (_audioDevice.Music, _audioDevice.Master) = (s.MusicVolume, s.MasterVolume);
         if (_menuAudio != null) _menuAudio.Volume = s.MenuVolume;
         if (_audio != null) _audio.EngineLevel = s.EngineVolume;
-        (_hud.Visible, _hud.Mode, _hud.Mph, _bumperCam) = (s.HudOn, s.MapMode, s.Mph, s.BumperCam);
+        (_hud.Visible, _hud.Mode, _hud.Scale, _hud.Mph, _bumperCam) = (s.HudOn, s.MapMode, s.HudScale, s.Mph, s.BumperCam);
         if (s.Livery != _carLivery) SwitchCar(Array.IndexOf(CarPaint.Cars, _carName), _paint);
         if (_persist) s.Save();
     }
@@ -1240,15 +1242,26 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             _hud.Build(_overlay, w, h, _carPose.Translation, Vector3.TransformNormal(Vector3.UnitZ, _carPose), _drive.Car, _carName, _menuTime);
         }
         else _overlay.Clear();
-        if (_front is not { Active: true } && menuShown) _menu!.Build(_overlay, w, h);
         var target = frame?.View ?? Device.CurrentSwapchainView;
-        _overlayRenderer.Draw(ctx.Encoder, _overlay, target, w, h);
-        _textRenderer.Draw(ctx.Encoder, _overlay, target, w, h);
+        if (_front is not { Active: true } && menuShown)
+        {
+            // HUD as its own layer first: one overlay draws all shapes before all text, so HUD text would land on the menu panels
+            DrawOverlay(ctx.Encoder, target, w, h);
+            _overlay.Clear();
+            _menu!.Build(_overlay, w, h);
+        }
+        DrawOverlay(ctx.Encoder, target, w, h);
         if (shot != null)
         {
             shot.Copy(ctx.Encoder);
             _shotState = 2;
         }
+    }
+
+    private void DrawOverlay(Penelope.ICommandEncoder encoder, Penelope.TextureViewHandle target, int w, int h)
+    {
+        _overlayRenderer.Draw(encoder, _overlay, target, w, h);
+        _textRenderer.Draw(encoder, _overlay, target, w, h);
     }
 
     public override void Dispose()

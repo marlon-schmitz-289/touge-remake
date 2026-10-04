@@ -181,8 +181,7 @@ public class OptionsTests
             Draw = (_, _) => { },
         });
         Assert.True(o.OpenPage("hud"));
-        o.Update((0, 1, false, false), null);
-        o.Update((0, 1, false, false), null); // HUD SCALE, the third row
+        o.Update((0, -1, false, false), null); // HUD SCALE, the last row (up wraps)
         o.Update((1, 0, false, false), null);
         Assert.Equal(0, scale);
         Assert.True(o.OpenPage("MUSICLIST"));

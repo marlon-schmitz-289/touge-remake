@@ -66,6 +66,8 @@ public sealed class Settings
 
     // ------------------------------------------------------------ HUD (Options: HUD)
     public bool HudOn { get; set; } = true;
+    /// <summary>HUD size 0.8..1.3 (Options HUD SIZE, <see cref="Hud.Scale"/>).</summary>
+    public float HudScale { get; set; } = 1;
     public Hud.MapMode MapMode { get; set; }
     /// <summary>Stickers and plates of the car.</summary>
     public Touge.Formats.Livery Livery { get; set; } = Touge.Formats.Livery.Rival;
@@ -196,6 +198,7 @@ public sealed class Settings
         if (!Enum.IsDefined(Livery)) Livery = Touge.Formats.Livery.Rival;
         (Width, Height) = Width is >= 640 and <= 16384 && Height is >= 360 and <= 16384 ? (Width, Height) : (1600, 900);
         if (!FrameCaps.Contains(FrameCap)) FrameCap = 0;
+        HudScale = float.IsFinite(HudScale) ? MathF.Round(Math.Clamp(HudScale, 0.8f, 1.3f) * 10) / 10 : 1; // the row steps in 10 %
         if (!RenderScales.Contains(RenderScale)) RenderScale = 100;
         (SteerAssist, DriftAssist, Fov) = (Math.Clamp(SteerAssist, 0, 2), Math.Clamp(DriftAssist, 0, 2), (int)Math.Round(Math.Clamp(Fov, FovMin, FovMax) / 5.0) * 5); // the row steps in 5°
         Course ??= "AKINA_DAY";

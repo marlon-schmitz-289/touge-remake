@@ -31,6 +31,7 @@ dotnet run --project Touge -- "<iso>" --autodrive 60 [--shot out/ad.png]   # Pil
 dotnet run --project Touge -- "<iso>" AKINA_DAY --at 710 --autodrive 40 [--ram] [--reverse]   # hinter dem Ziel: Auslauf bis vor die Endsperre bzw. mit --ram Vollgas in die Sperre; Zusammenfassung (Weg hinter dem Ziel, Abstand zur Sperre, Wandkontakt, Höhe)
 dotnet run --project Touge -- "<iso>" AKINA_DAY --reverse [--autodrive 60|--shot …|--ground …]   # Gegenrichtung (bergauf): CRS_COLI_<KURS>_1 + CRS_DRV_<KURS>_O, Start am anderen Ende
 dotnet run --project Touge -- "<iso>" --hud overview --shot out/map.png   # Minimap-Modus beim Start (north|overview|off)
+dotnet run --project Touge -- "<iso>" --hud-scale 130 --shot-size 1920x1080 --shot out/h.png   # HUD-Größe 80–130 % (Menü: Options → HUD SIZE)
 dotnet run --project Touge -- "<iso>" AKINA_NIT --bench 900 [--quality off] [--offscreen]   # Pilot fährt in Echtzeit (Fenster) bis ins Ziel (höchstens 900 s): pro Sekunde Position, fps, Frametime, CPU-ms, Draws, Effekte, GC, Speicher, macOS-Wärmezustand; am Ende avg/p99/max, Frames > 18/25 ms, je 500 m. --offscreen (Metal): ohne Display-Takt, Frametime = GPU-Zeit
 dotnet run --project Touge -- "<iso>" AKINA_RIN --flow out/proof --bench 900   # wie ein Spieler: Front-End → Kurs/Zeit/Wetter wie angegeben → 24 Autovorschauen + Lackwechsel → Rennen mit --bench-Log
 dotnet run --project Touge -- "<iso>" --at 300 --autodrive 5.2 --drift --shot out/drift.png   # --drift: Pilot reißt alle 7 s (ab 4,5 s) einen Handbremsdrift (auch mit --bench)
@@ -70,7 +71,7 @@ Original zweistufig: Abschnittsliste aus Chromplatten (OPSL) → Seite mit Zeile
 3 Werte als ◀ Wert ▶, Lautstärken als 10 Blöcke, Hilfetext unten; ↑/↓ Zeile, ←/→ bzw. Enter/A ändern, Esc/B zurück), alles wirkt sofort und wird gespeichert:
 GAME SETTING (Einheit km/h/mph im Kombiinstrument, Getriebe-Vorwahl AT/MT, Lenkhilfe OFF/LOW/FULL = `CounterSteerAssist` × 0/0,5/1, Drift-Hilfe
 LOW/NORMAL/HIGH = `DriftDamping` × 0,5/1/1,6 – beide ab dem nächsten Lauf; andere Hilfen als FULL/NORMAL fahren eigene Bestzeiten, RECORDS zeigt nur die Serienwerte –, Startkamera, Blickwinkel 50–90°, Kamerawackeln, Aufkleber
-ANIME/STOCK/NONE), HUD (an/aus, Navi-Karte), SCREEN (WINDOW/BORDERLESS, außer macOS auch FULLSCREEN exklusiv; Auflösung aus den Modi des
+ANIME/STOCK/NONE), HUD (an/aus, HUD SIZE 80–130 %, Navi-Karte), SCREEN (WINDOW/BORDERLESS, außer macOS auch FULLSCREEN exklusiv; Auflösung aus den Modi des
 Bildschirms; VSync; Bildratenbegrenzung 30–240; Render-Skalierung 50–150 %), GRAPHICS (Voreinstellung LOW/MEDIUM/HIGH/ULTRA bzw. CUSTOM aus den
 Schaltern MSAA, Sonnenschatten, AO, Bloom, Regen-Spiegelungen), SOUND (Gesamt, Musik an/aus + Lautstärke, SE, Motor, Menü-SE), CONTROLLER
 (Tastatur-/Pad-Belegung). Andere Features hängen eigene Seiten an `Menu.Options.Pages` an (Zeilen per `Options.Row.Choice/Toggle/Slider`
@@ -84,7 +85,9 @@ Einstellungen, letzte Wahl und Bestzeiten liegen als JSON im App-Data-Ordner (ma
 Windows `%APPDATA%\InitialDRemake`), nicht im Repo; Starts mit Kurs oder Test-Flags lesen/schreiben sie nicht (Fenster dort immer 1600×900).
 Die Datei hat eine `Version` (derzeit 2); ältere werden beim Laden umgestellt (v1: `HighQuality` → die fünf Grafikschalter, SE-Lautstärke auch
 für Menü-SE), Werte außerhalb des Bereichs auf Standard/Grenze gesetzt; gespeichert wird über eine temporäre Datei (kein halber Stand bei Absturz).
-HUD: F4 an/aus, N Minimap mitdrehend → nordausgerichtet → ganze Strecke (`--hud north|overview|off` beim Start). Oben links Zeit, Bestzeit
+HUD: F4 an/aus, N Minimap mitdrehend → nordausgerichtet → ganze Strecke (`--hud north|overview|off` beim Start), Größe in den Optionen
+(HUD SIZE 80–130 %, `--hud-scale 80..130` für Testläufe; Streckenuhr und Kombiinstrument bei 100 % 1,6× so groß wie früher – 640×304 px bei
+1080p –, auf schmalen Bildern (4:3, 5:4) gedeckelt, damit das Auto in der Mitte frei bleibt; oben rechts bleibt frei). Oben links Zeit, Bestzeit
 und 4 Sektoren (je 25 % der Strecke, Delta zur Bestzeit grün/rot; Zeit läuft ab der Startlinie, stoppt im Ziel), oben Mitte Drift-Kombo
 (Punkte aus Winkel × Tempo, Multiplikator, Wandkontakt löscht), unten links die Streckenuhr (`Ui/MapWidget`: rundes Instrument im Stil des
 Kombiinstruments mit Minimap – vorausliegende Straße hell, gefahrene gedimmt, Zoom nach Tempo, nachts in der Instrumentenfarbe des Autos –,
