@@ -193,7 +193,7 @@ public class StoryTests
 
     /// <summary>
     ///     Select → loading asks for the load → scene → the race; a loss offers a retry; a win plays the scene after it, saves the
-    ///     progress, opens the next chapter and selects it; locked chapters beep; back leaves to the main menu.
+    ///     progress, opens the next chapter and selects it; locked chapters beep; BACK in the scene before the race returns to the select, RIGHT skips it; back leaves to the main menu.
     /// </summary>
     [Fact]
     public void Flow_SelectSceneRaceResultProgress()
@@ -221,7 +221,14 @@ public class StoryTests
         Assert.True(s.InRun);
         Assert.Equal(StoryMode.Phase.Scene, s.Current);
         Assert.StartsWith("STORY_ST", s.Music);
-        Assert.Equal(StoryMode.Action.Race, Run(0.1f, back)); // skip to the race
+        Run(0.1f, back); // BACK before the race: out of the chapter
+        Run(1);
+        Assert.Equal(StoryMode.Action.Leave, actions.Last(a => a != StoryMode.Action.None));
+        Assert.Equal(StoryMode.Phase.Select, s.Current);
+        Assert.False(s.InRun);
+        Run(1.5f, ok);
+        s.Loaded();
+        Assert.Equal(StoryMode.Action.Race, Run(0.1f, (1, 0, false, false))); // RIGHT: skip to the race
         Assert.Equal(StoryMode.Phase.Racing, s.Current);
         Assert.False(s.Active);
 

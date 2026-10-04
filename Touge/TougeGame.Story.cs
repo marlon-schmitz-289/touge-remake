@@ -17,6 +17,8 @@ public sealed partial class TougeGame
     private StoryMode? _story;
     private StoryScript.Chapter[]? _storyChapters;
     private SoloJudge? _storyJudge;
+    /// <summary>A wet chapter at night: the disc has no rainy night course, so the dry one gets rain (drops, wet road, sound).</summary>
+    private bool _storyRain;
     /// <summary>--progress n: for test runs, chapters 0…n−1 count as cleared (the real file is not touched).</summary>
     public int StoryProgress { get; init; }
     /// <summary>--flow … --story: the scripted pass goes through the story instead of time attack.</summary>
@@ -35,7 +37,8 @@ public sealed partial class TougeGame
             return;
         }
         var progress = _persist ? Progress.Load() : new Progress();
-        for (var n = 0; n < StoryProgress; n++) progress.Clear(StoryMode.Key(n));
+        if (_persist && StoryProgress > 0) Console.WriteLine("[Story] --progress gilt nur für Testläufe ohne gespeicherten Fortschritt, ignoriert");
+        else for (var n = 0; n < StoryProgress; n++) progress.Clear(StoryMode.Key(n));
         _story = new StoryMode(_catalog!) { Sound = n => _menuAudio?.Play(n), Progress = progress };
     }
 
@@ -50,12 +53,13 @@ public sealed partial class TougeGame
         _inRace = false;
     }
 
-    /// <summary>--menu story[:n[:scene[:part[:line]]|:race]]: chapter select, a chapter's scene or its race start (screenshots).</summary>
+    /// <summary>--menu story[:n[:scene[:part[:line]]|:race|:end]]: chapter select, a chapter's scene, its race start or THE END (screenshots).</summary>
     private void StartStoryMenu(string arg)
     {
         var p = arg.Split(':');
         OpenStory(p.Length > 1 ? Math.Clamp(int.Parse(p[1]), 0, StoryText.Chapters.Length - 1) : null);
-        if (p.Length > 2)
+        if (p.Length > 2 && p[2] == "end") _story!.ShowEnding();
+        else if (p.Length > 2)
         {
             StoryLoad();
             if (p[2] == "race") StoryRace();
@@ -104,9 +108,9 @@ public sealed partial class TougeGame
         var s = _story!;
         EndBattle();
         Battle = s.Battle;
-        if (s.Data.Wet && !s.Data.Night) Console.WriteLine("[Story] nass bei Tag");
-        else if (s.Data.Wet) Console.WriteLine($"[Story] Kapitel {s.Chapter}: Regen bei Nacht gibt es auf der Disc nicht, {s.CourseTime} trocken");
+        _storyRain = _menu!.Rain = s.Data.Wet && s.Data.Night;
         using (var iso = new Iso9660(isoPath)) LoadCourse(iso, s.CourseTime, s.Data.Reverse, s.HeroCar, 0);
+        if (_storyRain) _renderer.Atmosphere.Wetness = 1; // rain over the night course (no _RIN night on the disc)
         ResetRun();
         _inRace = false;
         Console.WriteLine($"[Story] Kapitel {s.Chapter} {s.Text.Title}: {s.CourseTime}{(s.Data.Reverse ? " bergauf" : "")}, {s.HeroCar} gegen " +
@@ -164,12 +168,13 @@ public sealed partial class TougeGame
         if (Battle == null && _race == null) return;
         Device.WaitIdle(); // the rival's textures may still be in flight
         Battle = null;
+        _storyRain = false;
         _race = null;
         _rivalAudio?.Dispose();
         _rivalAudio = null;
         DisposeRival();
         _battleHud = null;
-        if (_menu != null) (_menu.Versus, _menu.Battle) = (null, null);
+        if (_menu != null) (_menu.Versus, _menu.Battle, _menu.Rain) = (null, null, false);
         _finished = false;
     }
 
@@ -189,18 +194,24 @@ public sealed partial class TougeGame
         ("StoryLoading", 0.4f, "loading", 0, 0, false, false),
         ("StoryScene", 3, "scene_title", 0, 0, false, false), ("StoryScene", 2.5f, "scene_line1", 0, 0, true, false),
         ("StoryScene", 2.5f, null, 0, 0, true, false), ("StoryScene", 2.5f, "scene_line3", 0, 0, true, false),
-        ("StoryScene", 2.5f, "scene_line4", 0, 0, false, true),
+        ("StoryScene", 2.5f, "scene_line4", 1, 0, false, false),
         ("Intro", 1, "telop_vs", 0, 0, false, false), ("Intro", 2, "countdown", 0, 0, false, false), ("Race", 1.5f, "race", 0, 0, false, false),
         ("StoryBanner", 1.2f, "banner", 0, 0, true, false), ("StoryResult", 2, "result", 0, 0, true, false),
         ("StoryScene", 1, "after_title", 0, 0, false, false), ("StoryScene", 3, "after_line1", 0, 0, true, false),
         ("StoryScene", 2.5f, null, 0, 0, true, false), ("StoryScene", 2.5f, null, 0, 0, true, false), ("StoryScene", 2.5f, null, 0, 0, true, false),
         ("StoryScene", 2.5f, "after_line5", 0, 0, false, true),
         ("StorySelect", 1.5f, "select_cleared", 0, -5, false, false), ("StorySelect", 0.8f, "select_ch3", 0, 0, true, false),
-        ("StoryLoading", 0.4f, null, 0, 0, false, false), ("StoryScene", 1, null, 0, 0, false, false), ("StoryScene", 4, "ghost_scene", 0, 0, false, true),
+        ("StoryLoading", 0.4f, null, 0, 0, false, false), ("StoryScene", 1, null, 0, 0, false, false), ("StoryScene", 4, "ghost_scene", 1, 0, false, false),
         ("Intro", 1, "ghost_telop", 0, 0, false, false), ("Race", 1.5f, "ghost_race", 0, 0, false, false),
         ("StoryBanner", 1.2f, "ghost_lose", 0, 0, true, false), ("StoryResult", 2, "ghost_result", 0, 0, true, false),
         ("Intro", 1, null, 0, 0, false, false), ("StoryBanner", 1, null, 0, 0, true, false), ("StoryResult", 1, null, 1, 0, false, false),
-        ("StoryResult", 0.6f, "ghost_result_select", 0, 0, true, false), ("StorySelect", 1.2f, "select_after", 0, 0, false, true),
+        ("StoryResult", 0.6f, "ghost_result_select", 0, 0, true, false), ("StorySelect", 1.2f, "select_after", 0, 0, true, false),
+        // chapter 3 again: BACK in the scene returns to the select; then into the race and out through Pause → Exit
+        ("StoryLoading", 0.4f, null, 0, 0, false, false), ("StoryScene", 2, "ghost_scene_back", 0, 0, false, true),
+        ("StorySelect", 1.2f, "select_from_scene", 0, 0, true, false), ("StoryLoading", 0.4f, null, 0, 0, false, false),
+        ("StoryScene", 1, null, 1, 0, false, false), ("Intro", 1, null, 0, 0, false, false), ("Race", 1.5f, "ghost_race2", 0, 0, false, true),
+        ("Pause", 0.6f, null, 1, 0, false, false), ("Pause", 0.4f, "pause_exit", 1, 0, false, false), ("Pause", 0.4f, null, 0, 0, true, false),
+        ("StorySelect", 1.5f, "select_from_pause", 0, 0, false, true),
         ("Modes", 1.2f, "modes_back", 0, 0, false, false),
     ];
 }

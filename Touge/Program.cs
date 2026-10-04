@@ -38,7 +38,7 @@ using Touge;
 // --sim-wheel: virtuelles Lenkrad (Lenkung pendelt, Pedale pumpen) für Bilder/Tests ohne Hardware; --menu controls:keyboard|pad|wheel öffnet die Steuerungsseite.
 // --battle <rivale|auto> [--rule race|chase] [--lead player|rival]: Schnellbattle gegen die KI (Telop, Countdown, Battle-HUD, Ergebnis);
 //   mit --autodrive <s> ohne Fenster: Autopilot gegen die KI, Log je Sekunde (Abstand, Führung, Kontakte) + Zusammenfassung.
-// --menu story[:n[:scene[:teil[:zeile]]|:race]]: STORY-Kapitelwahl, eine Szene oder der Rennstart von Kapitel n; --progress <n>: Kapitel 0…n−1 gelten
+// --menu story[:n[:scene[:teil[:zeile]]|:race|:end]]: STORY-Kapitelwahl, eine Szene, der Rennstart von Kapitel n oder THE END; --progress <n>: Kapitel 0…n−1 gelten
 //   als geschafft (nur Testläufe); --flow <dir> --story: Ablauf durch STORY (Wahl, Szene, Battle, Ergebnis, Szene danach, ein verlorenes Kapitel).
 // --story-check [n]: Kapiteltabelle und Szenen der Disc gegen die Übersetzung prüfen, dann jedes Kapitel (oder nur n) mit dem Autopiloten fahren (ohne Fenster).
 // --drift: Pilot reißt alle 7 s (ab 4,5 s) einen 2,5-s-Handbremsdrift (Reifenrauch/Bremsspuren testen), z. B. --autodrive 6.3 --drift --shot.

@@ -342,7 +342,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
 
     private void StartAudio(Iso9660 iso)
     {
-        _audio = new GameAudio(iso, _courseTime, _audioDevice!, _carName) { EngineLevel = _settings.EngineVolume };
+        _audio = new GameAudio(iso, _courseTime, _audioDevice!, _carName, rain: _storyRain) { EngineLevel = _settings.EngineVolume };
         StartRivalAudio(iso);
         if (_persist) _audioDevice!.Music = _settings.MusicVolume; // GameAudio sets its own default
         _music = ""; // SyncMusic starts the race or menu music

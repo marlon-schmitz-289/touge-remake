@@ -123,6 +123,9 @@ public sealed class StoryMode(Catalog catalog)
     /// <summary>Skips fades, entrances and typing (screenshots).</summary>
     public void Settle(float at = 99) => (_t, _leave) = (MathF.Max(_t, at), -1);
 
+    /// <summary>--menu story:n:end — the THE END screen (screenshots).</summary>
+    public void ShowEnding() => Go(Phase.Ending);
+
     /// <summary>--menu story:n:part:line — the scene of chapter n at that line (screenshots).</summary>
     public void ShowScene(int part, int line)
     {
@@ -251,7 +254,14 @@ public sealed class StoryMode(Catalog catalog)
         var line = StoryText.Split(Lines[_line]).Text;
         if (k.Ok && _t < Intro) _t = Intro; // decide skips the title card
         else if (k.Ok && Typed < line.Length) _t = 99; // first completes the line
-        else if (k.Ok || k.Back)
+        else if (k.Back && _scenePart == 0)
+        {
+            // before the race BACK leaves the chapter (RIGHT skips to the race)
+            Sound?.Invoke("BEEP001");
+            InRun = false;
+            Leave(Phase.Select, Action.Leave);
+        }
+        else if (k.Ok || k.Back || k.X > 0)
         {
             Sound?.Invoke(k.Ok ? "SYS006" : "BEEP001");
             if (k.Ok && _line + 1 < Lines.Length)
@@ -497,7 +507,7 @@ public sealed class StoryMode(Catalog catalog)
         }
         if (Typed >= line.Length) c.Arrow(458, 392, 472, 392, 465, 403, Canvas.Pulse(Theta)); // ▼ more
         c.Text($"{_line + 1} / {Lines.Length}", 472, 318, 9, Grey, 1, 0.12f);
-        Menu.Hint(c, _scenePart == 0 ? "DECIDE: Next    BACK: Skip to the race" : "DECIDE: Next    BACK: Skip");
+        Menu.Hint(c, _scenePart == 0 ? "DECIDE: Next    RIGHT: Skip to the race    BACK: Chapter select" : "DECIDE: Next    RIGHT/BACK: Skip");
     }
 
     private void Banner(Canvas c)

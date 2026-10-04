@@ -50,7 +50,7 @@ dotnet run --project Touge -- "<iso>" AKINA_DAY --menu controls:keyboard|pad|gam
 dotnet run --project Touge -- "<iso>" AKINA_NIT --battle keisuke [--rule race|chase] [--lead player|rival] [--car AE86T]   # Schnellbattle gegen die KI: Telop „VS …“, 3-2-1-GO, Battle, YOU WIN/LOSE, Ergebnis
 dotnet run --project Touge -- "<iso>" IROHA_DAY --battle takumi --autodrive 420   # ohne Fenster: Autopilot (Spielerauto) gegen die KI, Log je Sekunde (Abstand s/m, Führung, KI-Modus, Kontakte) + Ergebnis
 dotnet run --project Touge -- "<iso>" IROHA_DAY --battle itsuki --autodrive 110 --shot out/proof/b.png [--battle-result]   # Bild nach dem Battle: Zielbanner bzw. Ergebnisblatt
-dotnet run --project Touge -- "<iso>" --menu story[:n[:scene[:teil[:zeile]]|:race]] [--progress 12] --shot out/proof/s.png   # STORY: Kapitelwahl, Szene oder Rennstart von Kapitel n (--progress: Kapitel 0…n−1 geschafft, nur Testlauf)
+dotnet run --project Touge -- "<iso>" --menu story[:n[:scene[:teil[:zeile]]|:race|:end]] [--progress 12] --shot out/proof/s.png   # STORY: Kapitelwahl, Szene, Rennstart von Kapitel n oder THE END (--progress: Kapitel 0…n−1 geschafft, nur Testlauf; mit gespeichertem Fortschritt ignoriert)
 dotnet run --project Touge -- "<iso>" --flow out/proof/story --story --progress 5   # STORY-Ablauf im Fenster: Wahl → Szene → Battle (Pilot) → Ergebnis → Szene danach; verlorenes Kapitel mit RETRY
 dotnet run --project Touge -- "<iso>" --story-check [n|calibrate]   # ohne Fenster: Kapiteltabelle + Szenen der Disc gegen die Übersetzung, dann jedes Kapitel mit dem Autopiloten (Durchlauf-Log); calibrate = Rivalenstärke/Zeitgrenzen messen
 ```
@@ -121,12 +121,13 @@ Autos und Ziel liest das Spiel aus der Kapiteltabelle im ELF. Ablauf: Laden → 
 allein) → eigenes Banner (YOU WIN/LOSE bzw. CLEAR!!/TIME UP/FAILED mit WIN/LOSE/TIMEUP.adx) → Ergebnis (Battle-Blatt + Story-Tafel) →
 gewonnen: CONTINUE → Szene danach → nächstes Kapitel frei und gewählt; verloren: RETRY / CHAPTER SELECT. Nach dem letzten Kapitel „THE END“ mit
 THERACEISOVER. Szenen: Textpanels im Stil der Menüs über dem Flug entlang der Straße, Sprecherplatte mit Teamfarbe, Schreibmaschinentext
-(Gedanken hellblau kursiv), Titelkarte; Entscheiden = weiter (erst Zeile fertig), Zurück = Szene überspringen. Text: die Zeilen der Original-Szenen
+(Gedanken hellblau kursiv), Titelkarte; Entscheiden = weiter (erst Zeile fertig), → = Szene überspringen; Zurück: vor dem Rennen zur Kapitelwahl, danach Szene überspringen. Text: die Zeilen der Original-Szenen
 (`MG_OBJ` `STRnn.BIN`, 585 Äußerungen) in eigener englischer Übersetzung, Zeile für Zeile in Reihenfolge und Teilen des Originals (Kapitel 1/2 ohne Szene auf
 der Disc: eigener kurzer Text). Musik der Szenen aus ST_BGM_N (STORY_STnn). Ziele (Code aus dem ELF): Rennen; vorne bleiben bis ins Ziel; hinterher
 und überholen (auch: in 120 s); 100 s dranbleiben; allein mit Zeitgrenze, Tofu bergauf mit höchstens 3 Wandtreffern, Mitfahrer mit 10.000 Driftpunkten –
 im Rennen oben rechts eine Tafel mit Restzeit/Wandtreffern/Drift. Rivalenstärke je Kapitel aus einer Kalibrierung gegen den Autopiloten, am Anfang
-mit Spielraum. Pause → Exit führt zur Kapitelwahl zurück. Fortschritt in `progress.json` neben den Einstellungen (Schlüssel `story/nn`, Zähler
+mit Spielraum. Pause → Exit führt zur Kapitelwahl zurück. Regen bei Nacht (Kapitel 11, MYOGI) gibt es auf der Disc nicht: der Nachtkurs bekommt
+Regen (Tropfen, nasse Spiegelungen, Gischt, Regen-Sound, Telop WET); die Haftung ist wie auf den _RIN-Kursen unverändert. Fortschritt in `progress.json` neben den Einstellungen (Schlüssel `story/nn`, Zähler
 `…/tries`, `…/wins`; die Datei ist für alle Modi mit Karriere gedacht, z. B. Legend of the Streets); Story-Läufe zählen nicht als Time-Attack-Rekord.
 Einstellungen, letzte Wahl und Bestzeiten liegen als JSON im App-Data-Ordner (macOS `~/Library/Application Support/InitialDRemake/settings.json`,
 Windows `%APPDATA%\InitialDRemake`), nicht im Repo; Starts mit Kurs oder Test-Flags lesen/schreiben sie nicht (Fenster dort immer 1600×900).

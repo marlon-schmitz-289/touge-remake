@@ -61,7 +61,7 @@ public sealed partial class TougeGame
     private void StartRivalAudio(Iso9660 iso)
     {
         _rivalAudio?.Dispose();
-        _rivalAudio = Battle != null ? new GameAudio(iso, _courseTime, _audioDevice!, Battle.Rival.Car, other: true) : null;
+        _rivalAudio = Battle != null ? new GameAudio(iso, _courseTime, _audioDevice!, Battle.Rival.Car, other: true, rain: _storyRain) : null;
     }
 
     /// <summary>
