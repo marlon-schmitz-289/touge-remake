@@ -31,6 +31,7 @@ float sceneDist(vec2 uv) { return pc.uParams.x / max(textureLod(uDepth, uv, 0.0)
 // camera-relative world position of full-res texel t
 vec3 posAt(ivec2 t)
 {
+    t = clamp(t, ivec2(0), textureSize(uDepth, 0) - 1); // neighbours at the screen border
     vec2 uv = (vec2(t) + 0.5) * pc.uParams.zw;
     vec4 h = pc.uInvViewProj * vec4(uv.x * 2.0 - 1.0, (uv.y * 2.0 - 1.0) * pc.uParams.y, max(texelFetch(uDepth, t, 0).r, 1e-7), 1.0);
     return h.xyz / h.w;

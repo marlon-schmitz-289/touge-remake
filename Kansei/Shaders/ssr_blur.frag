@@ -4,7 +4,8 @@
 // → streaks, puddles → sharp). ssr.frag already smears the colour it hits; this smears the hit itself: the edges where
 // a ray just finds or just misses an object (car, guardrail, posts) and the 2×2 blocks of half resolution turn into
 // soft streaks instead of hard steps that flip from frame to frame. Only reflecting pixels mix (nothing bleeds in
-// from the car body above the road). Taps alternate ±½ texel sideways: a little horizontal softening for free.
+// from the car body above the road). Taps alternate ±½ / ±1 texel sideways: a little horizontal softening for free
+// (no square half-res steps far away, where the streak is short against a guardrail's reflection).
 
 layout(set = 0, binding = 0) uniform sampler2D uSsr;
 layout(set = 0, binding = 1) uniform sampler2D uGbuf; // full res
@@ -36,7 +37,7 @@ void main()
         float w = 1.0 - x;
         for (int s = -1; s <= 1; s += 2)
         {
-            vec2 q = uv + vec2(float(s) * 0.5, float(s) * x * reach) * pc.uA.xy;
+            vec2 q = uv + vec2(float(s) * (0.5 + 0.5 * float(k & 1)), float(s) * x * reach) * pc.uA.xy;
             float m = w * reflecting(q);
             c += textureLod(uSsr, q, 0.0) * m;
             wsum += m;
