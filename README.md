@@ -20,7 +20,7 @@ Assets kommen zur Laufzeit aus der eigenen ISO (SLPM-65268), nie ins Repo.
 ```sh
 dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso"   # Front-End (Hinweis, Karten, Titel, Hauptmenü) → Kurs, Auto, Rennen, Ergebnis, Rekorde, Optionen
 dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso" [AKINA_DAY|AKINA_NIT|USUI_NIT|…]   # direkt fahren, ohne Menü
-dotnet run --project Touge -- "<iso>" AKINA_NIT --menu boot|logo|disclaimer|title|mode|quit|course|route|time|weather|maker|car|gearbox|intro|pause|records|options --shot out/proof/ui_car.png [--shot-size 3200x1800]   # Menü-Bild
+dotnet run --project Touge -- "<iso>" AKINA_NIT --menu boot|logo|disclaimer|title|mode|quit|course|route|time|weather|maker|car|gearbox|intro|pause|records|options[:gamesetting|hud|screen|graphics|sound|controller] --shot out/proof/ui_car.png [--shot-size 3200x1800]   # Menü-Bild (options:<seite> öffnet eine Optionsseite)
 dotnet run --project Touge -- "<iso>" --flow out/proof   # ganzer Ablauf per Skript im Fenster (Titel → Auswahl → Laden → Countdown → Rennen mit Pilot in 16× → Pause → Ziel → Ergebnis → Rekorde → Optionen), PNG je Schritt
 dotnet run --project Touge -- "<iso>" --frontend-capture out/proof/fe.wav   # ganzer Menüablauf per Skript offline: Original-SE/BGM als WAV + Log aller Auslöser
 dotnet run --project Touge -- "<iso>" --shot out/akina.png   # ein Frame als PNG, dann Ende
@@ -42,12 +42,13 @@ dotnet run --project Touge -- "<iso>" --zfight [AKINA]   # Z-Fighting-Kandidaten
 dotnet run --project Touge -- "<iso>" USUI0_RIN --flicker out/proof/fl [--at n]   # Flackern messen: 8 Fahrlinienpunkte, 8 Winkel ums Auto, 8 Fundstellen, je 3× mit anderer Rundung (Schwelle nach Bildhelligkeit); dazu „motion“: dieselben Punkte/Winkel mit Auto, Kamera 3× je 1 cm vor, je mit/ohne SSR – zählt Pixel, deren Spiegelungsanteil nicht gleichmäßig mitläuft
 dotnet run --project Touge -- "<iso>" --sun --shot out/sun.png   # freie Kamera hinter dem Auto, Blick zur Sonne (Blendung prüfen)
 dotnet run --project Touge -- "<iso>" AKINA_NIT --fog [--autodrive 25 --shot out/fog.png]   # Wetter FOG: dichter Nebel (Sicht ~60 m) über dem Tag- oder Nachtkurs
+dotnet run --project Touge -- "<iso>" AKINA_RIN --render-scale 50 [--bench 15 --offscreen|--shot …]   # 3D-Auflösung in % des Fensters (Option RENDER SCALE), HUD bleibt scharf
 ```
 
 Fahren (Standard): W/S oder ↑/↓ Gas/Bremse, A/D oder ←/→ lenken, Leertaste Handbremse, S im Stand halten = Rückwärts (Automatik), T Automatik/Manuell,
 Shift/Strg hoch-/runterschalten (manuell, auch in R), R (Pad: Y) zurück auf die Fahrlinie (nächster freier Punkt, Blick in Fahrtrichtung), B Richtung wechseln (bergab ↔ bergauf, setzt auf die Fahrlinie der Gegenrichtung; Minimap/Fortschritt folgen), C Verfolger-/Stoßstangenkamera,
 L Licht an/aus, H Fernlicht an/aus (Umschalter, schaltet das Licht auch ein; Pad: D-Pad hoch/runter),
-F2 Grafikqualität hoch/niedrig (4× MSAA, Bloom und Sonnenschatten an/aus; `--quality off` startet niedrig).
+F2 Grafikqualität ULTRA ↔ LOW (MSAA, Schatten, AO, Bloom, Regen-SSR zusammen; `--quality off` startet LOW).
 Menüs: Ohne Kurs/Test-Flags startet das Spiel im Front-End im Stil des Originals (`Ui/FrontEnd`, nur Vektorformen + Schrift, keine
 Original-Menütexturen; Ablauf/Zeiten/Bewegung aus dem Originalcode, siehe FORMATS.md): Hinweis zu den Speicherdaten → Karte „Based on …“ →
 Hinweis „Fiktion“ → Titel (Akina bei Nacht im Hintergrund abgeflogen, Logo, blinkendes PRESS START BUTTON; nach 10 s ohne Eingabe zurück zu
@@ -64,15 +65,25 @@ sich, ←/→ Modell, ↑/↓ Lackfarbe, Antrieb FF/MR/FR/4WD) → Getriebe (AT/
 Streckenenden: bergab endet, wo bergauf startet, und umgekehrt (Auto steht 5 m hinter seinem Startbogen, Zeit läuft ab dem Bogen). Im Ziel
 „FINISH!!“ bzw. „NEW RECORD!!“ (das Spiel übernimmt das Auto wie ein Arcade-Racer: rollt aus und bremst gleichmäßig bis
 4,5 m vor die Endsperre, vor Kurven des Auslaufs auch stärker, `Drive.Coast`; WIN-Jingle) → Ergebnis (Gesamt-/Sektorzeiten mit Delta, Bestzeit, Differenz, Driftpunkte, Zeilen zählen mit
-NAME001, BGM „JOY“) → Retry / Course Select / Car Select / Exit. Rekorde: Bestzeit je Kurs und Route. Optionen: Grafik, Musik an/aus,
-Musik-/SE-Lautstärke, HUD, Navi-Karte, Kamera, Aufkleber (ANIME/STOCK/NONE), Steuerung (Tastatur/Pad-Belegung). Zurück geht die besuchten
+NAME001, BGM „JOY“) → Retry / Course Select / Car Select / Exit. Rekorde: Bestzeit je Kurs und Route. Optionen (`Ui/Options`) wie im
+Original zweistufig: Abschnittsliste aus Chromplatten (OPSL) → Seite mit Zeilen (OPGM: Reiter links, Chromplatte mit gravierten Werten, mehr als
+3 Werte als ◀ Wert ▶, Lautstärken als 10 Blöcke, Hilfetext unten; ↑/↓ Zeile, ←/→ bzw. Enter/A ändern, Esc/B zurück), alles wirkt sofort und wird gespeichert:
+GAME SETTING (Einheit km/h/mph im Kombiinstrument, Getriebe-Vorwahl AT/MT, Lenkhilfe OFF/LOW/FULL = `CounterSteerAssist` × 0/0,5/1, Drift-Hilfe
+LOW/NORMAL/HIGH = `DriftDamping` × 0,5/1/1,6 – beide ab dem nächsten Lauf –, Startkamera, Blickwinkel 50–90°, Kamerawackeln, Aufkleber
+ANIME/STOCK/NONE), HUD (an/aus, Navi-Karte), SCREEN (WINDOW/BORDERLESS, außer macOS auch FULLSCREEN exklusiv; Auflösung aus den Modi des
+Bildschirms; VSync; Bildratenbegrenzung 30–240; Render-Skalierung 50–150 %), GRAPHICS (Voreinstellung LOW/MEDIUM/HIGH/ULTRA bzw. CUSTOM aus den
+Schaltern MSAA, Sonnenschatten, AO, Bloom, Regen-Spiegelungen), SOUND (Gesamt, Musik an/aus + Lautstärke, SE, Motor, Menü-SE), CONTROLLER
+(Tastatur-/Pad-Belegung). Andere Features hängen eigene Seiten an `Menu.Options.Pages` an (Zeilen per `Options.Row.Choice/Toggle/Slider`
+oder eigener Bildschirm über `Page.Input`/`Page.Draw`). Zurück geht die besuchten
 Schritte rückwärts. Zwischen Modulen 30-Frame-Schwarzblenden. Ton: Original-SE aus SYSSE (SYS005 Cursor, SYS006 Bestätigen, BEEP001
 Zurück/gesperrt, sys002 START, alarm_02 Pause, CAR010/011 Countdown, NAME001 Ergebniszeilen) und Menü-BGM aus BGM.AFS mit Loop-Punkten:
 Titel/Hauptmenü „GAMBLE RUMBLE“ (eigene Wahl, das Original ist dort still bzw. spielt den Vorspannfilm), Kurswahl „LIVE IN TOKYO“,
 Hersteller/Auto/Rekorde „WORRY“, Laden still, Countdown/Rennen/Pause Eurobeat, Ziel „WIN“ (einmal), Ergebnis „JOY“ (wie im Original).
 Navigation Pfeile/WASD, Enter, Esc bzw. D-Pad/Stick, A, B.
 Einstellungen, letzte Wahl und Bestzeiten liegen als JSON im App-Data-Ordner (macOS `~/Library/Application Support/InitialDRemake/settings.json`,
-Windows `%APPDATA%\InitialDRemake`), nicht im Repo; Starts mit Kurs oder Test-Flags lesen/schreiben sie nicht.
+Windows `%APPDATA%\InitialDRemake`), nicht im Repo; Starts mit Kurs oder Test-Flags lesen/schreiben sie nicht (Fenster dort immer 1600×900).
+Die Datei hat eine `Version` (derzeit 2); ältere werden beim Laden umgestellt (v1: `HighQuality` → die fünf Grafikschalter, SE-Lautstärke auch
+für Menü-SE), Werte außerhalb des Bereichs auf Standard/Grenze gesetzt; gespeichert wird über eine temporäre Datei (kein halber Stand bei Absturz).
 HUD: F4 an/aus, N Minimap mitdrehend → nordausgerichtet → ganze Strecke (`--hud north|overview|off` beim Start). Oben links Zeit, Bestzeit
 und 4 Sektoren (je 25 % der Strecke, Delta zur Bestzeit grün/rot; Zeit läuft ab der Startlinie, stoppt im Ziel), oben Mitte Drift-Kombo
 (Punkte aus Winkel × Tempo, Multiplikator, Wandkontakt löscht), unten links die Streckenuhr (`Ui/MapWidget`: rundes Instrument im Stil des

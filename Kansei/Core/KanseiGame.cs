@@ -21,6 +21,9 @@ public abstract class KanseiGame : IDisposable
     /// <summary>CPU milliseconds of the last frame: ticks, <see cref="Update"/> and <see cref="Render"/>, without waiting for the GPU or the display.</summary>
     public double CpuMs { get; internal set; }
 
+    /// <summary>Frames per second at most (0 = no cap, the display/vsync paces); the loop sleeps out the rest of each frame.</summary>
+    public int FrameCap { get; set; }
+
     public virtual void Load() { }
     public virtual void Tick(float dt) { }
     public virtual void Update(in GameTime time) { }

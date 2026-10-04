@@ -57,8 +57,9 @@ void main()
     vec3 c = texture(uScene, uv).rgb;
     if (pc.uC.x > 0.0 || pc.uC.z > 0.0)
     {
-        vec4 g = texelFetch(uGbuf, ivec2(gl_FragCoord.xy), 0);
-        if (pc.uC.x > 0.0 && g.r > 0.0) c *= 1.0 - g.r * (1.0 - upsampleAo(gl_FragCoord.xy));
+        vec2 frag = uv * vec2(textureSize(uGbuf, 0)); // scene pixel (render scale: the scene may be smaller/larger than the output)
+        vec4 g = texelFetch(uGbuf, ivec2(frag), 0);
+        if (pc.uC.x > 0.0 && g.r > 0.0) c *= 1.0 - g.r * (1.0 - upsampleAo(frag));
         if (pc.uC.z > 0.0 && g.g > 0.0)
         {
             vec4 s = texture(uSsr, uv);

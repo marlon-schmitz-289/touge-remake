@@ -6,7 +6,7 @@ namespace Kansei.Graphics;
 
 /// <summary>
 ///     Frame pipeline + forward renderer for prelit static geometry. A frame is <see cref="BeginScene"/> (HDR RGBA16F
-///     target, 4× MSAA in <see cref="HighQuality"/>, analytic sky from <see cref="Atmosphere"/>), draws, then
+///     target, 4× MSAA in <see cref="Msaa"/>, analytic sky from <see cref="Atmosphere"/>), draws, then
 ///     <see cref="EndScene"/> (resolve → bloom → ACES tonemap/grade into the swapchain or a <see cref="FrameCapture"/>).
 ///     World: sRGB texture (mipmapped, trilinear + anisotropic) × baked vertex light re-lit by the sun with cascaded
 ///     shadows (<see cref="RenderShadows"/>, world.frag), + <see cref="Lights"/>, alpha test (alpha-to-coverage with
@@ -63,15 +63,26 @@ public sealed class WorldRenderer : IDisposable
     internal BindGroupLayoutHandle TextureLayout => _layout;
     internal static TextureFormat Depth => DepthFormat;
     internal BindGroupHandle TextureGroup(int texture) => _textures[texture].Group;
-    internal int Quality => HighQuality ? 1 : 0;
+    internal int Quality => Msaa ? 1 : 0;
     internal static int Samples(int quality) => quality == 1 ? 4 : 1;
 
     public Atmosphere Atmosphere { get; set; } = new();
     public SceneLights Lights { get; } = new();
-    /// <summary>4× MSAA (+ alpha-to-coverage), bloom and shadows; off = 1 sample, no bloom/shadows (tonemapping stays).</summary>
-    public bool HighQuality = true;
-    /// <summary>Wet-ground SSR (high quality, rain); off only for measuring (<c>--flicker</c> motion).</summary>
+    /// <summary>4× MSAA (+ alpha-to-coverage); off = 1 sample.</summary>
+    public bool Msaa = true;
+    /// <summary>Cascaded sun shadows (where <see cref="Atmosphere.Shadows"/>), ambient occlusion, bloom.</summary>
+    public bool Shadows = true, Ao = true, Bloom = true;
+    /// <summary>Wet-ground SSR (rain); off in low settings and for measuring (<c>--flicker</c> motion).</summary>
     public bool Reflections = true;
+    /// <summary>Scene resolution relative to the output (0.5 … 2); post and tonemap scale it back up/down, the 2D overlay stays sharp.</summary>
+    public float RenderScale = 1;
+
+    /// <summary>All of MSAA, shadows, AO, bloom and SSR on (F2 / <c>--quality off</c> switch them together).</summary>
+    public bool HighQuality
+    {
+        get => Msaa && Shadows && Ao && Bloom && Reflections;
+        set => Msaa = Shadows = Ao = Bloom = Reflections = value;
+    }
     /// <summary>Seconds, animates rain ripples.</summary>
     public float Time;
     /// <summary>Indexed draws issued so far (scene + shadow passes); a counter for benches, the caller resets it.</summary>
@@ -191,12 +202,12 @@ public sealed class WorldRenderer : IDisposable
     ///     Sun shadow cascades for this frame around the camera (<paramref name="eye"/>, <paramref name="forward"/>,
     ///     <paramref name="fovY"/>, <paramref name="aspect"/>): <paramref name="world"/> and the car meshes
     ///     (<see cref="CarVertex"/>, model matrices) as casters. Call before <see cref="BeginScene"/>; skipped when
-    ///     <see cref="Atmosphere.Shadows"/> or <see cref="HighQuality"/> is off.
+    ///     <see cref="Atmosphere.Shadows"/> or <see cref="Shadows"/> is off.
     /// </summary>
     public void RenderShadows(ICommandEncoder encoder, Vector3 eye, Vector3 forward, float fovY, float aspect, StaticMesh world,
         ReadOnlySpan<(StaticMesh Mesh, Matrix4x4 Model)> cars)
     {
-        _shadowsThisFrame = Atmosphere.Shadows && HighQuality;
+        _shadowsThisFrame = Atmosphere.Shadows && Shadows;
         if (!_shadowsThisFrame) return;
         _shadow.Update(eye, forward, fovY, aspect, Vector3.Normalize(Atmosphere.SunDirection), _device.Backend == BackendKind.Vulkan);
         DrawCalls += _shadow.Render(encoder, _textureGroup, world, cars);
@@ -277,7 +288,8 @@ public sealed class WorldRenderer : IDisposable
     /// </summary>
     public IRenderPassEncoder BeginScene(ICommandEncoder encoder, in Matrix4x4 view, in Matrix4x4 proj, FrameCapture? target = null)
     {
-        EnsureTargets(target?.Width ?? _device.SwapchainWidth, target?.Height ?? _device.SwapchainHeight, Samples(Quality));
+        var scale = Math.Clamp(RenderScale, 0.25f, 2);
+        EnsureTargets(Math.Max(1, (int)((target?.Width ?? _device.SwapchainWidth) * scale)), Math.Max(1, (int)((target?.Height ?? _device.SwapchainHeight) * scale)), Samples(Quality));
         // HDR colour + gbuffer (PostProcess.GbufFormat) + depth; with MSAA all three resolve into PostProcess's single-sample targets
         var ms = _samples > 1;
         ColorAttachment[] color = ms
@@ -317,7 +329,8 @@ public sealed class WorldRenderer : IDisposable
     {
         pass.Dispose();
         DrawGlow(encoder);
-        _post.Run(encoder, Atmosphere, HighQuality, Reflections, target?.View ?? _device.CurrentSwapchainView, _w, _h, _viewRotProj, _proj,
+        _post.Run(encoder, Atmosphere, Ao, Bloom, Reflections, target?.View ?? _device.CurrentSwapchainView, target?.Width ?? _device.SwapchainWidth,
+            target?.Height ?? _device.SwapchainHeight, _viewRotProj, _proj,
             _device.Backend == BackendKind.Metal ? -1 : 1);
     }
 
