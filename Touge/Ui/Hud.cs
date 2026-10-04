@@ -60,7 +60,8 @@ public sealed class Hud
         var against = kmh > 15 && Vector2.Dot(v, tangent) < -0.3f * v.Length() * tangent.Length();
         _wrongFor = against ? _wrongFor + dt : 0;
         var upright = Vector3.Transform(Vector3.UnitY, car.Orientation).Y > 0.3f;
-        var stuck = (kmh < 3 && Timer.Phase == LapTimer.State.Running) || MathF.Abs(lateral) > 14 || !upright;
+        // past the goal the line ends (run-out up to the end barrier): far from it is not off the road there
+        var stuck = (kmh < 3 && Timer.Phase == LapTimer.State.Running) || (MathF.Abs(lateral) > 14 && along < _pilot.Length - 1) || !upright;
         _stuckFor = stuck ? _stuckFor + dt : 0;
         _wrongA = Style.Approach(_wrongA, _wrongFor > 1 ? 1 : 0, 4, dt);
         _driftA = Style.Approach(_driftA, Drift.Drifting || Drift.Score > 0 || Drift.Last.Age < 1.5f ? 1 : 0, 5, dt);

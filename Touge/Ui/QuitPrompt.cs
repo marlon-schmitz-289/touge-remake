@@ -42,17 +42,17 @@ public sealed class QuitPrompt
     {
         if (!Open) return;
         c.Fill(Overlay.Rgba(0, 0, 0, 0.55f));
-        c.O.FadeText(0.45f); // text drawn before lies above every shape: dim it too
-        c.Carbon(136, 176, 376, 286);
-        c.Lettering("QUIT THE GAME?", 256, 222, 24, Canvas.White, Overlay.Rgba(0.72f, 0.73f, 0.75f));
+        c.O.FadeText(0.12f); // text drawn before lies above every shape: nearly hide it
+        c.Carbon(136, 296, 376, 406);
+        c.Lettering("QUIT THE GAME?", 256, 342, 24, Canvas.White, Overlay.Rgba(0.72f, 0.73f, 0.75f));
         string[] labels = ["YES", "NO"];
         for (var i = 0; i < 2; i++)
         {
             var x = 166 + i * 100;
-            c.Plate(x, 240, 80, 26, 1);
-            c.Text(labels[i], x + 40, 259, 14, Canvas.Shade(0.08f, 0.08f, 0.08f, 1), 0.5f, 0.18f);
+            c.Plate(x, 360, 80, 26, 1);
+            c.Text(labels[i], x + 40, 379, 14, Canvas.Shade(0.08f, 0.08f, 0.08f, 1), 0.5f, 0.18f);
         }
         var sx = _yes ? 166 : 266;
-        c.Glow(sx - 4, 236, sx + 84, 270, Canvas.Pulse(theta));
+        c.Glow(sx - 4, 356, sx + 84, 390, Canvas.Pulse(theta));
     }
 }
