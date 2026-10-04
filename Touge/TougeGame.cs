@@ -11,7 +11,8 @@ namespace Touge;
 /// <summary>
 ///     Course from the ISO with a drivable AE86 (default) and a free-fly camera (F1).
 ///     Drive: W/S or ↑/↓ throttle/brake (automatic: hold S at standstill to reverse), A/D or ←/→ steer, Space handbrake, T auto/manual, Shift/Ctrl gear up/down (manual),
-///     R reset onto the driving line, C chase/bumper camera, F2 graphics quality (MSAA, bloom, shadows) on/off. Pad: left stick, triggers, A handbrake, bumpers shift.
+///     R reset onto the driving line, C chase/bumper camera, F2 graphics quality (MSAA, bloom, shadows) on/off,
+///     F4 HUD on/off, N minimap mode (<see cref="Hud"/>). Pad: left stick, triggers, A handbrake, bumpers shift.
 ///     Fly: WASD, Q/E down/up, right mouse or arrow keys look, Shift fast, Space jump along the driving line. Esc quit.
 ///     <paramref name="orbit"/> (degrees, 0 = front, 90 = left, 180 = rear) puts the fly camera around the car;
 ///     <paramref name="autodrive"/> lets the line pilot drive that many seconds before the first frame (for --shot);
@@ -29,6 +30,10 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
 
     private CarRenderer _carRenderer = null!;
     private EffectsRenderer _fxRenderer = null!;
+    private OverlayRenderer _overlayRenderer = null!;
+    private Hud _hud = null!;
+    /// <summary>--hud: "north", "overview" (minimap mode at start) or "off"; default rotating map, HUD on.</summary>
+    public string? HudMode { get; init; }
     private readonly Effects _fx = new();
     private readonly Random _rng = new(3);
     private readonly float[] _smokeDebt = new float[4];
@@ -72,6 +77,12 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         Console.WriteLine($"[Touge] {courseTime} geladen in {sw.ElapsedMilliseconds} ms, {_course.World.Batches.Count} Batches, {_drive.Ground.Walls.Length} Wandsegmente");
         _carRenderer = new CarRenderer(_renderer);
         _fxRenderer = new EffectsRenderer(_renderer);
+        _overlayRenderer = new OverlayRenderer(Device);
+        _hud = new Hud(_course.Road, _drive.Line)
+        {
+            Visible = HudMode != "off",
+            Mode = HudMode switch { "north" => Hud.MapMode.NorthUp, "overview" => Hud.MapMode.Overview, _ => Hud.MapMode.Rotating },
+        };
         SetupLights(courseTime.EndsWith("_NIT"));
         _car = CarModel.Load(iso, "AE86T", 0, _renderer);
 
@@ -201,6 +212,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         var k = Input.Keyboard;
         var dt = time.DeltaTime;
         if (k.IsKeyPressed(Key.Escape)) Window.ShouldClose = true;
+        if (k.IsKeyPressed(Key.F4)) _hud.Visible = !_hud.Visible;
+        if (k.IsKeyPressed(Key.N)) _hud.NextMode();
         if (k.IsKeyPressed(Key.F2))
         {
             _renderer.HighQuality = !_renderer.HighQuality;
@@ -429,6 +442,14 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _carRenderer.Draw(pass, _car.Body, _car.Wheel, _carBody, _carWheels, view * proj, _pos);
         _fxRenderer.Draw(pass, _fx, view, view * proj, _pos);
         _renderer.EndScene(ctx.Encoder, pass, shot);
+        if (_hud.Visible)
+        {
+            var car = _drive.Car;
+            var (w, h) = shot != null ? (shot.Width, shot.Height) : (Device.SwapchainWidth, Device.SwapchainHeight);
+            var overlay = _hud.Build(w, h, _carPose.Translation, Vector3.TransformNormal(Vector3.UnitZ, _carPose), car.SpeedKmh, car.Gear,
+                car.AutomaticGearbox, _drive.Pilot.Track(car.Position).Along / _drive.Pilot.Length);
+            _overlayRenderer.Draw(ctx.Encoder, overlay, shot?.View ?? Device.CurrentSwapchainView, w, h);
+        }
         if (shot != null)
         {
             shot.Copy(ctx.Encoder);
@@ -445,6 +466,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _car.Dispose();
         _carRenderer.Dispose();
         _fxRenderer.Dispose();
+        _overlayRenderer.Dispose();
         _capture?.Dispose();
         _renderer.Dispose();
     }

@@ -57,7 +57,7 @@ Kursreihenfolge im ELF (Tabelle `0x24CD00`, Index = Byte `0x328156`): MYOUGI0, U
 - `CRS_SHD_<KURS>.BIN`: f32 pro ROAD-Punkt, Helligkeitsfaktor (interpoliert, `0x163C00`). Kein Reader.
 - `CRS_LIGHT_<KURS>.BIN`: u32 n, 12 B ?, n × (f32 x, y, z, w = 1) Lichtpunkte (Aufhellung des Autos im 16-m-Radius), Reader `CourseRoad.ReadLights`. Akina: 8 Punkte in zwei Vierergruppen (Start, Ziel), 6–7 m über und 5–10 m neben der Fahrlinie = Laternenköpfe. USUI: 2 Punkte bei x = −79 km (Platzhalter).
 - Env-Maps `ENV_TEX_<KURS>_<ZEIT>.PAC`: 64×32-GIMs `ENV_TOP00…`, `ENV_BOTTOM00…`, `ENV_LEFT00…`, `ENV_RIGHT00…` (Akina Tag: 9/4/3/3), kleine Panoramen (Himmel mit Baumkante, Straße/Leitplanke, Waldrand). Wie das Spiel sie auf das Auto projiziert, ist nicht nachgesehen; das Remake nimmt sie als groben Würfel im Auto-Raum (`car.frag`).
-- `CRS_NAVI_<KURS>.BIN`: u32 n + 12 B, n × 16 B (normierte 2D-Koordinaten, vermutlich Minimap). Nicht weiter analysiert.
+- `CRS_NAVI_<KURS>.BIN`: u32 n + 12 B 0, n × (f32 x, y, 0, 1) – die Minimap: genau die ROAD-Mittellinie (n = ROAD-n; MYOUGI 1786 statt 1779, MYOUGI0/USUI0 ±1 Punkt), `x = k·X + a`, `y = −k·Z + b` mit einem k je Kurs (AKINA 0,0004167 = 1/2400, IROHA 0,0004426, USUI0 0,000738), Fehler 0 (MYOUGI ≤ 0,024). Liegt in x ≈ 0…1, y ≈ −1…0 (Kartenbox des Spiels). Der Remake nimmt darum ROAD in Metern direkt (`Touge/Hud`).
 - `CRS_COLI_<KURS>_0/1.BIN`: Kollision, siehe unten.
 
 ## Kollision `CRS_COLI_<KURS>_0/1.BIN` – geknackt
