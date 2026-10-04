@@ -210,7 +210,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         if (_front != null) _inRace = false;
         else if (_guide != null && StartMenu?.StartsWith("guide") == true)
         {
-            _guide.Open(_carName, _paint, StartMenu == "guide" ? CarGuide.Step.Intro : CarGuide.Step.List);
+            OpenGuide(StartMenu == "guide" ? CarGuide.Step.Intro : CarGuide.Step.List);
             if (StartMenu == "guide-talk") _guide.Talk(4);
             if (shotPath != null) _guide.Settle();
             _inRace = false;
@@ -616,9 +616,17 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
                 OpenMenu(Menu.Screen.Options, fromFrontEnd: true);
                 break;
             case FrontEnd.Result.Guide:
-                _guide!.Open(_carName, _paint);
+                OpenGuide(CarGuide.Step.Intro);
                 break;
         }
+    }
+
+    /// <summary>Opens the car guide; its turntable car stands on open road away from the arches (<see cref="CarGuide.Spot"/>).</summary>
+    private void OpenGuide(CarGuide.Step step)
+    {
+        _guide!.Open(_carName, _paint, step);
+        _drive.ResetTo(CarGuide.Spot(_course.DrivingLine));
+        SyncPose();
     }
 
     /// <summary>Car guide input: shows the chosen car/paint; on exit the saved car comes back and the main menu opens.</summary>
@@ -637,6 +645,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
                     break;
                 }
                 if (_carName != _settings.Car || _paint != _settings.Paint) SwitchCar(Array.IndexOf(CarPaint.Cars, _settings.Car), _settings.Paint);
+                _drive.ResetTo(0); // back at the start for car select
+                SyncPose();
                 _front.Open(FrontEnd.Step.Modes);
                 break;
         }
@@ -656,9 +666,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         if (_guide?.Voice != _voice && _guideVoice != null)
         {
             // the music steps back while Iketani talks
-            if (_voice == null) _audioDevice.Music *= 0.35f;
-            else if (_guide!.Voice == null) _audioDevice.Music /= 0.35f;
             _voice = _guide!.Voice;
+            _audioDevice.Music = MusicLevel;
             _guide.VoiceSeconds = _guideVoice.Play(_voice, _settings.SoundVolume);
         }
         var want = !_settings.MusicOn ? null : front ? _front!.Music : guide ? _guide!.Music : _menu!.Music(_music);
@@ -733,11 +742,14 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         (_inRace, _camSnap, _fly) = (true, true, false);
     }
 
+    /// <summary>Music volume from the settings; it steps back while Iketani talks.</summary>
+    private float MusicLevel => _settings.MusicVolume * (_voice != null ? 0.35f : 1);
+
     private void ApplySettings()
     {
         var s = _settings;
         _renderer.HighQuality = s.HighQuality;
-        if (_audioDevice != null) _audioDevice.Music = s.MusicVolume;
+        if (_audioDevice != null) _audioDevice.Music = MusicLevel;
         if (_menuAudio != null) _menuAudio.Volume = s.SoundVolume;
         (_hud.Visible, _hud.Mode, _bumperCam) = (s.HudOn, s.MapMode, s.BumperCam);
         if (s.Livery != _carLivery) SwitchCar(Array.IndexOf(CarPaint.Cars, _carName), _paint);
@@ -755,12 +767,14 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         var screen = _menu?.Current ?? Menu.Screen.None;
         if (_guide is { ShowsCar: true })
         {
-            // the guide's turntable, further out; the car sits right of the list and comes to the middle while Iketani talks
-            OrbitCar(0.6f + _menuTime * 0.3f);
-            var fwd = Forward();
-            var right = Vector3.Normalize(Vector3.Cross(fwd, Vector3.UnitY));
-            _pos -= fwd * 2.2f + right * (1.5f * _guide.Shift) - Vector3.UnitY * 0.2f;
-            (_camLook, _fov) = (_pos + fwd - right * (0.09f * _guide.Shift) - Vector3.UnitY * 0.04f, MathF.PI / 4);
+            // the guide's turntable: the car turns in place (UpdateCarMatrices), the camera stands on the road behind it; the
+            // car sits right of the list (look turned left by ~0.23 screen heights) and comes to the middle while Iketani talks
+            const float back = 8f;
+            var target = _drive.Car.Position + Vector3.UnitY * 0.15f;
+            var fwd = Vector3.Normalize(Vector3.Transform(Vector3.UnitZ, _drive.Car.Orientation) with { Y = 0 });
+            var right = Vector3.Cross(fwd, Vector3.UnitY);
+            _pos = target - fwd * back + Vector3.UnitY * 1.5f;
+            (_camLook, _fov) = (target - right * (0.19f * back * _guide.Shift), MathF.PI / 4);
             return true;
         }
         if (!front && screen is Menu.Screen.None or Menu.Screen.Intro or Menu.Screen.Finish) return false;
@@ -1148,6 +1162,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         var car = _drive.Car;
         _carPose = Matrix4x4.CreateFromQuaternion(Quaternion.Slerp(_prevRot, car.Orientation, alpha))
                    * Matrix4x4.CreateTranslation(Vector3.Lerp(_prevPos, car.Position, alpha));
+        if (_guide is { ShowsCar: true }) _carPose = Matrix4x4.CreateRotationY(2.5f + _menuTime * 0.3f) * _carPose; // the guide's turntable
         _carBody = _modelToBody * _carPose;
         var restY = car.Spec.WheelRadius - car.Spec.CogHeight;
         for (var i = 0; i < 4; i++)

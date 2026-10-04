@@ -71,11 +71,11 @@ Zurück/gesperrt, sys002 START, alarm_02 Pause, CAR010/011 Countdown, NAME001 Er
 Titel/Hauptmenü „GAMBLE RUMBLE“ (eigene Wahl, das Original ist dort still bzw. spielt den Vorspannfilm), Kurswahl „LIVE IN TOKYO“,
 Hersteller/Auto/Rekorde „WORRY“, Laden still, Countdown/Rennen/Pause Eurobeat, Ziel „WIN“ (einmal), Ergebnis „JOY“ (wie im Original).
 IKETANI'S CAR GUIDE (`Ui/CarGuide`, wie das Original 池谷先輩の車紹介, BGM „WORRY“): Itsuki/Takumi/Iketani-Dialog (Entscheiden
-schreibt die Zeile fertig, dann weiter) → Liste aller 32 Autos unter Herstellerköpfen, das Auto dreht sich in 3D rechts daneben, Iketanis Text
+schreibt die Zeile fertig, dann weiter) → Liste aller 32 Autos unter Herstellerköpfen, das Auto dreht sich in 3D rechts daneben (Drehbühne auf freier, gerader Straße mitten im geladenen Kurs, weg von Start-/Zielbögen), Iketanis Text
 (eigenes Englisch) und Datenblatt (Motor, Hubraum, Bauart, Leistung/Drehmoment mit Drehzahl aus der Momentkurve, Gewicht, Antrieb, Getriebe,
 kg/PS, Fahrer in Initial D). ↑/↓ Auto, ←/→ Lackfarbe, Entscheiden = Iketani spricht (Original-Ansage `IKETANI.AFS` `INTRO_<AUTO>.ADX`,
-japanisch, 34–66 s; Liste fährt weg, Auto in die Mitte, Text tippt mit, Fortschrittsbalken, Musik leiser), Entscheiden/Zurück bricht ab,
-Zurück → Hauptmenü (gespeichertes Auto kommt zurück). `--menu guide` (Dialog), `guide-list`, `guide-talk` mit `--car`/`--paint` für Bilder.
+japanisch, 34–66 s; Liste fährt weg, Auto in die Mitte, Text tippt im Tempo der Ansage mit, Fortschrittsbalken, Musik leiser), Entscheiden/Zurück bricht ab,
+Zurück → Hauptmenü (gespeichertes Auto kommt zurück). `--menu guide` (Dialog), `guide-list`, `guide-talk` mit `--car`/`--paint` für Bilder (ohne Hauptmenü schließt Zurück das Fenster).
 Navigation Pfeile/WASD, Enter, Esc bzw. D-Pad/Stick, A, B.
 Einstellungen, letzte Wahl und Bestzeiten liegen als JSON im App-Data-Ordner (macOS `~/Library/Application Support/InitialDRemake/settings.json`,
 Windows `%APPDATA%\InitialDRemake`), nicht im Repo; Starts mit Kurs oder Test-Flags lesen/schreiben sie nicht.

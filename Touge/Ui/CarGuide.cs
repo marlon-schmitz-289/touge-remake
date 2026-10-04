@@ -103,7 +103,7 @@ public sealed class CarGuide(Catalog catalog)
     ];
 
     public const float Fade = 30 / 60f;
-    /// <summary>Panel text appears at this many characters per second while Iketani talks.</summary>
+    /// <summary>Panel text types at most this many characters per second while Iketani talks (slower to match a long voice).</summary>
     public const float TypeRate = 45;
 
     public bool Active { get; private set; }
@@ -217,6 +217,27 @@ public sealed class CarGuide(Catalog catalog)
     {
         Sound?.Invoke("BEEP001");
         _leave = 0;
+    }
+
+    /// <summary>
+    ///     Driving-line point for the turntable: the straightest, flattest road (±20 m) at least 150 m from either end, so
+    ///     no start/goal arch, barricade or gantry stands near the car and the camera looks along open road.
+    /// </summary>
+    public static int Spot(Vector3[] line)
+    {
+        var s = new float[line.Length];
+        for (var i = 1; i < line.Length; i++) s[i] = s[i - 1] + Vector3.Distance(line[i - 1], line[i]);
+        var (best, bestScore) = (line.Length / 2, float.MaxValue);
+        for (int i = 0, a = 0, b = 0; i < line.Length; i++)
+        {
+            while (s[a] < s[i] - 20) a++;
+            while (b < line.Length - 1 && s[b + 1] <= s[i] + 20) b++;
+            if (s[i] < 150 || s[^1] - s[i] < 150 || a == i || b == i) continue;
+            Vector3 u = Vector3.Normalize(line[i] - line[a]), v = Vector3.Normalize(line[b] - line[i]);
+            var score = 1 - Vector3.Dot(u, v) + MathF.Abs(u.Y) + MathF.Abs(v.Y);
+            if (score < bestScore) (best, bestScore) = (i, score);
+        }
+        return best;
     }
 
     /// <summary>Peak power (PS) and torque (Nm) with their rpm from the car's torque curve (P = T·ω).</summary>
@@ -337,7 +358,9 @@ public sealed class CarGuide(Catalog catalog)
         c.Carbon(190, 70, 500, 158);
         c.Plate(198, 58, 92, 22, 1);
         c.Text("IKETANI", 244, 74, 13, Ink, 0.5f, 0.15f);
-        var shown = _talk >= 0 ? (int)(_talk * TypeRate) : int.MaxValue;
+        // while the voice runs the text types along with it (done at ~85 % of the talk), never faster than TypeRate
+        var rate = VoiceSeconds > 0 ? MathF.Min(TypeRate, e.Text.Length / (0.85f * VoiceSeconds)) : TypeRate;
+        var shown = _talk >= 0 ? (int)(_talk * rate) : int.MaxValue;
         Paragraph(c, e.Text, 202, 96, 11.5f, 284, 14.5f, shown);
         if (_talk >= 0)
         {

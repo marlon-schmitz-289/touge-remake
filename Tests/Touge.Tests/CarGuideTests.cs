@@ -107,4 +107,19 @@ public class CarGuideTests
         Assert.Contains(("WEIGHT", "700 kg"), sheet);
         Assert.Contains(("PWR / WT", "10.9 kg/PS"), sheet);
     }
+
+    [Fact]
+    public void Spot_StraightFlatRoad_AwayFromTheEnds()
+    {
+        // 2 m points: 300 m straight (but the first/last 150 m are off limits), a 90° bend at 300 m, a 20 % ramp from 600 m, 900 m long
+        var line = new System.Numerics.Vector3[451];
+        for (var i = 0; i < line.Length; i++)
+        {
+            float d = i * 2, a = d < 300 ? 0 : MathF.Min((d - 300) / 60, 1) * MathF.PI / 2;
+            line[i] = i == 0 ? default : line[i - 1] + new System.Numerics.Vector3(MathF.Sin(a), d >= 600 ? 0.2f : 0, MathF.Cos(a)) * 2;
+        }
+        var s = CarGuide.Spot(line) * 2;
+        Assert.InRange(s, 150, 280); // the flat straight, not the bend or the ramp
+        Assert.Equal(1, CarGuide.Spot(new System.Numerics.Vector3[3])); // too short: the middle
+    }
 }
