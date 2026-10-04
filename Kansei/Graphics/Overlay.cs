@@ -162,16 +162,28 @@ public sealed class Overlay
         Triangle(a, c, d, color);
     }
 
+    /// <summary>Multiplies the alpha of all text so far by <paramref name="a"/> (text lies above every shape, so a black fade rectangle cannot cover it).</summary>
+    public void FadeText(float a)
+    {
+        for (var i = 0; i < GlyphCount; i++)
+        {
+            var c = _glyphs[i].Color;
+            _glyphs[i].Color = c & 0xFFFFFF | (uint)((c >> 24) * Math.Clamp(a, 0, 1) + 0.5f) << 24;
+        }
+    }
+
     /// <summary>
     ///     Text in <see cref="Font"/>, <paramref name="baseline"/> = left end of the baseline (shifted by
     ///     −<paramref name="align"/> × width: 0 left, 0.5 centre, 1 right), <paramref name="size"/> = em in pixels.
     ///     <paramref name="weight"/> grows the glyphs by that many pixels (negative: thinner), <paramref name="soft"/>
-    ///     widens the edge (shadows/glow; both limited by the font's distance range), <paramref name="skew"/> slants (italic, x per y).
+    ///     widens the edge (shadows/glow; both limited by the font's distance range), <paramref name="skew"/> slants (italic, x per y),
+    ///     <paramref name="bottom"/> (if set) is the colour at the bottom of each glyph box (vertical gradient from <paramref name="color"/>).
     ///     Glyphs go to <see cref="GlyphVertices"/>, drawn by <see cref="TextRenderer"/> after all shapes. Returns the advance width.
     /// </summary>
-    public float Text(ReadOnlySpan<char> text, Vector2 baseline, float size, uint color, float align = 0, float weight = 0, float soft = 0, float skew = 0)
+    public float Text(ReadOnlySpan<char> text, Vector2 baseline, float size, uint color, float align = 0, float weight = 0, float soft = 0, float skew = 0, uint? bottom = null)
     {
         if (Font is not { } f) return 0;
+        var low = bottom ?? color;
         var width = f.Measure(text, size);
         var x = baseline.X - width * align;
         var range = size * SdfFont.Spread / SdfFont.EmPx; // distance range in screen pixels
@@ -185,8 +197,8 @@ public sealed class Overlay
             {
                 float x0 = x + g.Plane.X * size, x1 = x + g.Plane.Z * size, y0 = baseline.Y - g.Plane.W * size, y1 = baseline.Y - g.Plane.Y * size;
                 float k0 = (baseline.Y - y0) * skew, k1 = (baseline.Y - y1) * skew;
-                GlyphVertex V(float px, float py, float u, float v) => new(new Vector2(px, py), new Vector2(u, v), color, scale, weight, soft);
-                var (a, b, cc, d) = (V(x0 + k0, y0, g.Uv.X, g.Uv.Y), V(x1 + k0, y0, g.Uv.Z, g.Uv.Y), V(x1 + k1, y1, g.Uv.Z, g.Uv.W), V(x0 + k1, y1, g.Uv.X, g.Uv.W));
+                GlyphVertex V(float px, float py, float u, float v, uint c) => new(new Vector2(px, py), new Vector2(u, v), c, scale, weight, soft);
+                var (a, b, cc, d) = (V(x0 + k0, y0, g.Uv.X, g.Uv.Y, color), V(x1 + k0, y0, g.Uv.Z, g.Uv.Y, color), V(x1 + k1, y1, g.Uv.Z, g.Uv.W, low), V(x0 + k1, y1, g.Uv.X, g.Uv.W, low));
                 _glyphs[GlyphCount++] = a;
                 _glyphs[GlyphCount++] = b;
                 _glyphs[GlyphCount++] = cc;

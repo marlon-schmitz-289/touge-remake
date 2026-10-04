@@ -18,9 +18,10 @@ Assets kommen zur Laufzeit aus der eigenen ISO (SLPM-65268), nie ins Repo.
 ## Starten
 
 ```sh
-dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso"   # Titelmenü (Kurs, Auto, Einstellungen)
+dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso"   # Front-End (Hinweis, Karten, Titel, Hauptmenü) → Kurs, Auto, Einstellungen
 dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso" [AKINA_DAY|AKINA_NIT|USUI_NIT|…]   # direkt fahren, ohne Menü
-dotnet run --project Touge -- "<iso>" --menu title|course|car|pause|settings --shot out/proof/ui_car.png [--shot-size 3200x1800]   # Menü-Bild
+dotnet run --project Touge -- "<iso>" AKINA_NIT --menu boot|logo|disclaimer|title|mode|course|car|pause|settings --shot out/proof/ui_car.png [--shot-size 3200x1800]   # Menü-Bild
+dotnet run --project Touge -- "<iso>" --frontend-capture out/proof/fe.wav   # Front-End per Skript offline: Original-SE/BGM als WAV + Log aller Auslöser
 dotnet run --project Touge -- "<iso>" --shot out/akina.png   # ein Frame als PNG, dann Ende
 dotnet run --project Touge -- "<iso>" --ground out/g.png [--at 300]   # Kollision: Raycast-Timing + Draufsicht mit Wänden
 dotnet run --project Touge -- "<iso>" --shot out/ae86.png --orbit 35   # Kamera ums Auto (0 vorne, 90 links, 180 hinten)
@@ -41,9 +42,17 @@ dotnet run --project Touge -- "<iso>" --sun --shot out/sun.png   # freie Kamera 
 Fahren (Standard): W/S oder ↑/↓ Gas/Bremse, A/D oder ←/→ lenken, Leertaste Handbremse, S im Stand halten = Rückwärts (Automatik), T Automatik/Manuell,
 Shift/Strg hoch-/runterschalten (manuell, auch in R), R (Pad: Y) zurück auf die Fahrlinie (nächster freier Punkt, Blick in Fahrtrichtung), B Richtung wechseln (bergab ↔ bergauf, setzt auf die Fahrlinie der Gegenrichtung; Minimap/Fortschritt folgen), C Verfolger-/Stoßstangenkamera,
 F2 Grafikqualität hoch/niedrig (4× MSAA, Bloom und Sonnenschatten an/aus; `--quality off` startet niedrig).
-Menüs: Ohne Kurs/Test-Flags startet das Spiel im Titelmenü (Strecke im Hintergrund abgeflogen) → Kurswahl (↑/↓ Kurs, ←/→ Tageszeit und
-Richtung) → Autowahl (↑/↓ Auto, ←/→ Lack) → Fahren. Esc (Pad: Start) pausiert: Weiter, Neustart, Kurs/Auto wechseln, Einstellungen
-(Grafik, Musik an/aus + Lautstärke, HUD, Minimap, Kamera), Beenden. Navigation Pfeile/WASD, Enter, Esc bzw. D-Pad/Stick, A, B.
+Menüs: Ohne Kurs/Test-Flags startet das Spiel im Front-End im Stil des Originals (`Ui/FrontEnd`, nur Vektorformen + Schrift, keine
+Original-Menütexturen; Ablauf/Zeiten/Bewegung aus dem Originalcode, siehe FORMATS.md): Hinweis zu den Speicherdaten → Karte „Based on …“ →
+Hinweis „Fiktion“ → Titel (Akina bei Nacht im Hintergrund abgeflogen, Logo, blinkendes PRESS START BUTTON; nach 10 s ohne Eingabe zurück zu
+den Karten) → Hauptmenü (Trommel mit den 7 Modi des Originals, Chromplatten, pulsierender gelber Rahmen; nach 30 s ohne Eingabe zurück zum
+Titel). Gebaut sind davon TIME ATTACK (→ Kurswahl → Autowahl → Fahren) und OPTIONS (→ Einstellungen); die anderen Modi piepen (BEEP001) wie
+gesperrte Einträge im Original. Esc im Hauptmenü zurück zum Titel, im Titel beenden. Ton: Original-SE aus SYSSE (SYS005 Cursor, SYS006
+Bestätigen, BEEP001 Zurück, sys002 START, alarm_02 Pause) und Menü-BGM aus BGM.AFS mit Loop-Punkten: Titel/Hauptmenü „GAMBLE RUMBLE“
+(eigene Wahl, das Original ist dort still bzw. spielt den Vorspannfilm), Kurswahl „LIVE IN TOKYO“, Autowahl „WORRY“ (wie im Original), Laden
+still, Rennen Eurobeat. Kurswahl/Autowahl/Einstellungen/Pause sind noch die eigenen Menüs: Kurswahl (↑/↓ Kurs, ←/→ Tageszeit und Richtung) →
+Autowahl (↑/↓ Auto, ←/→ Lack) → Fahren. Esc (Pad: Start) pausiert: Weiter, Neustart, Kurs/Auto wechseln, Einstellungen
+(Grafik, Musik an/aus + Lautstärke, SE-Lautstärke, HUD, Minimap, Kamera), Beenden. Navigation Pfeile/WASD, Enter, Esc bzw. D-Pad/Stick, A, B.
 Einstellungen, letzte Wahl und Bestzeiten liegen als JSON im App-Data-Ordner (macOS `~/Library/Application Support/InitialDRemake/settings.json`,
 Windows `%APPDATA%\InitialDRemake`), nicht im Repo; Starts mit Kurs oder Test-Flags lesen/schreiben sie nicht.
 HUD: F4 an/aus, N Minimap mitdrehend → nordausgerichtet → ganze Strecke (`--hud north|overview|off` beim Start). Oben links Zeit, Bestzeit

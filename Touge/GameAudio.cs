@@ -103,24 +103,16 @@ public sealed class GameAudio : IDisposable
         (_squeal, _squealHigh, _skid) = wet ? (Loop(rainSrip[0]), Loop(rainSrip[1]), srip[3]) : (Loop(srip[0]), Loop(srip[1]), srip[3]);
         _dirt = Loop(rainSrip[0]);
 
-        var sysse = iso.ReadFile("CDVD/DATA/SOUND/SYSSE.BIN");
-        var bank = Vag.SysSe(sysse);
-        var names = Afs.ParseTbl(iso.ReadFile("CDVD/DATA/SOUND/SYSSE.TBL"), bank.Length) ?? [];
-        Vag.Sound Sys(string name)
-        {
-            var i = Array.FindIndex(names, n => n.Equals(name, StringComparison.OrdinalIgnoreCase));
-            if (i < 0) throw new FileNotFoundException($"SYSSE.BIN: {name}");
-            return Vag.Decode(sysse.AsSpan(bank[i].Offset, bank[i].Size), bank[i].Rate);
-        }
-        _crashA = Clip(Sys("cr001.vag"));
-        var cr2 = Sys("cr002.vag");
+        var sys = SysSe(iso);
+        _crashA = Clip(sys("cr001.vag"));
+        var cr2 = sys("cr002.vag");
         _crashB = Clip(cr2);
         // cr002 stays loud from ~0.3 to ~1.9 s: its middle loops as wall scrape (no scrape sample on the disc)
         _scrape = Loop(Clip(cr2 with { Loop = (cr2.Rate * 6 / 10, cr2.Rate * 18 / 10) }));
-        _backfire = [.. "abcdefgh".Select(c => Clip(Sys($"zbackfire002{c}.vag")))];
+        _backfire = [.. "abcdefgh".Select(c => Clip(sys($"zbackfire002{c}.vag")))];
         if (wet)
         {
-            _rain = Loop(Clip(Seamless(Sys("rain.vag"), 0.4f)));
+            _rain = Loop(Clip(Seamless(sys("rain.vag"), 0.4f)));
             _rain.Gain = 0.5f;
         }
 
@@ -132,6 +124,20 @@ public sealed class GameAudio : IDisposable
         var course = courseTime[..courseTime.LastIndexOf('_')];
         _track = course.Sum(c => c) % _tracks.Length; // fixed pick per course, M cycles
         (dev.Music, dev.Sfx) = (0.6f, 0.35f);
+    }
+
+    /// <summary>Decoder for the SYSSE.BIN bank by name ("cr001.vag"; names from SYSSE.TBL, case-insensitive).</summary>
+    public static Func<string, Vag.Sound> SysSe(Iso9660 iso)
+    {
+        var sysse = iso.ReadFile("CDVD/DATA/SOUND/SYSSE.BIN");
+        var bank = Vag.SysSe(sysse);
+        var names = Afs.ParseTbl(iso.ReadFile("CDVD/DATA/SOUND/SYSSE.TBL"), bank.Length) ?? [];
+        return name =>
+        {
+            var i = Array.FindIndex(names, n => n.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (i < 0) throw new FileNotFoundException($"SYSSE.BIN: {name}");
+            return Vag.Decode(sysse.AsSpan(bank[i].Offset, bank[i].Size), bank[i].Rate);
+        };
     }
 
     /// <summary>Engine banks of <paramref name="car"/> (HCAR name); replaces the current ones (car change at standstill).</summary>

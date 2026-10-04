@@ -26,6 +26,7 @@ public sealed unsafe class AudioDevice : IDisposable
     private readonly bool _loopPoints;
     private readonly uint[] _sfx = new uint[SfxVoices];
     private readonly float[] _sfxGain = new float[SfxVoices];
+    private readonly bool[] _sfxUi = new bool[SfxVoices]; // UI voices ignore Sfx (menu sounds while the game's loops are muted)
     private readonly List<LoopVoice> _loops = [];
     private readonly Lock _lock = new();
     private readonly Thread? _feeder;
@@ -94,7 +95,7 @@ public sealed unsafe class AudioDevice : IDisposable
         {
             _sfxVolume = value;
             if (!Enabled) return;
-            for (var i = 0; i < SfxVoices; i++) _al.SetSourceProperty(_sfx[i], SourceFloat.Gain, _sfxGain[i] * value);
+            for (var i = 0; i < SfxVoices; i++) _al.SetSourceProperty(_sfx[i], SourceFloat.Gain, _sfxGain[i] * (_sfxUi[i] ? 1 : value));
             foreach (var l in _loops) l.Apply();
         }
     }
@@ -115,8 +116,8 @@ public sealed unsafe class AudioDevice : IDisposable
         return new Clip(this, buf, pcm.Length / channels / (float)rate);
     }
 
-    /// <summary>Fire-and-forget on the next SFX voice (round robin; a busy voice is cut).</summary>
-    public void PlaySfx(Clip clip, float gain = 1, float pitch = 1)
+    /// <summary>Fire-and-forget on the next SFX voice (round robin; a busy voice is cut). <paramref name="ui"/>: not scaled by <see cref="Sfx"/>.</summary>
+    public void PlaySfx(Clip clip, float gain = 1, float pitch = 1, bool ui = false)
     {
         if (!Enabled) return;
         var i = _nextSfx;
@@ -130,8 +131,8 @@ public sealed unsafe class AudioDevice : IDisposable
         var src = _sfx[i];
         _al.SourceStop(src);
         _al.SetSourceProperty(src, SourceInteger.Buffer, (int)clip.Buffer);
-        _sfxGain[i] = gain;
-        _al.SetSourceProperty(src, SourceFloat.Gain, gain * _sfxVolume);
+        (_sfxGain[i], _sfxUi[i]) = (gain, ui);
+        _al.SetSourceProperty(src, SourceFloat.Gain, gain * (ui ? 1 : _sfxVolume));
         _al.SetSourceProperty(src, SourceFloat.Pitch, pitch);
         _al.SourcePlay(src);
     }

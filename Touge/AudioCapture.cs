@@ -166,4 +166,43 @@ internal static class AudioCapture
         double sxy = p.Sum(t => (t.First - mx) * (t.Second - my)), sxx = p.Sum(t => (t.First - mx) * (t.First - mx)), syy = p.Sum(t => (t.Second - my) * (t.Second - my));
         return sxy / Math.Sqrt(sxx * syy);
     }
+
+    /// <summary>
+    ///     <c>--frontend-capture &lt;wav&gt;</c>: a scripted pass through the front end, rendered offline at 60 fps like the
+    ///     game loop — title (START), main menu (down, down, decide a mode not built yet, up, decide Time Attack), then
+    ///     course select's music — with the real <see cref="Ui.FrontEnd"/> and <see cref="MenuAudio"/>. Every SE/BGM trigger
+    ///     is logged with its time, the mix level per 0.5 s follows.
+    /// </summary>
+    public static bool FrontEnd(Iso9660 iso, string wavPath)
+    {
+        const int perFrame = Rate / 60;
+        const float seconds = 11;
+        using var dev = new AudioDevice(Rate);
+        if (!dev.Enabled) return false;
+        var t = 0f;
+        using var audio = new MenuAudio(iso, dev) { Clock = () => t };
+        var front = new Ui.FrontEnd { Sound = audio.Play };
+        front.Open(Ui.FrontEnd.Step.Title);
+        (float At, int Y, bool Ok)[] script = [(1.5f, 0, true), (3, 1, false), (3.7f, 1, false), (4.4f, 0, true), (5.2f, -1, false), (6, 0, true)];
+        var frames = (int)(seconds * 60);
+        var pcm = new short[frames * perFrame * 2];
+        for (int n = 0, next = 0; n < frames; n++, t = n / 60f)
+        {
+            var k = (X: 0, Y: 0, Ok: false, Back: false);
+            if (next < script.Length && t >= script[next].At) (k.Y, k.Ok, next) = (script[next].Y, script[next].Ok, next + 1);
+            if (front.Update(k, 1 / 60f) == Ui.FrontEnd.Result.TimeAttack) Console.WriteLine($"[Menu] {t:0.00} s main menu -> {Ui.FrontEnd.Modes[front.Index]} -> course select");
+            audio.Music(front.Active ? front.Music : "TOKYO.adx", background: false);
+            dev.Render(pcm.AsSpan(n * perFrame * 2, perFrame * 2));
+        }
+        Wav.Write(wavPath, pcm, 2, Rate);
+        const int block = Rate / 2 * 2;
+        for (var b = 0; b + block <= pcm.Length; b += block)
+        {
+            double sum = 0;
+            for (var i = b; i < b + block; i++) sum += (double)pcm[i] * pcm[i];
+            Console.WriteLine($"[Mix] {b / 2 / (float)Rate,5:0.0} s  RMS {10 * Math.Log10(sum / block / (32768.0 * 32768) + 1e-12),6:0.0} dBFS");
+        }
+        Console.WriteLine($"[Menu] -> {wavPath}");
+        return true;
+    }
 }

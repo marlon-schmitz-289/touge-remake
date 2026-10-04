@@ -49,6 +49,14 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     private bool _persist, _inRace;
     private Catalog? _catalog;
     private Menu? _menu;
+    /// <summary>Boot cards, title and main menu (started plainly or with --menu boot|logo|disclaimer|title|mode).</summary>
+    private FrontEnd? _front;
+    private MenuAudio? _menuAudio;
+    private readonly MenuKeys _frontKeys = new();
+    /// <summary>What the music stream plays: null silence, <see cref="RaceMusic"/>, or a BGM.AFS track of the menus ("" = decide again).</summary>
+    private string? _music = "";
+    private const string RaceMusic = "race";
+    private bool InMenus => _front is { Active: true } || _menu?.Current is not (null or Menu.Screen.None);
     private int _loadingFrames;
     private float _flyS, _menuTime;
     /// <summary>--hud: "north", "overview" (minimap mode at start) or "off"; default rotating map, HUD on.</summary>
@@ -126,9 +134,22 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             _menu = new Menu(_catalog, _settings);
             if (_persist && !_catalog.Courses.Any(c => _settings.Course == $"{c.Id}_DAY" || _settings.Course == $"{c.Id}_NIT" || _settings.Course == $"{c.Id}_RIN"))
                 _settings.Course = "AKINA_DAY";
+            _menu.Sound = n => _menuAudio?.Play(n);
+            FrontEnd.Step? step = StartMenu switch
+            {
+                null => UseMenus ? FrontEnd.Step.Boot : null, "course" or "car" or "pause" or "settings" => null, "boot" => FrontEnd.Step.Boot,
+                "logo" => FrontEnd.Step.Logo, "disclaimer" => FrontEnd.Step.Disclaimer, "mode" or "modes" => FrontEnd.Step.Modes, _ => FrontEnd.Step.Title,
+            };
+            if (step is { } first)
+            {
+                _front = new FrontEnd { SaveFound = File.Exists(Settings.FilePath), Sound = n => _menuAudio?.Play(n) };
+                _front.Open(first);
+                if (shotPath != null) _front.Settle();
+            }
         }
         _bumperCam = _settings.BumperCam;
-        LoadCourse(iso, _persist ? _settings.Course : _courseTime, _settings.Reverse, _settings.Car, _settings.Paint, startPoint);
+        // the front end shows Akina at night behind the title, like the original's photo; course select loads the choice
+        LoadCourse(iso, _front != null && _persist ? "AKINA_NIT" : _persist ? _settings.Course : _courseTime, _settings.Reverse, _settings.Car, _settings.Paint, startPoint);
         _drive.ForceDrift = drift;
         if (autodrive is { } seconds)
         {
@@ -154,11 +175,12 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             (_fly, _yaw, _pitch) = (true, MathF.Atan2(s.X, s.Z), MathF.Asin(s.Y) - 0.3f);
             _pos += Vector3.Normalize(s with { Y = 0 }) * -7 + Vector3.UnitY * 0.3f; // the parked car in front, against the light
         }
-        if (_menu != null && (UseMenus || StartMenu != null))
+        if (_front != null) _inRace = false;
+        else if (_menu != null && StartMenu != null)
         {
             var screen = StartMenu switch
             {
-                "course" => Menu.Screen.Course, "car" => Menu.Screen.Car, "pause" => Menu.Screen.Pause, "settings" => Menu.Screen.Settings, _ => Menu.Screen.Title,
+                "course" => Menu.Screen.Course, "car" => Menu.Screen.Car, "pause" => Menu.Screen.Pause, _ => Menu.Screen.Settings,
             };
             OpenMenu(screen);
             _inRace = screen == Menu.Screen.Pause;
@@ -177,6 +199,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         else
         {
             _audioDevice = new AudioDevice { Music = _settings.MusicVolume };
+            if (_menu != null) _menuAudio = new MenuAudio(iso, _audioDevice) { Volume = _settings.SoundVolume, Clock = () => _menuTime };
             StartAudio(iso);
         }
     }
@@ -222,9 +245,9 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     private void StartAudio(Iso9660 iso)
     {
         _audio = new GameAudio(iso, _courseTime, _audioDevice!, _carName);
-        if (_settings.MusicOn) _audio.PlayTrack(background: true);
-        else _audio.MusicOn = false;
-        _audioDevice!.Sfx = _menu?.Current is null or Menu.Screen.None ? 1 : 0;
+        if (_persist) _audioDevice!.Music = _settings.MusicVolume; // GameAudio sets its own default
+        _audioDevice!.Sfx = InMenus ? 0 : _settings.SoundVolume;
+        _music = ""; // SyncMusic starts the race or menu music
     }
 
     /// <summary>HUD for the loaded line, with the stored best run of this course and direction; a new record is kept (and saved with the menus).</summary>
@@ -316,7 +339,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
 
     public override void Tick(float dt)
     {
-        if (_probe != null || _menu?.Current is not (null or Menu.Screen.None)) return; // frozen scene / menus pause the game
+        if (_probe != null || InMenus) return; // frozen scene / menus pause the game
         var car = _drive.Car;
         (_prevPos, _prevRot) = (car.Position, car.Orientation);
         var input = autodrive != null || bench != null ? _drive.PilotInput(_simTime)
@@ -430,6 +453,12 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         var k = Input.Keyboard;
         var dt = time.DeltaTime;
         _menuTime += dt;
+        SyncMusic();
+        if (_front is { Active: true })
+        {
+            UpdateFrontEnd(dt);
+            return;
+        }
         if (_menu is { Current: not Menu.Screen.None })
         {
             UpdateMenu(dt);
@@ -438,7 +467,11 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         if (k.IsKeyPressed(Key.Escape) || Input.Gamepad.IsButtonPressed(GamepadButton.Start))
         {
             if (_menu == null) Window.ShouldClose = true;
-            else OpenMenu(Menu.Screen.Pause);
+            else
+            {
+                _menuAudio?.Play("alarm_02");
+                OpenMenu(Menu.Screen.Pause);
+            }
             return;
         }
         if (k.IsKeyPressed(Key.F4)) _hud.Visible = _settings.HudOn = !_hud.Visible;
@@ -453,8 +486,12 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             Console.WriteLine($"\n[Touge] Grafik: {(_renderer.HighQuality ? "hoch (4× MSAA, Bloom, Schatten)" : "niedrig (ohne MSAA/Bloom/Schatten)")}");
         }
         if (bench is { } benchSeconds && Bench(time, benchSeconds)) return;
-        if (_audio != null && k.IsKeyPressed(Key.M)) _audio.NextTrack();
-        if (_audio != null && k.IsKeyPressed(Key.F3)) _audio.MusicOn = _settings.MusicOn = !_audio.MusicOn;
+        if (_audio != null && k.IsKeyPressed(Key.M))
+        {
+            _settings.MusicOn = true;
+            _audio.NextTrack();
+        }
+        if (k.IsKeyPressed(Key.F3)) _settings.MusicOn = !_settings.MusicOn; // SyncMusic follows
         if (_drive.Car.SpeedKmh < 3) // car/paint change only at standstill
         {
             var id = Array.IndexOf(CarPaint.Cars, _carName);
@@ -480,11 +517,13 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         }
     }
 
-    private void OpenMenu(Menu.Screen screen)
+    /// <summary>Opens a menu screen; <paramref name="fromFrontEnd"/>: the course list starts at the saved choice and backing out returns to the main menu.</summary>
+    private void OpenMenu(Menu.Screen screen, bool fromFrontEnd = false)
     {
         var name = _catalog!.Courses.FirstOrDefault(c => _courseTime.StartsWith(c.Id + "_"));
         var time = _courseTime[(_courseTime.LastIndexOf('_') + 1)..];
-        _menu!.Open(screen, _courseTime, _drive.Reverse, _carName, _paint);
+        if (fromFrontEnd) _menu!.Open(screen, _settings.Course, _settings.Reverse, _carName, _paint, Menu.Screen.Title);
+        else _menu!.Open(screen, _courseTime, _drive.Reverse, _carName, _paint);
         _menu.Run = ($"{name?.Name} / {Catalog.TimeName(time)} / {(name == null ? "" : Catalog.DirectionName(name, _drive.Reverse))}",
             _catalog.Cars.First(c => c.Id == _carName).Name.ToUpperInvariant(),
             _hud.Timer.Phase == Ui.LapTimer.State.Ready ? null : _hud.Timer.Time, _hud.Timer.Best?[^1]);
@@ -495,7 +534,50 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     {
         _menu!.Close();
         (_inRace, _camSnap, _fly) = (true, true, false);
-        if (_audioDevice != null) _audioDevice.Sfx = 1;
+        if (_audioDevice != null) _audioDevice.Sfx = _settings.SoundVolume;
+    }
+
+    /// <summary>Front-end input; its results open the (own-style) menus behind the main menu or quit.</summary>
+    private void UpdateFrontEnd(float dt)
+    {
+        switch (_front!.Update(_frontKeys.Read(Input, dt), dt))
+        {
+            case FrontEnd.Result.Quit:
+                Window.ShouldClose = true;
+                break;
+            case FrontEnd.Result.TimeAttack:
+                OpenMenu(Menu.Screen.Course, fromFrontEnd: true);
+                break;
+            case FrontEnd.Result.Options:
+                OpenMenu(Menu.Screen.Settings, fromFrontEnd: true);
+                break;
+        }
+    }
+
+    /// <summary>
+    ///     Music for the current screen, switched only when it changes: front end per <see cref="FrontEnd.Music"/>, course
+    ///     select TOKYO.adx ("LIVE IN TOKYO", Time Attack in the original), car select WORRY.adx, settings keep what plays,
+    ///     loading silent, race and pause the race BGM; nothing with music off.
+    /// </summary>
+    private void SyncMusic()
+    {
+        if (_audio == null || _menuAudio == null) return;
+        var want = !_settings.MusicOn ? null
+            : _front is { Active: true } f ? f.Music
+            : _menu!.Current switch
+            {
+                Menu.Screen.Course => "TOKYO.adx", Menu.Screen.Car => "WORRY.adx", Menu.Screen.Loading or Menu.Screen.Title => null,
+                Menu.Screen.Settings => _music, _ => RaceMusic,
+            };
+        if (want == _music) return;
+        if (_music == RaceMusic) _audio.MusicOn = false;
+        _music = want;
+        if (want != RaceMusic) _menuAudio.Music(want);
+        else
+        {
+            _menuAudio.Music(null);
+            _audio.MusicOn = true;
+        }
     }
 
     /// <summary>Menu input and its actions; a course change shows the loading screen for one frame, then loads.</summary>
@@ -525,6 +607,10 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
                 break;
             case Menu.Action.SettingsChanged:
                 ApplySettings();
+                break;
+            case Menu.Action.None when menu.Current == Menu.Screen.Title: // backed out to the front end
+                menu.Close();
+                _front!.Open(FrontEnd.Step.Modes);
                 break;
             case Menu.Action.Start:
                 (_settings.Course, _settings.Reverse, _settings.Car, _settings.Paint) = (menu.CourseTime, menu.Reverse, menu.CarId, menu.Paint);
@@ -558,8 +644,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     {
         var s = _settings;
         _renderer.HighQuality = s.HighQuality;
-        if (_audio != null && _audio.MusicOn != s.MusicOn) _audio.MusicOn = s.MusicOn;
         if (_audioDevice != null) _audioDevice.Music = s.MusicVolume;
+        if (_menuAudio != null) _menuAudio.Volume = s.SoundVolume;
         (_hud.Visible, _hud.Mode, _bumperCam) = (s.HudOn, s.MapMode, s.BumperCam);
         if (_persist) s.Save();
     }
@@ -571,8 +657,9 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     /// </summary>
     private bool UpdateMenuCamera(float dt)
     {
-        if (_menu is not { Current: not Menu.Screen.None } menu) return false;
-        if (menu.Current == Menu.Screen.Car)
+        var front = _front is { Active: true };
+        if (!front && _menu is not { Current: not Menu.Screen.None }) return false;
+        if (!front && _menu!.Current == Menu.Screen.Car)
         {
             OrbitCar(0.6f + _menuTime * 0.35f);
             var fwd = Forward();
@@ -581,13 +668,13 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             (_camLook, _fov) = (_pos + fwd - Vector3.UnitY * 0.12f, MathF.PI / 4);
             return true;
         }
-        if (_inRace)
+        if (!front && _inRace)
         {
             if (!_fly) UpdateDriveCamera(0); // keeps the game's view (sets it up if the game opened paused)
             return true;
         }
         var road = _course.Road;
-        _flyS += dt * 16;
+        _flyS += dt * (front ? 7 : 16); // slower behind the title
         var i = (int)(_flyS / 2);
         if (i + 26 >= road.Length) (_flyS, i, _camSnap) = (0, 0, true);
         var f = _flyS / 2 - i;
@@ -899,7 +986,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _fxRenderer.DrawRain(pass, view * proj, _pos, _camVelocity, _simTime, 2 * MathF.Tan(_fov / 2) / heightPx);
         _renderer.EndScene(ctx.Encoder, pass, shot);
         var (w, h) = shot != null ? (shot.Width, shot.Height) : (Device.SwapchainWidth, Device.SwapchainHeight);
-        if (_menu is { Current: not Menu.Screen.None }) _menu.Build(_overlay, w, h, _menuTime);
+        if (_front is { Active: true }) _front.Build(_overlay, w, h);
+        else if (_menu is { Current: not Menu.Screen.None }) _menu.Build(_overlay, w, h);
         else if (_hud.Visible)
             _hud.Build(_overlay, w, h, _carPose.Translation, Vector3.TransformNormal(Vector3.UnitZ, _carPose), _drive.Car, _carName, _menuTime);
         else _overlay.Clear();
@@ -916,6 +1004,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     public override void Dispose()
     {
         _audio?.Dispose();
+        _menuAudio?.Dispose();
         _audioDevice?.Dispose();
         _course.World.Dispose();
         _course.Sky.Dispose();

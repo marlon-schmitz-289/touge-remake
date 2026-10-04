@@ -19,8 +19,9 @@ using Touge;
 // --car <NAME|index> (HCAR-Name wie AE86T, FD3S, R32, EVO3 … oder 0–31), --paint <n> (CAR_ENV-Farbe, 0 = Standard).
 // --cars <png>: Kontaktbogen aller 32 Autos (Orbit 35°, 4 × 8 Kacheln in CarPaint.Cars-Reihenfolge), dann Ende; mit --hud off.
 // --sun: freie Kamera am Startpunkt schaut zur Sonne (Blendung prüfen).
-// Ohne Kurs und ohne Test-Flags (außer --backend) startet das Spiel im Titelmenü mit den gespeicherten Einstellungen (Ui/Settings).
-// --menu title|course|car|pause|settings: dieses Menü beim Start öffnen (auch mit Test-Flags, z. B. --menu car --shot out/m.png).
+// Ohne Kurs und ohne Test-Flags (außer --backend) startet das Spiel im Front-End (Ui/FrontEnd: Hinweis, Karten, Titel, Hauptmenü) mit den gespeicherten Einstellungen (Ui/Settings).
+// --menu boot|logo|disclaimer|title|mode|course|car|pause|settings: diesen Schritt/dieses Menü beim Start öffnen (auch mit Test-Flags, z. B. --menu mode --shot out/m.png).
+// --frontend-capture <wav>: Front-End per Skript (Titel → Hauptmenü → Time Attack) offline mit Original-SE/BGM als WAV, Log aller Auslöser.
 // --shot-size WxH: Größe des --shot-Bildes (Standard 1280x720), z. B. 3200x1800 für die HUD-Skalierung.
 // --drift: Pilot reißt alle 7 s (ab 4,5 s) einen 2,5-s-Handbremsdrift (Reifenrauch/Bremsspuren testen), z. B. --autodrive 6.3 --drift --shot.
 var iso = args.FirstOrDefault(a => a.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
@@ -30,7 +31,7 @@ if (iso == null || !File.Exists(iso))
     Console.Error.WriteLine("usage: touge <Initial D Special Stage (SLPM-65268).iso> [KURS_ZEIT, z. B. AKINA_DAY]  (oder INITIALD_ISO setzen)");
     return 1;
 }
-string[] valueFlags = ["--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery"];
+string[] valueFlags = ["--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture"];
 string? Arg(string flag) { var i = Array.IndexOf(args, flag); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
 // --car: HCAR name (AE86T, FD3S, R32, EVO3, …) or index 0–31 in that list (Touge.Formats.CarPaint.Cars)
 var carArg = Arg("--car") ?? "AE86T";
@@ -55,6 +56,11 @@ var course = args.Where((a, i) => i == 0 || !valueFlags.Contains(args[i - 1]))
                  .FirstOrDefault(a => a.Contains('_') && !a.EndsWith(".iso", StringComparison.OrdinalIgnoreCase)) ?? "AKINA_DAY";
 float? autodrive = Arg("--autodrive") is { } ad ? float.Parse(ad, CultureInfo.InvariantCulture) : null;
 float? bench = Arg("--bench") is { } b ? float.Parse(b, CultureInfo.InvariantCulture) : null;
+if (Arg("--frontend-capture") is { } frontWav)
+{
+    using var isoFile = new Touge.Formats.Iso9660(iso);
+    return AudioCapture.FrontEnd(isoFile, frontWav) ? 0 : 2;
+}
 if (Arg("--audio-capture") is { } wav)
 {
     var capIndex = Array.IndexOf(args, "--audio-capture");

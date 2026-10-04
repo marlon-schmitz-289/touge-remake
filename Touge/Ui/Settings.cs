@@ -11,6 +11,8 @@ public sealed class Settings
     public bool HighQuality { get; set; } = true;
     public bool MusicOn { get; set; } = true;
     public float MusicVolume { get; set; } = 0.8f;
+    /// <summary>Menu and game sound effects 0..1.</summary>
+    public float SoundVolume { get; set; } = 1;
     public bool HudOn { get; set; } = true;
     public Hud.MapMode MapMode { get; set; }
     public bool BumperCam { get; set; }

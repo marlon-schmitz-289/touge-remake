@@ -5,9 +5,10 @@ using Kansei.Input;
 namespace Touge.Ui;
 
 /// <summary>
-///     Menu screens over the running 3D scene: title (course fly-over behind), course select (list, time of day ×
+///     Menu screens over the running 3D scene: course select (list, time of day ×
 ///     direction, line preview, length/climb/best), car select (list, specs, paint swatches; the game shows the car
-///     turning behind), pause (Esc) and settings. Arrows/Enter/Esc or D-pad/A/B (stick, Start too). The game reacts to the
+///     turning behind), pause (Esc) and settings. <see cref="Screen.Title"/> stands for the front end (<see cref="FrontEnd"/>):
+///     backing out to it leaves the menu there and the game hands over. UI sounds by name through <see cref="Sound"/>. Arrows/Enter/Esc or D-pad/A/B (stick, Start too). The game reacts to the
 ///     returned <see cref="Action"/> and reads the selection (<see cref="CourseTime"/>, <see cref="Reverse"/>, <see cref="CarId"/>, <see cref="Paint"/>).
 /// </summary>
 public sealed class Menu(Catalog catalog, Settings settings)
@@ -15,15 +16,16 @@ public sealed class Menu(Catalog catalog, Settings settings)
     public enum Screen { None, Title, Course, Car, Pause, Settings, Loading }
     public enum Action { None, Start, Resume, Restart, Quit, PreviewCar, SettingsChanged }
 
-    private static readonly string[] TitleRows = ["START", "SETTINGS", "QUIT"],
-        PauseRows = ["RESUME", "RESTART", "CHANGE COURSE", "CHANGE CAR", "SETTINGS", "QUIT"],
-        SettingRows = ["GRAPHICS", "MUSIC", "MUSIC VOLUME", "HUD", "MINIMAP", "CAMERA", "BACK"];
+    private static readonly string[] PauseRows = ["RESUME", "RESTART", "CHANGE COURSE", "CHANGE CAR", "SETTINGS", "QUIT"],
+        SettingRows = ["GRAPHICS", "MUSIC", "MUSIC VOLUME", "SOUND VOLUME", "HUD", "MINIMAP", "CAMERA", "BACK"];
 
     public Screen Current { get; private set; }
     private Screen _settingsFrom, _courseFrom, _carFrom;
     private int _row, _course, _variant, _car, _paint;
     private float _t; // seconds since the screen opened (entrance animation)
     private readonly MenuKeys _keys = new();
+    /// <summary>Original UI sound by SYSSE name: SYS005 cursor, SYS006 decide, BEEP001 back.</summary>
+    public Action<string>? Sound { get; set; }
 
     /// <summary>Layout grid (units): left text column, top of lists and detail panels, list row height.</summary>
     private const float ColX = 24, ContentTop = 120, RowH = 50;
@@ -39,14 +41,18 @@ public sealed class Menu(Catalog catalog, Settings settings)
 
     private static List<(string Time, bool Reverse)> Variants(Catalog.Course c) => [.. c.Times.SelectMany(t => new[] { (t, false), (t, true) })];
 
-    /// <summary>Opens <paramref name="s"/>; the course/car lists start at the current game's course, direction, car and paint.</summary>
-    public void Open(Screen s, string courseTime, bool reverse, string car, int paint)
+    /// <summary>
+    ///     Opens <paramref name="s"/>; the course/car lists start at the current game's course, direction, car and paint.
+    ///     Backing out of it returns to <paramref name="from"/> (<see cref="Screen.Title"/> = the front end).
+    /// </summary>
+    public void Open(Screen s, string courseTime, bool reverse, string car, int paint, Screen from = Screen.None)
     {
         var id = courseTime[..courseTime.LastIndexOf('_')];
         _course = Math.Max(0, catalog.Courses.ToList().FindIndex(c => c.Id == id));
         _variant = Math.Max(0, Variants(SelectedCourse).IndexOf((courseTime[(courseTime.LastIndexOf('_') + 1)..], reverse)));
         _car = Math.Max(0, catalog.Cars.ToList().FindIndex(c => c.Id == car));
         _paint = paint;
+        Current = from;
         Go(s);
     }
 
@@ -68,17 +74,11 @@ public sealed class Menu(Catalog catalog, Settings settings)
     public Action Update(InputSnapshot input, float dt)
     {
         _t += dt;
-        if (Current is Screen.None or Screen.Loading) return Action.None;
+        if (Current is Screen.None or Screen.Loading or Screen.Title) return Action.None;
         var k = _keys.Read(input, dt);
+        if (Sound != null && (k.Back ? "BEEP001" : k.Ok ? "SYS006" : k.Y != 0 || (k.X != 0 && Current != Screen.Pause) ? "SYS005" : null) is { } se) Sound(se);
         switch (Current)
         {
-            case Screen.Title:
-                _row = Wrap(_row + k.Y, TitleRows.Length);
-                if (!k.Ok) return Action.None;
-                if (_row == 0) Go(Screen.Course);
-                else if (_row == 1) Go(Screen.Settings);
-                else return Action.Quit;
-                return Action.None;
             case Screen.Pause:
                 _row = Wrap(_row + k.Y, PauseRows.Length);
                 if (k.Back) return Action.Resume;
@@ -121,9 +121,10 @@ public sealed class Menu(Catalog catalog, Settings settings)
                     case 0: settings.HighQuality = !settings.HighQuality; break;
                     case 1: settings.MusicOn = !settings.MusicOn; break;
                     case 2: settings.MusicVolume = Math.Clamp(MathF.Round(settings.MusicVolume * 10 + step) / 10, 0, 1); break;
-                    case 3: settings.HudOn = !settings.HudOn; break;
-                    case 4: settings.MapMode = (Hud.MapMode)Wrap((int)settings.MapMode + step, 3); break;
-                    case 5: settings.BumperCam = !settings.BumperCam; break;
+                    case 3: settings.SoundVolume = Math.Clamp(MathF.Round(settings.SoundVolume * 10 + step) / 10, 0, 1); break;
+                    case 4: settings.HudOn = !settings.HudOn; break;
+                    case 5: settings.MapMode = (Hud.MapMode)Wrap((int)settings.MapMode + step, 3); break;
+                    case 6: settings.BumperCam = !settings.BumperCam; break;
                 }
                 return Action.SettingsChanged;
         }
@@ -134,10 +135,10 @@ public sealed class Menu(Catalog catalog, Settings settings)
 
     // ---------------------------------------------------------------- drawing
 
-    public void Build(Overlay o, int width, int height, float time)
+    public void Build(Overlay o, int width, int height)
     {
         o.Clear();
-        if (Current == Screen.None) return;
+        if (Current is Screen.None or Screen.Title) return;
         var g = Style.Safe(width, height);
         var u = g.U;
         if (Current == Screen.Loading)
@@ -153,7 +154,6 @@ public sealed class Menu(Catalog catalog, Settings settings)
         if (Current is Screen.Pause or Screen.Settings) o.Rect(Vector2.Zero, new Vector2(width, height), Overlay.Rgba(0, 0, 0, 0.35f));
         switch (Current)
         {
-            case Screen.Title: Title(o, g, height, time); break;
             case Screen.Course: CourseScreen(o, g); break;
             case Screen.Car: CarScreen(o, g); break;
             case Screen.Pause: PauseScreen(o, g); break;
@@ -202,19 +202,6 @@ public sealed class Menu(Catalog catalog, Settings settings)
             else Style.Label(o, rows[i], new Vector2(x, baseY), size * u, Style.Fade(Style.Dim, a), 0, Style.Slant);
         }
         return y0 + rows.Count * rowH * u;
-    }
-
-    private void Title(Overlay o, Style.Grid g, int height, float time)
-    {
-        var u = g.U;
-        var a = In(0);
-        var x = g.Left + (ColX - 6) * u - (1 - a) * 60 * u; // italic overhang: the wordmark's stems line up with the list
-        var y = height * 0.44f;
-        Style.Label(o, "TOUGE", new Vector2(x, y), 210 * u, Style.Fade(Style.Text, a), 0, 0.2f, 1.2f * u);
-        o.Rect(Vector2.Round(new Vector2(x, y + 18 * u)), Vector2.Round(new Vector2(x + 462 * u, y + 24 * u)), Style.Fade(Style.Amber, a));
-        Style.Label(o, "SPECIAL STAGE REMAKE", new Vector2(x, y + 58 * u), 24 * u, Style.Fade(Style.Amber, a), 0, Style.Slant, 0.3f * u);
-        List(o, TitleRows, _row, g, y + 110 * u, 300);
-        Footer(o, g, ("UP/DN", "SELECT"), ("ENTER", "OK"));
     }
 
     private void CourseScreen(Overlay o, Style.Grid g)
@@ -365,7 +352,7 @@ public sealed class Menu(Catalog catalog, Settings settings)
         List(o, SettingRows, _row, g, top, 620);
         string[] values =
         [
-            settings.HighQuality ? "HIGH" : "LOW", settings.MusicOn ? "ON" : "OFF", "", settings.HudOn ? "ON" : "OFF",
+            settings.HighQuality ? "HIGH" : "LOW", settings.MusicOn ? "ON" : "OFF", "", "", settings.HudOn ? "ON" : "OFF",
             settings.MapMode switch { Hud.MapMode.NorthUp => "NORTH UP", Hud.MapMode.Overview => "WHOLE COURSE", _ => "ROTATING" },
             settings.BumperCam ? "BUMPER" : "CHASE", "",
         ];
@@ -376,12 +363,12 @@ public sealed class Menu(Catalog catalog, Settings settings)
             var sel = i == _row;
             var col = Style.Fade(sel ? Style.Ink : Style.Text, a);
             var right = g.Left + (ColX + 540) * u - (1 - a) * 40 * u;
-            if (i == 2)
+            if (i is 2 or 3)
             {
                 // volume: 10 slanted segments
                 for (var s = 0; s < 10; s++)
                 {
-                    var on = s < MathF.Round(settings.MusicVolume * 10);
+                    var on = s < MathF.Round((i == 2 ? settings.MusicVolume : settings.SoundVolume) * 10);
                     var sx = right - 200 * u + s * 20 * u;
                     Style.Slanted(o, new Vector2(sx, y - 10 * u), new Vector2(sx + 15 * u, y + 10 * u),
                         Style.Fade(on ? sel ? Style.Ink : Style.Amber : sel ? Overlay.Rgba(0, 0, 0, 0.25f) : Style.Faint, a), 0.3f);
@@ -403,37 +390,37 @@ public sealed class Menu(Catalog catalog, Settings settings)
         }
         Footer(o, g, ("UP/DN", "SELECT"), ("< >", "CHANGE"), ("ESC", "BACK"));
     }
+}
 
-    /// <summary>Menu navigation from keyboard (arrows with key repeat, Enter/Space, Esc/Backspace) and pad (D-pad, stick edges, A/Start, B).</summary>
-    private sealed class MenuKeys
+/// <summary>Menu navigation from keyboard (arrows with key repeat, Enter/Space, Esc/Backspace) and pad (D-pad, stick edges, A/Start, B).</summary>
+internal sealed class MenuKeys
+{
+    private Vector2 _stick;
+
+    public (int X, int Y, bool Ok, bool Back) Read(InputSnapshot input, float dt)
     {
-        private Vector2 _stick;
-
-        public (int X, int Y, bool Ok, bool Back) Read(InputSnapshot input, float dt)
+        var k = input.Keyboard;
+        var pad = input.Gamepad;
+        int x = 0, y = 0;
+        if (k.IsKeyRepeating(Key.Up, dt) || k.IsKeyRepeating(Key.W, dt)) y--;
+        if (k.IsKeyRepeating(Key.Down, dt) || k.IsKeyRepeating(Key.S, dt)) y++;
+        if (k.IsKeyRepeating(Key.Left, dt) || k.IsKeyRepeating(Key.A, dt)) x--;
+        if (k.IsKeyRepeating(Key.Right, dt) || k.IsKeyRepeating(Key.D, dt)) x++;
+        var ok = k.IsKeyPressed(Key.Enter) || k.IsKeyPressed(Key.Space);
+        var back = k.IsKeyPressed(Key.Escape) || k.IsKeyPressed(Key.Backspace);
+        if (pad.IsConnected)
         {
-            var k = input.Keyboard;
-            var pad = input.Gamepad;
-            int x = 0, y = 0;
-            if (k.IsKeyRepeating(Key.Up, dt) || k.IsKeyRepeating(Key.W, dt)) y--;
-            if (k.IsKeyRepeating(Key.Down, dt) || k.IsKeyRepeating(Key.S, dt)) y++;
-            if (k.IsKeyRepeating(Key.Left, dt) || k.IsKeyRepeating(Key.A, dt)) x--;
-            if (k.IsKeyRepeating(Key.Right, dt) || k.IsKeyRepeating(Key.D, dt)) x++;
-            var ok = k.IsKeyPressed(Key.Enter) || k.IsKeyPressed(Key.Space);
-            var back = k.IsKeyPressed(Key.Escape) || k.IsKeyPressed(Key.Backspace);
-            if (pad.IsConnected)
-            {
-                if (pad.IsButtonPressed(GamepadButton.DpadUp)) y--;
-                if (pad.IsButtonPressed(GamepadButton.DpadDown)) y++;
-                if (pad.IsButtonPressed(GamepadButton.DpadLeft)) x--;
-                if (pad.IsButtonPressed(GamepadButton.DpadRight)) x++;
-                var s = new Vector2(pad.GetAxis(GamepadAxis.LeftX), pad.GetAxis(GamepadAxis.LeftY));
-                if (MathF.Abs(s.Y) > 0.6f && MathF.Abs(_stick.Y) <= 0.6f) y += MathF.Sign(s.Y);
-                if (MathF.Abs(s.X) > 0.6f && MathF.Abs(_stick.X) <= 0.6f) x += MathF.Sign(s.X);
-                _stick = s;
-                ok |= pad.IsButtonPressed(GamepadButton.A) || pad.IsButtonPressed(GamepadButton.Start);
-                back |= pad.IsButtonPressed(GamepadButton.B);
-            }
-            return (Math.Sign(x), Math.Sign(y), ok, back);
+            if (pad.IsButtonPressed(GamepadButton.DpadUp)) y--;
+            if (pad.IsButtonPressed(GamepadButton.DpadDown)) y++;
+            if (pad.IsButtonPressed(GamepadButton.DpadLeft)) x--;
+            if (pad.IsButtonPressed(GamepadButton.DpadRight)) x++;
+            var s = new Vector2(pad.GetAxis(GamepadAxis.LeftX), pad.GetAxis(GamepadAxis.LeftY));
+            if (MathF.Abs(s.Y) > 0.6f && MathF.Abs(_stick.Y) <= 0.6f) y += MathF.Sign(s.Y);
+            if (MathF.Abs(s.X) > 0.6f && MathF.Abs(_stick.X) <= 0.6f) x += MathF.Sign(s.X);
+            _stick = s;
+            ok |= pad.IsButtonPressed(GamepadButton.A) || pad.IsButtonPressed(GamepadButton.Start);
+            back |= pad.IsButtonPressed(GamepadButton.B);
         }
+        return (Math.Sign(x), Math.Sign(y), ok, back);
     }
 }
