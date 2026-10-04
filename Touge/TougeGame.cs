@@ -1,4 +1,5 @@
 using System.Numerics;
+using Kansei.Audio;
 using Kansei.Core;
 using Kansei.Graphics;
 using Kansei.Input;
@@ -17,11 +18,15 @@ namespace Touge;
 ///     <paramref name="bench"/> lets it drive in real time with the chase camera for that many seconds, then logs frame times and quits;
 ///     <paramref name="drift"/> makes the pilot throw in a scripted handbrake drift every 7 s (<see cref="Drive.ForceDrift"/>).
 ///     Tyre smoke, skid marks and sparks come from the car's wheel/wall state every tick (<see cref="TickEffects"/>).
+///     Sound: engine, tyres, walls, wind, race BGM (M next track, F3 music on/off); none for --shot.
 /// </summary>
 public sealed class TougeGame(string isoPath, string courseTime, string? shotPath = null, int startPoint = 0, float? orbit = null, float? autodrive = null,
     float? bench = null, bool highQuality = true, bool drift = false)
     : KanseiGame
 {
+    private AudioDevice? _audioDevice;
+    private GameAudio? _audio;
+
     private CarRenderer _carRenderer = null!;
     private EffectsRenderer _fxRenderer = null!;
     private readonly Effects _fx = new();
@@ -93,6 +98,12 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             OrbitCar(deg * MathF.PI / 180);
         }
         if (shotPath != null) (_capture, _shotState) = (new FrameCapture(Device, 1280, 720), 1);
+        else
+        {
+            _audioDevice = new AudioDevice();
+            _audio = new GameAudio(iso, courseTime, _audioDevice);
+            _audio.PlayTrack(background: true);
+        }
     }
 
     private void SyncPose() => (_prevPos, _prevRot, _camSnap) = (_drive.Car.Position, _drive.Car.Orientation, true);
@@ -109,6 +120,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         car.Step(input, _drive.Ground, dt);
         _simTime += dt;
         TickEffects(dt);
+        _audio?.Update(car, input.Throttle, input.Handbrake, dt);
     }
 
     /// <summary>
@@ -195,6 +207,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             Console.WriteLine($"\n[Touge] Grafik: {(_renderer.HighQuality ? "hoch (4× MSAA, Bloom, Schatten)" : "niedrig (ohne MSAA/Bloom/Schatten)")}");
         }
         if (bench is { } benchSeconds && Bench(time, benchSeconds)) return;
+        if (_audio != null && k.IsKeyPressed(Key.M)) _audio.NextTrack();
+        if (_audio != null && k.IsKeyPressed(Key.F3)) _audio.MusicOn = !_audio.MusicOn;
         if (k.IsKeyPressed(Key.F1))
         {
             _fly = !_fly;
@@ -424,6 +438,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
 
     public override void Dispose()
     {
+        _audio?.Dispose();
+        _audioDevice?.Dispose();
         _course.World.Dispose();
         _course.Sky.Dispose();
         _car.Dispose();

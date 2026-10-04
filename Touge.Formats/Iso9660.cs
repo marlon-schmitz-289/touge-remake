@@ -29,6 +29,14 @@ public sealed class Iso9660 : IDisposable
         return ReadSectors(lba, size);
     }
 
+    /// <summary>AFS inside the image, entries read on demand (no full copy of e.g. the 355 MB RACEBGM.AFS); names from the sibling .TBL.</summary>
+    public Afs OpenAfs(string path)
+    {
+        var (lba, _) = Find(path) ?? throw new FileNotFoundException(path);
+        var tbl = Path.ChangeExtension(path, ".TBL");
+        return Afs.Open(_fs.Name, (long)lba * Sector, Exists(tbl) ? ReadFile(tbl) : null);
+    }
+
     private (int Lba, int Size)? Find(string path)
     {
         var cur = _root;
