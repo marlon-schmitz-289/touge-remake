@@ -89,14 +89,14 @@ public sealed class GameAudio : IDisposable
 
     /// <summary>
     ///     <paramref name="other"/>: another car's sound (a rival): engine, tyres and walls only — no rain, wind, road
-    ///     noise or music of its own; heard through <see cref="Spatial"/>.
+    ///     noise or music of its own; heard through <see cref="Spatial"/>. <paramref name="rain"/>: wet tyres and rain on a dry course.
     /// </summary>
-    public GameAudio(Iso9660 iso, string courseTime, AudioDevice dev, string car = "AE86T", bool other = false)
+    public GameAudio(Iso9660 iso, string courseTime, AudioDevice dev, string car = "AE86T", bool other = false, bool rain = false)
     {
         (_dev, _other) = (dev, other);
         var carse = _carse = iso.OpenAfs("CDVD/DATA/SOUND/CARSE.AFS");
         SetCar(car);
-        var wet = courseTime.EndsWith("_RIN");
+        var wet = rain || courseTime.EndsWith("_RIN"); // rain: a night course made wet (story)
         var srip = Bank(carse, "SRIP_A");
         var rainSrip = Bank(carse, "RAIN_SRIP");
         (_squeal, _squealHigh, _skid) = wet ? (Loop(rainSrip[0]), Loop(rainSrip[1]), srip[3]) : (Loop(srip[0]), Loop(srip[1]), srip[3]);

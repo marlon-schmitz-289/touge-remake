@@ -53,6 +53,9 @@ dotnet run --project Touge -- "<iso>" AKINA_DAY --menu controls:keyboard|pad|gam
 dotnet run --project Touge -- "<iso>" AKINA_NIT --battle keisuke [--rule race|chase] [--lead player|rival] [--car AE86T]   # Schnellbattle gegen die KI: Telop „VS …“, 3-2-1-GO, Battle, YOU WIN/LOSE, Ergebnis
 dotnet run --project Touge -- "<iso>" IROHA_DAY --battle takumi --autodrive 420   # ohne Fenster: Autopilot (Spielerauto) gegen die KI, Log je Sekunde (Abstand s/m, Führung, KI-Modus, Kontakte) + Ergebnis
 dotnet run --project Touge -- "<iso>" IROHA_DAY --battle itsuki --autodrive 110 --shot out/proof/b.png [--battle-result]   # Bild nach dem Battle: Zielbanner bzw. Ergebnisblatt
+dotnet run --project Touge -- "<iso>" --menu story[:n[:scene[:teil[:zeile]]|:race|:end]] [--progress 12] --shot out/proof/s.png   # STORY: Kapitelwahl, Szene, Rennstart von Kapitel n oder THE END (--progress: Kapitel 0…n−1 geschafft, nur Testlauf; mit gespeichertem Fortschritt ignoriert)
+dotnet run --project Touge -- "<iso>" --flow out/proof/story --story --progress 5   # STORY-Ablauf im Fenster: Wahl → Szene → Battle (Pilot) → Ergebnis → Szene danach; verlorenes Kapitel mit RETRY
+dotnet run --project Touge -- "<iso>" --story-check [n|calibrate]   # ohne Fenster: Kapiteltabelle + Szenen der Disc gegen die Übersetzung, dann jedes Kapitel mit dem Autopiloten (Durchlauf-Log); calibrate = Rivalenstärke/Zeitgrenzen messen
 ```
 
 Battle (`Touge/Race`, Grundlage für Legend of the Streets, Story und Multiplayer): `RaceSession` mit N Autos, jedes mit einem Fahrer
@@ -80,7 +83,7 @@ Menüs: Ohne Kurs/Test-Flags startet das Spiel im Front-End im Stil des Original
 Original-Menütexturen; Ablauf/Zeiten/Bewegung aus dem Originalcode, siehe FORMATS.md): Hinweis zu den Speicherdaten → Karte „Based on …“ →
 Hinweis „Fiktion“ → Titel (Akina bei Nacht im Hintergrund abgeflogen, Logo, blinkendes PRESS START BUTTON; nach 10 s ohne Eingabe zurück zu
 den Karten) → Hauptmenü (Trommel mit den 7 Modi des Originals, Chromplatten, pulsierender gelber Rahmen; nach 30 s ohne Eingabe zurück zum
-Titel). Gebaut sind davon LEGEND OF THE STREETS, TIME ATTACK, REPLAY & RECORD (→ Rekorde), IKETANI'S CAR GUIDE und OPTIONS; die anderen Modi piepen (BEEP001) wie gesperrte Einträge
+Titel). Gebaut sind davon LEGEND OF THE STREETS, TIME ATTACK, STORY, REPLAY & RECORD (→ Rekorde), IKETANI'S CAR GUIDE und OPTIONS; die anderen Modi piepen (BEEP001) wie gesperrte Einträge
 im Original. Als letzter Eintrag QUIT GAME (nur Windows/Linux/macOS): Abfrage „QUIT THE GAME?“ YES/NO (NO vorgewählt, ←/→ wählen,
 Enter/A entscheiden, Esc/B = NO), YES speichert die Einstellungen und schließt das Fenster. Esc im Hauptmenü zurück zum Titel, im Titel beenden. Danach alle Bildschirme ebenfalls im Originalstil (`Ui/Menu` + `Ui/Canvas`:
 graue Logo-Kachelwand, roter/blauer Laufschrift-Kopf, Chromplatten, Karbonpaneele, gelber Pulsrahmen, Verlaufswörter rot/blau, alles Englisch):
@@ -126,6 +129,22 @@ Nach einem Battle steht der Cursor auf dem nächsten Rivalen, Neues (Rivalen, Ku
 `legend.json` neben `settings.json` (Siege, Niederlagen, bester Abstand je Rivale; `Race/Legend.Progress`). Pause-Exit und Zurück aus der
 Autowahl führen zur Leiter, EXIT ins Hauptmenü.
 Navigation Pfeile/WASD, Enter, Esc bzw. D-Pad/Stick, A, B.
+STORY (`Touge/Story`, wie der Story-Modus des Originals, Daten zur Laufzeit aus der ISO, FORMATS.md „Story“): 31 Kapitel in drei Teilen
+(THE LEGEND OF AKINA 1–19, THE TAKAHASHI BROTHERS 20–24, PROJECT D 25–31) vom „Geist von Akina“ bis zu Bunta im Impreza. Kapitelwahl (BGM WORRY
+wie im Original): Teile als Chromplatten (←/→), Kapitelliste (↑/↓, geschafft = CLEAR, gesperrte grau), Infotafel mit Titel, kurzer Inhalt, Kurs/Richtung/
+Nacht, Fahrer und Auto (Takumi im AE86, in einigen Kapiteln Keisuke im FD, Ryosuke im FC, Takumi im 180SX), Rivale mit Team und Auto, Ziel. Kurs, Richtung,
+Autos und Ziel liest das Spiel aus der Kapiteltabelle im ELF. Ablauf: Laden → Szene vor dem Rennen → Telop „VS …“, Countdown → Battle (bzw. Lauf
+allein) → eigenes Banner (YOU WIN/LOSE bzw. CLEAR!!/TIME UP/FAILED mit WIN/LOSE/TIMEUP.adx) → Ergebnis (Battle-Blatt + Story-Tafel) →
+gewonnen: CONTINUE → Szene danach → nächstes Kapitel frei und gewählt; verloren: RETRY / CHAPTER SELECT. Nach dem letzten Kapitel „THE END“ mit
+THERACEISOVER. Szenen: Textpanels im Stil der Menüs über dem Flug entlang der Straße, Sprecherplatte mit Teamfarbe, Schreibmaschinentext
+(Gedanken hellblau kursiv), Titelkarte; Entscheiden = weiter (erst Zeile fertig), → = Szene überspringen; Zurück: vor dem Rennen zur Kapitelwahl, danach Szene überspringen. Text: die Zeilen der Original-Szenen
+(`MG_OBJ` `STRnn.BIN`, 585 Äußerungen) in eigener englischer Übersetzung, Zeile für Zeile in Reihenfolge und Teilen des Originals (Kapitel 1/2 ohne Szene auf
+der Disc: eigener kurzer Text). Musik der Szenen aus ST_BGM_N (STORY_STnn). Ziele (Code aus dem ELF): Rennen; vorne bleiben bis ins Ziel; hinterher
+und überholen (auch: in 120 s); 100 s dranbleiben; allein mit Zeitgrenze, Tofu bergauf mit höchstens 3 Wandtreffern, Mitfahrer mit 10.000 Driftpunkten –
+im Rennen oben rechts eine Tafel mit Restzeit/Wandtreffern/Drift. Rivalenstärke je Kapitel aus einer Kalibrierung gegen den Autopiloten, am Anfang
+mit Spielraum. Pause → Exit führt zur Kapitelwahl zurück. Regen bei Nacht (Kapitel 11, MYOGI) gibt es auf der Disc nicht: der Nachtkurs bekommt
+Regen (Tropfen, nasse Spiegelungen, Gischt, Regen-Sound, Telop WET); die Haftung ist wie auf den _RIN-Kursen unverändert. Fortschritt in `progress.json` neben den Einstellungen (Schlüssel `story/nn`, Zähler
+`…/tries`, `…/wins`; die Datei ist für alle Modi mit Karriere gedacht, z. B. Legend of the Streets); Story-Läufe zählen nicht als Time-Attack-Rekord.
 Einstellungen, letzte Wahl und Bestzeiten liegen als JSON im App-Data-Ordner (macOS `~/Library/Application Support/InitialDRemake/settings.json`,
 Windows `%APPDATA%\InitialDRemake`), nicht im Repo; Starts mit Kurs oder Test-Flags lesen/schreiben sie nicht (Fenster dort immer 1600×900).
 Die Datei hat eine `Version` (derzeit 2); ältere werden beim Laden umgestellt (v1: `HighQuality` → die fünf Grafikschalter, SE-Lautstärke auch

@@ -3,9 +3,13 @@ using Touge.Ui;
 
 namespace Touge.Race;
 
-/// <summary>A quick battle as chosen on the command line (--battle &lt;rival&gt; [--rule race|chase] [--lead player|rival]).</summary>
+/// <summary>A quick battle as chosen on the command line (--battle &lt;rival&gt; [--rule race|chase] [--lead player|rival]) or a story chapter.</summary>
 /// <param name="Leader">Lead/chase: who leads off, 0 the player, 1 the rival.</param>
-public sealed record BattleSetup(Rivals.Rival Rival, BattleRule Rule, int Leader = 1);
+/// <param name="Terms">Other limits than the rule's defaults (story chapters).</param>
+public sealed record BattleSetup(Rivals.Rival Rival, BattleRule Rule, int Leader = 1, BattleTerms? Terms = null);
+
+/// <summary>Limits of a <see cref="Battle"/> other than its rule's defaults (null = the default).</summary>
+public sealed record BattleTerms(float? Breakaway = null, float? DrawGap = null, float TimeLimit = 0, int TimeLimitWinner = 1);
 
 /// <summary>Builds a player-vs-rival <see cref="RaceSession"/> on a <see cref="Drive"/>, and runs one headless for --battle --autodrive.</summary>
 public static class BattleRun
@@ -19,7 +23,12 @@ public static class BattleRun
     /// </summary>
     public static RaceSession Create(Drive drive, BattleSetup setup, ICarDriver player, string playerName = "YOU")
     {
-        var battle = new Battle(setup.Rule, drive.Pilot.Length - LapTimer.Gate, setup.Leader);
+        var t = setup.Terms ?? new BattleTerms();
+        var battle = new Battle(setup.Rule, drive.Pilot.Length - LapTimer.Gate, setup.Leader)
+        {
+            Breakaway = t.Breakaway ?? Battle.DefaultBreakaway(setup.Rule), DrawGap = t.DrawGap ?? Battle.DefaultDrawGap,
+            TimeLimit = t.TimeLimit, TimeLimitWinner = t.TimeLimitWinner,
+        };
         var race = new RaceSession(drive.Ground, drive.Line, drive.RunOutLine, battle);
         race.Add(playerName, drive.Car, player);
         var rival = new Vehicle(setup.Rival.Spec) { SurfaceGrip = drive.Car.SurfaceGrip };

@@ -17,7 +17,7 @@ namespace Touge;
 /// </summary>
 public sealed partial class TougeGame
 {
-    /// <summary>--battle: rival and rules of a quick battle (Legend of the Streets sets it per battle); null = time attack.</summary>
+    /// <summary>--battle: rival and rules of a quick battle (Legend of the Streets sets it per battle, a story chapter when it loads); null = time attack.</summary>
     public BattleSetup? Battle { get; set; }
 
     /// <summary>--battle-result: with --shot, a decided battle shows the result sheet instead of the finish banner.</summary>
@@ -61,7 +61,7 @@ public sealed partial class TougeGame
     private void StartRivalAudio(Iso9660 iso)
     {
         _rivalAudio?.Dispose();
-        _rivalAudio = Battle != null ? new GameAudio(iso, _courseTime, _audioDevice!, Battle.Rival.Car, other: true) : null;
+        _rivalAudio = Battle != null ? new GameAudio(iso, _courseTime, _audioDevice!, Battle.Rival.Car, other: true, rain: _storyRain) : null;
     }
 
     /// <summary>

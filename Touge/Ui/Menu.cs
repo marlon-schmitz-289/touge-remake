@@ -114,6 +114,8 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
 
     /// <summary>Legend result: the mode's own tracks from MG_BGM.AFS (R_WIN01 / R_LOSE), a draw keeps JOY.</summary>
     private string LegendResultMusic => Battle?.Outcome switch { Race.BattleOutcome.Win => "R_WIN01.adx", Race.BattleOutcome.Lose => "R_LOSE.adx", _ => "JOY.adx" };
+    /// <summary>Rain over a dry course (a story chapter): the telop says WET.</summary>
+    public bool Rain { get; set; }
 
     /// <summary>Opens <paramref name="s"/> with the selection at the given course/direction/car/paint; backing out of it leaves to the main menu.</summary>
     public void Open(Screen s, string courseTime, bool reverse, string car, int paint, bool manual = false, bool fog = false)
@@ -720,7 +722,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
         c.O.Rect(Vector2.Round(c.P(x0, 214)), Vector2.Round(c.P(c.Right, 216)), Overlay.Rgba(0.8f, 0.07f, 0.06f));
         var shift = (1 - wipe) * 400;
         c.Lettering(course.Name, 490 + shift, 200, MathF.Min(46, 330 * c.Kx / c.O.Font!.Measure(course.Name, c.Ky)), Overlay.Rgba(0.35f, 0.45f, 1), Canvas.BrushBlue, 1, 0.12f, true);
-        var tags = $"{(_night ? "NIGHT" : "DAY")}    [{Catalog.DirectionName(course, _reverse)}]    [{(_wet ? "WET" : "DRY")}]";
+        var tags = $"{(_night ? "NIGHT" : "DAY")}    [{Catalog.DirectionName(course, _reverse)}]    [{(_wet || Rain ? "WET" : "DRY")}]";
         c.Text(tags, 490 + shift, 234, 13, Canvas.White, 1, 0.12f, 0.08f);
         if (Versus != null) c.Text($"VS  {Versus}", 490 + shift, 258, 17, Canvas.WordRed, 1, 0.15f, 0.08f, 0.3f);
     }
