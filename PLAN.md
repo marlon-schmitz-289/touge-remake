@@ -130,7 +130,9 @@ Jede Phase endet mit etwas Sichtbarem/Fahrbarem.
   Drücken zum Belegen, Kalibrieren, Live-Panel, FFB-Test), `--input-debug`. Physik: `VehicleInput.Clutch`/`DirectSteer`, Shift um mehrere Gänge.
   Tests `ControlsTests` (simuliertes G29), `WheelInputTests`. Belege `out/proof/input_controls_{keyboard,pad,wheel}.png`, `input_options.png`,
   `input_debug_race.png`. Offen: mit echtem Lenkrad prüfen (Achsenreihenfolge der Standardbelegung je OS, FFB-Vorzeichen und -Stärke,
-  Haptic unter macOS), Spring/Damper-Effekte im Stand fehlen (nur Constant-Force), Belegung der festen Tasten (F1–F4, M, N, B, T, 1–3) nicht änderbar.
+  Haptic unter macOS), Spring/Damper-Effekte im Stand fehlen (nur Constant-Force), Belegung der festen Tasten (F1–F4, M, N, B, T, 1–3) nicht änderbar (beim Belegen abgelehnt). Review-Fixes: FFB nur ans aktive
+  Lenkrad, Lenkrad übernimmt erst ab 10 % Drehung, Pad-Stick ab Totzone, Curb-Rumpeln als Sinus (kein Aliasing bei 60 fps), FFB auch im
+  `--autodrive`-Vorlauf (Overlay), `--menu controls:gamepad`.
 
 ### Phase 4 – Multiplayer
 - Steam-Lobby + Freunde einladen (Muster aus `SteamLobbyManager`), Fallback Direkt-IP

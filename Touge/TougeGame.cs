@@ -193,6 +193,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             {
                 TickEffects(Drive.Dt);
                 _hud.Tick(_drive.Car, Drive.Dt);
+                _ffb.Update(_drive.Car, _drive.Roughness, 0, _settings.Controls.FfbStrength, Drive.Dt); // --input-debug shows it
             });
             _simTime = seconds;
             _brakeLight = _drive.Pilot.Drive(_drive.Car).Brake; // the shot frame may come before the first tick
@@ -218,7 +219,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
                 : Enum.TryParse<Menu.Screen>(StartMenu.Split(':')[0], true, out var s) && s is not (Menu.Screen.None or Menu.Screen.Loading or Menu.Screen.Finish or Menu.Screen.Result) ? s
                 : throw new ArgumentException($"--menu {StartMenu}: unbekannt");
             OpenMenu(screen);
-            if (StartMenu.Split(':') is [_, var page]) _menu.Controls!.Open(Enum.Parse<DeviceKind>(page, true)); // --menu controls:wheel
+            if (StartMenu.Split(':') is [_, var page]) _menu.Controls!.Open(page.ToLowerInvariant() == "gamepad" ? DeviceKind.Pad : Enum.TryParse<DeviceKind>(page, true, out var dk) ? dk : DeviceKind.Keyboard); // --menu controls:wheel
             _inRace = screen is Menu.Screen.Pause or Menu.Screen.Intro;
             if (shotPath != null) _menu.Settle();
         }
@@ -1020,7 +1021,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     private void SendForces()
     {
         var cfg = _settings.Controls;
-        var force = Frozen || _fly ? _menu?.Controls?.TestForce ?? 0 : _ffb.Output;
+        // only the wheel in use gets the physics: forces on an unattended wheel (autocentre off) would turn it and steal the steering
+        var force = Frozen || _fly ? _menu?.Controls?.TestForce ?? 0 : _driver.Active == DeviceKind.Wheel ? _ffb.Output : 0;
         _driver.Wheel?.SetForce(cfg.FfbInvert ? -force : force);
         if (Frozen || _fly || _driver.Active != DeviceKind.Pad) return;
         var (low, high) = _ffb.PadRumble(cfg.Rumble);

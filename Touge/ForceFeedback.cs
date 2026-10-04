@@ -10,7 +10,8 @@ namespace Touge;
 ///         <item>Self-aligning torque of the front tyres: per wheel load × x·e^((1−x²)/2) with x = slip angle / peak slip angle –
 ///         grows with cornering force, peaks at the grip limit and goes light past it (understeer, front washing out), and
 ///         reverses with the slide (the wheel counter-steers by itself in a drift).</item>
-///         <item>Kerbs/gutters/grass: a square-wave rumble at the stripe frequency (speed / 1.2 m, at most 25 Hz).</item>
+///         <item>Kerbs/gutters/grass: a sine rumble at the stripe frequency (speed / 1.2 m, at most 25 Hz – below the 30 Hz Nyquist limit of a 60 fps
+///         update; a square wave's harmonics alias).</item>
 ///         <item>Wall impacts: a jolt away from the wall, from the closing speed, decaying in ~0.15 s.</item>
 ///         <item>Soft lock: past the game's steering lock (<see cref="DriverInput.SteerBeyond"/>) a stiff spring back.</item>
 ///     </list>
@@ -49,7 +50,7 @@ public sealed class ForceFeedback
         Aligning = sat * MathF.Min(speed / 3, 1); // slip angles mean little at walking pace
 
         _phase = (_phase + dt * MathF.Min(speed / 1.2f, 25)) % 1;
-        Kerb = rough * MathF.Min(speed / 10, 1) * 0.25f * (_phase < 0.5f ? 1 : -1);
+        Kerb = rough * MathF.Min(speed / 10, 1) * 0.25f * MathF.Sin(_phase * MathF.Tau);
 
         _jolt *= MathF.Exp(-dt / 0.15f);
         if (car.WallImpactSpeed > 1 && car.WallImpactSpeed / 12 > _jolt)

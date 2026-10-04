@@ -204,11 +204,17 @@ public sealed class ControlsScreen(ControlSettings cfg, InputSnapshot input, Dri
             sound?.Invoke("BEEP001");
             return;
         }
-        if (first || Detect() is not { } bind) return;
+        if (first) return;
+        if (_page == DeviceKind.Keyboard && input.Keyboard.PressedThisFrame.Any(k => FixedKeys.Contains((Key)k))) sound?.Invoke("BEEP001"); // taken, keep waiting
+        if (Detect() is not { } bind) return;
         cfg.Set(_page, _rows[_row].Control!.Value, _slot, bind);
         _capture = -1;
         sound?.Invoke("SYS006");
     }
+
+    /// <summary>Keys the game reads directly (cameras, HUD, AT/MT …, DELETE clears): never bound.</summary>
+    public static readonly Key[] FixedKeys =
+        [Key.F1, Key.F2, Key.F3, Key.F4, Key.M, Key.N, Key.T, Key.B, Key.D1, Key.D2, Key.D3, Key.Delete, Key.Escape];
 
     /// <summary>The input just used on the page's device, as a binding (null: none yet).</summary>
     public Bind? Detect()
@@ -216,7 +222,8 @@ public sealed class ControlsScreen(ControlSettings cfg, InputSnapshot input, Dri
         switch (_page)
         {
             case DeviceKind.Keyboard:
-                foreach (var key in input.Keyboard.PressedThisFrame) return new Bind(Source.Key, (int)key);
+                foreach (var key in input.Keyboard.PressedThisFrame)
+                    if (!FixedKeys.Contains((Key)key)) return new Bind(Source.Key, (int)key);
                 return null;
             case DeviceKind.Pad:
                 foreach (var b in input.Gamepad.PressedThisFrame) return new Bind(Source.PadButton, (int)b);
@@ -238,8 +245,8 @@ public sealed class ControlsScreen(ControlSettings cfg, InputSnapshot input, Dri
                 for (var i = 0; i < w.AxisCount && i < _base.Length; i++)
                 {
                     var d = w.Axis(i) - _base[i];
-                    if (MathF.Abs(d) <= 0.5f) continue;
                     var rest = Snap(_base[i]);
+                    if (MathF.Abs(d) <= (rest == 0 ? 0.15f : 0.5f)) continue; // centred (steering): ~70° on a 900° wheel; pedals: half travel
                     return Bind.JoyAxis(i, rest, rest != 0 ? -rest : MathF.Sign(d));
                 }
                 return null;

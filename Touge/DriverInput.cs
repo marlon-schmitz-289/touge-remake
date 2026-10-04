@@ -15,7 +15,8 @@ public sealed class DriverInput(ControlSettings cfg)
     private static readonly Control[] All = Enum.GetValues<Control>(),
         Gears = [Control.GearR, Control.Gear1, Control.Gear2, Control.Gear3, Control.Gear4, Control.Gear5, Control.Gear6];
     private readonly bool[] _down = new bool[All.Length], _was = new bool[All.Length];
-    private float _wheelSteerPrev = float.NaN;
+    /// <summary>Wheel steering when another device took over: the wheel claims the steering back only when turned away from it.</summary>
+    private float _wheelAnchor = float.NaN;
 
     public ControlSettings Settings => cfg;
     public DeviceKind Active { get; private set; } = DeviceKind.Keyboard;
@@ -113,11 +114,15 @@ public sealed class DriverInput(ControlSettings cfg)
 
         var hasWheelSteer = Wheel != null && AnyAxis(DeviceKind.Wheel, Control.SteerRight);
         var ws = hasWheelSteer ? WheelSteer(input) : 0;
-        if (hasWheelSteer && !float.IsNaN(_wheelSteerPrev) && MathF.Abs(ws - _wheelSteerPrev) > 0.02f) wheel = true;
-        _wheelSteerPrev = hasWheelSteer ? ws : float.NaN;
+        var stick = Shape(Analog(input, DeviceKind.Pad, Control.SteerRight) - Analog(input, DeviceKind.Pad, Control.SteerLeft), cfg.PadDeadzone, cfg.PadLinearity);
+        pad |= stick != 0; // any stick motion past the dead zone, not only past half
+        // a bumped wheel (a few degrees) takes nothing over: it has to be turned 0.1 of the lock away from where it was left
+        if (!hasWheelSteer || Active != DeviceKind.Wheel && float.IsNaN(_wheelAnchor)) _wheelAnchor = hasWheelSteer ? ws : float.NaN;
+        if (hasWheelSteer && Active != DeviceKind.Wheel && MathF.Abs(ws - _wheelAnchor) > 0.1f) wheel = true;
         if (key) Active = DeviceKind.Keyboard;
         else if (pad) Active = DeviceKind.Pad;
         else if (wheel) Active = DeviceKind.Wheel;
+        if (Active == DeviceKind.Wheel) _wheelAnchor = float.NaN; // re-anchored when another device takes over
 
         // pedals: the most pressed of all devices (digital bindings count fully)
         float Max(Control c) => MathF.Max(MathF.Max(Analog(input, DeviceKind.Keyboard, c),
@@ -129,7 +134,6 @@ public sealed class DriverInput(ControlSettings cfg)
 
         DirectSteer = Active == DeviceKind.Wheel && hasWheelSteer;
         SteerBeyond = DirectSteer ? ws : 0;
-        var stick = Shape(Analog(input, DeviceKind.Pad, Control.SteerRight) - Analog(input, DeviceKind.Pad, Control.SteerLeft), cfg.PadDeadzone, cfg.PadLinearity);
         if (DirectSteer) Steer = Math.Clamp(ws, -1, 1);
         else if (stick != 0) Steer = stick;
         else

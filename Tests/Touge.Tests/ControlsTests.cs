@@ -4,6 +4,7 @@ using Kansei.Input;
 using Kansei.Physics;
 using Touge.Ui;
 using SdlKey = Silk.NET.SDL.KeyCode;
+using GameControllerAxis = Silk.NET.SDL.GameControllerAxis;
 
 namespace Touge.Tests;
 
@@ -182,7 +183,7 @@ public class ControlsTests
         Step((0, 0, true, false));
         Assert.True(screen.Capturing);
         Step();
-        w.SetAxis(0, -0.7f);
+        w.SetAxis(0, -0.2f); // a centred axis binds after ~90° on a 900° wheel
         Step();
         Assert.False(screen.Capturing);
         Assert.Equal(Bind.JoyAxis(0, 0, -1), cfg.Get(DeviceKind.Wheel, Control.SteerLeft)[0]);
@@ -217,6 +218,43 @@ public class ControlsTests
         Assert.Equal(Bind.JoyAxis(0, 0, 0.95f), cfg.Get(DeviceKind.Wheel, Control.SteerRight)[0]);
         Assert.Equal(-0.97f, cfg.Get(DeviceKind.Wheel, Control.SteerLeft)[0].Full);
         Assert.DoesNotContain("BEEP001", sounds);
+    }
+
+    /// <summary>Keys the game reads itself (T = AT/MT …) are refused while binding.</summary>
+    [Fact]
+    public void ControlsScreen_Keyboard_RefusesFixedKeys()
+    {
+        var (input, _, d) = Rig();
+        var screen = new ControlsScreen(d.Settings, input, d);
+        screen.Open(DeviceKind.Keyboard);
+        input.Keyboard.OnKeyDown((SdlKey)Key.T);
+        Assert.Null(screen.Detect());
+        input.Keyboard.OnKeyDown((SdlKey)Key.Q);
+        Assert.Equal(new Bind(Source.Key, (int)Key.Q), screen.Detect());
+    }
+
+    /// <summary>A connected wheel nobody uses: a bump keeps keyboard/pad steering; small stick motion claims the pad back.</summary>
+    [Fact]
+    public void UnattendedWheel_DoesNotStealSteering()
+    {
+        var (input, w, d) = Rig();
+        Frame(input, d, w);
+        input.Keyboard.OnKeyDown((SdlKey)Key.D);
+        for (var i = 0; i < 30; i++) Frame(input, d, w);
+        input.Keyboard.OnKeyUp((SdlKey)Key.D);
+        Frame(input, d, w);
+        w.SetAxis(0, 0.05f); // ~22° bump
+        Frame(input, d, w);
+        Assert.Equal(DeviceKind.Keyboard, d.Active);
+        Assert.False(d.DirectSteer);
+        w.SetAxis(0, 0.2f); // really turned: the wheel steers
+        Frame(input, d, w);
+        Assert.Equal(DeviceKind.Wheel, d.Active);
+        input.Gamepad.OnAxis(GameControllerAxis.Leftx, 10000); // ~0.3 stick, past the dead zone
+        Frame(input, d, w);
+        Assert.Equal(DeviceKind.Pad, d.Active);
+        Assert.False(d.DirectSteer);
+        Assert.True(d.Steer > 0);
     }
 
     [Fact]
