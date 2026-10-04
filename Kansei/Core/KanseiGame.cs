@@ -18,6 +18,9 @@ public abstract class KanseiGame : IDisposable
     /// <summary>Fixed simulation rate in Hz.</summary>
     public virtual int TickRate => 120;
 
+    /// <summary>CPU milliseconds of the last frame: ticks, <see cref="Update"/> and <see cref="Render"/>, without waiting for the GPU or the display.</summary>
+    public double CpuMs { get; internal set; }
+
     public virtual void Load() { }
     public virtual void Tick(float dt) { }
     public virtual void Update(in GameTime time) { }

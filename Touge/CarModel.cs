@@ -10,9 +10,11 @@ namespace Touge;
 ///     (NUM_TEX.PAC composed like the game) as one mesh per lamp state (<see cref="Day"/>; <see cref="Lit"/> with the night
 ///     lamp parts and their lit lenses, <see cref="CarParts.Lit"/>), one wheel mesh (tire of the setup + brake disk;
 ///     calipers left out), the four wheel transforms in car space (fr_l, fr_r, re_l, re_r) and the <see cref="Lamps"/>.
-///     <see cref="Paints"/> = number of CAR_ENV colours of the car.
+///     <see cref="Paints"/> = number of CAR_ENV colours of the car. Its textures are the renderer's last ones (from
+///     <see cref="FirstTexture"/>), freed with the model.
 /// </summary>
-public sealed record CarModel(CarModel.Shell Day, CarModel.Shell Lit, StaticMesh Wheel, Matrix4x4[] Wheels, float WheelRadius, int Paints, CarModel.Lamps Lamp)
+public sealed record CarModel(CarModel.Shell Day, CarModel.Shell Lit, StaticMesh Wheel, Matrix4x4[] Wheels, float WheelRadius, int Paints, CarModel.Lamps Lamp,
+    WorldRenderer Renderer, int FirstTexture)
     : IDisposable
 {
     /// <summary>Opaque body, its alpha-blended decals (<see cref="Build"/>) and the pop-up headlamp part of this lamp state.</summary>
@@ -42,6 +44,7 @@ public sealed record CarModel(CarModel.Shell Day, CarModel.Shell Lit, StaticMesh
         paint = Math.Clamp(paint, 0, colours.Length - 1);
         var entries = Pac.Entries(pac);
 
+        var firstTexture = renderer.TextureCount;
         var textures = new Dictionary<string, int> { [""] = renderer.AddTexture(1, 1, [255, 255, 255, 255], "white") };
         foreach (var e in entries.Where(e => e.Type == 1))
         {
@@ -85,7 +88,7 @@ public sealed record CarModel(CarModel.Shell Day, CarModel.Shell Lit, StaticMesh
         }
         return new CarModel(Shell(day), Shell(lit),
             Build(renderer.Device, [("tire", tire), ("Bdisk00", parts["Bdisk00"])], textures, false).Opaque,
-            CarParts.Wheels(parts["body00"]), radius, colours.Length, lamps);
+            CarParts.Wheels(parts["body00"]), radius, colours.Length, lamps, renderer, firstTexture);
     }
 
     /// <summary>
@@ -160,5 +163,6 @@ public sealed record CarModel(CarModel.Shell Day, CarModel.Shell Lit, StaticMesh
             s.PopUp?.Dispose();
         }
         Wheel.Dispose();
+        Renderer.ReleaseTextures(FirstTexture);
     }
 }

@@ -31,7 +31,8 @@ dotnet run --project Touge -- "<iso>" --autodrive 60 [--shot out/ad.png]   # Pil
 dotnet run --project Touge -- "<iso>" AKINA_DAY --at 710 --autodrive 40 [--ram] [--reverse]   # hinter dem Ziel: Auslauf bis vor die Endsperre bzw. mit --ram Vollgas in die Sperre; Zusammenfassung (Weg hinter dem Ziel, Abstand zur Sperre, Wandkontakt, Höhe)
 dotnet run --project Touge -- "<iso>" AKINA_DAY --reverse [--autodrive 60|--shot …|--ground …]   # Gegenrichtung (bergauf): CRS_COLI_<KURS>_1 + CRS_DRV_<KURS>_O, Start am anderen Ende
 dotnet run --project Touge -- "<iso>" --hud overview --shot out/map.png   # Minimap-Modus beim Start (north|overview|off)
-dotnet run --project Touge -- "<iso>" --bench 30 [--quality off]   # Pilot fährt 30 s in Echtzeit (Fenster), dann Frametime avg/p99/max (mit Ton)
+dotnet run --project Touge -- "<iso>" AKINA_NIT --bench 900 [--quality off] [--offscreen]   # Pilot fährt in Echtzeit (Fenster) bis ins Ziel (höchstens 900 s): pro Sekunde Position, fps, Frametime, CPU-ms, Draws, Effekte, GC, Speicher, macOS-Wärmezustand; am Ende avg/p99/max, Frames > 18/25 ms, je 500 m. --offscreen (Metal): ohne Display-Takt, Frametime = GPU-Zeit
+dotnet run --project Touge -- "<iso>" AKINA_RIN --flow out/proof --bench 900   # wie ein Spieler: Front-End → Kurs/Zeit/Wetter wie angegeben → 24 Autovorschauen + Lackwechsel → Rennen mit --bench-Log
 dotnet run --project Touge -- "<iso>" --at 300 --autodrive 5.2 --drift --shot out/drift.png   # --drift: Pilot reißt alle 7 s (ab 4,5 s) einen Handbremsdrift (auch mit --bench)
 dotnet run --project Touge -- "<iso>" --autodrive 30 --audio-capture out/a.wav 30 [--no-music]   # Spielton offline als WAV + Auswertung (Pitch↔Drehzahl, Quietschen↔Schlupf, Pegel, Allokationen)
 dotnet run --project Touge -- "<iso>" --car FD3S --paint 2   # Auto (HCAR-Name oder Index 0–31) und CAR_ENV-Lackfarbe (0 = Standard), gilt für alle Modi

@@ -56,7 +56,7 @@ public sealed class CarRenderer : IDisposable
         _world.WritePush(push, model * viewProj, model, eye, false, true);
         pass.SetVertexBuffer(0, mesh.Vertices);
         pass.SetIndexBuffer(mesh.Indices, IndexType.UInt32);
-        _world.DrawBatches(pass, mesh, push);
+        _world.DrawBatches(pass, mesh, push, model * viewProj, eye);
     }
 
     public void Dispose()

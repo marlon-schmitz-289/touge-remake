@@ -39,6 +39,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     private readonly Overlay _overlay = new();
     private Hud _hud = null!;
     private string _courseTime = courseTime;
+    /// <summary>The course argument (--flow --bench drives it after the menus; the front end starts on its backdrop).</summary>
+    private readonly string _benchCourse = courseTime;
     /// <summary>Menus at start (no CLI test arguments): settings from/to the app-data JSON, title screen first.</summary>
     public bool UseMenus { get; init; }
     /// <summary>--shot-size WxH: size of the --shot frame (default 1280×720).</summary>
@@ -216,6 +218,11 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             Directory.CreateDirectory(Flow);
             _capture = new FrameCapture(Device, ShotSize.W, ShotSize.H); // and sound as usual (below)
         }
+        if (Offscreen)
+        {
+            Device.Offscreen = true;
+            _offscreen = new FrameCapture(Device, Device.SwapchainWidth, Device.SwapchainHeight);
+        }
         if (shotPath != null) (_capture, _shotState) = (new FrameCapture(Device, ShotSize.W, ShotSize.H), 1);
         else if (ContactSheet != null) (_capture, _sheet, _fly) = (new FrameCapture(Device, 1280, 720), new byte[SheetW * SheetH * 4], true);
         else if (flicker != null)
@@ -312,7 +319,6 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     /// <summary>
     ///     Car <paramref name="car"/> (index in <see cref="CarPaint.Cars"/>) with <paramref name="paint"/>: new model, and for a
     ///     different car its physics spec (back on the line where the old one stood) and engine sound.
-    ///     ponytail: the old car's textures stay in the renderer (a few MB per change); free them if cars are swapped a lot.
     /// </summary>
     private void SwitchCar(int car, int paint)
     {
@@ -504,6 +510,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             UpdateMenu(keys, dt);
             if (_menu.Current != Menu.Screen.Intro || _menu.Freezes) return; // after GO the intro only draws
         }
+        if (bench is { } benchSeconds && Bench(time, benchSeconds)) return;
         if (_front != null && !_finished && _hud.Timer.Phase == LapTimer.State.Finished)
         {
             // the run is over: finish banner, then the result sheet (only in the front-end flow)
@@ -512,7 +519,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             _menu!.Finish(new Menu.Run(t.Time, (float[])t.Splits.Clone(), [.. Enumerable.Range(0, LapTimer.Sectors).Select(t.Delta)], _previousBest, t.NewRecord, _hud.Drift.Total));
             return;
         }
-        if (Flow != null)
+        if (Flow != null && bench == null)
             for (var i = 0; i < 15; i++) Tick(Drive.Dt); // --flow: 16× time, the pilot drives the run to the finish
         if (k.IsKeyPressed(Key.Escape) || Input.Gamepad.IsButtonPressed(GamepadButton.Start) || (Flow != null && keys.Back))
         {
@@ -535,7 +542,6 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             _renderer.HighQuality = _settings.HighQuality = !_renderer.HighQuality;
             Console.WriteLine($"\n[Touge] Grafik: {(_renderer.HighQuality ? "hoch (4× MSAA, Bloom, Schatten)" : "niedrig (ohne MSAA/Bloom/Schatten)")}");
         }
-        if (bench is { } benchSeconds && Bench(time, benchSeconds)) return;
         if (_audio != null && k.IsKeyPressed(Key.M))
         {
             _settings.MusicOn = true;
@@ -777,15 +783,37 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         ("Options", 1, "options", 0, 1, false, false), ("Options", 0.5f, "options_music", 0, 0, false, true), ("Modes", 1.2f, "modes_end", 0, 0, false, false),
     ];
 
-    /// <summary>--flow: the scripted key of this frame; asks for the step's PNG first (written next frame), quits after the last step.</summary>
+    /// <summary>
+    ///     --flow with --bench: the player's way into a run as in a real session (title backdrop, Time Attack, Akina downhill at
+    ///     the time of day/weather of the course argument (_DAY, _NIT, _RIN: the menus open on it), 24 car previews and 6 paint changes in the car select),
+    ///     then the race in real time with the --bench log.
+    /// </summary>
+    private (string At, float Wait, string? Shot, int X, int Y, bool Ok, bool Back)[] FlowBenchScript =>
+    [
+        ("Boot", 1.2f, null, 0, 0, true, false), ("Logo", 1, null, 0, 0, true, false), ("Title", 3, null, 0, 0, true, false),
+        ("Modes", 1, null, 0, 1, false, false), ("Modes", 0.6f, null, 0, 0, true, false), ("Course", 1, null, 0, 0, true, false),
+        ("Route", 0.5f, null, 0, 0, true, false), ("Time", 0.5f, null, 0, 0, true, false),
+        .. _benchCourse.EndsWith("_NIT") ? [] : new[] { ("Weather", 0.5f, (string?)null, 0, 0, true, false) },
+        ("Maker", 0.5f, null, 0, 0, true, false), ("Maker", 0.5f, null, 0, 0, true, false),
+        .. Enumerable.Repeat(("Car", 0.3f, (string?)null, 1, 0, false, false), 12), .. Enumerable.Repeat(("Car", 0.3f, (string?)null, -1, 0, false, false), 12),
+        .. Enumerable.Repeat(("Car", 0.3f, (string?)null, 0, 1, false, false), 3), .. Enumerable.Repeat(("Car", 0.3f, (string?)null, 0, -1, false, false), 3),
+        ("Car", 1, "bench_car", 0, 0, true, false), ("Gearbox", 0.5f, null, 0, 0, true, false),
+    ];
+
+    /// <summary>--offscreen: frames go into this target instead of the window (no display pacing, for GPU-bound --bench timing).</summary>
+    public bool Offscreen { get; init; }
+    private FrameCapture? _offscreen;
+
+    /// <summary>--flow: the scripted key of this frame; asks for the step's PNG first (written next frame), quits after the last step (with --bench: races on).</summary>
     private (int X, int Y, bool Ok, bool Back) FlowKeys(float dt)
     {
-        if (_flowStep >= FlowScript.Length)
+        var script = bench != null ? FlowBenchScript : FlowScript;
+        if (_flowStep >= script.Length)
         {
-            Window.ShouldClose = true;
+            if (bench == null) Window.ShouldClose = true;
             return default;
         }
-        var s = FlowScript[_flowStep];
+        var s = script[_flowStep];
         var at = _front is { Active: true } ? _front.Current.ToString() : _menu!.Current != Menu.Screen.None ? _menu.Current.ToString() : "Race";
         if (at != s.At)
         {
@@ -804,19 +832,57 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         return (s.X, s.Y, s.Ok, s.Back);
     }
 
-    /// <summary>--bench: frame intervals after a 2 s warm-up; at the end avg/p99/max, frames over 25 ms and the effect peaks.</summary>
+    /// <summary>
+    ///     --bench: frame intervals after a 2 s warm-up, until <paramref name="seconds"/> have passed or the run has finished.
+    ///     Per second a line: metres along the line, km/h, fps, frame avg/max, CPU ms (worst frame, without waiting for GPU/display),
+    ///     draws per frame, effects, GCs and MB allocated, working set, macOS thermal state. At the end avg/p99/max, frames over
+    ///     18/25 ms and each 500 m section. GPU cost: with --offscreen the frame time of a GPU-bound run is the GPU time.
+    /// </summary>
     private bool Bench(in GameTime time, float seconds)
     {
-        if (time.TotalTime > 2) _frameTimes.Add(time.DeltaTime * 1000);
+        var along = _drive.Pilot.Track(_drive.Car.Position).Along;
+        var draws = _renderer.DrawCalls;
+        _renderer.DrawCalls = 0;
+        if (_benchT0 < 0) _benchT0 = time.TotalTime;
+        var t = time.TotalTime - _benchT0;
+        if (t <= 2) return false;
+        var ms = time.DeltaTime * 1000;
+        _frameTimes.Add(ms);
+        _benchAlong.Add(along);
+        var b = _benchSecond;
+        (b.Frames, b.Sum, b.Max, b.Cpu, b.Draws) = (b.Frames + 1, b.Sum + ms, MathF.Max(b.Max, ms), Math.Max(b.Cpu, CpuMs), Math.Max(b.Draws, draws));
         _fxPeak = (Math.Max(_fxPeak.Smoke, _fx.SmokeCount), Math.Max(_fxPeak.Skids, _fx.SkidCount), Math.Max(_fxPeak.Sparks, _fx.SparkCount));
-        if (time.TotalTime < seconds + 2) return false;
+        if (t - b.Start >= 1)
+        {
+            long gc = GC.CollectionCount(0) + GC.CollectionCount(1) + GC.CollectionCount(2), alloc = GC.GetTotalAllocatedBytes();
+            if (b.Start == 0) Console.WriteLine("\n[Bench]    t   m_linie  km/h  fps  avg_ms  max_ms  cpu_ms  draws  rauch/spur/funken  gc  alloc_mb  ws_mb  wärme");
+            else
+                Console.WriteLine($"\n[Bench] {t - 2,4:F0} {along,9:F0} {_drive.Car.SpeedKmh,5:F0} {b.Frames,4} {b.Sum / b.Frames,7:F2} {b.Max,7:F2} {b.Cpu,7:F2} {b.Draws,6} " +
+                                  $"{_fx.SmokeCount,7}/{_fx.SkidCount}/{_fx.SparkCount,-5} {gc - b.Gc,4} {(alloc - b.Alloc) / 1e6,9:F2} {Environment.WorkingSet / 1e6,6:F0}  {Thermal.State}");
+            _benchSecond = new BenchSecond { Start = t, Gc = gc, Alloc = alloc };
+        }
+        if (t < seconds + 2 && _hud.Timer.Phase != LapTimer.State.Finished) return false;
         var sorted = _frameTimes.Order().ToArray();
-        Console.WriteLine($"\n[Bench] {_courseTime} {Device.SwapchainWidth}x{Device.SwapchainHeight} Qualität {(_renderer.HighQuality ? "hoch" : "niedrig")}: " +
-                          $"{sorted.Length} Frames in {seconds:F0} s, Frametime avg {sorted.Average():F2} ms, p99 {sorted[(int)(sorted.Length * 0.99)]:F2} ms, " +
-                          $"max {sorted[^1]:F2} ms, > 25 ms: {sorted.Count(t => t > 25)}; Effekte max {_fxPeak.Smoke} Rauch, {_fxPeak.Skids} Spursegmente, {_fxPeak.Sparks} Funken");
+        Console.WriteLine($"\n[Bench] {_courseTime} {_carName} {Device.SwapchainWidth}x{Device.SwapchainHeight} Qualität {(_renderer.HighQuality ? "hoch" : "niedrig")}, {_renderer.TextureCount} Texturen: " +
+                          $"{sorted.Length} Frames in {t - 2:F0} s, {along:F0} m, Frametime avg {sorted.Average():F2} ms, p99 {sorted[(int)(sorted.Length * 0.99)]:F2} ms, " +
+                          $"max {sorted[^1]:F2} ms, > 18 ms: {sorted.Count(x => x > 18)}, > 25 ms: {sorted.Count(x => x > 25)}; Effekte max {_fxPeak.Smoke} Rauch, {_fxPeak.Skids} Spursegmente, {_fxPeak.Sparks} Funken");
+        foreach (var g in _frameTimes.Select((x, i) => (t: x, s: (int)(_benchAlong[i] / 500))).GroupBy(x => x.s).OrderBy(g => g.Key))
+            Console.WriteLine($"[Bench] Abschnitt {g.Key * 500,5}–{g.Key * 500 + 500,5} m: avg {g.Average(x => x.t):F2} ms, max {g.Max(x => x.t):F2} ms, > 18 ms: {g.Count(x => x.t > 18)}");
         Window.ShouldClose = true;
         return true;
     }
+
+    private sealed class BenchSecond
+    {
+        public double Start, Cpu;
+        public long Gc, Alloc;
+        public int Frames, Draws;
+        public float Sum, Max;
+    }
+
+    private BenchSecond _benchSecond = new();
+    private double _benchT0 = -1;
+    private readonly List<float> _benchAlong = [];
 
     /// <summary>
     ///     Car lights on at night, in rain and fog (<see cref="Headlights.For"/>), CRS_LIGHT points as sodium street lights at night
@@ -1059,6 +1125,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     public override void Render(in FrameContext ctx)
     {
         var shot = _shotState == 1 ? _capture : null;
+        var frame = shot ?? _offscreen; // where the frame goes (null: the window)
         var aspect = shot != null ? (float)shot.Width / shot.Height
             : ctx.Viewport.Height > 0 ? (float)ctx.Viewport.Width / ctx.Viewport.Height : 16f / 9f;
         UpdateCarMatrices(shot != null ? 1 : ctx.TickAlpha);
@@ -1083,7 +1150,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             (shell.Body, _carBody), (_car.Wheel, _carWheels[0]), (_car.Wheel, _carWheels[1]), (_car.Wheel, _carWheels[2]), (_car.Wheel, _carWheels[3]),
         ];
         _renderer.RenderShadows(ctx.Encoder, _pos, Vector3.Normalize(_camLook - _pos), _fov, aspect, _course.World, casters);
-        var pass = _renderer.BeginScene(ctx.Encoder, skyView, proj, shot);
+        var pass = _renderer.BeginScene(ctx.Encoder, skyView, proj, frame);
         _renderer.Time = _simTime;
         _renderer.DrawSky(pass, _course.Sky, Matrix4x4.CreateTranslation(_pos with { Y = 0 }) * view * proj, _pos); // follows the camera
         var carView = _probe != null && _probeView.Group == 1;
@@ -1101,8 +1168,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _lastCamPos = _pos;
         var heightPx = shot?.Height ?? Device.SwapchainHeight;
         _fxRenderer.DrawRain(pass, view * proj, _pos, _camVelocity, _simTime, 2 * MathF.Tan(_fov / 2) / heightPx);
-        _renderer.EndScene(ctx.Encoder, pass, shot);
-        var (w, h) = shot != null ? (shot.Width, shot.Height) : (Device.SwapchainWidth, Device.SwapchainHeight);
+        _renderer.EndScene(ctx.Encoder, pass, frame);
+        var (w, h) = frame != null ? (frame.Width, frame.Height) : (Device.SwapchainWidth, Device.SwapchainHeight);
         var menuShown = _menu is { Current: not Menu.Screen.None };
         if (_front is { Active: true }) _front.Build(_overlay, w, h);
         else if (_hud.Visible && (!menuShown || _menu!.OverRace)) // telop/countdown and pause lie over the HUD
@@ -1112,7 +1179,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         }
         else _overlay.Clear();
         if (_front is not { Active: true } && menuShown) _menu!.Build(_overlay, w, h);
-        var target = shot?.View ?? Device.CurrentSwapchainView;
+        var target = frame?.View ?? Device.CurrentSwapchainView;
         _overlayRenderer.Draw(ctx.Encoder, _overlay, target, w, h);
         _textRenderer.Draw(ctx.Encoder, _overlay, target, w, h);
         if (shot != null)
@@ -1135,6 +1202,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _overlayRenderer.Dispose();
         _textRenderer.Dispose();
         _capture?.Dispose();
+        _offscreen?.Dispose();
         _renderer.Dispose();
     }
 }

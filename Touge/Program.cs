@@ -12,8 +12,11 @@ using Touge;
 // --audio-capture <wav> <s> (mit --autodrive): Spielton offline (OpenAL-Loopback) als WAV + Auswertung, ohne Fenster; --no-music ohne BGM.
 // --audio-capture <wav> 0 --sweep: nur Motor, Drehzahlrampe Leerlauf → Begrenzer (Vollgas, 3. Gang) und zurück (Schub), WAV + CSV je Tick.
 // --ground <png>: Kollision des Kurses laden, Raycasts timen, Draufsicht mit Wandsegmenten, Sperren und Fahrlinie/Auslauf schreiben, Ausschnitte bei --at, Start, Ziel (ohne Fenster).
-// --bench <s>: Pilot fährt <s> Sekunden in Echtzeit mit Verfolgerkamera und Ton, danach Frametimes (avg/p99/max) und Ende.
+// --bench <s>: Pilot fährt höchstens <s> Sekunden (bzw. bis ins Ziel) in Echtzeit mit Verfolgerkamera und Ton; pro Sekunde Position, fps, CPU-ms,
+//   Draws, Effekte, GC, Speicher, Wärmezustand; am Ende Frametimes (avg/p99/max, > 18/25 ms) und je 500 m. Mit --flow: erst durch die Menüs (Kurs/Zeit
+//   wie angegeben, 24 Autovorschauen), dann das Rennen.
 // --quality off: ohne MSAA/Bloom starten (F2 schaltet um).
+// --offscreen (Metal): Bild nur in ein eigenes Ziel statt ins Fenster, ohne Display-Takt – mit --bench zeigt die Frametime dann die echten GPU-Kosten.
 // --flicker <prefix>: Z-Fighting im Bild messen (8 Punkte der Fahrlinie + 8 Winkel ums Auto, je 3× mit verschobener Rundung), Ausschnitte als <prefix>_course/_car.png;
 //   dazu _motion: Kamera in 1-cm-Schritten, je mit/ohne SSR (Springen nasser Spiegelungen).
 // --zfight [filter]: Z-Fighting-Kandidaten (fast koplanar, überlappend) aller Kurse und Autos auflisten (ohne Fenster).
@@ -117,7 +120,7 @@ var plain = args.Where((a, i) => a != iso && a != "--backend" && (i == 0 || args
 KanseiApp.Run(new TougeGame(iso, course.ToUpperInvariant(), shot, at, orbit, autodrive, bench, Arg("--quality") != "off", args.Contains("--drift"), Arg("--flicker"))
     { HudMode = Arg("--hud"), Reverse = args.Contains("--reverse"), Fog = args.Contains("--fog"), Car = car, Paint = paint, Livery = livery, ContactSheet = Arg("--cars"), LookAtSun = args.Contains("--sun"), OrbitDistance = orbitDistance,
       Lights = Arg("--lights") is { } lights ? Enum.Parse<Headlights.Mode>(lights, true) : null,
-      UseMenus = plain, StartMenu = Arg("--menu"), Flow = Arg("--flow"),
+      UseMenus = plain, StartMenu = Arg("--menu"), Flow = Arg("--flow"), Offscreen = args.Contains("--offscreen"),
       ShotSize = Arg("--shot-size") is { } size && size.Split('x') is [var sw, var sh] ? (int.Parse(sw), int.Parse(sh)) : (1280, 720) }, new WindowSettings
 {
     Title = $"Touge – {course}",

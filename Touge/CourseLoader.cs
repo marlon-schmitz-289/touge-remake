@@ -64,10 +64,13 @@ public static class CourseLoader
 
         var white = renderer.AddTexture(1, 1, [255, 255, 255, 255], "white");
         var textures = new Dictionary<string, int>();
+        var cutout = new HashSet<string>(); // textures with any alpha below 1 (foliage, fences)
         foreach (var e in entries.Where(e => e.Type == 1))
         {
             var (w, h, rgba) = Gim.Decode(pac.AsSpan(e.Offset, e.Size));
             textures[e.Name] = renderer.AddTexture(w, h, rgba, e.Name);
+            for (var i = 3; i < rgba.Length; i += 4)
+                if (rgba[i] < 255 && cutout.Add(e.Name)) break;
         }
 
         var course = courseTime[..courseTime.LastIndexOf('_')];
@@ -76,8 +79,8 @@ public static class CourseLoader
         var road = CourseRoad.Read(Data($"CRS_ROAD_{course}.BIN") ?? throw new FileNotFoundException($"CRS_ROAD_{course}.BIN"));
 
         // lod/shd are not drawn; the tree templates are placed from TREE_* (baked into the world)
-        var world = Build(renderer.Device, [.. Meshes(pac, false).Where(m => RaceGates(m.Name, reverse)), .. Trees(pac, course, Data, road)], textures, white, true);
-        var sky = Build(renderer.Device, Meshes(pac, true), textures, white, false); // no depth: paint order stays file order
+        var world = Build(renderer.Device, [.. Meshes(pac, false).Where(m => RaceGates(m.Name, reverse)), .. Trees(pac, course, Data, road)], textures, cutout, white, true);
+        var sky = Build(renderer.Device, Meshes(pac, true), textures, cutout, white, false); // no depth: paint order stays file order
 
         var lights = Data($"CRS_LIGHT_{course}.BIN") is { } l ? CourseRoad.ReadLights(l) : [];
         var slot = CourseInfo.FogSlot(courseTime[(courseTime.LastIndexOf('_') + 1)..]);
@@ -180,11 +183,13 @@ public static class CourseLoader
     /// <summary>
     ///     Flattens meshes into one vertex/index buffer, one batch per material (texture) in file order
     ///     (<see cref="Flatten"/>). Normals: <see cref="Normals.Smooth"/> over everything, so seams between
-    ///     sections stay smooth. <paramref name="layered"/>: triangles lying on earlier coplanar ones (decals, overlapping
-    ///     sections, <see cref="ZFight"/>) become overlay layers so the later one wins like on the PS2 (<see cref="Layered"/>).
+    ///     sections stay smooth. <paramref name="layered"/> (the course, not the sky): triangles lying on earlier coplanar ones (decals, overlapping
+    ///     sections, <see cref="ZFight"/>) become overlay layers so the later one wins like on the PS2 (<see cref="Layered"/>), and each
+    ///     batch gets its box for frustum and shadow-cascade culling (a batch is one material of one course section, so it is compact).
+    ///     Batches without a texture in <paramref name="cutout"/> and with vertex alpha 1 are <see cref="MeshBatch.Opaque"/>.
     /// </summary>
-    private static StaticMesh Build(Penelope.IPenelopeDevice device, IEnumerable<(string Name, Mesh Mesh)> meshes, Dictionary<string, int> textures, int white,
-        bool layered)
+    private static StaticMesh Build(Penelope.IPenelopeDevice device, IEnumerable<(string Name, Mesh Mesh)> meshes, Dictionary<string, int> textures,
+        HashSet<string> cutout, int white, bool layered)
     {
         var (corners, batches) = Flatten(meshes);
         var positions = corners.Select(v => v.Position).ToArray();
@@ -192,7 +197,17 @@ public static class CourseLoader
         var verts = corners.Select((v, i) => new WorldVertex(v.Position, v.Uv, v.Color, normals[i])).ToArray();
         var (indices, ranges) = Layered(positions, [.. batches.Select(b => b.First)], layered);
         return new StaticMesh(device, verts, indices,
-            [.. ranges.Select(r => new MeshBatch(textures.GetValueOrDefault(batches[r.Batch].Texture, white), r.First * 3, r.Count * 3, r.Layer))]);
+            [.. ranges.Select(r => new MeshBatch(textures.GetValueOrDefault(batches[r.Batch].Texture, white), r.First * 3, r.Count * 3, r.Layer,
+                !cutout.Contains(batches[r.Batch].Texture) && indices.AsSpan(r.First * 3, r.Count * 3).ToArray().All(i => corners[(int)i].Color.W >= 0.99f)))],
+            layered ? [.. ranges.Select(r => Bounds(positions, indices.AsSpan(r.First * 3, r.Count * 3)))] : null);
+    }
+
+    /// <summary>Box around the corners <paramref name="indices"/> of <paramref name="positions"/>.</summary>
+    private static (Vector3 Min, Vector3 Max) Bounds(Vector3[] positions, ReadOnlySpan<uint> indices)
+    {
+        Vector3 min = new(float.MaxValue), max = new(float.MinValue);
+        foreach (var i in indices) (min, max) = (Vector3.Min(min, positions[i]), Vector3.Max(max, positions[i]));
+        return (min, max);
     }
 
     /// <summary>

@@ -41,6 +41,14 @@ void main()
     // a motion-blurred drop spreads the same light over a longer streak
     float spread = clamp(0.3 / max(length(head - tail), 1e-3), 0.15, 1.0);
     vAlpha = pc.uModel[3].x * min(0.002 / width, 1.0) * spread * smoothstep(0.6, 2.0, dist) * edge;
+    if (vAlpha <= 0.002)
+    {
+        // rain.frag would discard every fragment (too close or at the box edge): no area, nothing rasterised
+        gl_Position = vec4(2.0, 2.0, 0.5, 1.0);
+        vUv = vec2(0.0);
+        vPos = head;
+        return;
+    }
 
     bool atTail = corner == 2 || corner == 4 || corner == 5;
     float across = corner == 0 || corner == 3 || corner == 5 ? -1.0 : 1.0;

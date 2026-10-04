@@ -120,7 +120,9 @@ vec3 dynamicLight(vec3 p, vec3 n, vec3 v, float shininess, inout vec3 spec)
     for (int i = 0; i < Lights; i++)
     {
         vec3 l;
-        vec3 e = capped(lightIn(i, p, false, l) * max(dot(n, l), 0.0));
+        vec3 e = lightIn(i, p, false, l);
+        if (e == vec3(0.0)) continue; // out of reach (most lights for most pixels): no specular power either
+        e = capped(e * max(dot(n, l), 0.0));
         sum += e;
         hl += e * (norm * pow(max(dot(n, normalize(l + v)), 0.0), shininess));
     }
@@ -201,8 +203,8 @@ vec3 lightGlow(vec3 p)
     return sum * pc.uFog.a;
 }
 
-// Fog over a lit surface colour at p (fog.glsl + light glow).
+// Fog over a lit surface colour at p (fog.glsl); the light glow is added per pixel afterwards (glow.frag).
 vec3 applyFog(vec3 c, vec3 p)
 {
-    return mix(c, fogColour(normalize(p - pc.uEye.xyz)), fogAmount(p)) + lightGlow(p);
+    return mix(c, fogColour(normalize(p - pc.uEye.xyz)), fogAmount(p));
 }
