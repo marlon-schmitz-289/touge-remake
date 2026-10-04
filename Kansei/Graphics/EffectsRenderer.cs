@@ -9,15 +9,22 @@ namespace Kansei.Graphics;
 ///     skid marks and smoke alpha-blended, sparks additive (HDR, so they bloom); depth tested, not written. One
 ///     per-frame vertex ring (<see cref="TransientBufferRing"/>) per effect type, quads are written straight into it.
 ///     Shading in effect.frag (mode in the shared push block's uEye.w): smoke/skids lit by sun (shadowed), ambient
-///     and the dynamic lights, fogged like the world.
+///     and the dynamic lights, fogged like the world. <see cref="DrawRain"/>: falling rain as camera-relative streaks
+///     generated in rain.vert (no buffer).
 /// </summary>
 public sealed class EffectsRenderer : IDisposable
 {
     private enum Kind { Smoke, Skid, Spark }
 
     private readonly WorldRenderer _world;
-    private readonly ShaderHandle _shader;
+    /// <summary>Rain drops at full <see cref="Atmosphere.Wetness"/>, in a box of <see cref="RainBox"/> around the camera.</summary>
+    public const int MaxRainDrops = 9000;
+    private static readonly Vector3 RainBox = new(36, 24, 36);
+    private static readonly Vector3 RainVelocity = new(1.2f, -9f, 0.6f); // m/s, a light breeze
+
+    private readonly ShaderHandle _shader, _rainShader;
     private readonly RenderPipelineHandle[,] _pipeline = new RenderPipelineHandle[3, 2]; // kind × quality
+    private readonly RenderPipelineHandle[] _rain = new RenderPipelineHandle[2];
     private readonly TransientBufferRing[] _rings = new TransientBufferRing[3];
 
     public EffectsRenderer(WorldRenderer world)
@@ -34,6 +41,33 @@ public sealed class EffectsRenderer : IDisposable
                     true, WorldRenderer.PushBytes, $"effect-{(Kind)k}", blend[k]);
             _rings[k] = new TransientBufferRing(device, capacity[k] * 6 * WorldVertex.Size, BufferUsage.Vertex, $"effect-{(Kind)k}");
         }
+        _rainShader = device.CreateShader(ShaderLoader.LoadGraphics(typeof(EffectsRenderer).Assembly, "rain", "rain", "rain"));
+        for (var q = 0; q < 2; q++)
+            _rain[q] = world.ScenePipeline(_rainShader, new VertexLayout(), MultisampleState.Disabled with { SampleCount = WorldRenderer.Samples(q) },
+                true, WorldRenderer.PushBytes, "rain", BlendState.AlphaBlend);
+    }
+
+    /// <summary>
+    ///     Falling rain for <see cref="Atmosphere.Wetness"/> &gt; 0 (drop count scales with it). <paramref name="cameraVelocity"/>
+    ///     stretches the streaks (motion blur), <paramref name="time"/> moves the drops, <paramref name="pixelAngle"/> =
+    ///     pixel size at 1 m distance keeps far drops at least ~1.5 px wide. Draw last (alpha-blended over everything).
+    /// </summary>
+    public void DrawRain(IRenderPassEncoder pass, in Matrix4x4 viewProj, Vector3 eye, Vector3 cameraVelocity, float time, float pixelAngle)
+    {
+        var wet = _world.Atmosphere.Wetness;
+        var drops = (int)(MaxRainDrops * wet);
+        if (drops == 0) return;
+        pass.SetPipeline(_rain[_world.Quality]);
+        _world.BindScene(pass);
+        var rain = new Matrix4x4(
+            RainVelocity.X, RainVelocity.Y, RainVelocity.Z, time % 3600,
+            cameraVelocity.X, cameraVelocity.Y, cameraVelocity.Z, 1 / 50f,
+            RainBox.X, RainBox.Y, RainBox.Z, pixelAngle,
+            0.5f, 0, 0, 0);
+        Span<byte> push = stackalloc byte[WorldRenderer.PushBytes];
+        _world.WritePush(push, viewProj, rain, eye, false, true);
+        pass.SetPushConstants(ShaderStage.Vertex | ShaderStage.Fragment, 0, push);
+        pass.Draw(drops * 6);
     }
 
     /// <summary>Skid marks, then smoke (sorted back to front), then sparks. <paramref name="view"/> gives the billboard axes.</summary>
@@ -78,7 +112,9 @@ public sealed class EffectsRenderer : IDisposable
     public void Dispose()
     {
         foreach (var p in _pipeline) _world.Device.DestroyRenderPipeline(p);
+        foreach (var p in _rain) _world.Device.DestroyRenderPipeline(p);
         foreach (var r in _rings) r.Dispose();
         _world.Device.DestroyShader(_shader);
+        _world.Device.DestroyShader(_rainShader);
     }
 }

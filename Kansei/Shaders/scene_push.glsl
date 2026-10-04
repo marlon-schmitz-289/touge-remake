@@ -1,10 +1,10 @@
-// Push constants shared by world.* and car.* (576 bytes: fine on Metal's 4 KB, Vulkan only guarantees 128).
+// Push constants shared by world.*, car.*, effect.* and rain.* (672 bytes: fine on Metal's 4 KB, Vulkan only guarantees 128).
 // Written by WorldRenderer.WritePush. Positions/directions in world space, colours linear.
 layout(push_constant) uniform Push {
     mat4 uMvp;
-    mat4 uModel;        // model → world (world meshes: identity)
-    vec4 uFog;          // rgb fog colour, a = 1 / fog distance (0 = no fog)
-    vec4 uEye;          // xyz camera, w = 1: sky mesh (unlit, vertex alpha ignored)
+    mat4 uModel;        // model → world (world meshes: identity; rain.vert: rain parameters)
+    vec4 uFog;          // rgb fog colour, a = glow of the dynamic lights in the fog (in-scattering, 0 = none)
+    vec4 uEye;          // xyz camera, w = 1: sky mesh (unlit, vertex alpha ignored); effect.frag: mode
     vec4 uSun;          // xyz towards the sun, w = direct sun strength
     vec4 uAmbient;      // rgb ambient for lit objects (cars), w = share of the baked light kept in shadow (world)
     vec4 uParams;       // x = shadows on, y = wetness 0..1, z = env-map strength, w = brake light 0..1
@@ -15,4 +15,9 @@ layout(push_constant) uniform Push {
     vec4 uSpotColor;    // rgb intensity (0 = off), w = range
     vec4 uPointPos[4];  // street lights: xyz, w = radius (0 = unused)
     vec4 uPointColor;   // rgb intensity, w = overlay layer pull in metres (world.vert, car.vert)
+    vec4 uFogParams;    // x = linear fog start (m), y = 1 / (end − start), z = height-fog density at uFogSun.w (1/m), w = 1 / its scale height
+    vec4 uFogSun;       // rgb sun light scattered into the fog towards the sun, w = height-fog base altitude
+    vec4 uSky;          // rgb zenith colour (wet reflections), w = time (s)
+    vec4 uTailPos[2];   // rear lamps as small point lights (w unused): they light the ground and streak on wet roads
+    vec4 uTailColor;    // rgb intensity (0 = off)
 } pc;

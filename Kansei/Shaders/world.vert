@@ -13,9 +13,8 @@ layout(location = 3) in vec3 aNormal;
 
 layout(location = 0) out vec2 vUv;
 layout(location = 1) out vec4 vColor;
-layout(location = 2) out float vFog;
-layout(location = 3) out vec3 vPos;
-layout(location = 4) out vec3 vNormal;
+layout(location = 2) out vec3 vPos;
+layout(location = 3) out vec3 vNormal;
 
 void main()
 {
@@ -26,7 +25,6 @@ void main()
     if (pull > 0.0 && gl_Position.w > 0.0) gl_Position.z *= gl_Position.w / max(gl_Position.w - pull, 0.5 * gl_Position.w);
     vUv = aUv;
     vColor = vec4(pow(aColor.rgb, vec3(2.2)), aColor.a);
-    vFog = clamp(length(aPos - pc.uEye.xyz) * pc.uFog.a, 0.0, 1.0);
     vPos = aPos;
     vNormal = aNormal;
 }

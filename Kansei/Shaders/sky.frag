@@ -1,6 +1,7 @@
 #version 450
 
-// Analytic sky behind the course's sky mesh: horizon → zenith gradient, darker below the horizon, sun disk + glow (HDR).
+// Analytic sky behind the course's sky mesh: horizon → zenith gradient, darker below the horizon, sun disk + glow
+// (HDR), then the horizon fog of fog.glsl so distant terrain and sky meet in the same colour.
 
 layout(push_constant) uniform Push {
     mat4 uInvViewProj; // inverse of (view rotation × projection): clip → camera-centred world direction
@@ -8,7 +9,13 @@ layout(push_constant) uniform Push {
     vec4 uHorizon;     // rgb, w = 1 / target height
     vec4 uSun;         // xyz towards the sun, w = cos of the disk radius
     vec4 uSunColor;    // rgb (0 = no sun), w = clip-space y per gl_FragCoord.y (+1 Vulkan/GL, -1 Metal)
+    vec4 uEye;         // xyz camera (fog.glsl, same meaning as scene_push.glsl from here on)
+    vec4 uFog;
+    vec4 uFogParams;
+    vec4 uFogSun;
 } pc;
+
+#include "fog.glsl"
 
 layout(location = 0) out vec4 FragColor;
 
@@ -25,5 +32,5 @@ void main()
     float s = max(dot(d, pc.uSun.xyz), 0.0);
     float disk = smoothstep(pc.uSun.w, pc.uSun.w + 0.0004, s);
     c += pc.uSunColor.rgb * (disk + 0.02 * pow(s, 64.0) + 0.004 * pow(s, 6.0));
-    FragColor = vec4(c, 1.0);
+    FragColor = vec4(mix(c, fogColour(d), skyFog(d)), 1.0);
 }

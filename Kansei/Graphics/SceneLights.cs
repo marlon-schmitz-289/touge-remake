@@ -12,6 +12,9 @@ public sealed class SceneLights
     public readonly Vector3[] HeadlightPosition = new Vector3[2], HeadlightDirection = new Vector3[2];
     /// <summary>Brake lamps 0..1.</summary>
     public float Brake;
+    /// <summary>Rear lamps as small point lights (8 m): light the ground behind the car, streak on a wet road. 0 = off.</summary>
+    public Vector3 TailLightColor;
+    public readonly Vector3[] TailLightPosition = new Vector3[2];
     /// <summary>All street lights of the course; the 4 nearest to the camera are used.</summary>
     public Vector3[] StreetLights = [];
     public Vector3 StreetLightColor;

@@ -17,7 +17,9 @@ namespace Touge;
 ///     <paramref name="autodrive"/> lets the line pilot drive that many seconds before the first frame (for --shot);
 ///     <paramref name="bench"/> lets it drive in real time with the chase camera for that many seconds, then logs frame times and quits;
 ///     <paramref name="drift"/> makes the pilot throw in a scripted handbrake drift every 7 s (<see cref="Drive.ForceDrift"/>).
-///     Tyre smoke, skid marks and sparks come from the car's wheel/wall state every tick (<see cref="TickEffects"/>).
+///     Tyre smoke, skid marks and sparks come from the car's wheel/wall state every tick (<see cref="TickEffects"/>), in rain
+///     also tyre spray; falling rain is drawn around the camera.
+///     Fog: per time of day (<see cref="AtmosphereFor"/>) with the original's fog colour (CRS_INFO) and height fog over the course's altitude range.
 ///     Sound: engine, tyres, walls, wind, race BGM (M next track, F3 music on/off); none for --shot.
 ///     <paramref name="flicker"/>: no game loop, renders the <see cref="FlickerProbe"/> views and quits.
 /// </summary>
@@ -32,9 +34,9 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     private EffectsRenderer _fxRenderer = null!;
     private readonly Effects _fx = new();
     private readonly Random _rng = new(3);
-    private readonly float[] _smokeDebt = new float[4];
+    private readonly float[] _smokeDebt = new float[4], _sprayDebt = new float[4];
     private float _simTime, _shake;
-    private Vector3 _prevVelocity, _shakeOffset;
+    private Vector3 _prevVelocity, _shakeOffset, _lastCamPos, _camVelocity;
     private CarModel _car = null!;
     private Matrix4x4 _carBody, _carPose, _modelToBody;
     private readonly Matrix4x4[] _carWheels = new Matrix4x4[4];
@@ -71,11 +73,12 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _renderer = new WorldRenderer(Device) { Atmosphere = AtmosphereFor(courseTime), HighQuality = highQuality };
         var sw = System.Diagnostics.Stopwatch.StartNew();
         _course = CourseLoader.Load(iso, courseTime, _renderer);
+        SetupFog(_renderer.Atmosphere);
         _drive = new Drive(iso, courseTime);
         Console.WriteLine($"[Touge] {courseTime} geladen in {sw.ElapsedMilliseconds} ms, {_course.World.Batches.Count} Batches, {_drive.Ground.Walls.Length} Wandsegmente");
         _carRenderer = new CarRenderer(_renderer);
         _fxRenderer = new EffectsRenderer(_renderer);
-        SetupLights(courseTime.EndsWith("_NIT"));
+        SetupLights(courseTime.EndsWith("_NIT"), courseTime.EndsWith("_RIN"));
         _car = CarModel.Load(iso, "AE86T", 0, _renderer);
 
         // model space → physics body space (origin CoG): model wheel centres onto the physics wheel centres at rest
@@ -146,6 +149,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         var up = Vector3.TransformNormal(Vector3.UnitY, pose);
         var side = Vector3.TransformNormal(Vector3.UnitX, pose) * 0.1f; // half tread width
         var speed = MathF.Max(car.Velocity.Length(), 3); // the tyre model's slip denominator (VMin)
+        var wet = _renderer.Atmosphere.Wetness;
+        var spray = wet * Math.Clamp((speed - 4) / 22, 0, 1); // water thrown up by the tyres, 0..1 by speed
         for (var i = 0; i < 4; i++)
         {
             var w = car.Wheels[i];
@@ -153,13 +158,22 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             var tan = MathF.Tan(w.SlipAngle);
             var slide = w.Contact ? speed * MathF.Sqrt(w.SlipRatio * w.SlipRatio + tan * tan) : 0; // m/s
             var load = Math.Clamp(w.Load / spec.NominalLoad, 0, 1.5f);
-            _fx.Skid(i, contact, side, up, Math.Clamp((slide - 2f) / 3, 0, 1) * Math.Clamp(load * 4, 0, 1));
-            var smoke = Math.Clamp((slide - 4.5f) / 7, 0, 1) * load;
+            // wet tyres barely mark the road or smoke
+            _fx.Skid(i, contact, side, up, Math.Clamp((slide - 2f) / 3, 0, 1) * Math.Clamp(load * 4, 0, 1) * (1 - 0.7f * wet));
+            var smoke = Math.Clamp((slide - 4.5f) / 7, 0, 1) * load * (1 - 0.8f * wet);
             _smokeDebt[i] += smoke * 45 * dt; // puffs per second per wheel at full slide
             for (; _smokeDebt[i] >= 1; _smokeDebt[i]--)
             {
                 var jitter = new Vector3(_rng.NextSingle() - 0.5f, _rng.NextSingle() * 0.5f, _rng.NextSingle() - 0.5f);
                 _fx.EmitSmoke(contact + up * 0.2f + jitter * 0.3f, car.Velocity * 0.12f + jitter * 1.5f + up * 0.5f, 0.3f, 0.12f + 0.25f * smoke);
+            }
+            // ponytail: spray reuses the smoke puffs (rise slowly instead of falling); own particles if it reads wrong up close
+            if (!w.Contact || i < 2) continue; // rear wheels: the fronts spray into the rears
+            _sprayDebt[i] += spray * 30 * dt;
+            for (; _sprayDebt[i] >= 1; _sprayDebt[i]--)
+            {
+                var jitter = new Vector3(_rng.NextSingle() - 0.5f, _rng.NextSingle(), _rng.NextSingle() - 0.5f);
+                _fx.EmitSmoke(contact + up * 0.15f + jitter * 0.2f, car.Velocity * 0.55f + up * (0.8f + 1.5f * jitter.Y) + jitter * 1.2f, 0.25f, 0.05f * spray);
             }
         }
 
@@ -290,17 +304,17 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
 
     /// <summary>
     ///     Night: headlights on, CRS_LIGHT points as sodium street lights (on Akina they sit 6–7 m above and 5–10 m beside
-    ///     the road: lamp heads; the game itself only brightens the car near them). Intensities tuned by eye.
+    ///     the road: lamp heads; the game itself only brightens the car near them). Rain: headlights on (dimmer, it is day). Intensities tuned by eye.
     /// </summary>
-    private void SetupLights(bool night)
+    private void SetupLights(bool night, bool rain)
     {
         var l = _renderer.Lights;
-        l.HeadlightColor = night ? new Vector3(1f, 0.92f, 0.8f) * 700 : Vector3.Zero;
+        l.HeadlightColor = night ? new Vector3(1f, 0.92f, 0.8f) * 700 : rain ? new Vector3(1f, 0.92f, 0.8f) * 250 : Vector3.Zero;
         l.StreetLights = _course.Lights;
         l.StreetLightColor = night ? new Vector3(1f, 0.62f, 0.3f) * 50 : Vector3.Zero;
     }
 
-    /// <summary>Per frame: headlights from the car pose, brake lamps, env maps of the road point nearest to the car.</summary>
+    /// <summary>Per frame: headlights and rear lamps from the car pose, brake lamps, env maps of the road point nearest to the car.</summary>
     private void UpdateLights()
     {
         var l = _renderer.Lights;
@@ -312,6 +326,9 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             l.HeadlightDirection[i] = dir;
         }
         l.Brake = _fly ? 0 : _brakeLight;
+        // rear lamps (placed by eye on the AE86 mesh): dim red with the headlights on, bright when braking
+        for (var i = 0; i < 2; i++) l.TailLightPosition[i] = Vector3.Transform(new Vector3(i == 0 ? 0.5f : -0.5f, 0.7f, -2.15f), _carBody);
+        l.TailLightColor = new Vector3(1f, 0.08f, 0.03f) * ((l.HeadlightColor != Vector3.Zero ? 0.08f : 0) + 0.8f * l.Brake);
         if (_course.Env is { } env)
         {
             var e = env[_course.NearestRoadPoint(_carBody.Translation)];
@@ -319,25 +336,53 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         }
     }
 
-    /// <summary>Sky, fog, light and grading per time of day (_DAY, _NIT, _RIN). Tuned by eye, not from game data.</summary>
+    /// <summary>
+    ///     Sky, fog, light and grading per time of day (_DAY, _NIT, _RIN), tuned by eye. Fog ends follow the original's
+    ///     per-course table read as start/end pairs (CRS_INFO, Akina: day 9000 m, rain 1300 m, night 4000 m; meaning not
+    ///     fully confirmed, see FORMATS.md); its negative starts (haze right at the camera) read as a milky veil here, so
+    ///     the fog starts a few metres out. The tint comes from the course (<see cref="SetupFog"/>).
+    ///     Rain is overcast: no sun shadows, soft ambient, flat contrast.
+    /// </summary>
     private static Atmosphere AtmosphereFor(string courseTime) => courseTime[(courseTime.LastIndexOf('_') + 1)..] switch
     {
         "NIT" => new Atmosphere
         {
             Zenith = new(0.004f, 0.006f, 0.016f), Horizon = new(0.018f, 0.022f, 0.035f),
             SunDirection = Vector3.Normalize(new Vector3(-0.5f, 0.45f, 0.6f)), SunDisk = new(1.2f, 1.3f, 1.5f), // moon
-            SunIntensity = 0.12f, Ambient = new(0.025f, 0.03f, 0.045f), FogDistance = 900, BakedKeep = 0.88f, BakedSun = 0.15f, EnvStrength = 2f,
+            SunIntensity = 0.12f, Ambient = new(0.025f, 0.03f, 0.045f), BakedKeep = 0.88f, BakedSun = 0.15f, EnvStrength = 2f,
+            FogColor = new(0.010f, 0.014f, 0.026f), FogSun = Vector3.Zero, FogStart = 10, FogEnd = 4000, HeightFogDensity = 0.0012f, LightGlow = 0.00012f,
             Exposure = 3.2f, BloomThreshold = 0.5f, BloomStrength = 1.0f, Tint = new(0.92f, 0.97f, 1.1f), Saturation = 0.9f, Vignette = 0.35f,
         },
         "RIN" => new Atmosphere
         {
-            Zenith = new(0.22f, 0.24f, 0.27f), Horizon = new(0.40f, 0.42f, 0.45f), SunDisk = Vector3.Zero,
-            SunIntensity = 0.35f, Ambient = new(0.32f, 0.34f, 0.37f), FogDistance = 700, BakedKeep = 0.85f, BakedSun = 0.2f, Wetness = 0.85f,
-            SunDirection = Vector3.Normalize(new Vector3(0.2f, 1f, 0.15f)),
-            Exposure = 1.45f, Tint = new(0.96f, 0.99f, 1.03f), Saturation = 0.8f, Vignette = 0.3f,
+            Zenith = new(0.17f, 0.18f, 0.20f), Horizon = new(0.27f, 0.28f, 0.30f), SunDisk = Vector3.Zero, Shadows = false,
+            SunIntensity = 0.15f, Ambient = new(0.30f, 0.32f, 0.35f), BakedKeep = 0.9f, BakedSun = 0.1f, Wetness = 1f,
+            SunDirection = Vector3.Normalize(new Vector3(0.2f, 1f, 0.15f)), EnvStrength = 4f,
+            FogColor = new(0.22f, 0.23f, 0.25f), FogSun = Vector3.Zero, FogStart = 15, FogEnd = 1300, HeightFogDensity = 0.0025f, LightGlow = 0.0004f,
+            Exposure = 1.5f, BloomThreshold = 1.6f, BloomStrength = 0.4f, Tint = new(0.96f, 0.99f, 1.03f), Saturation = 0.9f, Vignette = 0.3f,
         },
         _ => new Atmosphere(),
     };
+
+    /// <summary>
+    ///     Course-dependent fog: the original's fog tint (day/rain; its night fog is black, ours stays dark blue) at our
+    ///     brightness — its values are for unlit PS2 output (USUI0 rain is as light as day, which turns puddles white) — and the
+    ///     height fog over the driving line's altitude range (densest at its lowest point, ×1/e every third of the range).
+    /// </summary>
+    private void SetupFog(Atmosphere a)
+    {
+        if (_course.FogColour is { } c && c != Vector3.Zero)
+        {
+            var tint = new Vector3(MathF.Pow(c.X, 2.2f), MathF.Pow(c.Y, 2.2f), MathF.Pow(c.Z, 2.2f));
+            a.FogColor = tint * (Luminance(a.FogColor) / Luminance(tint));
+        }
+        float lo = float.MaxValue, hi = float.MinValue;
+        foreach (var p in _course.DrivingLine) (lo, hi) = (MathF.Min(lo, p.Y), MathF.Max(hi, p.Y));
+        a.HeightFogBase = lo;
+        a.HeightFogScale = MathF.Max((hi - lo) / 3, 30);
+    }
+
+    private static float Luminance(Vector3 c) => Vector3.Dot(c, new Vector3(0.2126f, 0.7152f, 0.0722f));
 
     private void UpdateDriver(float dt)
     {
@@ -478,11 +523,19 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         ];
         _renderer.RenderShadows(ctx.Encoder, _pos, Vector3.Normalize(_camLook - _pos), _fov, aspect, _course.World, casters);
         var pass = _renderer.BeginScene(ctx.Encoder, skyView, proj, shot);
-        _renderer.DrawSky(pass, _course.Sky, Matrix4x4.CreateTranslation(_pos with { Y = 0 }) * view * proj); // follows the camera
+        _renderer.Time = _simTime;
+        _renderer.DrawSky(pass, _course.Sky, Matrix4x4.CreateTranslation(_pos with { Y = 0 }) * view * proj, _pos); // follows the camera
         var carView = _probe != null && _probeView.Group == 1;
         if (_probe == null || !carView) _renderer.Draw(pass, _course.World, view * proj, _pos);
         if (_probe == null || carView) _carRenderer.Draw(pass, _car.Body, _car.Wheel, _carBody, _carWheels, view * proj, _pos);
         _fxRenderer.Draw(pass, _fx, view, view * proj, _pos);
+        // camera velocity stretches the rain streaks; a shot has no previous frame, the chase camera moves with the car
+        var frameDt = ctx.Time.DeltaTime;
+        _camVelocity = shot != null ? (_fly ? Vector3.Zero : _drive.Car.Velocity)
+            : frameDt > 0 ? Vector3.Lerp(_camVelocity, (_pos - _lastCamPos) / frameDt, 0.3f) : _camVelocity;
+        _lastCamPos = _pos;
+        var heightPx = shot?.Height ?? Device.SwapchainHeight;
+        _fxRenderer.DrawRain(pass, view * proj, _pos, _camVelocity, _simTime, 2 * MathF.Tan(_fov / 2) / heightPx);
         _renderer.EndScene(ctx.Encoder, pass, shot);
         if (shot != null)
         {

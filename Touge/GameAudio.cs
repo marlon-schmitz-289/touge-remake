@@ -7,7 +7,8 @@ namespace Touge;
 /// <summary>
 ///     Sound of a drive, all from the ISO except wind/road noise (synthesised, the disc has none):
 ///     AE86 engine = CARSE <c>AE86_U</c> (on throttle) + <c>AE86_D</c> (overrun), 8 looped layers each, volume and pitch per
-///     layer from the original SECT curves over an rpm index; tyres <c>SRIP_A</c> (road) / <c>RAIN_SRIP</c> (grass, stand-in);
+///     layer from the original SECT curves over an rpm index; tyres <c>SRIP_A</c> (road; <c>RAIN_SRIP</c> on _RIN courses) /
+///     <c>RAIN_SRIP</c> (grass, stand-in); rain ambience SYSSE <c>rain</c> looped on _RIN courses;
 ///     walls <c>cr001/cr002</c> (one-shot by impact speed, cr002's middle looped as scrape); <c>zbackfire002a–h</c> on
 ///     high-rpm upshifts/lift-off; race BGM (RACEBGM.AFS) streamed with its loop points.
 ///     <see cref="Update"/> once per physics tick, allocation-free.
@@ -24,6 +25,7 @@ public sealed class GameAudio : IDisposable
     private readonly List<AudioDevice.Clip> _clips = [];
     private readonly AudioDevice.LoopVoice[] _engine = new AudioDevice.LoopVoice[16]; // 0–7 load (U), 8–15 overrun (D)
     private readonly AudioDevice.LoopVoice _squeal, _squealHigh, _dirt, _scrape, _road, _wind;
+    private readonly AudioDevice.LoopVoice? _rain;
     private readonly AudioDevice.Clip _crashA, _crashB, _skid;
     private readonly AudioDevice.Clip[] _backfire;
 
@@ -60,9 +62,11 @@ public sealed class GameAudio : IDisposable
             _engine[i] = Loop(load[i]);
             _engine[8 + i] = Loop(overrun[i]);
         }
+        var wet = courseTime.EndsWith("_RIN");
         var srip = Bank(carse, "SRIP_A");
-        (_squeal, _squealHigh, _skid) = (Loop(srip[0]), Loop(srip[1]), srip[3]);
-        _dirt = Loop(Bank(carse, "RAIN_SRIP")[0]);
+        var rainSrip = Bank(carse, "RAIN_SRIP");
+        (_squeal, _squealHigh, _skid) = wet ? (Loop(rainSrip[0]), Loop(rainSrip[1]), srip[3]) : (Loop(srip[0]), Loop(srip[1]), srip[3]);
+        _dirt = Loop(rainSrip[0]);
 
         var sysse = iso.ReadFile("CDVD/DATA/SOUND/SYSSE.BIN");
         var bank = Vag.SysSe(sysse);
@@ -79,6 +83,11 @@ public sealed class GameAudio : IDisposable
         // cr002 stays loud from ~0.3 to ~1.9 s: its middle loops as wall scrape (no scrape sample on the disc)
         _scrape = Loop(Clip(cr2 with { Loop = (cr2.Rate * 6 / 10, cr2.Rate * 18 / 10) }));
         _backfire = [.. "abcdefgh".Select(c => Clip(Sys($"zbackfire002{c}.vag")))];
+        if (wet)
+        {
+            _rain = Loop(Clip(Seamless(Sys("rain.vag"), 0.4f)));
+            _rain.Gain = 0.5f;
+        }
 
         _road = Loop(Clip(new Vag.Sound(Noise(22050 * 2, 0.06f, 1), 22050, null)));
         _wind = Loop(Clip(new Vag.Sound(Noise(22050 * 2, 0.35f, 2), 22050, null)));
@@ -110,6 +119,20 @@ public sealed class GameAudio : IDisposable
         var (hd, bd) = Vag.Mrg(carse.Read(carse.Find(name + ".MRG")!.Value));
         // program i plays Vagi i (the HD's Smpl chunk maps them 1:1)
         return [.. Vag.HdSamples(hd, bd.Length).Select(s => Clip(Vag.Decode(bd.AsSpan(s.Offset, s.Size), s.Rate)))];
+    }
+
+    /// <summary>
+    ///     Loops a sample without a loop point (rain.vag): the last <paramref name="seconds"/> crossfade into the first ones,
+    ///     the loop runs from there to the end, so the jump back lands on matching material.
+    /// </summary>
+    private static Vag.Sound Seamless(Vag.Sound s, float seconds)
+    {
+        var n = Math.Min((int)(s.Rate * seconds), s.Pcm.Length / 2);
+        var pcm = (short[])s.Pcm.Clone();
+        var start = pcm.Length - n;
+        for (var k = 0; k < n; k++)
+            pcm[start + k] = (short)(s.Pcm[start + k] * (1 - (float)k / n) + s.Pcm[k] * ((float)k / n));
+        return s with { Pcm = pcm, Loop = (n, pcm.Length) };
     }
 
     /// <summary>Low-passed white noise (one-pole, <paramref name="a"/> = filter coefficient), normalised to −6 dBFS peak.</summary>
@@ -266,6 +289,7 @@ public sealed class GameAudio : IDisposable
         _dev.StopMusic();
         foreach (var v in _engine) v.Dispose();
         foreach (var v in new[] { _squeal, _squealHigh, _dirt, _scrape, _road, _wind }) v.Dispose();
+        _rain?.Dispose();
         foreach (var c in _clips) c.Dispose();
     }
 }

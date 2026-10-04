@@ -41,8 +41,11 @@ Backend: Metal (macOS) bzw. Vulkan, umschaltbar mit `--backend metal|vulkan|open
 
 Grafik: Szene in HDR (RGBA16F, 4× MSAA mit Resolve, Alpha-to-Coverage für Laub), danach Bloom, ACES-Tonemapping,
 Belichtung, Farbstimmung und Vignette je Tageszeit (`_DAY`/`_NIT`/`_RIN`, `TougeGame.AtmosphereFor`). Texturen sRGB mit
-Mipmaps (CPU, Alpha-Abdeckung bleibt erhalten) und 8× anisotrop. Himmel: analytischer Verlauf + Sonne hinter dem Sky-Mesh,
-Nebel in der Horizontfarbe. Z-Fighting: Dreiecke, die < 1 mm über einem früheren liegen (Decals, überlappende
+Mipmaps (CPU, Alpha-Abdeckung bleibt erhalten) und 8× anisotrop. Himmel: analytischer Verlauf + Sonne hinter dem Sky-Mesh.
+Nebel (fog.glsl, pro Pixel auf Strecke, Auto, Effekte, Regen und Horizont von Himmel/Sky-Mesh): linear nach Entfernung +
+Höhennebel (am dichtesten am tiefsten Punkt der Fahrlinie, Täler laufen voll), Farbton aus dem Kurs (`CRS_INFO`), tags
+warm zur Sonne hin, nachts dunkelblau mit Lichthof um Laternen und sichtbaren Scheinwerferkegeln, im Regen dichter grauer
+Dunst. Z-Fighting: Dreiecke, die < 1 mm über einem früheren liegen (Decals, überlappende
 Streckenabschnitte, Auto-Aufkleber), werden beim Laden zu Overlay-Ebenen (`ZFight`) und pro Ebene 2 mm Richtung Kamera
 gezogen – wie auf der PS2 gewinnt die spätere Schicht, statt je nach Rundung zu flackern.
 
@@ -52,7 +55,16 @@ neu verteilt: `gebacken × (Rest + Sonne × Schatten × N·L)` (`Atmosphere.Bake
 werfen Schatten, gebackene Schatten werden nicht doppelt abgedunkelt. Auto: Klarlack mit Fresnel, Spiegelung der
 Env-Maps des Kurses (`ENV_TEX_*`, je Straßenpunkt per `CRS_ENV` gewählt), Scheiben dunkel + spiegelnd, Rücklichter
 leuchten beim Bremsen (Bloom). Nacht: zwei Scheinwerfer-Kegel (flach/breit) und die `CRS_LIGHT`-Punkte als
-Straßenlaternen (4 nächste). Regen: flache Flächen dunkler, Horizont-Spiegelung und Glanzlichter.
+Straßenlaternen (4 nächste), Rückleuchten als kleine rote Punktlichter.
+
+Regen (`_RIN`, `Atmosphere.Wetness`): bedeckt (keine Sonnenschatten, weiches Umgebungslicht), alles nass-dunkler und
+satter; nur nach oben zeigende graue, deckende Flächen (Asphalt, Beton) glänzen, fleckig per Rauschen – Gras, Laub,
+Fels werden nur dunkler. Glänzende Flächen spiegeln den Himmel unscharf (Wasser-Fresnel, unter Bäumen/an Wänden
+gedämpft) und Lampen als lange Streifen; Pfützen (Rauschmaske auf ebenem Boden) sind dunkle, scharfe Spiegel mit
+Regenringen. Fallender Regen: 9000 Tropfen als kamerabezogene Streifen (rain.vert, ohne Vertexpuffer, in einer 36×24×36-m-Box
+um die Kamera umgebrochen), durch die Kamerabewegung gestreckt, von Scheinwerfern beleuchtet. Auto: Lack etwas dunkler,
+Tropfen (gewölbte Normalen) auf Lack und Scheiben. Scheinwerfer an, Gischt hinter den Hinterrädern nach Tempo, kaum
+Rauch/Bremsspuren. Ton: Regen-Loop `rain` (SYSSE) und nasses Reifenquietschen `RAIN_SRIP`.
 
 Effekte (`Effects`/`EffectsRenderer`, effect.frag): Reifenrauch je Rad aus der Rutschgeschwindigkeit (Schlupf × Tempo,
 gewichtet mit Radlast) – weiche Billboards mit Rauschen, von Sonne (mit Schatten), Ambient und Scheinwerfern/Laternen
