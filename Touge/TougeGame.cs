@@ -1180,15 +1180,26 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             _hud.Build(_overlay, w, h, _carPose.Translation, Vector3.TransformNormal(Vector3.UnitZ, _carPose), _drive.Car, _carName, _menuTime);
         }
         else _overlay.Clear();
-        if (_front is not { Active: true } && menuShown) _menu!.Build(_overlay, w, h);
         var target = frame?.View ?? Device.CurrentSwapchainView;
-        _overlayRenderer.Draw(ctx.Encoder, _overlay, target, w, h);
-        _textRenderer.Draw(ctx.Encoder, _overlay, target, w, h);
+        if (_front is not { Active: true } && menuShown)
+        {
+            // HUD as its own layer first: one overlay draws all shapes before all text, so HUD text would land on the menu panels
+            DrawOverlay(ctx.Encoder, target, w, h);
+            _overlay.Clear();
+            _menu!.Build(_overlay, w, h);
+        }
+        DrawOverlay(ctx.Encoder, target, w, h);
         if (shot != null)
         {
             shot.Copy(ctx.Encoder);
             _shotState = 2;
         }
+    }
+
+    private void DrawOverlay(Penelope.ICommandEncoder encoder, Penelope.TextureViewHandle target, int w, int h)
+    {
+        _overlayRenderer.Draw(encoder, _overlay, target, w, h);
+        _textRenderer.Draw(encoder, _overlay, target, w, h);
     }
 
     public override void Dispose()

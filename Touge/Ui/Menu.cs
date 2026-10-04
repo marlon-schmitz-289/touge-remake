@@ -451,7 +451,7 @@ public sealed class Menu(Catalog catalog, Settings settings)
     /// <summary>Selected value of option row <paramref name="row"/>.</summary>
     private int OptionValue(int row) => row switch
     {
-        0 => settings.HighQuality ? 0 : 1, 1 => settings.MusicOn ? 0 : 1, 4 => settings.HudOn ? 0 : 1, 5 => (int)MathF.Round((settings.HudScale - 0.8f) * 10), 6 => (int)settings.MapMode,
+        0 => settings.HighQuality ? 0 : 1, 1 => settings.MusicOn ? 0 : 1, 4 => settings.HudOn ? 0 : 1, 5 => Math.Clamp((int)MathF.Round((settings.HudScale - 0.8f) * 10), 0, 5), 6 => (int)settings.MapMode,
         7 => settings.BumperCam ? 1 : 0, 8 => settings.Livery switch { Livery.Rival => 0, Livery.Stock => 1, _ => 2 }, 9 => _padHelp ? 1 : 0, _ => 0,
     };
 
@@ -896,7 +896,7 @@ public sealed class Menu(Catalog catalog, Settings settings)
         }
         var gy = 64 + _row * 28;
         c.Glow(200, gy - 4, 484, gy + 30, Canvas.Pulse(Theta));
-        c.Carbon(36, 344, 480, 426, 1, false);
+        c.Carbon(36, 348, 480, 426, 1, false);
         var help = _row == 9 ? _padHelp ? PadHelp : KeyboardHelp : OptionHelp[_row];
         for (var i = 0; i < help.Length; i++) c.Text(help[i], 50, 366 + i * 20, 11.5f, Canvas.White, 0, 0.12f);
         Hint(c, "UP/DOWN: Select    LEFT/RIGHT: Change    BACK: Main menu");

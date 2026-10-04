@@ -44,7 +44,7 @@ public sealed class Hud
     public static float Dash(Style.Grid g, float scale) => MathF.Min(DashSize * Math.Clamp(scale, 0.8f, 1.3f), (g.Units / 2 - CarClear) / Cluster.Box.X);
 
     /// <summary>Half width (units) kept free around the screen centre for the car.</summary>
-    public const float CarClear = 160;
+    public const float CarClear = 180;
     public LapTimer Timer { get; }
     public DriftMeter Drift { get; } = new();
 
