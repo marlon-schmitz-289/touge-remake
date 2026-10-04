@@ -209,6 +209,7 @@ public sealed class Settings
         Car ??= "AE86T";
         Best ??= [];
         MusicOff ??= [];
+        Controls ??= new();
         Version = CurrentVersion;
     }
 

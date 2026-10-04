@@ -83,6 +83,19 @@ public class OptionsTests
         Assert.Equal(65, Settings.FromJson("""{ "Fov": 63 }""").Fov); // on the row's 5 degree grid
     }
 
+    /// <summary>Merged schema: a v2 file from before HUD SIZE / PLAYLIST / CONTROLLER (or with nulls) gets their defaults, HUD SIZE snaps into 80–130 %.</summary>
+    [Fact]
+    public void Load_V2WithoutLaterFields_GetsDefaults()
+    {
+        var s = Settings.FromJson("""{ "Version": 2, "Fov": 70, "MusicOff": null, "Controls": null, "HudScale": 9 }""");
+        Assert.Equal(70, s.Fov);
+        Assert.Empty(s.MusicOff);
+        Assert.NotNull(s.Controls);
+        Assert.Equal(1.3f, s.HudScale, 3);
+        Assert.Equal(1f, Settings.FromJson("""{ "Version": 2 }""").HudScale);
+        Assert.Equal(0.9f, Settings.FromJson("""{ "Version": 2, "HudScale": 0.93 }""").HudScale, 3);
+    }
+
     [Fact]
     public void Presets_DeriveFromToggles()
     {

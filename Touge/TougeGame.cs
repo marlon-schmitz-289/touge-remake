@@ -247,16 +247,18 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         else if (_menu != null && StartMenu != null)
         {
             // options:<page> opens an options page directly (screenshots), controls:<device> the controls screen
-            var page = StartMenu.StartsWith("options:", StringComparison.OrdinalIgnoreCase) ? StartMenu[8..] : null;
-            var screen = StartMenu == "settings" || page != null ? Menu.Screen.Options
-                : Enum.TryParse<Menu.Screen>(StartMenu.Split(':')[0], true, out var s) && s is not (Menu.Screen.None or Menu.Screen.Loading or Menu.Screen.Finish or Menu.Screen.Result) ? s
-                : throw new ArgumentException($"--menu {StartMenu}: unbekannt");
+            var start = StartMenu;
+            var page = start.StartsWith("options:", StringComparison.OrdinalIgnoreCase) ? start[8..] : null;
+            if (page?.ToLowerInvariant() == "controller" && _menu.Controls != null) (start, page) = ("controls", null); // the plate opens the controls screen
+            var screen = start == "settings" || page != null ? Menu.Screen.Options
+                : Enum.TryParse<Menu.Screen>(start.Split(':')[0], true, out var s) && s is not (Menu.Screen.None or Menu.Screen.Loading or Menu.Screen.Finish or Menu.Screen.Result) ? s
+                : throw new ArgumentException($"--menu {start}: unbekannt");
             OpenMenu(screen);
             if (page != null && !_menu.Options.OpenPage(page))
                 throw new ArgumentException($"--menu options:{page}: unbekannt, möglich: {string.Join(' ', _menu.Options.Pages.Select(p => p.Title.Replace(" ", "").ToLowerInvariant()))}");
             if (screen == Menu.Screen.Controls)
             {
-                var device = StartMenu.Split(':') is [_, var d] ? d : "";
+                var device = start.Split(':') is [_, var d] ? d : "";
                 _menu.Controls!.Open(device.ToLowerInvariant() == "gamepad" ? DeviceKind.Pad : Enum.TryParse<DeviceKind>(device, true, out var dk) ? dk : DeviceKind.Keyboard); // --menu controls:wheel
             }
             _inRace = screen is Menu.Screen.Pause or Menu.Screen.Intro;
@@ -634,7 +636,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             ApplyGraphics();
             Console.WriteLine($"\n[Touge] Grafik: {(_renderer.HighQuality ? "hoch (4× MSAA, Bloom, Schatten)" : "niedrig (ohne MSAA/Bloom/Schatten)")}");
         }
-        if (_jukebox != null && (k.IsKeyPressed(Key.M) || Input.Gamepad.IsButtonPressed(GamepadButton.DpadRight)))
+        if (_jukebox != null && (k.IsKeyPressed(Key.M) || Input.Gamepad.IsButtonPressed(GamepadButton.DpadRight) && !PadBound(GamepadButton.DpadRight)))
         {
             _settings.MusicOn = true;
             _jukebox.Next();
@@ -1410,6 +1412,9 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             _shotState = 2;
         }
     }
+
+    /// <summary>A pad button the player bound to a driving control (then its fixed extra, e.g. D-pad right = next song, stays off).</summary>
+    private bool PadBound(GamepadButton b) => _settings.Controls.Pad.Values.Any(binds => binds.Contains(Bind.Pad(b)));
 
     private void DrawOverlay(Penelope.ICommandEncoder encoder, Penelope.TextureViewHandle target, int w, int h)
     {

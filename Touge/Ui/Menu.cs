@@ -510,7 +510,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                 c.Backdrop(_clock);
                 Controls!.Draw(c, Theta);
                 Hint(c, "UP/DOWN: Select    LEFT/RIGHT: Change    DECIDE: Bind    BACK: Options");
-                c.Marquee("CONTROLS", true, _clock);
+                c.Marquee("CONTROLLER", true, _clock);
                 break;
         }
         c.Fade(_leave >= 0 ? Math.Clamp(_leave / Fade, 0, 1) : _fadeIn ? 1 - Math.Clamp(_t / Fade, 0, 1) : 0);
