@@ -722,7 +722,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             return;
         }
         _fly = true;
-        if (_probeView.Group == 1)
+        if (_probeView.Group == 1 || _probeView is { Group: 3, LinePoint: < 0 })
         {
             UpdateCarMatrices(1);
             OrbitCar(_probeView.Orbit * MathF.PI / 180);
@@ -737,6 +737,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             JumpToLine(_probeView.LinePoint);
             _pitch = -0.12f;
         }
+        _pos += Forward() * _probeView.Push;
+        _renderer.Reflections = !_probeView.NoSsr;
         _camLook = _pos + Forward() * 100; // far target: rounding of the turned target barely tilts the view
         _shotState = 1;
     }
@@ -1049,7 +1051,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _renderer.DrawSky(pass, _course.Sky, Matrix4x4.CreateTranslation(_pos with { Y = 0 }) * view * proj, _pos); // follows the camera
         var carView = _probe != null && _probeView.Group == 1;
         if (_probe == null || !carView) _renderer.Draw(pass, _course.World, view * proj, _pos);
-        if (_probe == null || carView) _carRenderer.Draw(pass, _car.Body, _car.Decals, _car.Wheel, _carBody, _carWheels, view * proj, _pos);
+        if (_probe == null || carView || _probeView.Group == 3) _carRenderer.Draw(pass, _car.Body, _car.Decals, _car.Wheel, _carBody, _carWheels, view * proj, _pos);
         _fxRenderer.Draw(pass, _fx, view, view * proj, _pos);
         // camera velocity stretches the rain streaks; a shot has no previous frame, the chase camera moves with the car
         var frameDt = ctx.Time.DeltaTime;
