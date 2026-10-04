@@ -82,12 +82,16 @@ public sealed class LinePilot
 
     public float Length => _along[^1];
 
-    /// <summary>Nearest segment by global search (resets tracking) — for spawning/reset, O(n).</summary>
-    public int Nearest(Vector3 p)
+    /// <summary>
+    ///     Nearest segment by global search (resets tracking) — for spawning/reset, O(n). <paramref name="near"/>: only segments
+    ///     within 50 m of that distance along the line — a circuit's line runs two laps, so the start point lies on it twice.
+    /// </summary>
+    public int Nearest(Vector3 p, float? near = null)
     {
         var best = float.MaxValue;
         for (var i = 0; i < _line.Length - 1; i++)
         {
+            if (near is { } s && (_along[i + 1] < s - 50 || _along[i] > s + 50)) continue;
             var d = DistanceSq(p, i);
             if (d < best) (best, _seg) = (d, i);
         }
@@ -119,7 +123,7 @@ public sealed class LinePilot
             car.WallProbes(probes);
             if (ground.CollideWalls(probes, Vehicle.ProbeRadius, contacts) > 0) continue;
             for (var t = 0; t < 60; t++) car.Step(new VehicleInput(0, 0, 0, Handbrake: true), ground, 1f / 120); // handbrake: brake at standstill engages reverse
-            Nearest(car.Position);
+            Nearest(car.Position, _along[at]);
             return at;
         }
         return -1;

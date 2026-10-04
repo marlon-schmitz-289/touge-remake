@@ -25,9 +25,9 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     /// <summary>
     ///     Load: load <see cref="CourseTime"/>/<see cref="CarId"/>… (the menu goes on into the telop); Restart: car back to the
     ///     start (the telop follows); Exit: back to the main menu; PreviewCar: show <see cref="CarId"/>/<see cref="Paint"/>;
-    ///     Quit: close the game (confirmed in the pause menu).
+    ///     Quit: close the game (confirmed in the pause menu); Rivals: back to the Legend of the Streets rival ladder.
     /// </summary>
-    public enum Action { None, Load, Resume, Restart, Exit, PreviewCar, SettingsChanged, Quit }
+    public enum Action { None, Load, Resume, Restart, Exit, PreviewCar, SettingsChanged, Quit, Rivals }
 
     /// <summary>A finished run for the result sheet.</summary>
     /// <param name="Deltas">Per sector against the best run it was compared with (null without one).</param>
@@ -67,6 +67,13 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     public string? Versus { get; set; }
     /// <summary>Original UI sound by SYSSE name.</summary>
     public Action<string>? Sound { get; set; }
+
+    // ---- Legend of the Streets (Ui/LegendScreen): its battles leave to the rival ladder, not the main menu
+    /// <summary>A Legend battle: backing out of the car select, pause Exit and the result's RIVAL SELECT return <see cref="Action.Rivals"/>.</summary>
+    public bool Legend { get; set; }
+    /// <summary>Cars not won yet (Legend's secret car): shown as ?????, not selectable.</summary>
+    public Func<string, bool>? CarLocked { get; set; }
+    private bool Locked(int car) => CarLocked?.Invoke(catalog.Cars[car].Id) == true;
 
     private int _slot, _maker, _model, _car, _paint, _choice, _row;
     private bool _reverse, _night, _wet, _fog, _manual, _inModels, _loadAsked, _fadeIn;
@@ -112,6 +119,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
         _slot = Math.Max(0, catalog.Courses.ToList().FindIndex(c => c.Id == id));
         (_night, _wet, _fog, _reverse) = (courseTime.EndsWith("_NIT"), courseTime.EndsWith("_RIN"), fog, reverse);
         _car = Math.Max(0, catalog.Cars.ToList().FindIndex(c => c.Id == car));
+        if (Locked(_car)) (_car, paint) = (0, 0);
         (_paint, _manual) = (paint, manual);
         _maker = Array.IndexOf(Catalog.Makers, catalog.Cars[_car].Maker);
         _back.Clear();
@@ -164,7 +172,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     {
         Sound?.Invoke("BEEP001");
         if (_back.TryPop(out var s) && s != Screen.None) Go(s, false);
-        else Leave(Screen.None, Action.Exit);
+        else Leave(Screen.None, Legend ? Action.Rivals : Action.Exit);
     }
 
     private string[] Times()
@@ -292,6 +300,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                     _inModels = true;
                     _model = Math.Max(0, Array.IndexOf(MakerCars(_maker), _car));
                 }
+                else if (k.Ok && Locked(MakerCars(_maker)[_model])) Sound?.Invoke("BEEP001");
                 else if (k.Ok)
                 {
                     Sound?.Invoke("SYS006");
@@ -313,7 +322,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                     Sound?.Invoke("SYS005");
                     if (k.X != 0)
                     {
-                        var cars = MakerCars(_maker);
+                        var cars = MakerCars(_maker).Where(i => !Locked(i) || i == _car).ToArray();
                         (_car, _paint) = (cars[Wrap(Array.IndexOf(cars, _car) + k.X, cars.Length)], 0);
                     }
                     else _paint = Wrap(_paint + k.Y, catalog.Cars[_car].Paints.Length);
@@ -363,7 +372,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                             Enter(Screen.Intro, false);
                             return Action.Restart;
                         case 2:
-                            Leave(Screen.None, Action.Exit);
+                            Leave(Screen.None, Legend ? Action.Rivals : Action.Exit);
                             break;
                         default:
                             _quit.Show();
@@ -397,10 +406,11 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                             Leave(Screen.Intro, Action.Restart);
                             break;
                         case 1:
-                            Go(Screen.Course, false);
+                            if (Legend) Leave(Screen.None, Action.Rivals);
+                            else Go(Screen.Course, false);
                             break;
                         case 2:
-                            _back.Push(Screen.Course);
+                            if (!Legend) _back.Push(Screen.Course);
                             Go(Screen.Maker, false);
                             break;
                         default:
@@ -581,7 +591,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     }
 
     /// <summary>Driving line fitted north-up into the canvas box, the start tick green, the goal tick red (circuits: start only).</summary>
-    private static void MapLine(Canvas c, Catalog.Course course, bool reverse, float x0, float y0, float x1, float y1)
+    internal static void MapLine(Canvas c, Catalog.Course course, bool reverse, float x0, float y0, float x1, float y1)
     {
         var line = course.Line;
         Vector2 lo = new(float.MaxValue), hi = new(float.MinValue);
@@ -653,7 +663,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
             var y = 182 + i * 22;
             var sel = _inModels && i == _model;
             if (sel) c.Diamond(282, y - 4, 5);
-            c.Fit(catalog.Cars[cars[i]].Name, 292, y, 190, 0, sel ? Canvas.Yellow : Canvas.White, 0.15f, 0.06f, 13);
+            c.Fit(Locked(cars[i]) ? "?????" : catalog.Cars[cars[i]].Name, 292, y, 190, 0, Locked(cars[i]) ? Overlay.Rgba(1, 1, 1, 0.35f) : sel ? Canvas.Yellow : Canvas.White, 0.15f, 0.06f, 13);
         }
         if (_inModels) c.Glow(270, 166 + _model * 22, 490, 188 + _model * 22, Canvas.Pulse(Theta));
         Hint(c, _inModels ? "UP/DOWN: Select model    DECIDE: OK    BACK: Makers" : "UP/DOWN: Select maker    DECIDE: Models    BACK: Return");
@@ -811,7 +821,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
         var b = Style.Ease((_t - ButtonsAt) / 0.2f);
         if (b <= 0) return;
         for (var i = 0; i < ResultButtons.Length; i++)
-            c.Button(24 + i * 118, 392, 110, 30, ResultButtons[i], i == 0 ? Canvas.ButtonKind.Positive : i == 3 ? Canvas.ButtonKind.Negative : Canvas.ButtonKind.Neutral, b);
+            c.Button(24 + i * 118, 392, 110, 30, Legend && i == 1 ? "RIVAL SELECT" : ResultButtons[i], i == 0 ? Canvas.ButtonKind.Positive : i == 3 ? Canvas.ButtonKind.Negative : Canvas.ButtonKind.Neutral, b);
         var x = 24 + _row * 118;
         c.Glow(x - 4, 388, x + 114, 426, Canvas.Pulse(Theta), b);
     }

@@ -13,13 +13,13 @@ public sealed class MenuAudio : IDisposable
 {
     private static readonly string[] Names = ["SYS005", "SYS006", "BEEP001", "sys002", "alarm_02", "CAR010", "CAR011", "NAME001"];
     private readonly AudioDevice _dev;
-    private readonly Afs _bgm;
+    private readonly Afs _bgm, _themes;
     private readonly Dictionary<string, AudioDevice.Clip> _se = new(StringComparer.OrdinalIgnoreCase);
     private int _request;
 
     /// <summary>UI sound volume 0..1 (Settings).</summary>
     public float Volume { get; set; } = 1;
-    /// <summary>BGM.AFS entry playing (or loading), null = none.</summary>
+    /// <summary>BGM.AFS (else MG_BGM.AFS) entry playing (or loading), null = none.</summary>
     public string? Track { get; private set; }
     /// <summary>Time source for the log (seconds); the offline capture sets its own.</summary>
     public Func<double>? Clock { get; set; }
@@ -34,6 +34,7 @@ public sealed class MenuAudio : IDisposable
             _se[n] = dev.CreateClip(s.Pcm, 1, s.Rate);
         }
         _bgm = iso.OpenAfs("CDVD/DATA/SOUND/BGM.AFS");
+        _themes = iso.OpenAfs("CDVD/DATA/MANGA/MG_BGM.AFS"); // the characters' themes (Legend VS card)
     }
 
     private string Stamp => Clock is { } c ? $"{c():0.00} s " : "";
@@ -62,7 +63,7 @@ public sealed class MenuAudio : IDisposable
         var stamp = Stamp;
         void Start()
         {
-            var adx = new Adx(_bgm.Read(_bgm.Find(track)!.Value));
+            var adx = new Adx(_bgm.Find(track) is { } e ? _bgm.Read(e) : _themes.Read(_themes.Find(track)!.Value));
             if (request != _request) return; // superseded while loading
             var reader = adx.Open(loop: true);
             var once = Jingle(track);

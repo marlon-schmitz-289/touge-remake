@@ -66,7 +66,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     /// <summary>What the music stream plays: null silence, <see cref="Menu.RaceMusic"/>, or a BGM.AFS track of the menus ("" = decide again).</summary>
     private string? _music = "";
     /// <summary>Front end or a menu holds the game (no physics); the intro lets go at GO, the finish banner lets the pilot drive on.</summary>
-    private bool Frozen => _front is { Active: true } || _guide is { Active: true } || _menu is { Freezes: true };
+    private bool Frozen => _front is { Active: true } || _guide is { Active: true } || _legend is { Active: true } || _menu is { Freezes: true };
     /// <summary>The run's finish was handed to the menus (once per run).</summary>
     private bool _finished;
     private float _flyS, _menuTime;
@@ -180,6 +180,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
                 _settings.Course = "AKINA_DAY";
             _menu.Sound = n => _menuAudio?.Play(n);
             _guide = new CarGuide(_catalog) { Sound = n => _menuAudio?.Play(n) };
+            LoadLegend();
             FrontEnd.Step? step = Flow != null ? FrontEnd.Step.Boot : StartMenu switch
             {
                 null => UseMenus ? FrontEnd.Step.Boot : null, "boot" => FrontEnd.Step.Boot, "logo" => FrontEnd.Step.Logo,
@@ -242,6 +243,11 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             OpenGuide(StartMenu == "guide" ? CarGuide.Step.Intro : CarGuide.Step.List);
             if (StartMenu == "guide-talk") _guide.Talk(4);
             if (shotPath != null) _guide.Settle();
+            _inRace = false;
+        }
+        else if (_legend != null && StartMenu?.StartsWith("legend") == true)
+        {
+            OpenLegendAtStart(StartMenu);
             _inRace = false;
         }
         else if (_menu != null && StartMenu != null)
@@ -597,6 +603,11 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             UpdateGuide(keys, dt);
             return;
         }
+        if (_legend is { Active: true })
+        {
+            UpdateLegend(keys, dt);
+            return;
+        }
         if (_menu is { Current: not Menu.Screen.None })
         {
             UpdateMenu(keys, dt);
@@ -694,6 +705,9 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             case FrontEnd.Result.Guide:
                 OpenGuide(CarGuide.Step.Intro);
                 break;
+            case FrontEnd.Result.Legend:
+                _legend!.Open(LegendScreen.Step.Course);
+                break;
         }
     }
 
@@ -736,7 +750,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     {
         if (_audio == null || _menuAudio == null) return;
         var front = _front is { Active: true };
-        var guide = _guide is { Active: true };
+        var guide = _guide is { Active: true } || _legend is { Active: true };
         var sfx = !front && !guide && _menu!.Current is Menu.Screen.None or Menu.Screen.Intro or Menu.Screen.Finish ? _settings.SoundVolume : 0;
         if (_audioDevice!.Sfx != sfx) _audioDevice.Sfx = sfx; // the setter touches every voice
         if (_guide?.Voice != _voice && _guideVoice != null)
@@ -746,7 +760,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             _audioDevice.Music = MusicLevel;
             _guide.VoiceSeconds = _guideVoice.Play(_voice, _settings.MenuVolume);
         }
-        var want = !_settings.MusicOn ? null : front ? _front!.Music : guide ? _guide!.Music : _menu!.Music(_music);
+        var want = !_settings.MusicOn ? null : front ? _front!.Music : _legend is { Active: true } ? _legend.Music : guide ? _guide!.Music : _menu!.Music(_music);
         if (want == _music) return;
         if (_music == Menu.RaceMusic) _jukebox!.Stop();
         _music = want;
@@ -781,7 +795,11 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             case Menu.Action.Restart:
                 ResetRun();
                 break;
+            case Menu.Action.Rivals:
+                ReturnToLadder();
+                break;
             case Menu.Action.Exit:
+                EndLegendBattle();
                 _inRace = false;
                 if (_front == null) Window.ShouldClose = true; // a --menu start has no main menu to go back to
                 else _front.Open(FrontEnd.Step.Modes);
@@ -881,8 +899,13 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     /// </summary>
     private bool UpdateMenuCamera(float dt)
     {
-        var front = _front is { Active: true } || _guide is { Active: true, ShowsCar: false };
+        var front = _front is { Active: true } || _guide is { Active: true, ShowsCar: false } || _legend is { Active: true, ShowsCar: false };
         var screen = _menu?.Current ?? Menu.Screen.None;
+        if (_legend is { ShowsCar: true } && _rivalModel != null)
+        {
+            LegendCamera();
+            return true;
+        }
         if (_guide is { ShowsCar: true })
         {
             // the guide's turntable: the car turns in place (UpdateCarMatrices), the camera stands on the road behind it; the
@@ -1007,14 +1030,14 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     /// <summary>--flow: the scripted key of this frame; asks for the step's PNG first (written next frame), quits after the last step (with --bench: races on).</summary>
     private (int X, int Y, bool Ok, bool Back) FlowKeys(float dt)
     {
-        var script = bench != null ? FlowBenchScript : FlowScript;
+        var script = bench != null ? FlowBenchScript : LegendFlow ? LegendFlowScript : FlowScript;
         if (_flowStep >= script.Length)
         {
             if (bench == null) Window.ShouldClose = true;
             return default;
         }
         var s = script[_flowStep];
-        var at = _front is { Active: true } ? _front.Current.ToString() : _guide is { Active: true } ? "Guide" + _guide.Current : _menu!.Current != Menu.Screen.None ? _menu.Current.ToString() : "Race";
+        var at = _front is { Active: true } ? _front.Current.ToString() : _guide is { Active: true } ? "Guide" + _guide.Current : _legend is { Active: true } ? "Legend" + _legend.Current : _menu!.Current != Menu.Screen.None ? _menu.Current.ToString() : "Race";
         if (at != s.At)
         {
             _flowT = 0;
@@ -1385,6 +1408,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         var menuShown = _menu is { Current: not Menu.Screen.None };
         if (_front is { Active: true }) _front.Build(_overlay, w, h);
         else if (_guide is { Active: true }) _guide.Build(_overlay, w, h);
+        else if (_legend is { Active: true }) _legend.Build(_overlay, w, h);
         else if (_hud.Visible && (!menuShown || _menu!.OverRace)) // telop/countdown and pause lie over the HUD
         {
             _hud.Lights = _lights.State;
@@ -1394,14 +1418,14 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         }
         else _overlay.Clear();
         var target = frame?.View ?? Device.CurrentSwapchainView;
-        if (_front is not { Active: true } && _guide is not { Active: true } && menuShown)
+        if (_front is not { Active: true } && _guide is not { Active: true } && _legend is not { Active: true } && menuShown)
         {
             // HUD as its own layer first: one overlay draws all shapes before all text, so HUD text would land on the menu panels
             DrawOverlay(ctx.Encoder, target, w, h);
             _overlay.Clear();
             _menu!.Build(_overlay, w, h);
         }
-        if (_jukebox is { Playing: true, Current: { } song } && _music == Menu.RaceMusic && _front is not { Active: true } && _guide is not { Active: true })
+        if (_jukebox is { Playing: true, Current: { } song } && _music == Menu.RaceMusic && _front is not { Active: true } && _guide is not { Active: true } && _legend is not { Active: true })
             NowPlaying.Draw(_overlay, w, h, song, _jukebox.Since, hold: _menu?.Current == Menu.Screen.Pause,
                 below: _race?.Battle != null && _hud.Visible ? BattleHud.H + 14 : 0);
         if (InputDebug) InputDebugView.Build(_overlay, w, h, Input, _driver, _ffb);
