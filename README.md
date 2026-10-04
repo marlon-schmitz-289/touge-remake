@@ -156,7 +156,9 @@ Auto, nach oben ×1/e alle 50 m dünner, Täler dichter), langsam ziehende Nebel
 Himmel in jeder Richtung verhüllt (`skyFog` mindestens der Nebel der ersten 150 m). Tag: hellgrau-weiß, bedeckt und flach (keine
 Sonne/Schatten, weiches Ambient), Sonne nur als hellerer Fleck im Dunst, Scheinwerfer an, aber schwach (kein Lichtfleck auf der Straße).
 Nacht: fast schwarzer Nebel, Lichthof der Lampen und Scheinwerferkegel im Dunst. Allgemein für alle Lichter: die Extinktion des
-Nebels an der Kamera schluckt Lampenlicht mit der Entfernung (`uTailPos[0].w`, auf Flächen und im Lichthof).
+Nebels an der Kamera schluckt Lampenlicht mit der Entfernung (`uTailPos[0].w`, auf Flächen und im Lichthof), was durchkommt, ist
+weich gedeckelt (`FogLightCap`: Kegel als Schleier statt weißem Fleck). Nebelbänke im Volumen abgetastet (15/45 m entlang des
+Strahls, nicht an der Fläche), die ersten 3 m vor der Kamera klar (Auto behält Kontrast).
 
 Effekte (`Effects`/`EffectsRenderer`, effect.frag): Reifenrauch je Rad aus der Rutschgeschwindigkeit (Schlupf × Tempo,
 gewichtet mit Radlast) – weiche Billboards mit Rauschen, von Sonne (mit Schatten), Ambient und Scheinwerfern/Laternen

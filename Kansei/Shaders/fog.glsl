@@ -18,8 +18,16 @@ float fogAmount(vec3 p)
         float g = abs(dy) > 1e-3 ? (1.0 - exp(-dy)) / dy : 1.0;
         depth = pc.uFogParams.z * dist * exp(-e) * g;
 #ifdef SCENE_PUSH
-        // ±drift/2 by ~40 m noise at the end of the ray, moving at ~2 m/s: smooth, so nothing flickers
-        if (pc.uShadeGround.w > 0.0) depth *= 1.0 + pc.uShadeGround.w * (noise(p.xz * 0.025 + pc.uSky.w * vec2(0.05, 0.02)) - 0.5);
+        if (pc.uShadeGround.w > 0.0)
+        {
+            // fog weather: ±drift/2 by ~40 m noise sampled in the volume (15 and 45 m along the ray, not at the surface,
+            // so surfaces at one distance share it), moving at ~2 m/s: smooth, nothing flickers. The first 3 m are
+            // clear, so the player car keeps its contrast.
+            vec3 rd = d / max(dist, 1e-4);
+            vec2 t = pc.uSky.w * vec2(0.05, 0.02);
+            float n = noise((pc.uEye.xz + rd.xz * min(dist, 15.0)) * 0.025 + t) + noise((pc.uEye.xz + rd.xz * min(dist, 45.0)) * 0.025 + t);
+            depth *= (1.0 + pc.uShadeGround.w * (0.5 * n - 0.5)) * max(1.0 - 3.0 / max(dist, 1e-4), 0.0);
+        }
 #endif
     }
     return 1.0 - (1.0 - lin) * exp(-depth);

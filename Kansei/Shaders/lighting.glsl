@@ -55,6 +55,7 @@ float beam(int i, vec3 dir)
 
 const int Lights = 8;
 const float TailRange = 8.0;
+const float FogLightCap = 0.3; // most irradiance a lamp lends a surface in dense fog
 
 // Point light j (0–3 street lights, 4–5 rear lamps): position + radius, colour.
 vec4 pointLight(int j, out vec3 colour)
@@ -79,9 +80,12 @@ vec3 lightIn(int i, vec3 p, out vec3 l)
     l = d * inversesqrt(max(d2, 1e-4));
     float w = 1.0 - (d2 * d2) / (range * range * range * range);
     float att = w * w / (d2 + 1.0);
-    if (pc.uTailPos[0].w > 0.0) att *= exp(-pc.uTailPos[0].w * sqrt(d2)); // dense fog swallows the light on its way
     if (spot) att *= beam(i, -l);
-    return colour * att;
+    vec3 e = colour * att;
+    if (pc.uTailPos[0].w <= 0.0) return e;
+    // dense fog swallows the light on its way and scatters the rest: soft cap, so a beam reads as a veil, not a white spot
+    e *= exp(-pc.uTailPos[0].w * sqrt(d2));
+    return e / (1.0 + max(e.r, max(e.g, e.b)) / FogLightCap);
 }
 
 // Diffuse irradiance of all dynamic lights; adds an energy-normalised Blinn-Phong highlight (exponent `shininess`) to `spec`.
