@@ -178,6 +178,8 @@ public sealed partial class TougeGame
             ui.ShowMessage("UNKNOWN ADDRESS", Versus.Screen.Online);
             return;
         }
+        _lan?.Dispose();
+        _lan = null;
         _net = NetSession.Join(target, ui.Name, NetSim, log: l => Console.WriteLine("\n" + l));
         _vsLoaded = -1;
         ui.ShowConnecting();
@@ -273,8 +275,14 @@ public sealed partial class TougeGame
             case Versus.Action.Rematch when ui.Split:
                 StartSplit();
                 break;
-            case Versus.Action.Rematch:
-                _net?.StartRace();
+            case Versus.Action.Rematch when _net is { CanStart: true }:
+                _net.StartRace();
+                break;
+            case Versus.Action.Rematch: // the others left (or are not ready): back to the lobby instead
+                _menuAudio?.Play("BEEP001");
+                _net?.BackToLobby();
+                EndVersusRace();
+                ui.BackToLobby();
                 break;
             case Versus.Action.ToLobby:
                 if (_net?.IsHost == true) _net.BackToLobby();
