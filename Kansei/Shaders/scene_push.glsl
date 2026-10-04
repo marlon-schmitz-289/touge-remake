@@ -14,5 +14,5 @@ layout(push_constant) uniform Push {
     vec4 uSpotDir[2];   // beam axis xyz, w = tan of the vertical half spread
     vec4 uSpotColor;    // rgb intensity (0 = off), w = range
     vec4 uPointPos[4];  // street lights: xyz, w = radius (0 = unused)
-    vec4 uPointColor;   // rgb intensity
+    vec4 uPointColor;   // rgb intensity, w = overlay layer pull in metres (world.vert, car.vert)
 } pc;

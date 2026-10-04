@@ -35,18 +35,16 @@ public sealed record CarModel(StaticMesh Body, StaticMesh Wheel, Matrix4x4[] Whe
     }
 
     /// <summary>
-    ///     One batch per material; decal materials (flag 0x400, second pass in the game) go last so they win
-    ///     against the coplanar body under reversed-Z GreaterEqual. Material RGB (0x80 = 1.0) is baked into the
-    ///     vertex colour, alpha carries the kind for car.frag: paint 1 (flag 0x100, and the untextured 0x1000 parts =
+    ///     One batch per material in <see cref="Flatten"/> order, split into overlay layers where parts lie on each
+    ///     other (<see cref="CourseLoader.Layered"/>: decals, emblems, lamps, stacked trim). Material RGB (0x80 = 1.0) is baked into the vertex
+    ///     colour, alpha carries the kind for car.frag: paint 1 (flag 0x100, and the untextured 0x1000 parts =
     ///     the near-black lower body), windows (part <c>wind</c>) 0.5, rear lamps (part <c>Blamp</c>) 2, else 0 (matte).
     /// </summary>
     private static StaticMesh Build(Penelope.IPenelopeDevice device, IEnumerable<(string Name, Mesh Mesh)> meshes, Dictionary<string, int> textures)
     {
         var verts = new List<CarVertex>();
-        var batches = new List<MeshBatch>();
-        foreach (var decals in new[] { false, true })
-        foreach (var (name, mesh) in meshes)
-        foreach (var m in mesh.Materials.Where(m => (m.Flags & 0x400) != 0 == decals))
+        var batches = new List<(int Texture, int First)>();
+        foreach (var (name, mesh, m) in Flatten(meshes))
         {
             var tex = textures[m.Texture >= 0 && m.Texture < mesh.Textures.Length ? mesh.Textures[m.Texture] : ""];
             var rgb = new Vector3(m.Rgba & 0xFF, (m.Rgba >> 8) & 0xFF, (m.Rgba >> 16) & 0xFF) / 128f;
@@ -54,11 +52,23 @@ public sealed record CarModel(StaticMesh Body, StaticMesh Wheel, Matrix4x4[] Whe
                 : (m.Flags & CarPaint.PaintFlag) != 0 || m.Flags == 0x1000 && m.Texture < 0 && !name.StartsWith("tire") ? 1f : 0f;
             var first = verts.Count;
             foreach (var v in m.Triangles) verts.Add(new CarVertex(v.Position, v.Normal, v.Uv, new Vector4(rgb, gloss)));
-            if (verts.Count > first) batches.Add(new MeshBatch(tex, first, verts.Count - first));
+            if (verts.Count > first) batches.Add((tex, first / 3));
         }
-        var indices = new uint[verts.Count];
-        for (var i = 0; i < indices.Length; i++) indices[i] = (uint)i;
-        return new StaticMesh(device, verts.ToArray(), indices, batches);
+        var (indices, ranges) = CourseLoader.Layered([.. verts.Select(v => v.Position)], [.. batches.Select(b => b.First)], true);
+        return new StaticMesh(device, verts.ToArray(), indices,
+            [.. ranges.Select(r => new MeshBatch(batches[r.Batch].Texture, r.First * 3, r.Count * 3, r.Layer))]);
+    }
+
+    /// <summary>
+    ///     Materials in draw order: all parts' normal materials, then the decal materials (flag 0x400, the game's
+    ///     second pass in <c>0x1860E0</c>), each in part/file order.
+    /// </summary>
+    public static IEnumerable<(string Part, Mesh Mesh, Mesh.Material Material)> Flatten(IEnumerable<(string Name, Mesh Mesh)> meshes)
+    {
+        foreach (var decals in new[] { false, true })
+        foreach (var (name, mesh) in meshes)
+        foreach (var m in mesh.Materials.Where(m => (m.Flags & 0x400) != 0 == decals))
+            yield return (name, mesh, m);
     }
 
     public void Dispose()

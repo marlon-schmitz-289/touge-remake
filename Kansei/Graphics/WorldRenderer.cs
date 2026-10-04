@@ -13,11 +13,20 @@ namespace Kansei.Graphics;
 ///     MSAA), distance fog in the horizon colour. World and car shaders share one push-constant block
 ///     (scene_push.glsl, <see cref="WritePush"/>) and bind group 1 (shadow atlas + env maps, <see cref="SetEnvironment"/>). No backface culling (the PS2 draws foliage cards from both sides);
 ///     exact duplicates must be removed by the caller. Reversed-Z (use <see cref="Perspective"/>) with GreaterEqual:
-///     overlay layers a few cm apart stay stable at distance, exactly coplanar layers resolve by draw order (later wins).
+///     overlay layers a few cm apart stay stable at distance; coplanar ones (&lt; 1 mm, decals, overlapping sections) come
+///     as <see cref="MeshBatch.Layer"/> and are pulled <see cref="LayerOffset"/> per layer towards the camera, so the later
+///     one wins like on the PS2 instead of fighting over float rounding.
 /// </summary>
 public sealed class WorldRenderer : IDisposable
 {
     internal const int PushBytes = 576; // scene_push.glsl
+    /// <summary>
+    ///     Metres an overlay layer (<see cref="MeshBatch.Layer"/>) is pulled towards the camera per layer (world.vert,
+    ///     car.vert): above the gap up to which layers are formed (1 mm, Touge.Formats.ZFight.FightGap) and far above the
+    ///     depth noise of float world coordinates (~0.1 mm at 1–2 km from the origin), small enough not to show.
+    /// </summary>
+    public const float LayerOffset = 0.002f;
+    private const int LayerPush = 572; // uPointColor.w
     private const int SkyPushBytes = 128;
     private const float AlphaCutoff = 0.3f; // world.frag
     private static readonly TextureFormat DepthFormat = TextureFormat.Depth32Float;
@@ -253,11 +262,26 @@ public sealed class WorldRenderer : IDisposable
         BindScene(pass);
         Span<byte> push = stackalloc byte[PushBytes];
         WritePush(push, viewProj, Matrix4x4.Identity, eye, sky, false);
-        pass.SetPushConstants(ShaderStage.Vertex | ShaderStage.Fragment, 0, push);
         pass.SetVertexBuffer(0, mesh.Vertices);
         pass.SetIndexBuffer(mesh.Indices, IndexType.UInt32);
+        DrawBatches(pass, mesh, push);
+    }
+
+    /// <summary>
+    ///     Draws <paramref name="mesh"/>'s batches with <paramref name="push"/> (filled by <see cref="WritePush"/>), resent
+    ///     with the layer offset whenever the layer changes (batches are sorted by layer).
+    /// </summary>
+    internal void DrawBatches(IRenderPassEncoder pass, StaticMesh mesh, Span<byte> push)
+    {
+        var layer = -1;
         foreach (var b in mesh.Batches)
         {
+            if (b.Layer != layer)
+            {
+                layer = b.Layer;
+                MemoryMarshal.Write(push[LayerPush..], layer * LayerOffset);
+                pass.SetPushConstants(ShaderStage.Vertex | ShaderStage.Fragment, 0, push);
+            }
             pass.SetBindGroup(0, _textures[b.Texture].Group);
             pass.DrawIndexed(b.IndexCount, 1, b.FirstIndex);
         }

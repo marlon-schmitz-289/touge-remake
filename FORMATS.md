@@ -30,7 +30,7 @@ Eintrag 0x20: char name[16], u32 offset (ab PAC-Start), u32 size, u32 type, u32 
 `"CMD\0" "1.02V"`; 0x10 #Texturen, 0x14 #Knoten, 0x18 #Materialien, 0x20 Textur-Namen (16 B), 0x24 Knoten (name[16] + 4×4-Matrix), danach Materialien (0x20 B: Offset, QWC, Textur-Index, ?, Flags, RGBA, #Dreiecke, #Vertices), 0x30 BBox.
 - Daten = VIF-Stream, pro Batch: V4-32 → addr 1 (xyz + ADC-Bit 0x8000 in w), V3-32 → addr 2 (Normale), V2-32 → addr 3 (UV), V3-32 → addr 4 (?), MSCAL. Triangle-Strips.
 - Vertices im Auto-Koordinatensystem (Meter, +Z vorne, +Y oben). Räder lokal, Knoten `fr_l/fr_r/re_l/re_r` am `body00` geben die Position. AE86: `fr_rk_close/open` = Klappscheinwerfer.
-- Material-Flags (Zeichnen `0x1860E0`): **0x100 = Lack** (RGB kommt zur Laufzeit aus `CAR_ENV.BIN`, siehe unten; das sind die 0x1100/Alpha-0x40-Materialien, *kein* Glas), 0x200 = RGB aus Material, Alpha von der Instanz, 0x400 = zweiter Durchgang (Decals). 0x1000/0x2000/0x800/0x4000/0x8000 nicht genau geklärt.
+- Material-Flags (Zeichnen `0x1860E0`): **0x100 = Lack** (RGB kommt zur Laufzeit aus `CAR_ENV.BIN`, siehe unten; das sind die 0x1100/Alpha-0x40-Materialien, *kein* Glas), 0x200 = RGB aus Material, Alpha von der Instanz, 0x400 = zweiter Durchgang (Decals). Im zweiten Durchgang schalten 0x800/0x8000 das Z-Schreiben ab (`0x14E2B0` → GS `ZBUF` mit ZMSK = 1, `0x14E2A0` wieder an; Pakete aus `0x148CC0`). Kein Z-Offset/Bias: Decals gewinnen nur über die Zeichenreihenfolge bei gleichem Z (24-bit-Z). 0x1000/0x2000/0x4000 nicht genau geklärt.
 - Teile mit Varianten-Suffix `00`–`05` (Tuning), `tire00FL`…, `Bcali00FR`… (Bremssättel).
 
 ## CAR_ENV.BIN (Lackfarben) – geknackt
@@ -46,6 +46,7 @@ u32 `0x01DA3D12` (Byte 3: 1 = gepackt, 0 = roh), u32 entpackte Größe, u32 gepa
 ## SMD (Strecken-Mesh) – geknackt
 `"SMD\0" "0.00"`; 0x08 #Dreiecke, 0x0C #Vertices, 0x10 #Texturen, 0x14 #Materialien, 0x18 Texturtabelle, 0x1C Materialtabelle, 0x20 BBox. VIF wie CMD, aber addr 2 = UV, addr 3 = V4-8 Vertexfarbe (vorbeleuchtet), keine Normalen. Weltkoordinaten in Metern.
 Strecken-PACs: `crsNN` (Abschnitte), `crslodNN` (LOD), `shdNN` (Schatten), `tree*`, `gate*`, `mnt00`, `sky`. Varianten `_DAY`, `_NIT`, `_RIN`.
+Überlappungen (`touge --zfight`): Abschnitte überdecken sich teils großflächig fast koplanar (Akina `crs03` über `crs01`, 1373 m², 0,0 mm; `crs05` legt Gras-/Buschtextur `KINA_DAY097_*` 0,5 mm über `crs03`), dazu Decals in derselben Ebene. Je Kurs 47k–203k Dreiecke, 3k–42k Paare innerhalb 3 cm, davon 57–5753 unter 1 mm. Ob das Spiel solche Abschnitte je gleichzeitig zeichnet (Sichtbarkeit über `CRS_INFO`?), ist nicht nachgesehen.
 GIM kann auch 32-bit Truecolor sein (psm 0, ohne CLUT).
 
 ## CRS_DATA (nicht gepackt)

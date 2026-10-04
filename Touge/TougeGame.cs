@@ -19,9 +19,10 @@ namespace Touge;
 ///     <paramref name="drift"/> makes the pilot throw in a scripted handbrake drift every 7 s (<see cref="Drive.ForceDrift"/>).
 ///     Tyre smoke, skid marks and sparks come from the car's wheel/wall state every tick (<see cref="TickEffects"/>).
 ///     Sound: engine, tyres, walls, wind, race BGM (M next track, F3 music on/off); none for --shot.
+///     <paramref name="flicker"/>: no game loop, renders the <see cref="FlickerProbe"/> views and quits.
 /// </summary>
 public sealed class TougeGame(string isoPath, string courseTime, string? shotPath = null, int startPoint = 0, float? orbit = null, float? autodrive = null,
-    float? bench = null, bool highQuality = true, bool drift = false)
+    float? bench = null, bool highQuality = true, bool drift = false, string? flicker = null)
     : KanseiGame
 {
     private AudioDevice? _audioDevice;
@@ -39,6 +40,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     private readonly Matrix4x4[] _carWheels = new Matrix4x4[4];
     private FrameCapture? _capture;
     private int _shotState; // 0 none, 1 render next frame into capture, 2 read back
+    private FlickerProbe? _probe;
+    private FlickerProbe.View _probeView;
     private WorldRenderer _renderer = null!;
     private CourseLoader.Course _course = null!;
     private Drive _drive = null!;
@@ -98,6 +101,13 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             OrbitCar(deg * MathF.PI / 180);
         }
         if (shotPath != null) (_capture, _shotState) = (new FrameCapture(Device, 1280, 720), 1);
+        else if (flicker != null)
+        {
+            var models = Afs.FromBytes(iso.ReadFile("CDVD/DATA/MODEL/COURSE.AFS"), iso.ReadFile("CDVD/DATA/MODEL/COURSE.TBL"));
+            var (corners, batches) = CourseLoader.Flatten(CourseLoader.Meshes(models.Read(models.Find(courseTime + ".PAC")!.Value), false));
+            var spots = FlickerProbe.Spots([.. corners.Select(v => v.Position)], [.. batches.Select(b => b.First)]);
+            (_capture, _probe) = (new FrameCapture(Device, 1280, 720), new FlickerProbe(flicker, courseTime, _course.DrivingLine, startPoint, spots));
+        }
         else
         {
             _audioDevice = new AudioDevice();
@@ -110,6 +120,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
 
     public override void Tick(float dt)
     {
+        if (_probe != null) return; // frozen scene
         var car = _drive.Car;
         (_prevPos, _prevRot) = (car.Position, car.Orientation);
         var input = autodrive != null || bench != null ? _drive.PilotInput(_simTime)
@@ -191,6 +202,11 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
 
     public override void Update(in GameTime time)
     {
+        if (_probe != null)
+        {
+            ProbeStep();
+            return;
+        }
         if (_shotState == 2)
         {
             Png.Write(shotPath!, _capture!.Width, _capture.Height, _capture.ReadRgba());
@@ -225,6 +241,37 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             Console.Write($"\r[Touge] {c.SpeedKmh,4:F0} km/h  Gang {Drive.Gear(c),-2}  {c.Rpm,5:F0} rpm  Schräglauf {c.SlipAngle * 180 / MathF.PI,6:F1}°  {_frames / (time.TotalTime - _statusTime),4:F0} fps   ");
             (_statusTime, _frames) = (time.TotalTime, 0);
         }
+    }
+
+    /// <summary>--flicker: reads back the last view, sets up the next one (or writes the result and quits).</summary>
+    private void ProbeStep()
+    {
+        if (_shotState == 1) return;
+        if (_shotState == 2) _probe!.Add(_capture!.Width, _capture.Height, _capture.ReadRgba());
+        if (!_probe!.Next(out _probeView))
+        {
+            _probe.Finish(_capture!.Width);
+            Window.ShouldClose = true;
+            return;
+        }
+        _fly = true;
+        if (_probeView.Group == 1)
+        {
+            UpdateCarMatrices(1);
+            OrbitCar(_probeView.Orbit * MathF.PI / 180);
+        }
+        else if (_probeView.Group == 2)
+        {
+            var look = Vector3.Normalize(_probeView.Target - _probeView.Eye);
+            (_pos, _yaw, _pitch) = (_probeView.Eye, MathF.Atan2(look.X, look.Z), MathF.Asin(look.Y));
+        }
+        else
+        {
+            JumpToLine(_probeView.LinePoint);
+            _pitch = -0.12f;
+        }
+        _camLook = _pos + Forward() * 100; // far target: rounding of the turned target barely tilts the view
+        _shotState = 1;
     }
 
     /// <summary>--bench: frame intervals after a 2 s warm-up; at the end avg/p99/max, frames over 25 ms and the effect peaks.</summary>
@@ -416,6 +463,13 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         var proj = WorldRenderer.Perspective(_fov, aspect, 0.3f, Device.Backend == Penelope.BackendKind.Vulkan);
         var shake = _fly ? Vector3.Zero : _shakeOffset; // moves the view only, not the camera spring
         var view = Matrix4x4.CreateLookAt(_pos + shake, _camLook + shake * 0.5f, Vector3.UnitY);
+        var skyView = view; // analytic sky + sun
+        if (_probeView.Spin != 0)
+        {
+            // --flicker: camera and world turned together (same image, different depth rounding)
+            var spin = Matrix4x4.CreateRotationY(_probeView.Spin);
+            view = spin * Matrix4x4.CreateLookAt(Vector3.Transform(_pos, spin), Vector3.Transform(_camLook, spin), Vector3.UnitY);
+        }
 
         UpdateLights();
         Span<(StaticMesh, Matrix4x4)> casters =
@@ -423,10 +477,11 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             (_car.Body, _carBody), (_car.Wheel, _carWheels[0]), (_car.Wheel, _carWheels[1]), (_car.Wheel, _carWheels[2]), (_car.Wheel, _carWheels[3]),
         ];
         _renderer.RenderShadows(ctx.Encoder, _pos, Vector3.Normalize(_camLook - _pos), _fov, aspect, _course.World, casters);
-        var pass = _renderer.BeginScene(ctx.Encoder, view, proj, shot);
+        var pass = _renderer.BeginScene(ctx.Encoder, skyView, proj, shot);
         _renderer.DrawSky(pass, _course.Sky, Matrix4x4.CreateTranslation(_pos with { Y = 0 }) * view * proj); // follows the camera
-        _renderer.Draw(pass, _course.World, view * proj, _pos);
-        _carRenderer.Draw(pass, _car.Body, _car.Wheel, _carBody, _carWheels, view * proj, _pos);
+        var carView = _probe != null && _probeView.Group == 1;
+        if (_probe == null || !carView) _renderer.Draw(pass, _course.World, view * proj, _pos);
+        if (_probe == null || carView) _carRenderer.Draw(pass, _car.Body, _car.Wheel, _carBody, _carWheels, view * proj, _pos);
         _fxRenderer.Draw(pass, _fx, view, view * proj, _pos);
         _renderer.EndScene(ctx.Encoder, pass, shot);
         if (shot != null)
