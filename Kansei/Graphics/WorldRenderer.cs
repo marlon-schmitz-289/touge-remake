@@ -195,7 +195,7 @@ public sealed class WorldRenderer : IDisposable
         WriteFog(push[576..]);
         MemoryMarshal.Write(push[608..], new Vector4(a.Zenith, Time));
         for (var i = 0; i < 2; i++) MemoryMarshal.Write(push[(624 + i * 16)..], new Vector4(l.TailLightPosition[i], 0));
-        MemoryMarshal.Write(push[656..], new Vector4(l.TailLightColor * share, 0));
+        MemoryMarshal.Write(push[656..], new Vector4(l.TailLightColor, share));
         MemoryMarshal.Write(push[672..], new Vector4(a.SunColor, a.Specular));
         MemoryMarshal.Write(push[688..], new Vector4(a.ShadeSky, a.ContactShadow));
         MemoryMarshal.Write(push[704..], new Vector4(a.ShadeGround, 0));

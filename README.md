@@ -138,10 +138,11 @@ links zum Straßenrand ansteigend), Licht staut sich unter der Grenze und wird z
 ~60 m gleichmäßig statt heller Fleck vor der Stoßstange), Fernlicht ohne Grenze, breiter, 2,5× heller, bis 160 m.
 Mit Licht an die Nachtteile des Spiels (`Flight01`, `Blamp02`: leuchtende Gläser) plus Glühen (Bloom),
 Klappscheinwerfer (AE86, MR2, FD3S, FC3S, ONE80, NA6C) fahren in 0,6 s zwischen `fr_rk_close`/`fr_rk_open` und
-leuchten erst oben; Rückleuchten rot (Bremse heller), Rückfahrlicht weiß im Rückwärtsgang. Grün/blaue Kontrollleuchten
+leuchten erst oben (zugeklappt mit dem Tagteil); Rückleuchten rot (Bremse heller), Rückfahrlicht weiß im Rückwärtsgang. Grün/blaue Kontrollleuchten
 im Kombiinstrument. Alle lokalen Lichter (Scheinwerfer, Laternen, Rückleuchten) sind auf Flächen gedeckelt
 (`LightCap`, weich, je Licht nach N·L und in Summe) und wirken nur bei Dunkelheit (`Atmosphere.LocalLightShare`:
-tags/Regen 0 – kein Lichtkegel auf der Straße, die Gläser glühen gedämpft). Keine Lichtkegel im Dunst mehr.
+tags/Regen 0 – kein Lichtkegel auf der Straße, die Gläser glühen gedämpft; nur die Spiegelung der Rückleuchten
+auf nasser Straße bleibt). Keine Lichtkegel im Dunst mehr.
 Nacht: die `CRS_LIGHT`-Punkte als Straßenlaternen (4 nächste).
 
 Tag (`_DAY`) und Regen: Sonnenrichtung = Hauptlicht des Originals fürs Auto (`CRS_INFO`, je Kurs, Akina 26,6° von +X wie

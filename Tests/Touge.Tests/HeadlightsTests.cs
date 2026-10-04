@@ -34,7 +34,7 @@ public class HeadlightsTests
     [Fact]
     public void Apply_PlacesLampsOnTheCar()
     {
-        var lamps = new CarModel.Lamps(null, default, default, CarModel.Centres([new(0.6f, 0.3f, 1.9f), new(0.7f, 0.4f, 2f), new(-0.65f, 0.35f, 1.95f)], Vector3.Zero, true),
+        var lamps = new CarModel.Lamps(false, default, default, CarModel.Centres([new(0.6f, 0.3f, 1.9f), new(0.7f, 0.4f, 2f), new(-0.65f, 0.35f, 1.95f)], Vector3.Zero, true),
             CarModel.Centres([], new Vector3(0.6f, 0.4f, -2), false));
         Assert.True(Vector3.Distance(new Vector3(0.65f, 0.35f, 2f), lamps.Head[0]) < 1e-5f);
         Assert.True(Vector3.Distance(new Vector3(-0.65f, 0.35f, 1.95f), lamps.Head[1]) < 1e-5f);

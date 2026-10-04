@@ -1052,7 +1052,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         if (_probe == null || carView)
         {
             _carRenderer.Draw(pass, shell.Body, shell.Decals, _car.Wheel, _carBody, _carWheels, view * proj, _pos);
-            if (_car.Lamp.PopUp is { } popUp) _carRenderer.DrawPart(pass, popUp, _car.Lamp.PopUpAt(_lights.Open) * _carBody, view * proj, _pos);
+            if (shell.PopUp is { } popUp) _carRenderer.DrawPart(pass, popUp, _car.Lamp.PopUpAt(_lights.Open) * _carBody, view * proj, _pos);
         }
         _fxRenderer.Draw(pass, _fx, view, view * proj, _pos);
         // camera velocity stretches the rain streaks; a shot has no previous frame, the chase camera moves with the car

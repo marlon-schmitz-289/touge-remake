@@ -20,7 +20,7 @@ layout(set = 1, binding = 6, std140) uniform Push {
     vec4 uFogSun;       // rgb sun light scattered into the fog towards the sun, w = height-fog base altitude
     vec4 uSky;          // rgb zenith colour (wet reflections), w = time (s)
     vec4 uTailPos[2];   // rear lamps as small point lights (w unused): they light the ground and streak on wet roads
-    vec4 uTailColor;    // rgb intensity (0 = off)
+    vec4 uTailColor;    // rgb intensity (0 = off), w share thrown onto surfaces (night 1, day 0)
     vec4 uSunColor;     // rgb tint of the direct sun, w = sun glints on the world (0 = none)
     vec4 uShadeSky;     // rgb tint of the shade (baked keep / car ambient) on upward normals, w = contact shadow under the car (world)
     vec4 uShadeGround;  // rgb tint of the shade on downward normals (bounce from the ground)

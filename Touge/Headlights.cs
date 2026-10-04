@@ -45,7 +45,7 @@ public sealed class Headlights(Headlights.Mode start)
     /// </summary>
     public void Apply(SceneLights l, CarModel.Lamps lamps, in Matrix4x4 body, float daylight, float brake, bool reverse)
     {
-        var lit = Lit(lamps.PopUp != null);
+        var lit = Lit(lamps.PopUp);
         var dir = Vector3.Normalize(Vector3.TransformNormal(Vector3.UnitZ, body));
         for (var i = 0; i < 2; i++)
         {

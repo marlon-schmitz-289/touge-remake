@@ -78,21 +78,22 @@ vec3 capped(vec3 e)
 const int Lights = 8;
 const float TailRange = 8.0;
 
-// Point light j (0–3 street lights, 4–5 rear lamps): position + radius, colour.
-vec4 pointLight(int j, out vec3 colour)
+// Point light j (0–3 street lights, 4–5 rear lamps): position + radius, colour. A rear lamp lights surfaces by the
+// night share (uTailColor.w) but stays `mirror`ed at full strength: a brake light streaks on a wet road by day too.
+vec4 pointLight(int j, bool mirror, out vec3 colour)
 {
-    colour = j < 4 ? pc.uPointColor.rgb : pc.uTailColor.rgb;
+    colour = j < 4 ? pc.uPointColor.rgb : pc.uTailColor.rgb * (mirror ? 1.0 : pc.uTailColor.w);
     return j < 4 ? pc.uPointPos[j] : vec4(pc.uTailPos[j - 4].xyz, TailRange);
 }
 
 // Light i (0–1 headlights, 2–7 point lights) arriving at p: irradiance on a surface facing the lamp (inverse square
 // windowed to the range, beam shape; not capped yet) and the unit direction l towards the lamp. Zero when off or out of range.
-vec3 lightIn(int i, vec3 p, out vec3 l)
+vec3 lightIn(int i, vec3 p, bool mirror, out vec3 l)
 {
     l = vec3(0.0, 1.0, 0.0);
     bool spot = i < 2;
     vec3 colour = pc.uSpotColor.rgb;
-    vec4 lp = spot ? pc.uSpotPos[i] : pointLight(i - 2, colour);
+    vec4 lp = spot ? pc.uSpotPos[i] : pointLight(i - 2, mirror, colour);
     float range = spot ? pc.uSpotColor.w : lp.w;
     if (range <= 0.0 || dot(colour, colour) == 0.0) return vec3(0.0);
     vec3 d = lp.xyz - p;
@@ -114,7 +115,7 @@ vec3 dynamicLight(vec3 p, vec3 n, vec3 v, float shininess, inout vec3 spec)
     for (int i = 0; i < Lights; i++)
     {
         vec3 l;
-        vec3 e = capped(lightIn(i, p, l) * max(dot(n, l), 0.0));
+        vec3 e = capped(lightIn(i, p, false, l) * max(dot(n, l), 0.0));
         sum += e;
         hl += e * (norm * pow(max(dot(n, normalize(l + v)), 0.0), shininess));
     }
@@ -127,7 +128,7 @@ vec3 dynamicLight(vec3 p, vec3 n, vec3 v, float shininess, inout vec3 spec)
 vec3 lightAt(vec3 p)
 {
     vec3 sum = vec3(0.0), l;
-    for (int i = 0; i < Lights; i++) sum += capped(lightIn(i, p, l));
+    for (int i = 0; i < Lights; i++) sum += capped(lightIn(i, p, false, l));
     return capped(sum);
 }
 
@@ -144,7 +145,7 @@ vec3 wetLights(vec3 p, vec3 n, vec3 v, float across, float along)
     for (int i = 0; i < Lights; i++)
     {
         vec3 l;
-        vec3 e = capped(lightIn(i, p, l));
+        vec3 e = capped(lightIn(i, p, true, l));
         if (dot(l, r) <= 0.0) continue;
         float x = dot(l, side) / across, y = dot(l, up) / along;
         sum += e * exp(-(x * x + y * y));
@@ -167,7 +168,7 @@ vec3 lightGlow(vec3 p)
     for (int j = 0; j < 4; j++)
     {
         vec3 colour;
-        vec4 lp = pointLight(j, colour);
+        vec4 lp = pointLight(j, false, colour);
         if (lp.w <= 0.0 || dot(colour, colour) == 0.0) continue;
         vec3 ol = lp.xyz - o;
         float tc = dot(ol, rd);

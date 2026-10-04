@@ -15,15 +15,15 @@ namespace Touge;
 public sealed record CarModel(CarModel.Shell Day, CarModel.Shell Lit, StaticMesh Wheel, Matrix4x4[] Wheels, float WheelRadius, int Paints, CarModel.Lamps Lamp)
     : IDisposable
 {
-    /// <summary>Opaque body and its alpha-blended decals (<see cref="Build"/>).</summary>
-    public sealed record Shell(StaticMesh Body, StaticMesh Decals);
+    /// <summary>Opaque body, its alpha-blended decals (<see cref="Build"/>) and the pop-up headlamp part of this lamp state.</summary>
+    public sealed record Shell(StaticMesh Body, StaticMesh Decals, StaticMesh? PopUp);
 
     /// <summary>
-    ///     Lamps in car space: the pop-up headlamp part (null for fixed lamps; modelled around its hinge, drawn between the
-    ///     body00 nodes <c>fr_rk_close</c> and <c>fr_rk_open</c>) and the centres of the head and rear lamp lenses (left,
+    ///     Lamps in car space: pop-up headlamps or fixed ones (the part is in <see cref="Shell.PopUp"/>, modelled around its
+    ///     hinge, drawn between the body00 nodes <c>fr_rk_close</c> and <c>fr_rk_open</c>) and the centres of the head and rear lamp lenses (left,
     ///     right; pop-ups open), from their textured materials.
     /// </summary>
-    public sealed record Lamps(StaticMesh? PopUp, Matrix4x4 Closed, Matrix4x4 Open, Vector3[] Head, Vector3[] Tail)
+    public sealed record Lamps(bool PopUp, Matrix4x4 Closed, Matrix4x4 Open, Vector3[] Head, Vector3[] Tail)
     {
         /// <summary>Pop-up part → car space between closed (0) and open (1), eased.</summary>
         public Matrix4x4 PopUpAt(float open)
@@ -68,18 +68,22 @@ public sealed record CarModel(CarModel.Shell Day, CarModel.Shell Lit, StaticMesh
         var nodes = parts["body00"].Nodes;
         var closed = nodes.FirstOrDefault(n => n.Name == "fr_rk_close").Transform;
         var open = nodes.FirstOrDefault(n => n.Name == "fr_rk_open").Transform;
-        var popUp = closed != default && open != default ? lit.Select(p => p.Name).FirstOrDefault(n => n.StartsWith("Flight")) : null;
+        var day = CarParts.Body(car, parts, livery, paint, plate);
+        string? PopUpOf(List<(string Name, Mesh Mesh)> body) =>
+            closed != default && open != default ? body.Select(p => p.Name).FirstOrDefault(n => n.StartsWith("Flight")) : null;
+        var popUp = PopUpOf(lit);
         IEnumerable<Vector3> Lenses(string prefix) => lit.Where(p => p.Name.StartsWith(prefix))
             .SelectMany(p => (p.Name == popUp ? CarParts.Transformed(parts[p.Name], open) : p.Mesh).Materials)
             .Where(m => m.Texture >= 0).SelectMany(m => m.Triangles).Select(v => v.Position);
-        var lamps = new Lamps(popUp == null ? null : Build(renderer.Device, [(popUp, parts[popUp])], textures, false).Opaque, closed, open,
+        var lamps = new Lamps(popUp != null, closed, open,
             Centres(Lenses("Flight"), new Vector3(0.6f, 0.35f, 1.9f), true), Centres(Lenses("Blamp"), new Vector3(0.6f, 0.4f, -2f), false));
         Shell Shell(List<(string Name, Mesh Mesh)> body)
         {
-            var (opaque, decals) = Build(renderer.Device, body.Where(p => p.Name != popUp), textures, true);
-            return new Shell(opaque, decals!);
+            var part = PopUpOf(body);
+            var (opaque, decals) = Build(renderer.Device, body.Where(p => p.Name != part), textures, true);
+            return new Shell(opaque, decals!, part == null ? null : Build(renderer.Device, [(part, parts[part])], textures, false).Opaque);
         }
-        return new CarModel(Shell(CarParts.Body(car, parts, livery, paint, plate)), Shell(lit),
+        return new CarModel(Shell(day), Shell(lit),
             Build(renderer.Device, [("tire", tire), ("Bdisk00", parts["Bdisk00"])], textures, false).Opaque,
             CarParts.Wheels(parts["body00"]), radius, colours.Length, lamps);
     }
@@ -153,8 +157,8 @@ public sealed record CarModel(CarModel.Shell Day, CarModel.Shell Lit, StaticMesh
         {
             s.Body.Dispose();
             s.Decals.Dispose();
+            s.PopUp?.Dispose();
         }
-        Lamp.PopUp?.Dispose();
         Wheel.Dispose();
     }
 }

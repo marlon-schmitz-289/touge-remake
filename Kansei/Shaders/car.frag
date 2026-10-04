@@ -120,7 +120,7 @@ void main()
         // core, rear lamps (2) in their red parts — dim running light, bright braking — and in their white parts (reverse)
         vec3 e = t.rgb * vColor.rgb;
         float glow = pc.uSpotDir[0].w;
-        if (kind > 2.5) c += e * (1.8 * glow * smoothstep(0.45, 0.9, max(e.r, max(e.g, e.b))));
+        if (kind > 2.5) c += e * (1.2 * glow * smoothstep(0.55, 0.95, max(e.r, max(e.g, e.b))));
         else
         {
             float red = smoothstep(0.75, 0.9, (e.r - max(e.g, e.b)) / max(e.r, 1e-3)); // hue, not brightness: dark day lenses too
