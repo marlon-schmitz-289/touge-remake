@@ -24,7 +24,7 @@ public sealed class Settings
     public bool Manual { get; set; }
     /// <summary>Stickers and plates of the car (Options).</summary>
     public Touge.Formats.Livery Livery { get; set; } = Touge.Formats.Livery.Rival;
-    /// <summary>Best run per course and direction ("AKINA", "AKINA_R"): cumulative sector splits, last = total.</summary>
+    /// <summary>Best run per course and direction (<see cref="BestKey"/>): cumulative sector splits, last = total.</summary>
     public Dictionary<string, float[]> Best { get; set; } = [];
 
     public static string FilePath { get; } =
@@ -58,5 +58,9 @@ public sealed class Settings
         }
     }
 
-    public static string BestKey(string course, bool reverse) => course + (reverse ? "_R" : "");
+    /// <summary>
+    ///     "MYOUGI0", "AKINA_A", "AKINA_R_A": mountain runs are timed arch to arch (<see cref="CourseEnd"/>) since the "_A"
+    ///     keys; older ones started up to 57 m earlier and are not comparable, so they stay unused in the file.
+    /// </summary>
+    public static string BestKey(string course, bool reverse) => course + (reverse ? "_R" : "") + (course.EndsWith('0') ? "" : "_A");
 }

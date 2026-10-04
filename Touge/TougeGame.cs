@@ -244,7 +244,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _courseTime = courseTime;
         _renderer = new WorldRenderer(Device) { Atmosphere = AtmosphereFor(courseTime), HighQuality = _settings.HighQuality };
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        _course = CourseLoader.Load(iso, courseTime, _renderer);
+        _course = CourseLoader.Load(iso, courseTime, _renderer, reverse);
         SetupFog(_renderer.Atmosphere);
         if (!courseTime.EndsWith("_NIT") && _course.SunDirection is { } sun) _renderer.Atmosphere.SunDirection = sun; // the original's key light
         _drive = new Drive(iso, courseTime, reverse, CarSpecs.All[car]);
@@ -273,7 +273,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     {
         var key = Settings.BestKey(_courseTime[.._courseTime.LastIndexOf('_')], _drive.Reverse);
         _previousBest = _settings.Best.GetValueOrDefault(key)?[^1];
-        var hud = new Hud(_course.Road, _drive.Line, _drive.Pilot, _settings.Best.GetValueOrDefault(key))
+        var hud = new Hud(_course.Road, _drive.Line, _drive.Pilot, _settings.Best.GetValueOrDefault(key), _drive.Start)
         {
             Visible = _settings.HudOn, Mode = _settings.MapMode, Night = _courseTime.EndsWith("_NIT"),
         };

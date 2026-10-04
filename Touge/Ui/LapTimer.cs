@@ -1,9 +1,9 @@
 namespace Touge.Ui;
 
 /// <summary>
-///     Run timing along the driving line (<paramref name="length"/> m): armed at the start, runs once the car passes
-///     <see cref="Gate"/> metres past it, splits at every quarter of the line, stops at the goal. Restarts armed when the
-///     car is back at the start. <see cref="Best"/> = cumulative splits of the best run (the last one is the total time);
+///     Run timing along the driving line (<paramref name="length"/> m from the start line): armed where the car stands, runs
+///     once it crosses the start line (or <see cref="Gate"/> metres past where it stood, if that is further), splits at every
+///     quarter of the line, stops at the goal. Restarts armed when the car is back at the start. <see cref="Best"/> = cumulative splits of the best run (the last one is the total time);
 ///     a run that beats it replaces it and <see cref="Record"/> fires.
 /// </summary>
 public sealed class LapTimer(float length, float[]? best)
@@ -35,9 +35,9 @@ public sealed class LapTimer(float length, float[]? best)
         switch (Phase)
         {
             case State.Ready:
-                // armed where the car stands: some lines start off the road, so the car spawns past point 0
+                // the start line is at 0; the car stands behind it, or past it where the road starts later (then it starts on driving off)
                 _armedAt ??= along;
-                var gate = MathF.Max(Gate, _armedAt.Value + Gate);
+                var gate = MathF.Max(0, _armedAt.Value + Gate);
                 if (_prev <= gate && along > gate && along < length / Sectors)
                     (Phase, Time, Sector, NewRecord, _ref) = (State.Running, 0, 0, false, Best);
                 break;

@@ -27,7 +27,8 @@ public static class CourseLoader
         }
     }
 
-    public static Course Load(Iso9660 iso, string courseTime, WorldRenderer renderer)
+    /// <param name="reverse">Direction of the race: picks the arch variant at each end (<see cref="RaceGates"/>).</param>
+    public static Course Load(Iso9660 iso, string courseTime, WorldRenderer renderer, bool reverse)
     {
         var models = Afs.FromBytes(iso.ReadFile("CDVD/DATA/MODEL/COURSE.AFS"), iso.ReadFile("CDVD/DATA/MODEL/COURSE.TBL"));
         var pac = models.Read(models.Find(courseTime + ".PAC") ?? throw new FileNotFoundException(courseTime + ".PAC"));
@@ -47,7 +48,7 @@ public static class CourseLoader
         var road = CourseRoad.Read(Data($"CRS_ROAD_{course}.BIN") ?? throw new FileNotFoundException($"CRS_ROAD_{course}.BIN"));
 
         // lod/shd are not drawn; the tree templates are placed from TREE_* (baked into the world)
-        var world = Build(renderer.Device, [.. Meshes(pac, false), .. Trees(pac, course, Data, road)], textures, white, true);
+        var world = Build(renderer.Device, [.. Meshes(pac, false).Where(m => RaceGates(m.Name, reverse)), .. Trees(pac, course, Data, road)], textures, white, true);
         var sky = Build(renderer.Device, Meshes(pac, true), textures, white, false); // no depth: paint order stays file order
 
         var lights = Data($"CRS_LIGHT_{course}.BIN") is { } l ? CourseRoad.ReadLights(l) : [];
@@ -186,6 +187,13 @@ public static class CourseLoader
             }
         return (corners, batches);
     }
+
+    /// <summary>
+    ///     False for the arch variants of the other direction (FORMATS.md "Kursenden"): each end has a start variant (arch +
+    ///     "road closed" barricades behind it, forward <c>gate00</c>, reverse <c>gate02</c>) and a goal variant (arch alone,
+    ///     forward <c>gate01</c>, reverse <c>gate03</c>), so no barricades stand in the run-out past the goal.
+    /// </summary>
+    public static bool RaceGates(string mesh, bool reverse) => mesh != (reverse ? "gate00" : "gate02") && mesh != (reverse ? "gate01" : "gate03");
 
     /// <summary>Course meshes as drawn: no tree templates, LOD or shadow meshes; sky separate.</summary>
     public static List<(string Name, Mesh Mesh)> Meshes(byte[] pac, bool sky) =>

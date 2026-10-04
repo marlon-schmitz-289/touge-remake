@@ -11,7 +11,7 @@ namespace Touge.Ui;
 public sealed class Catalog
 {
     /// <param name="Times">"DAY", "NIT", "RIN" as present.</param>
-    /// <param name="Line">Forward driving line (XZ).</param>
+    /// <param name="Line">Forward driving line (XZ), on touge from the start arch to the goal arch (<see cref="CourseEnd"/>).</param>
     /// <param name="ForwardDownhill">Forward (_I) line ends lower than it starts; circuits have neither (<see cref="Circuit"/>).</param>
     public sealed record Course(string Id, string Name, string[] Times, Vector2[] Line, float LengthM, float ClimbM, bool ForwardDownhill, bool Circuit)
     {
@@ -78,6 +78,8 @@ public sealed class Catalog
                 string[] times = [.. new[] { "DAY", "NIT", "RIN" }.Where(t => models.Find($"{c.Id}_{t}.PAC") != null)];
                 var drv = data.Find($"CRS_DRV_{c.Id}_I.BIN") ?? throw new FileNotFoundException($"CRS_DRV_{c.Id}_I.BIN");
                 var line = DrivingLine.Read(data.Read(drv), DrivingLine.PointCount(c.Id));
+                // touge: start arch to goal arch (CourseEnd), not the whole line, which runs on past the goal or starts before the start
+                if (CourseEnd.Marks(iso, c.Id, times[0], false) is var (ext, start, goal, _)) line = CourseEnd.Cut(new LinePilot(ext), ext, start, goal);
                 float length = 0, lo = float.MaxValue, hi = float.MinValue;
                 for (var i = 0; i < line.Length; i++)
                 {

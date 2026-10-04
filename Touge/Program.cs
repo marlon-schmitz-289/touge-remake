@@ -10,7 +10,7 @@ using Touge;
 //   Hinter dem Ziel: Auslauf bis vor die Endsperre (Drive.Coast), mit --ram Vollgas weiter in die Sperre; Zusammenfassung danach.
 // --audio-capture <wav> <s> (mit --autodrive): Spielton offline (OpenAL-Loopback) als WAV + Auswertung, ohne Fenster; --no-music ohne BGM.
 // --audio-capture <wav> 0 --sweep: nur Motor, Drehzahlrampe Leerlauf → Begrenzer (Vollgas, 3. Gang) und zurück (Schub), WAV + CSV je Tick.
-// --ground <png>: Kollision des Kurses laden, Raycasts timen, Draufsicht mit Wandsegmenten schreiben (ohne Fenster).
+// --ground <png>: Kollision des Kurses laden, Raycasts timen, Draufsicht mit Wandsegmenten, Sperren und Fahrlinie/Auslauf schreiben, Ausschnitte bei --at, Start, Ziel (ohne Fenster).
 // --bench <s>: Pilot fährt <s> Sekunden in Echtzeit mit Verfolgerkamera und Ton, danach Frametimes (avg/p99/max) und Ende.
 // --quality off: ohne MSAA/Bloom starten (F2 schaltet um).
 // --flicker <prefix>: Z-Fighting im Bild messen (8 Punkte der Fahrlinie + 8 Winkel ums Auto, je 3× mit verschobener Rundung), Ausschnitte als <prefix>_course/_car.png.
@@ -99,7 +99,7 @@ if (Arg("--ground") is { } groundPng)
 {
     using var isoFile = new Touge.Formats.Iso9660(iso);
     var c = course.ToUpperInvariant();
-    CourseGround.Proof(isoFile, c[..c.LastIndexOf('_')], groundPng, at, args.Contains("--reverse"));
+    CourseGround.Proof(isoFile, c, groundPng, at, args.Contains("--reverse"));
     return 0;
 }
 

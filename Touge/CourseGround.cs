@@ -23,15 +23,18 @@ public static class CourseGround
     /// <summary>
     ///     --ground &lt;png&gt;: times 1e6 downward raycasts around the driving line and writes a top-down
     ///     image (road grey, other drivable green, wall faces dark, derived wall segments red with blue
-    ///     normal ticks) of the whole course plus a 200 m detail around driving-line point <paramref name="at" />.
+    ///     normal ticks, with the <see cref="CourseEnd"/> barriers; driving line yellow, run-out cyan) of the whole course plus
+    ///     200 m details around driving-line point <paramref name="at" />, the start and the goal.
     /// </summary>
-    public static void Proof(Iso9660 iso, string course, string png, int at, bool reverse = false)
+    public static void Proof(Iso9660 iso, string courseTime, string png, int at, bool reverse = false)
     {
         var sw = Stopwatch.StartNew();
+        var course = courseTime[..courseTime.LastIndexOf('_')];
         var (g, c) = Load(iso, course, reverse ? 1 : 0);
+        var ends = CourseEnd.Close(iso, courseTime, reverse, g);
         Console.WriteLine($"[Ground] {course}: {c.Faces.Length} Dreiecke, {g.Walls.Length} Wandsegmente, gebaut in {sw.ElapsedMilliseconds} ms");
 
-        var line = CourseLoader.ReadDrivingLine(iso, course, reverse);
+        var line = ends.Line;
         const int n = 1_000_000;
         var rng = new Random(1);
         var origins = new Vector3[n];
@@ -53,12 +56,12 @@ public static class CourseGround
         Vector2 min = new(float.MaxValue), max = new(float.MinValue);
         foreach (var p in c.Positions) (min, max) = (Vector2.Min(min, new(p.X, p.Z)), Vector2.Max(max, new(p.X, p.Z)));
         var scale = 3000 / MathF.Max(max.X - min.X, max.Y - min.Y);
-        Raster(png, g, c, min, scale, (int)((max.X - min.X) * scale) + 1, (int)((max.Y - min.Y) * scale) + 1);
-        var centre = line[Math.Clamp(at, 0, line.Length - 1)];
-        Raster(Path.ChangeExtension(png, null) + $"_at{at}.png", g, c, new Vector2(centre.X, centre.Z) - new Vector2(100), 6, 1200, 1200);
+        Raster(png, g, c, ends, min, scale, (int)((max.X - min.X) * scale) + 1, (int)((max.Y - min.Y) * scale) + 1);
+        foreach (var (name, centre) in new[] { ($"at{at}", line[Math.Clamp(at, 0, line.Length - 1)]), ("start", line[0]), ("goal", line[^1]) })
+            Raster(Path.ChangeExtension(png, null) + $"_{name}.png", g, c, ends, new Vector2(centre.X, centre.Z) - new Vector2(100), 6, 1200, 1200);
     }
 
-    private static void Raster(string png, TriangleGround g, Collision c, Vector2 min, float scale, int w, int h)
+    private static void Raster(string png, TriangleGround g, Collision c, CourseEnd.Ends ends, Vector2 min, float scale, int w, int h)
     {
         var rgba = new byte[w * h * 4];
         Array.Fill(rgba, (byte)255);
@@ -100,6 +103,8 @@ public static class CourseGround
             Line(a, b, (230, 30, 30));
             Line(m, m + new Vector2(s.Normal.X, s.Normal.Z) * scale, (40, 60, 230)); // 1 m tick toward the drivable side
         }
+        foreach (var (pts, col) in new[] { (ends.Line, ((byte)230, (byte)190, (byte)0)), (ends.RunOut, ((byte)0, (byte)190, (byte)220)) })
+            for (var i = 1; i < pts.Length; i++) Line(Px(pts[i - 1]), Px(pts[i]), col);
         Png.Write(png, w, h, rgba);
         Console.WriteLine($"[Ground] Draufsicht {w}×{h} -> {png}");
     }
