@@ -44,10 +44,11 @@ public class FrontEndTests
         Run(0.5f);
         Run(1, (0, 1, false, false)); // TIME ATTACK
         Run(0.5f, (0, 1, false, false)); // STORY
-        Run(0.5f, (0, 0, true, false)); // not built: beeps, stays
-        Assert.Equal(FrontEnd.Step.Modes, f.Current);
+        Run(FrontEnd.Fade + 0.1f, (0, 0, true, false)); // STORY is built: leaves for it
+        Assert.Equal(FrontEnd.Result.Story, r);
+        f.Open(FrontEnd.Step.Modes); // the story hands back: same entry selected
         Run(0.5f, (0, -1, false, false));
-        Assert.Equal(["sys002", "SYS005", "SYS005", "SYS005", "SYS005", "BEEP001", "SYS005"], sounds);
+        Assert.Equal(["sys002", "SYS005", "SYS005", "SYS005", "SYS005", "SYS006", "SYS005"], sounds);
 
         f.Update((0, 0, true, false), 1 / 60f); // decide TIME ATTACK
         Run(FrontEnd.Fade - 0.1f);

@@ -70,12 +70,17 @@ public sealed class Battle(BattleRule rule, float goal, int startLeader = 1)
     /// <summary>Lead/chase: who leads off (0 player, 1 rival); race: who is ahead on the grid's tie (both side by side).</summary>
     public int StartLeader { get; } = startLeader;
     /// <summary>Time gap that ends the battle (s); 0 = only at the goal.</summary>
-    public float Breakaway { get; init; } = rule == BattleRule.LeadChase ? 4 : 8;
+    public float Breakaway { get; init; } = DefaultBreakaway(rule);
+    public static float DefaultBreakaway(BattleRule rule) => rule == BattleRule.LeadChase ? 4 : 8;
+    public const float DefaultDrawGap = 1;
     /// <summary>Lead/chase: how long the chaser must hold the lead after a pass, and the gap a leader needs at the goal.</summary>
     public float PassHold { get; init; } = 1.5f;
-    public float DrawGap { get; init; } = 1;
+    public float DrawGap { get; init; } = DefaultDrawGap;
     /// <summary>Lead/chase: a pass in the first seconds (the launch) does not decide; the AI chaser does not try one then.</summary>
     public float StartGrace { get; init; } = 10;
+    /// <summary>Time limit (s, 0 = none): still undecided then, <see cref="TimeLimitWinner"/> (0 player, 1 rival) wins, reason TIME (story).</summary>
+    public float TimeLimit { get; init; }
+    public int TimeLimitWinner { get; init; } = 1;
 
     private readonly GapClock _clock = new(2, goal + 50);
     private float _rawSince, _time;
@@ -130,6 +135,11 @@ public sealed class Battle(BattleRule rule, float goal, int startLeader = 1)
     private void Decide(float player, float rival)
     {
         bool pDone = player >= Goal, rDone = rival >= Goal;
+        if (TimeLimit > 0 && _time >= TimeLimit && !pDone && !rDone)
+        {
+            End(TimeLimitWinner, "TIME");
+            return;
+        }
         if (Rule == BattleRule.Race)
         {
             if (pDone || rDone) End(player >= rival ? 0 : 1, "GOAL");

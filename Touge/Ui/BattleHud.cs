@@ -27,6 +27,8 @@ public sealed record BattleReport(BattleOutcome Outcome, string Reason, BattleRu
         (BattleOutcome.Win, "OVERTAKE") => "PASSED AND HELD THE LEAD",
         (BattleOutcome.Lose, "OVERTAKE") => "OVERTAKEN",
         (BattleOutcome.Draw, _) => "NO GAP AT THE GOAL",
+        (BattleOutcome.Win, "TIME") => "STAYED WITH HIM TO THE END",
+        (BattleOutcome.Lose, "TIME") => "TIME UP",
         _ => "",
     };
 }

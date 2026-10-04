@@ -38,6 +38,9 @@ using Touge;
 // --sim-wheel: virtuelles Lenkrad (Lenkung pendelt, Pedale pumpen) für Bilder/Tests ohne Hardware; --menu controls:keyboard|pad|wheel öffnet die Steuerungsseite.
 // --battle <rivale|auto> [--rule race|chase] [--lead player|rival]: Schnellbattle gegen die KI (Telop, Countdown, Battle-HUD, Ergebnis);
 //   mit --autodrive <s> ohne Fenster: Autopilot gegen die KI, Log je Sekunde (Abstand, Führung, Kontakte) + Zusammenfassung.
+// --menu story[:n[:scene[:teil[:zeile]]|:race]]: STORY-Kapitelwahl, eine Szene oder der Rennstart von Kapitel n; --progress <n>: Kapitel 0…n−1 gelten
+//   als geschafft (nur Testläufe); --flow <dir> --story: Ablauf durch STORY (Wahl, Szene, Battle, Ergebnis, Szene danach, ein verlorenes Kapitel).
+// --story-check [n]: Kapiteltabelle und Szenen der Disc gegen die Übersetzung prüfen, dann jedes Kapitel (oder nur n) mit dem Autopiloten fahren (ohne Fenster).
 // --drift: Pilot reißt alle 7 s (ab 4,5 s) einen 2,5-s-Handbremsdrift (Reifenrauch/Bremsspuren testen), z. B. --autodrive 6.3 --drift --shot.
 var iso = args.FirstOrDefault(a => a.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
           ?? Environment.GetEnvironmentVariable("INITIALD_ISO");
@@ -46,7 +49,7 @@ if (iso == null || !File.Exists(iso))
     Console.Error.WriteLine("usage: touge <Initial D Special Stage (SLPM-65268).iso> [KURS_ZEIT, z. B. AKINA_DAY]  (oder INITIALD_ISO setzen)");
     return 1;
 }
-string[] valueFlags = ["--battle", "--rule", "--lead", "--flow", "--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--hud-scale", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture", "--lights", "--render-scale", "--jukebox"];
+string[] valueFlags = ["--story-check", "--progress", "--battle", "--rule", "--lead", "--flow", "--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--hud-scale", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture", "--lights", "--render-scale", "--jukebox"];
 string? Arg(string flag) { var i = Array.IndexOf(args, flag); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
 // --car: HCAR name (AE86T, FD3S, R32, EVO3, …) or index 0–31 in that list (Touge.Formats.CarPaint.Cars)
 var carArg = Arg("--car") ?? "AE86T";
@@ -81,6 +84,17 @@ if (Arg("--frontend-capture") is { } frontWav)
 {
     using var isoFile = new Touge.Formats.Iso9660(iso);
     return AudioCapture.FrontEnd(isoFile, frontWav) ? 0 : 2;
+}
+if (args.Contains("--story-check"))
+{
+    // the story's chapter table and scenes against the English, then every chapter with the autopilot (Touge/Story)
+    using var isoFile = new Touge.Formats.Iso9660(iso);
+    if (Arg("--story-check") == "calibrate")
+    {
+        Touge.Story.StoryHeadless.Calibrate(isoFile);
+        return 0;
+    }
+    return Touge.Story.StoryHeadless.Run(isoFile, int.TryParse(Arg("--story-check"), out var only) ? only : null) ? 0 : 2;
 }
 if (Arg("--jukebox") is { } jukeboxSeconds)
 {
@@ -158,6 +172,7 @@ KanseiApp.Run(new TougeGame(iso, course.ToUpperInvariant(), shot, at, orbit, aut
       RenderScale = Arg("--render-scale") is { } rs ? int.Parse(rs) : 100,
       InputDebug = args.Contains("--input-debug"), SimWheel = args.Contains("--sim-wheel"),
       UseMenus = plain, StartMenu = Arg("--menu"), Flow = Arg("--flow"), Offscreen = args.Contains("--offscreen"),
+      StoryFlow = args.Contains("--story"), StoryProgress = int.TryParse(Arg("--progress"), out var progress) ? progress : 0,
       ShotSize = Arg("--shot-size") is { } size && size.Split('x') is [var sw, var sh] ? (int.Parse(sw), int.Parse(sh)) : (1280, 720) }, new WindowSettings
 {
     Title = $"Touge – {course}",

@@ -6,14 +6,14 @@ namespace Touge;
 /// <summary>
 ///     Front-end sound as in the original: UI sounds from SYSSE.BIN, played by name like its sub_1781D0 (SYS005 cursor,
 ///     SYS006 decide, BEEP001 back/blocked, sys002 PRESS START, alarm_02 pause opens) and menu music from BGM.AFS
-///     (sub_177AD0: gam/WORRY/TOKYO/JOY.adx …), streamed with the ADX loop points. UI sounds ignore the device's Sfx
+///     (sub_177AD0: gam/WORRY/TOKYO/JOY.adx …) or ST_BGM_N.AFS (story scenes), streamed with the ADX loop points. UI sounds ignore the device's Sfx
 ///     scale (the game's loops are muted in menus) and play at <see cref="Volume"/>. Every trigger is logged.
 /// </summary>
 public sealed class MenuAudio : IDisposable
 {
     private static readonly string[] Names = ["SYS005", "SYS006", "BEEP001", "sys002", "alarm_02", "CAR010", "CAR011", "NAME001"];
     private readonly AudioDevice _dev;
-    private readonly Afs _bgm;
+    private readonly Afs _bgm, _story;
     private readonly Dictionary<string, AudioDevice.Clip> _se = new(StringComparer.OrdinalIgnoreCase);
     private int _request;
 
@@ -34,6 +34,7 @@ public sealed class MenuAudio : IDisposable
             _se[n] = dev.CreateClip(s.Pcm, 1, s.Rate);
         }
         _bgm = iso.OpenAfs("CDVD/DATA/SOUND/BGM.AFS");
+        _story = iso.OpenAfs("CDVD/DATA/SOUND/ST_BGM_N.AFS"); // the story's scene music (STORY_STnn.adx)
     }
 
     private string Stamp => Clock is { } c ? $"{c():0.00} s " : "";
@@ -62,7 +63,8 @@ public sealed class MenuAudio : IDisposable
         var stamp = Stamp;
         void Start()
         {
-            var adx = new Adx(_bgm.Read(_bgm.Find(track)!.Value));
+            var afs = _bgm.Find(track) != null ? _bgm : _story;
+            var adx = new Adx(afs.Read(afs.Find(track)!.Value));
             if (request != _request) return; // superseded while loading
             var reader = adx.Open(loop: true);
             var once = Jingle(track);

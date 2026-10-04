@@ -154,7 +154,8 @@ public sealed class RaceSession
         t.Nearest(t.PointAt(along));
         var p = t.PointAt(along) + t.LeftAt(along) * lateral;
         var dir = t.PointAt(along + 3) - t.PointAt(along - 3);
-        if (!Ground.Raycast(p + Vector3.UnitY * 5, -Vector3.UnitY, 20, out var hit)) return false;
+        // road under the spot at the line's height (beside the road the ray may reach a slope or valley far below)
+        if (!Ground.Raycast(p + Vector3.UnitY * 5, -Vector3.UnitY, 20, out var hit) || MathF.Abs(hit.Point.Y - p.Y) > 1.5f) return false;
         var v = car.Vehicle;
         if (lateral != 0 && car != Cars[0] && car.Driver is AiDriver ai)
         {
@@ -167,6 +168,7 @@ public sealed class RaceSession
         v.WallProbes(probes);
         if (Ground.CollideWalls(probes, Vehicle.ProbeRadius, contacts) > 0) return false;
         for (var i = 0; i < 60; i++) v.Step(new VehicleInput(0, 0, 0, Handbrake: true), Ground, 1f / 120); // settle on the springs
+        if (v.Position.Y < hit.Point.Y || v.Velocity.Y < -1) return false; // the wheels find no road there (MYOUGI uphill, left of the line): it sinks
         t.Nearest(v.Position);
         (car.Along, car.Lateral) = t.Track(v.Position);
         (car.PrevPosition, car.PrevOrientation, car.StuckFor, car.Coast) = (v.Position, v.Orientation, 0, null);

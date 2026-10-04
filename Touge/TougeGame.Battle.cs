@@ -17,8 +17,8 @@ namespace Touge;
 /// </summary>
 public sealed partial class TougeGame
 {
-    /// <summary>--battle: rival and rules of a quick battle; null = time attack.</summary>
-    public BattleSetup? Battle { get; init; }
+    /// <summary>--battle: rival and rules of a quick battle (or the story chapter's, set when it loads); null = time attack.</summary>
+    public BattleSetup? Battle { get; set; }
 
     /// <summary>--battle-result: with --shot, a decided battle shows the result sheet instead of the finish banner.</summary>
     public bool ShotBattleResult { get; init; }
