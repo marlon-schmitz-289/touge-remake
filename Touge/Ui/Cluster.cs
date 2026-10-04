@@ -8,22 +8,23 @@ namespace Touge.Ui;
 ///     Instrument cluster of the driven car, bottom right of the HUD, drawn from a per-car <see cref="Gauge"/> spec.
 ///     The original has no per-car meters (one Sega-Rosso tach in four scales, RACEVIEW.PAC), so each car gets its real
 ///     dash rebuilt from published layouts: which meters sit where (tach/speedo order, small gauges, boost on turbo cars,
-///     R32 console trio, R34 multi-function display, S15 dash-top boost, Evo boost on the brow, FD A-pillar pods),
-///     housing shape, face/numeral/needle colours, tick and needle style, night illumination. Dial arc = the original's
-///     (252° from 140°, sub_00158B40); the bottom 108° stay free of the needle, so speed/gear windows and sub-dials sit there.
-///     Colours and some ranges are from memory and partly uncertain (see the table).
+///     R32 console trio, R34 multi-function display, FD extra gauges), housing shape, face/numeral/needle colours, tick
+///     and needle style, night illumination. Every meter sits inside the housing (extras that are elsewhere in the real
+///     car are pulled in), the housing fits <see cref="Box"/>. Dial arc = the original's (252° from 140°, sub_00158B40);
+///     the bottom 108° stay free of the needle, so legends, speed/gear windows and sub-dials sit there, numbers sit in a
+///     band along the rim outside the needle tip. Colours and some ranges are from memory and partly uncertain.
 /// </summary>
 public static class Cluster
 {
     public enum Kind { Tach, Speedo, Fuel, Temp, FuelTemp, Oil, Boost, OilTemp, Volt, Mfd }
 
-    /// <summary>Where a meter sits: in the main housing, in its own pod outside it, or as a sub-dial inside a big dial.</summary>
-    public enum Mount { Dash, Pod, Inset }
+    /// <summary>Where a meter sits: in the main housing or as a sub-dial inside a big dial.</summary>
+    public enum Mount { Dash, Inset }
 
     /// <summary>Hooded binnacle (corner radius <see cref="Gauge.Corner"/>), Nissan wedge, separate round cowls, or the S2000 LCD.</summary>
     public enum Housing { Hood, Wedge, Cowls, Lcd }
 
-    /// <summary>Thin line ticks; flat block ticks; numbers outside an inner tick ring; wristwatch (chronograph) track.</summary>
+    /// <summary>Thin line ticks; flat block ticks; line ticks on a drawn ring (Honda); wristwatch (chronograph) track.</summary>
     public enum Ticks { Line, Block, Outer, Watch }
 
     /// <summary>Meter <see cref="K"/> centred at (<see cref="X"/>, <see cref="Y"/>) units from the housing's top-left, face radius <see cref="R"/> (Mfd: half height).</summary>
@@ -53,14 +54,14 @@ public static class Cluster
     private static readonly Meter[] Ae86 = [M(Kind.FuelTemp, 62, 128, 44), M(Kind.Tach, 222, 118, 104), M(Kind.Speedo, 414, 124, 78)];
     /// <summary>Two small gauges stacked left, tach centre, speedo right.</summary>
     private static Meter[] Stack(Kind top, Kind bottom) =>
-        [M(top, 56, 76, 34), M(bottom, 56, 172, 34), M(Kind.Tach, 210, 118, 104), M(Kind.Speedo, 410, 124, 80)];
-    /// <summary>Nissan S13 family / R32: speedo left, tach right, two small gauges between.</summary>
+        [M(top, 52, 74, 40), M(bottom, 52, 168, 40), M(Kind.Tach, 210, 118, 104), M(Kind.Speedo, 410, 124, 80)];
+    /// <summary>Nissan S13 family: speedo left, tach right, two small gauges between.</summary>
     private static Meter[] Twin(Kind top, Kind bottom) =>
-        [M(Kind.Speedo, 112, 116, 94), M(top, 240, 66, 28), M(bottom, 240, 166, 28), M(Kind.Tach, 368, 116, 94)];
+        [M(Kind.Speedo, 112, 116, 94), M(top, 240, 66, 32), M(bottom, 240, 166, 32), M(Kind.Tach, 368, 116, 94)];
     private static readonly Vector2 TwinSize = new(480, 228);
-    /// <summary>Mazda FD: speedo left, tach centre, two small gauges stacked right.</summary>
+    /// <summary>Mazda FD: speedo left, tach centre, small gauges stacked right (two, or the Project D three).</summary>
     private static Meter[] Fd(Kind top, Kind bottom) =>
-        [M(Kind.Speedo, 96, 124, 80), M(Kind.Tach, 290, 118, 104), M(top, 452, 72, 32), M(bottom, 452, 168, 32)];
+        [M(Kind.Speedo, 96, 124, 80), M(Kind.Tach, 290, 118, 104), M(top, 452, 72, 36), M(bottom, 452, 168, 36)];
 
     /// <summary>Eunos/MX-5: five separate cowls, fuel/temp left, oil right.</summary>
     private static readonly Meter[] Roadster =
@@ -86,24 +87,25 @@ public static class Cluster
             Black, White, OrangeRed, NOrange, Corner: 60, Chrome: true, Weight: -0.3f),
         // Altezza: chronograph dials with sub-dials, thin watch numerals, baton needles
         ["ALTEZ"] = new(9000, 7800, new(500, 228),
-            [M(Kind.Speedo, 116, 114, 98), M(Kind.Fuel, 116, 164, 20, Mount.Inset), M(Kind.Tach, 384, 114, 98), M(Kind.Temp, 384, 164, 20, Mount.Inset)],
+            [M(Kind.Speedo, 116, 114, 98), M(Kind.Fuel, 116, 160, 26, Mount.Inset), M(Kind.Tach, 384, 114, 98), M(Kind.Temp, 384, 160, 26, Mount.Inset)],
             Black, White, BatonWhite, NWhite, Corner: 50, Ticks: Ticks.Watch, Weight: -0.6f, Chrome: true),
         // Celica GT-Four: numbers on the outer ring, boost and fuel/temp left
         ["GT-4"] = new(8000, 7000, Wide, Stack(Kind.Boost, Kind.FuelTemp), Black, White, OrangeRed, NOrange, Corner: 24, Ticks: Ticks.Outer,
             Badge: "GT-FOUR", Skew: 0.06f),
-        // Skyline R32: Nissan twin, oil pressure/temp between, console trio (boost, oil temp, volts) left
-        ["R32"] = new(9000, 8000, TwinSize, [.. Twin(Kind.Oil, Kind.Temp), M(Kind.Boost, -44, 38, 26, Mount.Pod), M(Kind.OilTemp, -44, 114, 26, Mount.Pod),
-            M(Kind.Volt, -44, 190, 26, Mount.Pod)], Black, White, OrangeRed, NOrange, Corner: 26, Badge: "GT-R"),
-        // Late-90s Nissan: wedge housing, red needles; R34 with the multi-function display on the dash centre
-        ["R34"] = new(9000, 8000, new(510, 232), [.. Ae86, M(Kind.Mfd, -96, 132, 64, Mount.Pod)], Black, White, Red, NWhite, Housing.Wedge,
-            Ticks: Ticks.Block, Badge: "GT-R", Skew: 0.1f, Ring: Rgba(0.55f, 0.57f, 0.6f)),
+        // Skyline R32: Nissan twin, oil pressure/temp between, the console trio (boost, oil temp, volts) as a column on the left
+        ["R32"] = new(9000, 8000, new(540, 228), [M(Kind.Boost, 40, 45, 30), M(Kind.OilTemp, 40, 117, 30), M(Kind.Volt, 40, 189, 30),
+            M(Kind.Speedo, 177, 116, 94), M(Kind.Oil, 305, 66, 32), M(Kind.Temp, 305, 166, 32), M(Kind.Tach, 433, 116, 94)],
+            Black, White, OrangeRed, NOrange, Corner: 26, Badge: "GT-R"),
+        // Late-90s Nissan: wedge housing, red needles; R34 with the multi-function display (dash centre in the car) left of the tach
+        ["R34"] = new(9000, 8000, new(510, 232), [M(Kind.Mfd, 60, 128, 66), M(Kind.Tach, 226, 118, 104), M(Kind.Speedo, 416, 124, 78)],
+            Black, White, Red, NWhite, Housing.Wedge, Ticks: Ticks.Block, Badge: "GT-R", Skew: 0.1f, Ring: Rgba(0.55f, 0.57f, 0.6f)),
         ["ER34"] = new(8000, 7000, new(510, 232), Stack(Kind.Boost, Kind.FuelTemp), Black, White, OrangeRed, NOrange, Housing.Wedge, Ticks: Ticks.Block,
             Skew: 0.1f),
         ["S13"] = new(8000, 7000, TwinSize, Twin(Kind.Boost, Kind.Temp), Black, White, Orange, NOrange, Corner: 20),
         ["S14Q"] = new(8000, 7000, TwinSize, Twin(Kind.Temp, Kind.Fuel), Black, White, OrangeRed, NOrange, Corner: 48, Ticks: Ticks.Block, Skew: 0.06f),
         ["S14"] = new(8000, 7000, TwinSize, Twin(Kind.Boost, Kind.Temp), Black, White, OrangeRed, NOrange, Corner: 48, Ticks: Ticks.Block, Skew: 0.06f),
-        // S15: separate round boost gauge on top of the dash centre
-        ["S15"] = new(9000, 7500, new(510, 232), [.. Ae86, M(Kind.Boost, 40, -50, 32, Mount.Pod)], Black, White, OrangeRed, NAmber, Housing.Wedge,
+        // S15: boost gauge (dash top in the car) over fuel/temp
+        ["S15"] = new(9000, 7500, new(510, 232), Stack(Kind.Boost, Kind.FuelTemp), Black, White, OrangeRed, NAmber, Housing.Wedge,
             Badge: "SPEC R", Skew: 0.1f, Ring: Rgba(0.75f, 0.2f, 0.1f)),
         ["ONE80"] = new(8000, 7000, TwinSize, Twin(Kind.Boost, Kind.Temp), Black, White, Orange, NOrange, Corner: 20),
         ["SIL80"] = new(8000, 7000, TwinSize, Twin(Kind.Boost, Kind.Temp), Black, White, Orange, NOrange, Corner: 20),
@@ -115,15 +117,15 @@ public static class Cluster
         ["INTGR"] = new(10000, 8400, Wide, Stack(Kind.Temp, Kind.Fuel), RedFace, White, Red, NWhite, Corner: 40, Ticks: Ticks.Outer, Badge: "TYPE R",
             Skew: 0.04f, Chrome: true),
         ["S2000"] = new(10000, 9000, new(470, 210), [], Black, LcdAmber, LcdAmber, LcdAmber, Housing.Lcd),
-        // Lancer Evolution III/IV: boost gauge on the brow above the tach
-        ["EVO3"] = new(8000, 7000, Wide, [.. Ae86, M(Kind.Boost, 134, -40, 28, Mount.Pod)], Black, White, Orange, NGreen, Corner: 16, Ticks: Ticks.Block),
-        ["EVO4"] = new(9000, 7500, Wide, [.. Ae86, M(Kind.Boost, 134, -40, 28, Mount.Pod)], Black, White, Orange, NGreen, Corner: 30, Ticks: Ticks.Block,
+        // Lancer Evolution III/IV: boost gauge (on the brow in the car) over fuel/temp
+        ["EVO3"] = new(8000, 7000, Wide, Stack(Kind.Boost, Kind.FuelTemp), Black, White, Orange, NGreen, Corner: 16, Ticks: Ticks.Block),
+        ["EVO4"] = new(9000, 7500, Wide, Stack(Kind.Boost, Kind.FuelTemp), Black, White, Orange, NGreen, Corner: 30, Ticks: Ticks.Block,
             Skew: 0.06f),
         // Evo VII: white rings, red needles, sporty italic
         ["EVO7"] = new(8000, 7000, Wide, Stack(Kind.Temp, Kind.Fuel), Black, White, Red, NWhite, Corner: 44, Skew: 0.12f, Chrome: true, Ring: White),
-        // RX-7 FD: speedo left, centre tach, boost/oil right; Project D car: temp/fuel right, aftermarket boost/oil pods up the A-pillar
+        // RX-7 FD: speedo left, centre tach, boost/oil right; Project D car: its A-pillar boost/oil gauges and temp as a column right
         ["FD3S"] = new(10000, 8000, Wide, Fd(Kind.Boost, Kind.Oil), Black, White, OrangeRed, NOrange, Corner: 40, Badge: "ROTARY", NumSize: 0.92f),
-        ["FD3SA"] = new(10000, 8000, Wide, [.. Fd(Kind.Temp, Kind.Fuel), M(Kind.Boost, 470, -42, 28, Mount.Pod), M(Kind.Oil, 470, -124, 28, Mount.Pod)],
+        ["FD3SA"] = new(10000, 8000, Wide, [.. Fd(Kind.Boost, Kind.Oil)[..2], M(Kind.Boost, 456, 46, 28), M(Kind.Oil, 456, 118, 28), M(Kind.Temp, 456, 190, 28)],
             Black, White, OrangeRed, NOrange, Corner: 40, Badge: "ROTARY", NumSize: 0.92f),
         // RX-7 FC: square column-mounted box, boost and oil pressure left
         ["FC3S"] = new(9000, 7000, Wide, Stack(Kind.Boost, Kind.Oil), Black, White, Orange, NOrange, Corner: 6, Ticks: Ticks.Block, Badge: "ROTARY TURBO",
@@ -145,15 +147,30 @@ public static class Cluster
     /// <summary>What the dials show this frame; <see cref="Boost"/> in bar (−1..1), <see cref="Time"/> in s for blinking.</summary>
     public readonly record struct Reading(float Rpm, float Kmh, int Gear, bool Automatic, float Boost, bool Night, float Time);
 
-    private const float SpeedoMax = 180, A0 = 140 * MathF.PI / 180, Sweep = 252 * MathF.PI / 180;
+    /// <summary>Needle sweep of one dial in px: hub, start angle and span (rad), needle length, tail length.</summary>
+    public readonly record struct Sweep(Vector2 C, float From, float Span, float Len, float Tail);
+
+    /// <summary>Test hook: when set, <see cref="Draw"/> adds the full sweep of every needle it draws.</summary>
+    public static List<Sweep>? Sweeps;
+
+    /// <summary>Largest housing, in HUD units (<see cref="Style.Grid.U"/>): 400×190 px at 1080p.</summary>
+    public static readonly Vector2 Box = new(333, 158);
+
+    private const float SpeedoMax = 180, A0 = 140 * MathF.PI / 180, Sweep252 = 252 * MathF.PI / 180, MfdAspect = 0.78f;
     private static readonly uint HousingFill = Rgba(0.045f, 0.046f, 0.05f, 0.94f), HousingRim = Rgba(0.2f, 0.2f, 0.22f, 0.95f),
         Brow = Rgba(0.1f, 0.1f, 0.11f, 0.94f), ChromeLight = Rgba(0.82f, 0.83f, 0.85f), ChromeDark = Rgba(0.28f, 0.29f, 0.31f),
         RedZone = Rgba(0.9f, 0.1f, 0.08f), Window = Rgba(0.01f, 0.01f, 0.012f, 0.96f), Hub = Rgba(0.02f, 0.02f, 0.02f);
 
-    /// <summary>Outer radius (units) a meter occupies: face + bezel, + the cowl around it.</summary>
-    public static float Outer(Gauge g, Meter m) => m.R + (g.Chrome ? 5 : 3) + (m.Mount == Mount.Pod || g.Housing == Housing.Cowls ? 8 : 0);
+    /// <summary>Pixels per housing unit for <paramref name="g"/> on <paramref name="grid"/>: housing fitted into <see cref="Box"/>.</summary>
+    public static float Fit(Gauge g, Style.Grid grid) => grid.U * MathF.Min(Box.X / g.Size.X, Box.Y / g.Size.Y);
 
-    /// <summary>Cluster of <paramref name="g"/> with its housing's bottom-right corner at <paramref name="corner"/>, <paramref name="u"/> px per unit.</summary>
+    /// <summary>Outer radius (units) a meter occupies: face + bezel, + the cowl around it.</summary>
+    public static float Outer(Gauge g, Meter m) => m.R + (g.Chrome ? 5 : 3) + (g.Housing == Housing.Cowls && m.Mount == Mount.Dash ? 8 : 0);
+
+    /// <summary>Half size (units) a meter occupies: round meters their <see cref="Outer"/> radius, the MFD its panel and rim.</summary>
+    public static Vector2 Half(Gauge g, Meter m) => m.K == Kind.Mfd ? new Vector2(MfdAspect * m.R + 4, m.R + 4) : new Vector2(Outer(g, m));
+
+    /// <summary>Cluster of <paramref name="g"/> with its housing's bottom-right corner at <paramref name="corner"/>, <paramref name="u"/> px per unit (<see cref="Fit"/>).</summary>
     public static void Draw(Overlay o, Gauge g, Vector2 corner, float u, in Reading r)
     {
         var size = g.Size * u;
@@ -167,11 +184,10 @@ public static class Cluster
                 return;
             case Housing.Hood: Hood(o, p0, p0 + size, g.Corner * u); break;
             case Housing.Wedge: Wedge(o, p0, p0 + size, u); break;
-        }
-        foreach (var m in g.Meters)
-        {
-            var c = p0 + new Vector2(m.X, m.Y) * u;
-            if (m.Mount == Mount.Pod || (g.Housing == Housing.Cowls && m.Mount == Mount.Dash)) Cowl(o, c, (Outer(g, m) - 1) * u, u, g.Chrome);
+            case Housing.Cowls:
+                foreach (var m in g.Meters)
+                    if (m.Mount == Mount.Dash) Cowl(o, p0 + new Vector2(m.X, m.Y) * u, (Outer(g, m) - 2) * u, u, g.Chrome);
+                break;
         }
         // chronograph: the sub-dials take the bottom of each dial, so speed and gear sit in a column between the dials
         var watch = g.Ticks == Ticks.Watch;
@@ -185,12 +201,12 @@ public static class Cluster
                 case Kind.Tach:
                     var tach = new Scale(g.TachMax, 1000, g.Minor > 0 ? g.Minor : g.TachMax > 9000 ? 2 : 4, 1000, g.Redline, 1000);
                     Dial(o, c, rad, u, k, tach, r.Rpm, "x1000r/min", 20 * g.NumSize * MathF.Min(1, m.R / 96), g.Badge, g.BadgeRed);
-                    GearWindow(o, watch ? column + new Vector2(0, 150 * u) : c + new Vector2(0, 0.63f * rad), u, r);
+                    GearWindow(o, watch ? column + new Vector2(0, 150 * u) : c + new Vector2(0, MathF.Min(0.7f * rad, rad - 24 * u)), u, r);
                     break;
                 case Kind.Speedo:
                     var speedo = new Scale(SpeedoMax, 20, g.Minor > 0 ? g.Minor : 2, 20, float.MaxValue, 1);
-                    Dial(o, c, rad, u, k, speedo, r.Kmh, "km/h", 15 * g.NumSize * MathF.Min(1, m.R / 90));
-                    SpeedWindow(o, watch ? column + new Vector2(0, 92 * u) : c + new Vector2(0, 0.62f * rad), watch ? 70 * u : rad, u, k, r.Kmh);
+                    Dial(o, c, rad, u, k, speedo, r.Kmh, "km/h", 16 * g.NumSize * MathF.Min(1, m.R / 90));
+                    SpeedWindow(o, watch ? column + new Vector2(0, 92 * u) : c + new Vector2(0, 0.66f * rad), watch ? 70 * u : rad, u, k, r.Kmh);
                     break;
                 case Kind.Mfd:
                     Mfd(o, c, rad, u, r, g.TachMax);
@@ -211,7 +227,7 @@ public static class Cluster
 
     private static Vector2 Dir(float a) => new(MathF.Cos(a), MathF.Sin(a));
 
-    private static float Angle(float v, float max) => A0 + Sweep * Math.Clamp(v / max, 0, 1.015f);
+    private static float Angle(float v, float max) => A0 + Sweep252 * Math.Clamp(v / max, 0, 1.015f);
 
     /// <summary>Rounded binnacle with a lighter brow along the top.</summary>
     private static void Hood(Overlay o, Vector2 min, Vector2 max, float r)
@@ -286,25 +302,26 @@ public static class Cluster
     private static float Extent(Overlay o, string text, float size, Vector2 d) =>
         MathF.Abs(d.X) * o.Font!.Measure(text, size) / 2 + MathF.Abs(d.Y) * o.Font.CapHeight * size / 2;
 
-    /// <summary>Analog dial: bezel, red zone, ticks, numbers (inside or outside the ticks), unit, badge, needle with hub.</summary>
+    /// <summary>
+    ///     Analog dial: bezel, numbers in a band along the rim, ticks (and red zone) inside it, needle ending in the ticks,
+    ///     unit legend and badge below the hub in the needle-free bottom sector.
+    /// </summary>
     private static void Dial(Overlay o, Vector2 c, float r, float u, in Look k, in Scale s, float value, string unit, float numSize, string badge = "", bool badgeRed = false)
     {
         Bezel(o, c, r, u, k);
         if (k.Ring != 0) o.Ring(c, r - 1.5f * u, 2 * u, k.Ring, 64);
         var watch = k.Ticks == Ticks.Watch;
-        var outer = k.Ticks == Ticks.Outer;
-        // tick band: at the rim, or an inner ring with the numbers outside it
-        var t0 = outer ? r - 30 * u : r - 3 * u;
-        var redR = outer ? t0 - 3 * u : watch ? r - 12 * u : r - 6 * u;
-        if (s.Red < s.Max) o.Arc(c, redR, (watch ? 3 : 5) * u, RedZone, Angle(s.Red, s.Max), Angle(s.Max, s.Max), 24);
+        var size = numSize * u;
+        var t0 = r - (6 + 1.4f * numSize) * u; // tick ring
+        if (s.Red < s.Max) o.Arc(c, t0 - (watch ? 2 : 3) * u, (watch ? 3 : 5) * u, RedZone, Angle(s.Red, s.Max), Angle(s.Max, s.Max), 24);
+        if (k.Ticks == Ticks.Outer) o.Ring(c, t0, 1.2f * u, Style.Fade(k.Ink, 0.7f), 72);
         if (watch)
         {
-            o.Ring(c, r - 6 * u, 0.8f * u, Style.Fade(k.Ink, 0.5f), 72);
+            o.Ring(c, t0, 0.8f * u, Style.Fade(k.Ink, 0.5f), 72);
             for (var i = 0; i < 120; i++)
-                o.Line(c + Dir(i * MathF.Tau / 120) * (r - 4 * u), c + Dir(i * MathF.Tau / 120) * (r - 8 * u), 0.7f * u, Style.Fade(k.Ink, 0.45f));
+                o.Line(c + Dir(i * MathF.Tau / 120) * t0, c + Dir(i * MathF.Tau / 120) * (t0 - 4 * u), 0.7f * u, Style.Fade(k.Ink, 0.45f));
         }
         var steps = (int)MathF.Round(s.Max / s.Major) * s.Minor;
-        var size = numSize * u;
         for (var i = 0; i <= steps; i++)
         {
             var v = i * s.Major / s.Minor;
@@ -313,7 +330,7 @@ public static class Cluster
             var tickCol = v >= s.Red && !k.Glow ? RedZone : k.Ink;
             if (watch)
             {
-                if (major) o.Line(c + d * (r - 10 * u), c + d * (r - 22 * u), 3.2f * u, v >= s.Red ? Red : k.Ink);
+                if (major) o.Line(c + d * (t0 - 6 * u), c + d * (t0 - 16 * u), 3.2f * u, v >= s.Red ? Red : k.Ink);
             }
             else if (k.Ticks == Ticks.Block)
             {
@@ -324,17 +341,16 @@ public static class Cluster
             if (!major || MathF.Round(v) % s.Label != 0) continue;
             var text = $"{v / s.Divide:0}";
             var sz = text.Length > 2 && s.Divide == 1 ? size * 0.88f : text.Length > 1 && s.Divide > 1 ? size * 0.82f : size;
-            var ext = Extent(o, text, sz, d);
-            // outside: between rim and tick ring; inside: clear of the ticks and the red band
-            var at = outer ? (r - 4 * u + t0) / 2 : watch ? r - 30 * u - ext : t0 - 19 * u - ext;
-            Numeral(o, text, c + d * at, sz, k, v >= s.Red ? Red : k.Ink);
+            Numeral(o, text, c + d * (r - 4 * u - Extent(o, text, sz, d)), sz, k, v >= s.Red ? Red : k.Ink);
         }
-        Label(o, unit, new Vector2(c.X, c.Y - r * 0.3f), MathF.Max(0.11f * r, 8 * u), k);
-        if (badge != "") Label(o, badge, new Vector2(c.X, c.Y + r * 0.34f), 0.12f * r, k, badgeRed ? Red : null, 0.6f);
+        if (!watch) Label(o, unit, new Vector2(c.X, c.Y + 0.3f * r), 0.095f * r, k);
+        if (badge != "") Label(o, badge, new Vector2(c.X, c.Y + 0.43f * r), 0.11f * r, k, badgeRed ? Red : null, 0.6f);
         var a = Angle(value, s.Max);
-        if (watch) Baton(o, c, a, r, u, k);
-        else if (k.Slim) Needle(o, c, a, r - (outer ? 26 : 6) * u, r * 0.12f, 0.035f * r, 0.035f * r, k.Needle, u, 0.09f * r);
-        else Needle(o, c, a, r - (outer ? 26 : 6) * u, r * 0.2f, 0.07f * r, 0.035f * r, k.Needle, u, 0.12f * r);
+        var len = t0 - 4 * u;
+        Sweeps?.Add(new Sweep(c, A0, Sweep252 * 1.015f, len, (watch ? 0.14f : 0.16f) * r));
+        if (watch) Baton(o, c, a, r, len, u, k);
+        else if (k.Slim) Needle(o, c, a, len, r * 0.12f, 0.035f * r, 0.035f * r, k.Needle, u, 0.09f * r);
+        else Needle(o, c, a, len, r * 0.16f, 0.07f * r, 0.035f * r, k.Needle, u, 0.12f * r);
     }
 
     private static void Label(Overlay o, string s, Vector2 centre, float size, in Look k, uint? color = null, float alpha = 0.75f)
@@ -356,119 +372,126 @@ public static class Cluster
     }
 
     /// <summary>Altezza baton: slim white hand with a red tip, chrome hub.</summary>
-    private static void Baton(Overlay o, Vector2 c, float a, float r, float u, in Look k)
+    private static void Baton(Overlay o, Vector2 c, float a, float r, float len, float u, in Look k)
     {
         var d = Dir(a);
         var sh = new Vector2(1.5f, 2.5f) * u;
-        o.Line(c - d * r * 0.18f + sh, c + d * (r - 8 * u) + sh, 3 * u, Rgba(0, 0, 0, 0.35f));
-        o.Line(c - d * r * 0.18f, c + d * (r - 22 * u), 4 * u, k.Needle);
-        o.Line(c + d * (r - 22 * u), c + d * (r - 8 * u), 2.2f * u, Red);
+        o.Line(c - d * r * 0.14f + sh, c + d * len + sh, 3 * u, Rgba(0, 0, 0, 0.35f));
+        o.Line(c - d * r * 0.14f, c + d * (len - 14 * u), 4 * u, k.Needle);
+        o.Line(c + d * (len - 14 * u), c + d * len, 2.2f * u, Red);
         o.Disc(c, 6 * u, ChromeLight);
         o.Disc(c, 3 * u, Hub);
     }
 
     /// <summary>
-    ///     Small gauge: arc across the top (ends lo/hi, caption below), fuel/temp combination with two half-arcs, or a
-    ///     thin-ringed chronograph sub-dial when <paramref name="inset"/>.
+    ///     Small gauge: arc across the top with a red zone and the caption below the hub, fuel/temp combination (fuel arc
+    ///     on top, temperature below, E/C and F/H in the needle-free side gaps), or a thin-ringed chronograph sub-dial
+    ///     when <paramref name="inset"/>. No numbers: too small to read.
     /// </summary>
     private static void Mini(Overlay o, Vector2 c, float r, float u, in Look k, Kind kind, bool inset, in Reading rd, int tachMax)
     {
-        var (caption, lo, hi, value) = kind switch
+        // value 0..1 and red zone at the low (−1) or high (+1) end
+        var (caption, value, zone) = kind switch
         {
-            Kind.Fuel => ("FUEL", "E", "F", 0.7f),
-            Kind.Temp => ("TEMP", "C", "H", 0.45f),
-            Kind.Oil => ("OIL", "0", "8", 0.25f + 0.5f * rd.Rpm / tachMax),
-            Kind.Boost => ("BOOST", "-1", "+1", (rd.Boost + 1) / 2),
-            Kind.OilTemp => ("OIL °C", "50", "150", 0.42f + 0.1f * rd.Rpm / tachMax),
-            Kind.Volt => ("VOLT", "8", "16", 0.7f),
-            _ => ("FUEL", "E", "F", 0.7f),
+            Kind.Temp => ("TEMP", 0.45f, 1),
+            Kind.Oil => ("OIL", 0.25f + 0.5f * rd.Rpm / tachMax, -1),
+            Kind.Boost => ("BOOST", (rd.Boost + 1) / 2, 1),
+            Kind.OilTemp => ("OIL T", 0.42f + 0.1f * rd.Rpm / tachMax, 1),
+            Kind.Volt => ("VOLT", 0.7f, -1),
+            _ => ("FUEL", 0.7f, -1),
         };
         if (inset)
         {
             o.Disc(c, r, k.Face);
             o.Ring(c, r, 1 * u, Style.Fade(k.Ink, 0.7f), 32);
-            for (var i = 0; i <= 4; i++)
-                o.Line(c + Dir(MathF.PI + i * MathF.PI / 4) * r, c + Dir(MathF.PI + i * MathF.PI / 4) * (r - 4 * u), 1 * u, k.Ink);
-            Label(o, caption, c + new Vector2(0, r * 0.45f), 0.36f * r, k);
-            o.Line(c, c + Dir(MathF.PI + MathF.PI * value) * (r - 3 * u), 1.6f * u, Red);
-            o.Disc(c, 2.2f * u, ChromeLight);
+            Arc(o, c, r, u, k, 180, 180, value, zone, 2 * u);
+            Caption(o, caption, c, r, k);
             return;
         }
         Bezel(o, c, r, u, k);
-        var size = MathF.Max(0.3f * r, 10 * u);
         if (kind == Kind.FuelTemp)
         {
-            // fuel on an upper arc, water temperature on a lower one, one needle each from the centre
-            Arc(o, c, r, u, k, 215, 110, size, "E", "F", 0.7f, "FUEL", -1);
-            Arc(o, c, r, u, k, 145, -110, size, "C", "H", 0.45f, "TEMP", 1);
-            o.Disc(c, 0.1f * r, Hub);
+            Arc(o, c, r, u, k, 225, 90, 0.7f, -1, 0.07f * r);
+            Arc(o, c, r, u, k, 135, -90, 0.45f, 1, 0.07f * r);
+            foreach (var (s, deg) in new[] { ("E", 198), ("C", 162), ("F", 342), ("H", 18) })
+                Numeral(o, s, c + Dir(deg * MathF.PI / 180) * 0.62f * r, 0.34f * r, k, k.Ink);
             return;
         }
-        Arc(o, c, r, u, k, 200, 140, size, lo, hi, value, caption, 1);
+        Arc(o, c, r, u, k, 200, 140, value, zone, 0.08f * r);
+        Caption(o, caption, c, r, k);
     }
 
-    /// <summary>Scale arc from <paramref name="from"/>° over <paramref name="sweep"/>° with end letters, caption above (−1) or below (+1) the hub, and its needle.</summary>
-    private static void Arc(Overlay o, Vector2 c, float r, float u, in Look k, float from, float sweep, float size, string lo, string hi, float value, string caption, int side)
+    /// <summary>Caption of a small gauge below its hub, as large as fits the face.</summary>
+    private static void Caption(Overlay o, string s, Vector2 c, float r, in Look k) =>
+        Label(o, s, c + new Vector2(0, 0.48f * r), MathF.Min(0.42f * r, 1.3f * r * 10 / o.Font!.Measure(s, 10)), k, null, 0.85f);
+
+    /// <summary>Scale arc from <paramref name="from"/>° over <paramref name="sweep"/>°: ticks, red quarter at the <paramref name="zone"/> end, needle.</summary>
+    private static void Arc(Overlay o, Vector2 c, float r, float u, in Look k, float from, float sweep, float value, int zone, float width)
     {
         float a0 = from * MathF.PI / 180, sw = sweep * MathF.PI / 180;
+        o.Arc(c, r - 5 * u, 3 * u, RedZone, zone < 0 ? a0 : a0 + 0.75f * sw, zone < 0 ? a0 + 0.25f * sw : a0 + sw, 8);
         for (var i = 0; i <= 4; i++)
         {
             var d = Dir(a0 + sw * i / 4);
-            o.Line(c + d * (r - 3 * u), c + d * (r - (i % 2 == 0 ? 10 : 6) * u), (i % 2 == 0 ? 2 : 1.2f) * u, i == 4 && caption is "TEMP" or "OIL °C" ? RedZone : k.Ink);
+            o.Line(c + d * (r - 2 * u), c + d * (r - (i % 2 == 0 ? 9 : 6) * u), (i % 2 == 0 ? 2 : 1.2f) * u, k.Ink);
         }
-        Numeral(o, lo, c + Dir(a0) * (r - 10 * u - size * 0.7f), size, k, k.Ink);
-        Numeral(o, hi, c + Dir(a0 + sw) * (r - 10 * u - size * 0.7f), size, k, k.Ink);
-        Label(o, caption, new Vector2(c.X, c.Y + side * r * 0.42f), size * 0.85f, k);
-        Needle(o, c, a0 + sw * Math.Clamp(value, 0, 1), r - 5 * u, r * 0.12f, 0.08f * r, 0.05f * r, k.Needle, u, 0.13f * r);
+        var len = r - 4 * u;
+        Sweeps?.Add(new Sweep(c, MathF.Min(a0, a0 + sw), MathF.Abs(sw), len, 0.12f * r));
+        Needle(o, c, a0 + sw * Math.Clamp(value, 0, 1), len, 0.12f * r, width, 0.6f * width, k.Needle, u, MathF.Max(0.13f * r, 2.5f * u));
     }
 
     /// <summary>Odometer-style window with the speed in drum digits, sized to the dial.</summary>
     private static void SpeedWindow(Overlay o, Vector2 c, float dial, float u, in Look k, float kmh)
     {
-        var half = new Vector2(MathF.Min(30 * u, 0.36f * dial), 13 * u);
-        o.Rect(Vector2.Round(c - half - new Vector2(u)), Vector2.Round(c + half + new Vector2(u)), Rgba(0.4f, 0.4f, 0.42f));
-        o.Rect(Vector2.Round(c - half), Vector2.Round(c + half), Window);
-        var size = MathF.Min(24 * u, half.X * 0.8f);
+        var half = new Vector2(MathF.Min(34 * u, 0.36f * dial), 15 * u);
+        WindowBox(o, c, half, u);
+        var size = MathF.Min(28 * u, half.X * 0.85f);
         o.Text($"{MathF.Round(kmh):0}", new Vector2(c.X, c.Y + o.Font!.CapHeight * size / 2), size, k.Glow ? k.Ink : White, 0.5f, 0.3f * u);
+    }
+
+    /// <summary>Black window with a grey frame of at least one whole pixel.</summary>
+    private static void WindowBox(Overlay o, Vector2 c, Vector2 half, float u)
+    {
+        Vector2 min = Vector2.Round(c - half), max = Vector2.Round(c + half), e = new(MathF.Max(1, MathF.Round(u)));
+        o.Rect(min - e, max + e, Rgba(0.4f, 0.4f, 0.42f));
+        o.Rect(min, max, Window);
     }
 
     /// <summary>Gear window at the foot of the tach, AT/MT in small type beside the digit.</summary>
     private static void GearWindow(Overlay o, Vector2 c, float u, in Reading r)
     {
-        var half = new Vector2(26, 17) * u;
-        o.Rect(Vector2.Round(c - half - new Vector2(u)), Vector2.Round(c + half + new Vector2(u)), Rgba(0.4f, 0.4f, 0.42f));
-        o.Rect(Vector2.Round(c - half), Vector2.Round(c + half), Window);
+        var half = new Vector2(28, 19) * u;
+        WindowBox(o, c, half, u);
         var gear = r.Gear < 0 ? "R" : r.Gear == 0 ? "N" : r.Gear.ToString();
-        var size = 30 * u;
-        o.Text(gear, new Vector2(c.X - 7 * u, c.Y + o.Font!.CapHeight * size / 2), size, Style.Amber, 0.5f, 0.4f * u);
-        o.Text(r.Automatic ? "AT" : "MT", new Vector2(c.X + 15 * u, c.Y + 9 * u), 11 * u, Style.Fade(Style.Amber, 0.7f), 0.5f, 0.2f * u);
+        var size = 34 * u;
+        o.Text(gear, new Vector2(c.X - 8 * u, c.Y + o.Font!.CapHeight * size / 2), size, Style.Amber, 0.5f, 0.4f * u);
+        o.Text(r.Automatic ? "AT" : "MT", new Vector2(c.X + 16 * u, c.Y + 10 * u), 12 * u, Style.Fade(Style.Amber, 0.7f), 0.5f, 0.2f * u);
     }
 
-    /// <summary>R34 multi-function display: dark LCD panel (half height <paramref name="h"/>) with boost bar, oil and water temperatures.</summary>
+    /// <summary>R34 multi-function display: upright dark LCD panel (half height <paramref name="h"/>) with boost bar, oil and water temperatures.</summary>
     private static void Mfd(Overlay o, Vector2 c, float h, float u, in Reading r, int tachMax)
     {
-        var half = new Vector2(1.25f * h, h);
+        var half = new Vector2(MfdAspect * h, h);
         RoundRect(o, c - half - new Vector2(4 * u), c + half + new Vector2(4 * u), 10 * u, HousingRim);
         RoundRect(o, c - half, c + half, 6 * u, Rgba(0.02f, 0.035f, 0.05f, 0.97f));
         var ink = Rgba(0.55f, 0.85f, 1);
-        var x0 = c.X - half.X + 12 * u;
-        var x1 = c.X + half.X - 12 * u;
-        var y = c.Y - half.Y + 24 * u;
-        o.Text("BOOST", new Vector2(x0, y), 14 * u, Style.Fade(ink, 0.75f), 0, 0.2f * u);
-        o.Text($"{r.Boost:+0.0;-0.0}", new Vector2(x1, y), 18 * u, ink, 1, 0.3f * u);
-        var bar0 = new Vector2(x0, y + 8 * u);
-        for (var i = 0; i < 16; i++)
+        var x0 = c.X - half.X + 8 * u;
+        var x1 = c.X + half.X - 8 * u;
+        void Row(string name, string value, float y)
         {
-            var x = bar0.X + i * (x1 - x0) / 16;
-            o.Rect(Vector2.Round(new Vector2(x, bar0.Y)), Vector2.Round(new Vector2(x + (x1 - x0) / 16 - 2 * u, bar0.Y + 12 * u)),
-                i < (r.Boost + 1) / 2 * 16 ? ink : Style.Fade(ink, 0.15f));
+            o.Text(name, new Vector2(x0, y), 13 * u, Style.Fade(ink, 0.75f), 0, 0.2f * u);
+            o.Text(value, new Vector2(x1, y), 19 * u, ink, 1, 0.3f * u);
         }
-        y += 46 * u;
-        o.Text("OIL", new Vector2(x0, y), 14 * u, Style.Fade(ink, 0.75f), 0, 0.2f * u);
-        o.Text($"{90 + 12 * r.Rpm / tachMax:0}°C", new Vector2(x1, y), 18 * u, ink, 1, 0.3f * u);
-        y += 30 * u;
-        o.Text("WATER", new Vector2(x0, y), 14 * u, Style.Fade(ink, 0.75f), 0, 0.2f * u);
-        o.Text("84°C", new Vector2(x1, y), 18 * u, ink, 1, 0.3f * u);
+        Row("BOOST", $"{r.Boost:+0.0;-0.0}", c.Y - h + 26 * u);
+        var bar = c.Y - h + 34 * u;
+        for (var i = 0; i < 10; i++)
+        {
+            var x = x0 + i * (x1 - x0) / 10;
+            o.Rect(Vector2.Round(new Vector2(x, bar)), Vector2.Round(new Vector2(x + (x1 - x0) / 10 - 2 * u, bar + 14 * u)),
+                i < (r.Boost + 1) / 2 * 10 ? ink : Style.Fade(ink, 0.15f));
+        }
+        Row("OIL", $"{90 + 12 * r.Rpm / tachMax:0}°C", c.Y + 14 * u);
+        Row("WATER", "84°C", c.Y + 50 * u);
     }
 
     /// <summary>

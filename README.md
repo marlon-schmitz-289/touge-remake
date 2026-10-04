@@ -50,10 +50,12 @@ HUD: F4 an/aus, N Minimap mitdrehend → nordausgerichtet → ganze Strecke (`--
 und 4 Sektoren (je 25 % der Strecke, Delta zur Bestzeit grün/rot; Zeit läuft ab der Startlinie, stoppt im Ziel), oben Mitte Drift-Kombo
 (Punkte aus Winkel × Tempo, Multiplikator, Wandkontakt löscht), oben rechts Minimap (Start grün, Ziel kariert) mit Fortschritt,
 unten rechts das Kombiinstrument des jeweiligen Autos (`Ui/Cluster`: je Auto eigene Instrumentenliste mit Position – Tacho links/rechts,
-Zusatzinstrumente wie Ladedruck, Öldruck, Tank/Temperatur-Kombi, R32-Konsolentrio, R34-Multifunktionsdisplay, S15-Ladedruck auf dem Armaturenbrett,
-Evo-Ladedruck auf der Hutze, FD-A-Säulen-Instrumente; Gehäuse Hutze/Nissan-Keil/Einzelrohre/LCD, Strich-/Block-/Außenzahlen-/Uhrenskala,
-Altezza-Chronograph, S2000-LCD-Balken; Skala/roter Bereich/Farben/Nachtbeleuchtung je Auto; Tacho alle 20 km/h beziffert; km/h im
-Kilometerzähler-Fenster, Gang + AT/MT unter dem Drehzahlmesser; ein Test prüft, dass sich keine Instrumente überdecken). Alles in einem gemeinsamen Sicherheitsrahmen (`Style.Safe`: 44/900 Rand, ab 2:1 mittig begrenzt). Falschfahrt-Warnung, Hinweis „R“ zum Zurücksetzen, wenn das Auto feststeckt.
+Zusatzinstrumente wie Ladedruck, Öldruck, Tank/Temperatur-Kombi, R32-Konsolentrio, R34-Multifunktionsdisplay, FD-Zusatzinstrumente, alle innerhalb
+des Gehäuses; Gehäuse Hutze/Nissan-Keil/Einzelrohre/LCD, Strich-/Block-/Ring-/Uhrenskala, Altezza-Chronograph, S2000-LCD-Balken;
+Skala/roter Bereich/Farben/Nachtbeleuchtung je Auto; Zahlen am Rand außerhalb der Zeigerspitze, Beschriftungen im zeigerfreien unteren Bogen,
+kleine Instrumente nur mit Beschriftung + rotem Bereich; Gehäuse höchstens 400×190 px bei 1080p (mit der Höhe skaliert); km/h im
+Kilometerzähler-Fenster, Gang + AT/MT unter dem Drehzahlmesser; Tests prüfen Überdeckung, Größe/Lage bei 720p/1080p/4:3/21:9 und dass keine Schrift
+im Zeigerbereich liegt). Alles in einem gemeinsamen Sicherheitsrahmen (`Style.Safe`: 44/900 Rand, ab 2:1 mittig begrenzt). Falschfahrt-Warnung, Hinweis „R“ zum Zurücksetzen, wenn das Auto feststeckt.
 Schrift: Rajdhani Bold (SIL Open Font License, `Touge/Assets/Fonts/OFL.txt`), zur Laufzeit als Distanzfeld-Atlas.
 Ton: M nächster Eurobeat-Titel, F3 Musik an/aus (Startstück fest je Kurs).
 Auto (nur im Stand, < 3 km/h): 1/2 voriges/nächstes Auto, 3 nächste Lackfarbe. Autos (`--car`, Index in Klammern):

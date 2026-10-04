@@ -92,8 +92,8 @@ public sealed class Hud
         var g = Style.Safe(width, height);
         var u = g.U;
         Map(o, new Vector2(g.Right - MapRadius * u, g.Top + MapRadius * u), u, Xz(carPos), Xz(carForward));
-        // narrower than 16:9 the cluster shrinks (to 80 % at 4:3) so it stays clear of the car
-        Cluster.Draw(o, Cluster.Cars[carName], new Vector2(g.Right, g.Bottom), u * Math.Clamp(g.Units / 1400, 0.8f, 1),
+        var gauge = Cluster.Cars[carName];
+        Cluster.Draw(o, gauge, new Vector2(g.Right, g.Bottom), Cluster.Fit(gauge, g),
             new Cluster.Reading(car.Rpm, car.SpeedKmh, car.Gear, car.AutomaticGearbox, _boost, Night, time));
         var timingH = Drift.Total > 0 ? 186 : 150;
         Timing(o, new Vector2(g.Left, g.Top), timingH, u, time);
