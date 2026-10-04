@@ -61,7 +61,36 @@ dotnet run --project Touge -- "<iso>" AKINA_DAY --versus host|join:<ip[:port]>|o
 dotnet run --project Touge -- "<iso>" AKINA_NIT --flow out/proof/vs --versus flow   # Versus-Ablauf per Skript: Hauptmenü → VERSUS → SPLIT → Lobby (START gesperrt bis READY) → Rennen → Pause → RETRY → EXIT → Lobby → Hauptmenü, PNG je Schritt
 dotnet run --project Touge -- "<iso>" IROHA_DAY --headless --host [--bot] [--port 47860] [--players 2] [--races 2] [--net-rule race] [--seconds 600]   # Host ohne Fenster
 dotnet run --project Touge -- "<iso>" --headless --join 127.0.0.1[:47860] --bot [--car FD3S] [--net-sim 80:5%:20]   # Bot-Client ohne Fenster (wartet, bis der Host da ist), Log je Sekunde + Zusammenfassung je Rennen
+dotnet run --project Touge -- "<iso>" AKINA_DAY --replay-test 380 [--battle keisuke] [--drift] [--save out/proof/r.rpl]   # ohne Fenster: Lauf aufnehmen, Datei schreiben/lesen, auf frischen Autos abspielen, Positionsfehler je Tick (mit Keyframes) und nur aus Eingaben, 20 Sprünge
+dotnet run --project Touge -- "<iso>" --replay out/proof/r.rpl [--replay-at 30] [--replay-cam tv|chase|bumper|free] [--shot out/proof/rv.png]   # Replay im Viewer
+dotnet run --project Touge -- "<iso>" AKINA_DAY --ghost out/proof/r.rpl --autodrive 9 --drift --shot out/proof/ghost.png   # Geist aus einer Replay-Datei (mit Menüs: der Bestzeit-Lauf)
+dotnet run --project Touge -- "<iso>" --data-dir out/proof/data --menu replay|replay-best|replay-records|replay-delete|saveload|saveload-actions|saveload-name --shot out/proof/m.png   # REPLAY & RECORD / SAVE & LOAD als Bild (anderer App-Daten-Ordner: die echten Daten bleiben unberührt)
+dotnet run --project Touge -- "<iso>" --flow out/proof/flow --data-dir out/proof/flow_data   # --flow mit echtem Speichern: Ergebnis → EXIT legt Replay + Bestzeit-Lauf in out/proof/flow_data/Replays ab, REPLAY & RECORD zeigt ihn
+dotnet run --project Touge -- "<iso>" AKINA_DAY --menu photo --shot out/proof/photo.png   # Fotomodus über dem pausierten Rennen
 ```
+
+REPLAY & RECORD (`Touge/Replay`, `Ui/ReplayMenu`, `Ui/ReplayViewer`, BGM „WORRY“ wie im Original): jeder Lauf und jedes Battle wird aufgenommen
+(`ReplayRecorder`: Eingaben aller Autos je Physik-Tick + alle 0,5 s und nach jedem Versetzen (R, Neustart der KI) der volle Zustand jedes Autos,
+`Vehicle.Save/Load`). Die Physik ist deterministisch: Abspielen nur aus den Eingaben trifft die Aufnahme auf den Millimeter (`--replay-test`), die
+Keyframes machen Springen billig und tragen, was die Eingaben nicht haben. Fertige Läufe landen mit den Menüs (oder `--data-dir`) in `Replays/` neben settings.json,
+sobald der Lauf endet (Ergebnis/Pause → EXIT, neuer Lauf, Beenden) (die neuesten 40 plus behaltene, gzip, ~1–2,5 KiB/s), ein neuer Rekord zusätzlich als `Replays/Best/<Rekordschlüssel>.rpl`. Zuschauen: Pause → Replay (der Lauf
+bis hier, danach geht das Rennen genau dort weiter), Ergebnis → REPLAY, Hauptmenü → REPLAY & RECORD (Reiter REPLAYS, BEST RUNS, RECORDS = die
+Bestzeiten wie bisher; ↑/↓, Entscheiden ansehen, K bzw. Pad Y behalten (KEPT: nie weggekürzt), X/Entf bzw. Pad X löschen mit JA/NEIN).
+Zurück aus Viewer/Fotomodus steht der Cursor wieder auf REPLAY bzw. PHOTO. Viewer: blinkendes REPLAY, Auto/Tempo/Gang, Zeitleiste;
+Kameras C bzw. Pad Y: TV (die Originalkameras aus `REPLAY.AFS`/REPCAM je Kurs und Richtung, an der Strecke, Zoom und Fahrt wie im Original,
+schauen aufs Auto), Verfolger, Stoßstange, frei (WASD/QE, IJKL oder rechte Maustaste, Shift schnell; Pad Sticks + Trigger). Leertaste/Enter bzw.
+Pad A Pause, ←/→ (Pad D-Pad/LB/RB) gehalten zurück/vor (4×), ↑/↓ Tempo ¼–4×, Tab (Pad BACK) anderes Auto, H (Pad X) Overlay aus, R (Pad L3)
+von vorn, P (Pad R3) Fotomodus, Esc/Backspace (Pad B) zurück. Motor/Reifen/Effekte laufen mit, Eurobeat spielt weiter.
+GEIST (Optionen → GAME SETTING → GHOST, Standard an): in Time Attack fährt der Bestzeit-Lauf derselben Strecke, Richtung und Hilfen als
+durchsichtiges, bläuliches Auto mit (eigenes Auto des Laufs; nur die vorderste Fläche wird gemischt; blendet innerhalb 10 m zur Kamera aus).
+FOTOMODUS (Pause → Photo oder P im Replay): Spiel steht, freie Kamera wie oben, ↑/↓ Blickwinkel 10–100°, ←/→ Belichtung ±2 EV, H Overlay,
+Enter/Leertaste (Pad A) speichert ein PNG ohne Overlay in `Screenshots/` neben settings.json, Esc (Pad B) zurück. Tiefenunschärfe: nicht gebaut.
+SAVE & LOAD (`SaveSlots`, `Ui/SaveLoadScreen`): 3 Spielstände (Name, Spielzeit, Rekorde, Fortschritt, Datum). Ein Spielstand ist eine Kopie aller
+`*.json` direkt im App-Data-Ordner (settings.json + was andere Modi dort ablegen, z. B. legend.json/story.json – ohne Anmeldung) in
+`Saves/Slot<n>/`, dazu die Bestzeit-Läufe `Replays/Best/` (Geister und BEST RUNS gehören zum Profil); Laden kopiert sie zurück (fehlende Fortschrittsdateien werden entfernt), übernimmt alles außer Steuerung und Bildschirm dieses
+Rechners und meldet `SaveSlots.Loaded` (für Modi mit Zustand im Speicher). Entscheiden auf einem Platz: SAVE / LOAD / RENAME / DELETE / CANCEL
+(Überschreiben, Laden, Löschen fragen JA/NEIN), ein leerer Platz fragt nach dem Namen (Arcade-Eingabe ↑/↓ Buchstabe, ←/→ Stelle, oder tippen).
+AUTOSAVE (an/aus) speichert nach jedem fertigen Lauf und beim Beenden in den Platz in Benutzung (zuletzt gespeichert/geladen).
 
 Battle (`Touge/Race`, Grundlage für Legend of the Streets, Story und Multiplayer): `RaceSession` mit N Autos, jedes mit einem Fahrer
 (`ICarDriver`: Spieler-Eingabe, KI, später Replay/Netz), Startaufstellung, Zusammenstößen, Auslauf nach dem Ziel und den Regeln (`Battle`).
@@ -124,7 +153,7 @@ Menüs: Ohne Kurs/Test-Flags startet das Spiel im Front-End im Stil des Original
 Original-Menütexturen; Ablauf/Zeiten/Bewegung aus dem Originalcode, siehe FORMATS.md): Hinweis zu den Speicherdaten → Karte „Based on …“ →
 Hinweis „Fiktion“ → Titel (Akina bei Nacht im Hintergrund abgeflogen, Logo, blinkendes PRESS START BUTTON; nach 10 s ohne Eingabe zurück zu
 den Karten) → Hauptmenü (Trommel mit den 7 Modi des Originals, Chromplatten, pulsierender gelber Rahmen; nach 30 s ohne Eingabe zurück zum
-Titel). Gebaut sind davon LEGEND OF THE STREETS, TIME ATTACK, VERSUS (eigene Ergänzung nach TIME ATTACK, siehe unten), STORY, REPLAY & RECORD (→ Rekorde), IKETANI'S CAR GUIDE und OPTIONS; die anderen Modi piepen (BEEP001) wie gesperrte Einträge
+Titel). Gebaut sind davon LEGEND OF THE STREETS, TIME ATTACK, VERSUS (eigene Ergänzung nach TIME ATTACK, siehe unten), STORY, REPLAY & RECORD, IKETANI'S CAR GUIDE, SAVE & LOAD und OPTIONS – alle Modi des Originals
 im Original. Als letzter Eintrag QUIT GAME (nur Windows/Linux/macOS): Abfrage „QUIT THE GAME?“ YES/NO (NO vorgewählt, ←/→ wählen,
 Enter/A entscheiden, Esc/B = NO), YES speichert die Einstellungen und schließt das Fenster. Esc im Hauptmenü zurück zum Titel, im Titel beenden. Danach alle Bildschirme ebenfalls im Originalstil (`Ui/Menu` + `Ui/Canvas`:
 graue Logo-Kachelwand, roter/blauer Laufschrift-Kopf, Chromplatten, Karbonpaneele, gelber Pulsrahmen, Verlaufswörter rot/blau, alles Englisch):
@@ -132,11 +161,11 @@ TIME ATTACK = Kurswahl (3 × 4 Raster wie im Original, Streckenlinie im Karbon-�
 PASSES“ ist gesperrt) → Route (DOWNHILL/UPHILL bzw. CLOCKWISE/COUNTER-CLOCKWISE aus dem Drehsinn der Linie) → Tageszeit (DAY/NIGHT) → Wetter
 (DRY/WET/FOG, nachts DRY/FOG) – Schritte mit nur einer Möglichkeit entfallen – → Hersteller (7 Chromplatten, Modellliste im Karbonpaneel) → Auto (3D-Auto dreht
 sich, ←/→ Modell, ↑/↓ Lackfarbe, Antrieb FF/MR/FR/4WD) → Getriebe (AT/MT) → Laden (weiß, „Now Loading...“) → Streckentelop + 3-2-1-GO
-(CAR010/CAR011, Auto steht bis GO) → Rennen. Esc (Pad: Start) pausiert (alarm_02): Continue/Retry/Exit/Quit Game (Quit Game wie im Hauptmenü mit Abfrage, nur Desktop). Start und Ziel sind die beiden Bögen an den
+(CAR010/CAR011, Auto steht bis GO) → Rennen. Esc (Pad: Start) pausiert (alarm_02): Continue/Retry/Replay/Photo/Exit/Quit Game (Quit Game wie im Hauptmenü mit Abfrage, nur Desktop). Start und Ziel sind die beiden Bögen an den
 Streckenenden: bergab endet, wo bergauf startet, und umgekehrt (Auto steht 5 m hinter seinem Startbogen, Zeit läuft ab dem Bogen). Im Ziel
 „FINISH!!“ bzw. „NEW RECORD!!“ (das Spiel übernimmt das Auto wie ein Arcade-Racer: rollt aus und bremst gleichmäßig bis
 4,5 m vor die Endsperre, vor Kurven des Auslaufs auch stärker, `Drive.Coast`; WIN-Jingle) → Ergebnis (Gesamt-/Sektorzeiten mit Delta, Bestzeit, Differenz, Driftpunkte, Zeilen zählen mit
-NAME001, BGM „JOY“) → Retry / Course Select / Car Select / Exit. Rekorde: Bestzeit je Kurs und Route. Optionen (`Ui/Options`) wie im
+NAME001, BGM „JOY“) → Retry / Replay / Course Select / Car Select / Exit. Rekorde: Bestzeit je Kurs und Route. Optionen (`Ui/Options`) wie im
 Original zweistufig: Abschnittsliste aus Chromplatten (OPSL) → Seite mit Zeilen (OPGM: Reiter links, Chromplatte mit gravierten Werten, mehr als
 3 Werte als ◀ Wert ▶, Lautstärken als 10 Blöcke, Hilfetext unten; ↑/↓ Zeile, ←/→ bzw. Enter/A ändern, Esc/B zurück), alles wirkt sofort und wird gespeichert:
 GAME SETTING (Einheit km/h/mph im Kombiinstrument, Getriebe-Vorwahl AT/MT, Lenkhilfe OFF/LOW/FULL = `CounterSteerAssist` × 0/0,5/1, Drift-Hilfe

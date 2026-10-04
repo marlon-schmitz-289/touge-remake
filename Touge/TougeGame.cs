@@ -66,7 +66,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     /// <summary>What the music stream plays: null silence, <see cref="Menu.RaceMusic"/>, or a BGM.AFS track of the menus ("" = decide again).</summary>
     private string? _music = "";
     /// <summary>Front end or a menu holds the game (no physics); the intro lets go at GO, the finish banner lets the pilot drive on.</summary>
-    private bool Frozen => _front is { Active: true } || _guide is { Active: true } || _legend is { Active: true } || _versusUi is { Active: true } || _story is { Freezes: true }
+    private bool Frozen => _front is { Active: true } || _guide is { Active: true } || _legend is { Active: true } || _versusUi is { Active: true } || _story is { Freezes: true } || ReplayFreezes
                            || _menu is { Freezes: true } && !(_netRace != null && _menu.Current == Menu.Screen.Pause);
     /// <summary>The run's finish was handed to the menus (once per run).</summary>
     private bool _finished;
@@ -183,6 +183,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             _guide = new CarGuide(_catalog) { Sound = n => _menuAudio?.Play(n) };
             LoadLegend();
             LoadStory(iso);
+            SetupReplay();
             FrontEnd.Step? step = Flow != null ? FrontEnd.Step.Boot : StartMenu switch
             {
                 null => UseMenus ? FrontEnd.Step.Boot : null, "boot" => FrontEnd.Step.Boot, "logo" => FrontEnd.Step.Logo,
@@ -213,6 +214,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         var title = _front != null && (_persist || Flow != null);
         LoadCourse(iso, title ? "AKINA_NIT" : _persist ? _settings.Course : _courseTime, _settings.Reverse, _settings.Car, _settings.Paint, startPoint, !title && _settings.Fog);
         _drive.ForceDrift = drift;
+        if (GhostFile != null) LoadGhost();
         // --versus: StartVersusCli below, once sound and menus are up
         if (VersusStart == null && autodrive is { } battleSeconds && _race != null) BattleAutoDrive(battleSeconds);
         else if (VersusStart == null && autodrive is { } seconds)
@@ -222,6 +224,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
                 TickEffects(Drive.Dt);
                 _hud.Tick(_drive.Car, Drive.Dt);
                 _ffb.Update(_drive.Car, _drive.Roughness, 0, _settings.Controls.FfbStrength, Drive.Dt); // --input-debug shows it
+                GhostTick();
             });
             _simTime = seconds;
             _brakeLight = _drive.Pilot.Drive(_drive.Car).Brake; // the shot frame may come before the first tick
@@ -241,6 +244,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             _pos += Vector3.Normalize(s with { Y = 0 }) * -7 + Vector3.UnitY * 0.3f; // the parked car in front, against the light
         }
         if (_front != null) _inRace = false;
+        else if (OpenReplayStart()) { } // --menu replay|saveload|photo, --replay
         else if (_guide != null && StartMenu?.StartsWith("guide") == true)
         {
             OpenGuide(StartMenu == "guide" ? CarGuide.Step.Intro : CarGuide.Step.List);
@@ -458,7 +462,9 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
 
     public override void Tick(float dt)
     {
+        if (ReplayTick(dt)) return; // the replay viewer drives the cars
         if (_probe != null || Frozen) return; // frozen scene / menus pause the game
+        RecordBefore();
         var car = _drive.Car;
         (_prevPos, _prevRot) = (car.Position, car.Orientation);
         // past the finish of a front-end run the game takes the car (auto-run to a stop before the end barrier);
@@ -479,6 +485,8 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         _hud.Tick(car, dt);
         StoryTick(dt);
         _audio?.Update(car, input.Throttle, input.Handbrake, dt);
+        RecordAfter(input);
+        GhostTick();
     }
 
     /// <summary>
@@ -586,10 +594,11 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         }
         if (_shotState == 2)
         {
-            var path = Flow != null ? Path.Combine(Flow, $"om_step2_flow_{++_flowShots:00}_{_flowShot}.png") : shotPath!;
+            var photo = PhotoShotDone();
+            var path = photo ?? (Flow != null ? Path.Combine(Flow, $"om_step2_flow_{++_flowShots:00}_{_flowShot}.png") : shotPath!);
             Png.Write(path, _capture!.Width, _capture.Height, _capture.ReadRgba());
             Console.WriteLine($"\n[Touge] Screenshot -> {path}");
-            if (Flow == null)
+            if (Flow == null && photo == null)
             {
                 Window.ShouldClose = true;
                 return;
@@ -605,6 +614,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         _driver.Update(Input, dt);
         SendForces();
         var keys = Flow != null ? FlowKeys(dt) : _frontKeys.Read(Input, dt);
+        if (UpdateReplay(keys, dt)) return; // viewer, photo mode, REPLAY & RECORD, SAVE & LOAD
         if (VersusUpdate(keys, dt)) return;
         if (_front is { Active: true })
         {
@@ -732,6 +742,12 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             case FrontEnd.Result.Story:
                 OpenStory();
                 break;
+            case FrontEnd.Result.Replay:
+                _replayMenu?.Open();
+                break;
+            case FrontEnd.Result.SaveLoad:
+                _saveMenu?.Open();
+                break;
         }
     }
 
@@ -776,7 +792,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         var front = _front is { Active: true };
         var guide = _guide is { Active: true } || _legend is { Active: true };
         var versus = _versusUi is { Active: true };
-        var sfx = !front && !guide && !versus && _story is not { Mutes: true } && _menu!.Current is Menu.Screen.None or Menu.Screen.Intro or Menu.Screen.Finish ? _settings.SoundVolume : 0;
+        var sfx = !front && !guide && !versus && !ReplayMutes && _story is not { Mutes: true } && _menu!.Current is Menu.Screen.None or Menu.Screen.Intro or Menu.Screen.Finish ? _settings.SoundVolume : 0;
         if (_audioDevice!.Sfx != sfx) _audioDevice.Sfx = sfx; // the setter touches every voice
         if (_guide?.Voice != _voice && _guideVoice != null)
         {
@@ -785,7 +801,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             _audioDevice.Music = MusicLevel;
             _guide.VoiceSeconds = _guideVoice.Play(_voice, _settings.MenuVolume);
         }
-        var want = !_settings.MusicOn ? null : front ? _front!.Music : _legend is { Active: true } ? _legend.Music : guide ? _guide!.Music : versus ? _versusUi!.Music : _story is { Active: true } ? _story.Music : VersusMusic(_menu!.Music(_music));
+        var want = !_settings.MusicOn ? null : front ? _front!.Music : _legend is { Active: true } ? _legend.Music : guide ? _guide!.Music : versus ? _versusUi!.Music : _story is { Active: true } ? _story.Music : ReplayMusic ?? VersusMusic(_menu!.Music(_music));
         if (want == _music) return;
         if (_music == Menu.RaceMusic) _jukebox!.Stop();
         _music = want;
@@ -834,6 +850,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
                 VersusExitRace();
                 break;
             case Menu.Action.Exit:
+                EndRecording(); // the finished run is saved now, not at the next run
                 EndLegendBattle();
                 _inRace = false;
                 if (_front == null) Window.ShouldClose = true; // a --menu start has no main menu to go back to
@@ -848,12 +865,23 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             case Menu.Action.Quit:
                 Quit();
                 break;
+            case Menu.Action.Replay when _rec is { Valid: true, Replay.Ticks: > 0 }:
+                OpenReplay(_rec.Replay, menu.Current == Menu.Screen.Pause ? Back.Pause : Back.Result);
+                break;
+            case Menu.Action.Replay:
+                _menuAudio?.Play("BEEP001");
+                break;
+            case Menu.Action.Photo:
+                OpenPhoto();
+                break;
         }
     }
 
     /// <summary>QUIT GAME (main or pause menu, confirmed): settings saved, window closed.</summary>
     private void Quit()
     {
+        EndRecording();
+        Autosave();
         if (_persist) _settings.Save();
         Window.ShouldClose = true;
     }
@@ -874,6 +902,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         _finished = false;
         SyncPose();
         (_inRace, _camSnap, _fly) = (true, true, false);
+        RestartRecording();
     }
 
     /// <summary>Music volume from the settings; it steps back while Iketani talks.</summary>
@@ -936,7 +965,8 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     /// </summary>
     private bool UpdateMenuCamera(float dt)
     {
-        var front = _front is { Active: true } || _guide is { Active: true, ShowsCar: false } || _legend is { Active: true, ShowsCar: false } || _story is { Flyover: true } || _versusUi is { Active: true };
+        if (ReplayCamera(dt)) return true;
+        var front = _front is { Active: true } || _guide is { Active: true, ShowsCar: false } || _legend is { Active: true, ShowsCar: false } || _story is { Flyover: true } || _versusUi is { Active: true } || ReplayBackdrop;
         var screen = _menu?.Current ?? Menu.Screen.None;
         if (_legend is { ShowsCar: true } && _rivalModel != null)
         {
@@ -1028,12 +1058,22 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         ("Maker", 1, "maker", 0, 0, true, false), ("Maker", 0.6f, "model", 0, 0, true, false),
         ("Car", 1.5f, "car", 0, 1, false, false), ("Car", 1, "car_paint", 0, 0, true, false), ("Gearbox", 0.8f, "gearbox", 0, 0, true, false),
         ("Loading", 0.6f, "loading", 0, 0, false, false), ("Intro", 1, "telop", 0, 0, false, false), ("Intro", 2, "countdown", 0, 0, false, false),
-        ("Race", 2, "race", 0, 0, false, true), ("Pause", 0.8f, "pause", 0, 0, true, false),
-        ("Finish", 1.2f, "finish", 0, 0, false, false), ("Result", 3.6f, "result", 1, 0, false, false), ("Result", 0.3f, null, 1, 0, false, false),
-        ("Result", 0.3f, null, 1, 0, false, false), ("Result", 0.5f, "result_exit", 0, 0, true, false),
+        ("Race", 2, "race", 0, 0, false, true),
+        // pause → REPLAY (the run so far, TV camera) → back; → PHOTO → back; CONTINUE
+        ("Pause", 0.8f, "pause", 1, 0, false, false), ("Pause", 0.3f, null, 1, 0, false, false), ("Pause", 0.3f, null, 0, 0, true, false),
+        ("Replay", 2.5f, "replay_pause", 0, 0, false, true),
+        ("Pause", 0.5f, "pause_back_replay", 1, 0, false, false), ("Pause", 0.3f, null, 0, 0, true, false), // the cursor stays on REPLAY
+        ("Photo", 1, "photo", 0, 0, false, true),
+        ("Pause", 0.5f, "pause_back_photo", -1, 0, false, false), ("Pause", 0.3f, null, -1, 0, false, false), ("Pause", 0.3f, null, -1, 0, false, false), ("Pause", 0.3f, null, 0, 0, true, false),
+        ("Finish", 1.2f, "finish", 0, 0, false, false), ("Result", 3.6f, "result", 1, 0, false, false), ("Result", 0.3f, null, 0, 0, true, false),
+        ("Replay", 3, "replay_result", 0, 0, false, true), ("Result", 0.8f, "result_back", 1, 0, false, false),
+        ("Result", 0.3f, null, 1, 0, false, false), ("Result", 0.3f, null, 1, 0, false, false),
+        ("Result", 0.5f, "result_exit", 0, 0, true, false),
         ("Modes", 1, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 0, true, false),
-        ("Records", 1, "records", 0, 0, false, true),
-        ("Modes", 1, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 0, true, false),
+        ("ReplayMenu", 1, "replay_menu", 0, 0, false, true),
+        ("Modes", 1, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 0, true, false),
+        ("SaveLoad", 1, "saveload", 0, 0, false, true),
+        ("Modes", 1, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 0, true, false),
         ("Options", 1, "options", 0, 4, false, false), ("Options", 0.5f, "options_sound_section", 0, 0, true, false), ("Options", 0.5f, "options_sound", 0, 0, false, true),
         ("Options", 0.5f, null, 0, 0, false, true), ("Modes", 1.2f, "modes_end", 0, -1, false, false),
         // IKETANI'S CAR GUIDE: intro lines, down the list to the R32, next paint, Iketani talks, skip, back to the main menu
@@ -1075,9 +1115,9 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             return default;
         }
         var s = script[_flowStep];
-        var at = _front is { Active: true } ? _front.Current.ToString() : _guide is { Active: true } ? "Guide" + _guide.Current : _legend is { Active: true } ? "Legend" + _legend.Current
+        var at = ReplayFlowAt ?? (_front is { Active: true } ? _front.Current.ToString() : _guide is { Active: true } ? "Guide" + _guide.Current : _legend is { Active: true } ? "Legend" + _legend.Current
             : _story is { Active: true } ? "Story" + _story.Current : _versusUi is { Active: true } ? "Vs" + _versusUi.Current
-            : _menu!.Current != Menu.Screen.None ? _menu.Current.ToString() : "Race";
+            : _menu!.Current != Menu.Screen.None ? _menu.Current.ToString() : "Race");
         if (at != s.At)
         {
             _flowT = 0;
@@ -1346,6 +1386,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         (_carPose, _carBody) = PoseCar(_drive.Car, _car, _modelToBody, _prevPos, _prevRot, alpha, _carWheels, spin);
         UpdateRivalMatrices(alpha);
         UpdateVersusMatrices(alpha);
+        UpdateShowMatrices(alpha);
     }
 
     /// <summary>Pose (physics body → world) and model matrix of <paramref name="car"/> interpolated by <paramref name="alpha"/>, its wheel matrices into <paramref name="wheels"/>.</summary>
@@ -1410,7 +1451,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         var shot = _shotState == 1 ? _capture : null;
         var frame = shot ?? _offscreen; // where the frame goes (null: the window)
         var (w, h) = frame != null ? (frame.Width, frame.Height) : (Device.SwapchainWidth, Device.SwapchainHeight);
-        UpdateCarMatrices(shot != null ? 1 : ctx.TickAlpha);
+        UpdateCarMatrices(shot != null ? 1 : ReplayAlpha(ctx.TickAlpha));
         if (!UpdateMenuCamera(ctx.Time.DeltaTime) && !_fly) UpdateDriveCamera(ctx.Time.DeltaTime);
         var split = SplitViews(w, h);
         if (split is var (first, second))
@@ -1427,7 +1468,8 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         }
         var menuShown = _menu is { Current: not Menu.Screen.None };
         var hudShown = _hud.Visible && (!menuShown || _menu!.OverRace); // telop/countdown and pause lie over the HUD
-        if (_front is { Active: true }) _front.Build(_overlay, w, h);
+        if (ReplayOverlay(w, h)) hudShown = false; // viewer, photo mode, REPLAY & RECORD, SAVE & LOAD
+        else if (_front is { Active: true }) _front.Build(_overlay, w, h);
         else if (_guide is { Active: true }) _guide.Build(_overlay, w, h);
         else if (_legend is { Active: true }) _legend.Build(_overlay, w, h);
         else if (_story is { Active: true, OverRace: false })
@@ -1469,7 +1511,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             _story.Build(_overlay, w, h);
         }
         if (_jukebox is { Playing: true, Current: { } song } && _music == Menu.RaceMusic && _front is not { Active: true } && _guide is not { Active: true } && _legend is not { Active: true }
-            && _story is not { Active: true } && _versusUi is not { Active: true })
+            && _story is not { Active: true } && _versusUi is not { Active: true } && !OverlayQuiet)
             NowPlaying.Draw(_overlay, w, h, song, _jukebox.Since, hold: _menu?.Current == Menu.Screen.Pause,
                 below: _hud.Visible ? (_race?.Battle != null ? BattleHud.H + 14 : VersusHudBelow(split != null)) + (_story?.HudHeight(_race?.Battle) ?? 0) : 0);
         if (InputDebug) InputDebugView.Build(_overlay, w, h, Input, _driver, _ffb);
@@ -1522,6 +1564,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             if (shell.PopUp is { } popUp) _carRenderer.DrawPart(pass, popUp, own.Model.Lamp.PopUpAt(own.Lights.Open) * own.Body, view3 * proj, _pos);
             DrawRival(pass, view3 * proj);
             DrawVersusCars(pass, view3 * proj, view);
+            DrawShowCars(pass, view3 * proj);
         }
         _fxRenderer.Draw(pass, _fx, view3, view3 * proj, _pos);
         // camera velocity stretches the rain streaks; a shot has no previous frame, the chase camera moves with the car
@@ -1547,6 +1590,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
 
     public override void Dispose()
     {
+        EndRecording();
         _audio?.Dispose();
         _rivalAudio?.Dispose();
         DisposeVersus();

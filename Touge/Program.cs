@@ -50,6 +50,11 @@ using Touge;
 // --versus split|host|join[:ip[:port]]|online [--bot] [--split vertical] [--car2 X] [--players n] [--net-rule battle|race]: Versus direkt (Testläufe/Bilder):
 //   geteilter Bildschirm bzw. Online-Host/-Client im Fenster; --bot: Autopilot fährt, Lobby läuft von selbst (Host startet bei --players Spielern).
 // --shot-after <s>: --shot erst nach so vielen Sekunden (statt sofort), das Spiel läuft bis dahin normal.
+// --replay-test <s> [--battle <rivale>] [--drift] [--save <datei.rpl>]: Lauf ohne Fenster aufnehmen, Datei schreiben/lesen, auf frischen Autos abspielen,
+//   Positionsfehler je Tick (mit Keyframes) und nur aus Eingaben (Determinismus), Sprünge; optional die Replay-Datei.
+// --replay <datei.rpl> [--replay-at <s>] [--replay-cam tv|chase|bumper|free]: Replay im Viewer öffnen (z. B. mit --shot).
+// --ghost <datei.rpl>: dieser Lauf fährt als Geist mit (sonst mit Menüs der Bestzeit-Lauf); --data-dir <ordner>: anderer App-Daten-Ordner (Einstellungen, Replays, Spielstände, Fotos), Läufe werden dort auch in Testläufen gespeichert.
+// --menu replay|replay-best|replay-records|replay-delete|saveload|saveload-actions|saveload-name|photo: REPLAY & RECORD, SAVE & LOAD, Fotomodus (Bilder).
 // --drift: Pilot reißt alle 7 s (ab 4,5 s) einen 2,5-s-Handbremsdrift (Reifenrauch/Bremsspuren testen), z. B. --autodrive 6.3 --drift --shot.
 var iso = args.FirstOrDefault(a => a.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
           ?? Environment.GetEnvironmentVariable("INITIALD_ISO");
@@ -59,7 +64,8 @@ if (iso == null || !File.Exists(iso))
     return 1;
 }
 string[] valueFlags = ["--story-check", "--progress", "--battle", "--rule", "--lead", "--flow", "--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--hud-scale", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture", "--lights", "--render-scale", "--jukebox", "--legend-progress",
-    "--join", "--port", "--name", "--net-sim", "--players", "--races", "--seconds", "--net-rule", "--versus", "--split", "--car2", "--shot-after"];
+    "--join", "--port", "--name", "--net-sim", "--players", "--races", "--seconds", "--net-rule", "--versus", "--split", "--car2", "--shot-after",
+    "--replay-test", "--replay", "--replay-at", "--replay-cam", "--save", "--data-dir", "--ghost"];
 string? Arg(string flag) { var i = Array.IndexOf(args, flag); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
 // --car: HCAR name (AE86T, FD3S, R32, EVO3, …) or index 0–31 in that list (Touge.Formats.CarPaint.Cars)
 var carArg = Arg("--car") ?? "AE86T";
@@ -169,6 +175,12 @@ if (args.Contains("--legend-sim"))
     using var isoFile = new Touge.Formats.Iso9660(iso);
     return Touge.Race.LegendSim.Run(isoFile, car, Arg("--legend-progress"), autodrive ?? 600) ? 0 : 2;
 }
+if (Arg("--replay-test") is { } replaySeconds)
+{
+    using var isoFile = new Touge.Formats.Iso9660(iso);
+    return Touge.Replays.ReplayProof.Run(isoFile, course.ToUpperInvariant(), args.Contains("--reverse"), car, float.Parse(replaySeconds, CultureInfo.InvariantCulture), battle,
+        args.Contains("--drift"), Arg("--save")) ? 0 : 2;
+}
 if (autodrive is { } battleSeconds && shot == null && battle != null)
 {
     using var isoFile = new Touge.Formats.Iso9660(iso);
@@ -198,6 +210,8 @@ if (Arg("--ground") is { } groundPng)
     return 0;
 }
 
+// --data-dir: another app-data folder (settings, replays, save slots, photos), finished runs are saved there also in test runs
+if (Arg("--data-dir") is { } dataDir) Touge.Ui.Settings.FilePath = Path.Combine(Path.GetFullPath(dataDir), "settings.json");
 // menus (and the saved settings) only when started plainly: any course or test flag means a scripted run
 var plain = args.Where((a, i) => a != iso && a != "--backend" && (i == 0 || args[i - 1] != "--backend")).All(a => a is "--menu" or "--input-debug" or "--sim-wheel" || a == Arg("--menu"));
 // a plain start opens the window as saved (Options: SCREEN), test runs always in a 1600×900 window
@@ -211,6 +225,8 @@ KanseiApp.Run(new TougeGame(iso, course.ToUpperInvariant(), shot, at, orbit, aut
       Battle = battle, LegendProgressPath = Arg("--legend-progress"), LegendFlow = args.Contains("--legend"), ShotBattleResult = args.Contains("--battle-result"), Lights = Arg("--lights") is { } lights ? Enum.Parse<Headlights.Mode>(lights, true) : null,
       RenderScale = Arg("--render-scale") is { } rs ? int.Parse(rs) : 100,
       InputDebug = args.Contains("--input-debug"), SimWheel = args.Contains("--sim-wheel"),
+      SaveRuns = Arg("--data-dir") != null, ReplayFile = Arg("--replay"), GhostFile = Arg("--ghost"), ReplayAt = Arg("--replay-at") is { } ra ? float.Parse(ra, CultureInfo.InvariantCulture) : 0,
+      ReplayCam = Enum.TryParse<Touge.Ui.ReplayViewer.Camera>(Arg("--replay-cam") ?? "tv", true, out var rc) ? rc : Touge.Ui.ReplayViewer.Camera.Tv,
       UseMenus = plain, StartMenu = Arg("--menu"), Flow = Arg("--flow"), Offscreen = args.Contains("--offscreen"),
       StoryFlow = args.Contains("--story"), StoryProgress = int.TryParse(Arg("--progress"), out var progress) ? progress : 0,
       ShotSize = Arg("--shot-size") is { } size && size.Split('x') is [var sw, var sh] ? (int.Parse(sw), int.Parse(sh)) : (1280, 720) }, new WindowSettings

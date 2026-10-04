@@ -156,6 +156,23 @@ Rollen (aus Dateinamen; „?" = geraten):
 
 Stichprobe (WAV-Export + Spektrum, Python/numpy): alle Exporte nicht still (RMS −18 … −2 dBFS) und tonal statt Rauschen (spektrale Flachheit 0,000–0,39; weißes Rauschen 1,0). Musik Schwerpunkt ~1,4–1,7 kHz, Stimme ~1,1 kHz, Reifen-Quietschen Spitze bei ~1 kHz.
 
+## Replay-Kameras `BINARY/REPLAY.AFS` – geknackt
+22 Einträge `REPCAM<nn>_<d>.BIN`, nn = Kurs in der ELF-Reihenfolge (00 MYOUGI0, 01 USUI0, 02 AKAGI, 03 AKINA, 04 HAPPOU, 05 IROHA, 06 MYOUGI,
+07 USUI, 08 MOMIJI, 09 SHIONA, 10 SHOMARU), d = Richtung (0 entlang ROAD, 1 Gegenrichtung). Jede Datei fest 26628 B = u32 Anzahl + 128 × 0xD0
+(Akina 69 / 74 Kameras; alle 22 Dateien: 25–100 Kameras, Bereiche lückenlos bis ~ROAD-Ende, Augen ≤ 52 m von ROAD). Satz: u8 Index, u8 Art (0 fest, 1 fester Standort mit Zoom, 2 fest, 3 Fahrt, 5 kurzer Schnitt), u16 ?, u16 von, u16 bis
+(ROAD-Index des Fortschritts des Autos; Richtung 1 zählt vom Ende: Index = n − 1 − ROAD), f32 0,01, f32 0,25 (Glättung?), 7 × f32 (meist 0, an
++0x24 0,6–0,78), f32 1; dann zwei Schlüssel à 0x50 B ab +0x30 und +0x80: Auge xyzw, Ziel xyzw, Einheitsrichtung Auge→Ziel, (Neigung°, Gier°),
+(Abstand Auge–Ziel, ?, vertikaler Blickwinkel°). Die Bereiche schließen lückenlos aneinander (0 → Ende), die Augen stehen 2–14 m neben und
+0–6,5 m über der Straße (Akina meist 1–4 m), Blickwinkel 4–45° (Fernsehzoom). Art 3: Auge, Ziel und Zoom wandern vom ersten zum zweiten
+Schlüssel, während das Auto den Bereich durchfährt; das Ziel des zweiten Schlüssels liegt am Bereichsende auf der Straße. Der Remake
+interpoliert Auge und Zoom genauso und schaut immer aufs Auto (`Touge/Replay/TvCameras`, Reader `ReplayCameras`).
+
+## Replay-Datei (eigenes Format, `.rpl`)
+gzip von: `"IDRP"`, u16 Version (1), u16 Zustandsgröße (`Vehicle.StateBytes`, 314), i32 Länge + Kopf als JSON (`ReplayInfo`: Kurs, Richtung,
+Nebel, Datum, Modus, Zeit, Ausgang, Autos mit Auto/Lack/Hilfen), i32 Ticks, i32 Autos, Ticks × Autos × 18 B Eingabe (f32 Gas, Bremse,
+Lenkung, Kupplung, s8 Schalten, u8 Bits Handbremse/Lenkrad), i32 Keyframes × (i32 Tick, Autos × Zustand). Andere Version oder Zustandsgröße:
+wird nicht gelesen (Liste überspringt sie).
+
 ## Battle (Position, Rennende, Sieg) – teils geknackt
 Aus dem Recomp (ELF-Adresse = Dateioffset + 0xFFF80):
 - **Position** `0x15E690` (je Frame): zwei Autos (Zeiger `gp−0x79B0`, `gp−0x79B4`), verglichen wird zuerst der Abschnittsindex `+0x17B2`

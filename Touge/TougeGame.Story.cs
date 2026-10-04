@@ -187,7 +187,7 @@ public sealed partial class TougeGame
     private static readonly (string At, float Wait, string? Shot, int X, int Y, bool Ok, bool Back)[] StoryFlowScript =
     [
         ("Boot", 1.2f, null, 0, 0, true, false), ("Logo", 1, null, 0, 0, true, false), ("Title", 1.5f, null, 0, 0, true, false),
-        ("Modes", 1, null, 0, 1, false, false), ("Modes", 0.6f, null, 0, 1, false, false), ("Modes", 0.8f, "modes_story", 0, 0, true, false),
+        ("Modes", 1, null, 0, 1, false, false), ("Modes", 0.6f, null, 0, 1, false, false), ("Modes", 0.6f, null, 0, 1, false, false), ("Modes", 0.8f, "modes_story", 0, 0, true, false),
         ("StorySelect", 1.5f, "select", 0, -1, false, false), ("StorySelect", 0.8f, "select_ch7", 1, 0, false, false),
         ("StorySelect", 0.8f, "select_part2_locked", -1, 0, false, false), ("StorySelect", 0.5f, null, 0, -1, false, false),
         ("StorySelect", 0.6f, null, 0, 0, true, false),
@@ -210,7 +210,7 @@ public sealed partial class TougeGame
         ("StoryLoading", 0.4f, null, 0, 0, false, false), ("StoryScene", 2, "ghost_scene_back", 0, 0, false, true),
         ("StorySelect", 1.2f, "select_from_scene", 0, 0, true, false), ("StoryLoading", 0.4f, null, 0, 0, false, false),
         ("StoryScene", 1, null, 1, 0, false, false), ("Intro", 1, null, 0, 0, false, false), ("Race", 1.5f, "ghost_race2", 0, 0, false, true),
-        ("Pause", 0.6f, null, 1, 0, false, false), ("Pause", 0.4f, "pause_exit", 1, 0, false, false), ("Pause", 0.4f, null, 0, 0, true, false),
+        ("Pause", 0.6f, null, 1, 0, false, false), ("Pause", 0.4f, null, 1, 0, false, false), ("Pause", 0.4f, null, 1, 0, false, false), ("Pause", 0.4f, "pause_exit", 1, 0, false, false), ("Pause", 0.4f, null, 0, 0, true, false),
         ("StorySelect", 1.5f, "select_from_pause", 0, 0, false, true),
         ("Modes", 1.2f, "modes_back", 0, 0, false, false),
     ];

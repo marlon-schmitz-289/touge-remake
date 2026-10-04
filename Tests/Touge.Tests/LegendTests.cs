@@ -254,7 +254,8 @@ public class LegendTests
         m.Finish(new Menu.Run(200, [50, 100, 150, 200], [null, null, null, null], null, false, 0));
         Run(Menu.FinishHold + Menu.Fade + 0.1f);
         Run(Menu.ButtonsAt);
-        Run(0.1f, (1, 0, false, false)); // RIVAL SELECT
+        Run(0.1f, (1, 0, false, false)); // REPLAY
+        Run(0.1f, (1, 0, false, false)); // RIVAL SELECT (in place of COURSE SELECT)
         actions.Clear();
         Run(Menu.Fade + 0.1f, ok);
         Assert.Contains(Menu.Action.Rivals, actions);

@@ -60,6 +60,8 @@ public sealed class Settings
     /// <summary>Slide stabiliser: 0 low, 1 normal, 2 high (<see cref="CarSpec.DriftDamping"/>).</summary>
     public int DriftAssist { get; set; } = 1;
     public bool BumperCam { get; set; }
+    /// <summary>Time attack ghost: the best run of the course and route drives along see-through (Options → GAME SETTING → GHOST).</summary>
+    public bool Ghost { get; set; } = true;
     /// <summary>Chase camera field of view at standstill in degrees (it widens with speed).</summary>
     public int Fov { get; set; } = 60;
     /// <summary>Camera shake on wall hits 0..1.</summary>
@@ -129,7 +131,8 @@ public sealed class Settings
 
     // ------------------------------------------------------------ file
 
-    public static string FilePath { get; } =
+    /// <summary>settings.json; its folder holds every other store (replays, save slots, photos); --data-dir moves it.</summary>
+    public static string FilePath { get; set; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "InitialDRemake", "settings.json");
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };

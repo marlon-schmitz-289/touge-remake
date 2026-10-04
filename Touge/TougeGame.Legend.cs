@@ -162,6 +162,7 @@ public sealed partial class TougeGame
         ("Maker", 1, $"legend_maker_{n}", 0, 0, true, false), ("Maker", 0.5f, null, 0, 0, true, false), ("Car", 1.2f, $"legend_car_{n}", 0, 0, true, false),
         ("Gearbox", 0.6f, null, 0, 0, true, false), ("Loading", 0.5f, null, 0, 0, false, false),
         ("Intro", 1.2f, $"legend_telop_{n}", 0, 0, false, false), ("Race", 2.5f, $"legend_race_{n}", 0, 0, false, false),
-        ("Finish", 0.8f, $"legend_finish_{n}", 0, 0, false, false), ("Result", 3.6f, $"legend_result_{n}", 1, 0, false, false), ("Result", 0.4f, null, 0, 0, true, false),
+        ("Finish", 0.8f, $"legend_finish_{n}", 0, 0, false, false), ("Result", 3.6f, $"legend_result_{n}", 1, 0, false, false), ("Result", 0.3f, null, 1, 0, false, false),
+        ("Result", 0.4f, null, 0, 0, true, false),
     ];
 }

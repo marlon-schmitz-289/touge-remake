@@ -683,6 +683,7 @@ public sealed partial class TougeGame
         ("Intro", 1, "vs_telop", 0, 0, false, false), ("Intro", 2.5f, "vs_countdown", 0, 0, false, false),
         ("Race", 1.5f, "vs_race", 0, 0, false, true), ("Pause", 0.8f, "vs_pause", 1, 0, false, false), ("Pause", 0.4f, null, 0, 0, true, false),
         ("Race", 1.5f, "vs_race_retry", 0, 0, false, true), ("Pause", 0.8f, null, 1, 0, false, false), ("Pause", 0.4f, null, 1, 0, false, false),
+        ("Pause", 0.4f, null, 1, 0, false, false), ("Pause", 0.4f, null, 1, 0, false, false),
         ("Pause", 0.4f, "vs_pause_exit", 0, 0, true, false),
         ("VsLobby", 1.2f, "vs_lobby_back", 0, 0, false, true), ("VsMode", 0.8f, null, 0, 0, false, true), ("Modes", 1, "vs_modes_back", 0, 0, false, false),
     ];

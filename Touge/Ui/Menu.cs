@@ -25,9 +25,10 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     /// <summary>
     ///     Load: load <see cref="CourseTime"/>/<see cref="CarId"/>… (the menu goes on into the telop); Restart: car back to the
     ///     start (the telop follows); Exit: back to the main menu; PreviewCar: show <see cref="CarId"/>/<see cref="Paint"/>;
-    ///     Quit: close the game (confirmed in the pause menu); Rivals: back to the Legend of the Streets rival ladder.
+    ///     Quit: close the game (confirmed in the pause menu); Replay: watch the run (pause, result); Photo: photo mode (pause);
+    ///     Rivals: back to the Legend of the Streets rival ladder.
     /// </summary>
-    public enum Action { None, Load, Resume, Restart, Exit, PreviewCar, SettingsChanged, Quit, Rivals }
+    public enum Action { None, Load, Resume, Restart, Exit, PreviewCar, SettingsChanged, Quit, Replay, Photo, Rivals }
 
     /// <summary>A finished run for the result sheet.</summary>
     /// <param name="Deltas">Per sector against the best run it was compared with (null without one).</param>
@@ -48,9 +49,9 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     public static float ButtonsAt => RowFirst + RowStep * ResultRows + 0.2f;
 
     /// <summary>Pause buttons; "Quit Game" only on desktop builds (<see cref="QuitPrompt"/>).</summary>
-    public static readonly string[] PauseButtons = ["Continue", "Retry", "Exit", .. QuitPrompt.Available ? new[] { "Quit Game" } : []],
-        ResultButtons = ["RETRY", "COURSE SELECT", "CAR SELECT", "EXIT"];
-    private static readonly string[] PauseCaptions = ["Return to the race.", "Restart the race from the beginning.", "Quit this race.", "Close the game."];
+    public static readonly string[] PauseButtons = ["Continue", "Retry", "Replay", "Photo", "Exit", .. QuitPrompt.Available ? new[] { "Quit Game" } : []],
+        ResultButtons = ["RETRY", "REPLAY", "COURSE SELECT", "CAR SELECT", "EXIT"];
+    private static readonly string[] PauseCaptions = ["Return to the race.", "Restart the race from the beginning.", "Watch the run so far.", "Free camera, take a picture.", "Quit this race.", "Close the game."];
     private readonly QuitPrompt _quit = new();
 
     public Screen Current { get; private set; }
@@ -152,6 +153,9 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     public void Settle(float at = 1) => (_t, _fadeIn) = (MathF.Max(_t, at), false);
 
     public void Close() => Current = Screen.None;
+
+    /// <summary>The cursor on the pause/result button <paramref name="label"/> (back from the replay viewer or photo mode).</summary>
+    public void Select(string label) => _row = Math.Max(0, Array.IndexOf(Current == Screen.Pause ? PauseButtons : ResultButtons, label));
 
     private void Enter(Screen s, bool fadeIn)
     {
@@ -379,13 +383,15 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                 else if (k.Ok)
                 {
                     Sound?.Invoke("SYS006");
-                    switch (_row)
+                    switch (PauseButtons[_row])
                     {
-                        case 0: return Resume();
-                        case 1:
+                        case "Continue": return Resume();
+                        case "Retry":
                             Enter(Screen.Intro, false);
                             return Action.Restart;
-                        case 2:
+                        case "Replay": return Action.Replay;
+                        case "Photo": return Action.Photo;
+                        case "Exit":
                             Leave(Screen.None, Legend ? Action.Rivals : Action.Exit);
                             break;
                         default:
@@ -414,16 +420,17 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                 else if (k.Ok)
                 {
                     Sound?.Invoke("SYS006");
-                    switch (_row)
+                    switch (ResultButtons[_row])
                     {
-                        case 0:
+                        case "RETRY":
                             Leave(Screen.Intro, Action.Restart);
                             break;
-                        case 1:
+                        case "REPLAY": return Action.Replay;
+                        case "COURSE SELECT":
                             if (Legend) Leave(Screen.None, Action.Rivals);
                             else Go(Screen.Course, false);
                             break;
-                        case 2:
+                        case "CAR SELECT":
                             if (!Legend) _back.Push(Screen.Course);
                             Go(Screen.Maker, false);
                             break;
@@ -754,8 +761,9 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
         c.Fill(Overlay.Rgba(0, 0, 0, 0.5f));
         c.O.FadeText(0.5f); // the HUD's text lies above every shape: dim it too
         c.Lettering("PAUSE", 256, 128, 44, Overlay.Rgba(1, 0.25f, 0.2f), Overlay.Rgba(0.75f, 0, 0), 0.5f, 0.2f, true);
-        // caption bar, then the strip with the "Pause" tab and the chrome buttons (centred: 3 or 4)
-        var x0 = 256 - (PauseButtons.Length * 86 - 10) / 2f;
+        // caption bar, then the strip with the "Pause" tab and the chrome buttons (centred)
+        var step = MathF.Min(86, 470f / PauseButtons.Length);
+        var x0 = 256 - (PauseButtons.Length * step - 10) / 2f;
         c.Carbon(x0 - 16, 328, 512 - x0 + 16, 352, 1, false);
         c.Text(PauseCaptions[_row], 256, 345, 12, Canvas.White, 0.5f, 0.12f);
         var grey = Canvas.Shade(0.08f, 0.08f, 0.08f, 1, 0.4f);
@@ -763,13 +771,13 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
         c.Text("Pause", x0 - 6, 372, 11, Canvas.White, 0, 0.2f);
         for (var i = 0; i < PauseButtons.Length; i++)
         {
-            var x = x0 + i * 86;
+            var x = x0 + i * step;
             var off = i == 1 && NoRetry;
-            c.Plate(x, 380, 76, 22, off ? 0.5f : 1);
-            c.Text(PauseButtons[i], x + 38, 396, 12, off ? grey : Canvas.Shade(0.08f, 0.08f, 0.08f, 1), 0.5f, 0.18f);
+            c.Plate(x, 380, step - 10, 22, off ? 0.5f : 1);
+            c.Text(PauseButtons[i], x + (step - 10) / 2, 396, 12, off ? grey : Canvas.Shade(0.08f, 0.08f, 0.08f, 1), 0.5f, 0.18f);
         }
-        var sx = x0 + _row * 86;
-        c.Glow(sx - 4, 376, sx + 80, 406, Canvas.Pulse(Theta));
+        var sx = x0 + _row * step;
+        c.Glow(sx - 4, 376, sx + step - 6, 406, Canvas.Pulse(Theta));
         _quit.Draw(c, Theta);
     }
 
@@ -836,10 +844,12 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     {
         var b = Style.Ease((_t - ButtonsAt) / 0.2f);
         if (b <= 0) return;
+        const float step = 94, w = 88;
         for (var i = 0; i < ResultButtons.Length; i++)
-            c.Button(24 + i * 118, 392, 110, 30, Legend && i == 1 ? "RIVAL SELECT" : ResultButtons[i], i == 0 ? Canvas.ButtonKind.Positive : i == 3 ? Canvas.ButtonKind.Negative : Canvas.ButtonKind.Neutral, b);
-        var x = 24 + _row * 118;
-        c.Glow(x - 4, 388, x + 114, 426, Canvas.Pulse(Theta), b);
+            c.Button(24 + i * step, 392, w, 30, Legend && ResultButtons[i] == "COURSE SELECT" ? "RIVAL SELECT" : ResultButtons[i],
+                i == 0 ? Canvas.ButtonKind.Positive : ResultButtons[i] == "EXIT" ? Canvas.ButtonKind.Negative : Canvas.ButtonKind.Neutral, b);
+        var x = 24 + _row * step;
+        c.Glow(x - 4, 388, x + w + 4, 426, Canvas.Pulse(Theta), b);
     }
 
     private void RecordsScreen(Canvas c)
