@@ -29,7 +29,7 @@ if (iso == null || !File.Exists(iso))
     Console.Error.WriteLine("usage: touge <Initial D Special Stage (SLPM-65268).iso> [KURS_ZEIT, z. B. AKINA_DAY]  (oder INITIALD_ISO setzen)");
     return 1;
 }
-string[] valueFlags = ["--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--car", "--paint", "--cars", "--menu", "--shot-size"];
+string[] valueFlags = ["--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery"];
 string? Arg(string flag) { var i = Array.IndexOf(args, flag); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
 // --car: HCAR name (AE86T, FD3S, R32, EVO3, …) or index 0–31 in that list (Touge.Formats.CarPaint.Cars)
 var carArg = Arg("--car") ?? "AE86T";
@@ -41,6 +41,12 @@ if ((uint)carIndex >= Touge.Formats.CarPaint.Cars.Length)
 }
 var car = Touge.Formats.CarPaint.Cars[carIndex];
 var paint = int.Parse(Arg("--paint") ?? "0");
+// --livery: none (no decals/plates), stock (the game's stock car) or rival (default: the anime character's car), also 0–2
+if (!Enum.TryParse<Touge.Formats.Livery>(Arg("--livery") ?? "rival", true, out var livery) || !Enum.IsDefined(livery))
+{
+    Console.Error.WriteLine($"--livery {Arg("--livery")}: unbekannt, möglich: none stock rival");
+    return 1;
+}
 var shot = Arg("--shot");
 var at = int.Parse(Arg("--at") ?? "0");
 float? orbit = Arg("--orbit") is { } o ? float.Parse(o, CultureInfo.InvariantCulture) : null;
@@ -86,7 +92,7 @@ if (Arg("--ground") is { } groundPng)
 // menus (and the saved settings) only when started plainly: any course or test flag means a scripted run
 var plain = args.Where((a, i) => a != iso && a != "--backend" && (i == 0 || args[i - 1] != "--backend")).All(a => a == "--menu" || a == Arg("--menu"));
 KanseiApp.Run(new TougeGame(iso, course.ToUpperInvariant(), shot, at, orbit, autodrive, bench, Arg("--quality") != "off", args.Contains("--drift"), Arg("--flicker"))
-    { HudMode = Arg("--hud"), Reverse = args.Contains("--reverse"), Car = car, Paint = paint, ContactSheet = Arg("--cars"), LookAtSun = args.Contains("--sun"),
+    { HudMode = Arg("--hud"), Reverse = args.Contains("--reverse"), Car = car, Paint = paint, Livery = livery, ContactSheet = Arg("--cars"), LookAtSun = args.Contains("--sun"),
       UseMenus = plain, StartMenu = Arg("--menu"),
       ShotSize = Arg("--shot-size") is { } size && size.Split('x') is [var sw, var sh] ? (int.Parse(sw), int.Parse(sh)) : (1280, 720) }, new WindowSettings
 {

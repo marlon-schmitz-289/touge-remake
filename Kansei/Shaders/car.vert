@@ -5,7 +5,7 @@
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec2 aUv;
-layout(location = 3) in vec4 aColor; // rgb material colour, a = kind (0 matte, 0.5 glass, 1 paint, 2 rear lamp)
+layout(location = 3) in vec4 aColor; // rgb material colour, a = kind (0 matte, 0.5 glass, 1 paint, 2 rear lamp; +4 in the decal pass)
 
 #include "scene_push.glsl"
 

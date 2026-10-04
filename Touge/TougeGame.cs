@@ -58,6 +58,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     /// <summary>--car / --paint: HCAR name (<see cref="CarPaint.Cars"/>) and CAR_ENV colour at start; 1/2 cycle the car, 3 the paint (at standstill).</summary>
     public string Car { get; init; } = "AE86T";
     public int Paint { get; init; }
+    /// <summary>--livery: stickers/plates of the car (<see cref="Touge.Formats.Livery"/>), default the anime character's car.</summary>
+    public Livery Livery { get; init; } = Livery.Rival;
     /// <summary>--cars: PNG path of a contact sheet of all cars (orbit shots), written before quitting.</summary>
     public string? ContactSheet { get; init; }
     private string _carName = "";
@@ -247,7 +249,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     /// </summary>
     private void LoadCarModel(Iso9660 iso)
     {
-        _car = CarModel.Load(iso, _carName, _paint, _renderer);
+        _car = CarModel.Load(iso, _carName, _paint, _renderer, Livery);
         var spec = _drive.Car.Spec;
         var modelWheels = Vector3.Zero;
         foreach (var w in _car.Wheels) modelWheels += w.Translation / 4;
@@ -278,7 +280,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
 
     private const int SheetCols = 4, SheetTile = 4, SheetW = SheetCols * 1280 / SheetTile, SheetH = 8 * 720 / SheetTile; // 32 cars, 320×180 each
 
-    /// <summary>--cars: renders each car from the orbit (35°), pastes the 4× box-filtered frame into its tile, writes the sheet after the last.</summary>
+    /// <summary>--cars: renders each car from the orbit (--orbit, default 35°), pastes the 4× box-filtered frame into its tile, writes the sheet after the last.</summary>
     private void ContactSheetStep()
     {
         if (_shotState == 1) return;
@@ -305,7 +307,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         }
         SwitchCar(_sheetCar, 0);
         UpdateCarMatrices(1);
-        OrbitCar(35 * MathF.PI / 180);
+        OrbitCar((orbit ?? 35) * MathF.PI / 180);
         _camLook = _pos + Forward();
         _shotState = 1;
     }
@@ -886,7 +888,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _renderer.DrawSky(pass, _course.Sky, Matrix4x4.CreateTranslation(_pos with { Y = 0 }) * view * proj, _pos); // follows the camera
         var carView = _probe != null && _probeView.Group == 1;
         if (_probe == null || !carView) _renderer.Draw(pass, _course.World, view * proj, _pos);
-        if (_probe == null || carView) _carRenderer.Draw(pass, _car.Body, _car.Wheel, _carBody, _carWheels, view * proj, _pos);
+        if (_probe == null || carView) _carRenderer.Draw(pass, _car.Body, _car.Decals, _car.Wheel, _carBody, _carWheels, view * proj, _pos);
         _fxRenderer.Draw(pass, _fx, view, view * proj, _pos);
         // camera velocity stretches the rain streaks; a shot has no previous frame, the chase camera moves with the car
         var frameDt = ctx.Time.DeltaTime;

@@ -5,7 +5,7 @@ using Touge.Formats;
 // idss textures <file.PAC> <outDir>      – alle GIM-Texturen als PNG
 // idss check <PAC...>                   – alle Texturen und Meshes testweise dekodieren
 // idss course <COURSE.PAC> <outDir>     – Strecke (crs/tree/gate/mnt/sky, ohne LOD/Schatten) als OBJ
-// idss car <CAR.PAC> <outDir> [<CAR_ENV.BIN> [n]] – Standard-Teile (…00) + Räder als OBJ, Texturen als PNG; Lack Nr. n (0 = Standard)
+// idss car <CAR.PAC> <outDir> [<CAR_ENV.BIN> [n]] – Teile wie im Spiel (Figuren-Lackierung) + Räder als OBJ, Texturen als PNG; Lack Nr. n (0 = Standard)
 // idss coli <CRS_COLI_*.BIN> <out.obj>  – Kollisionsfläche als OBJ (Gruppe je Material), Histogramm
 // idss drv <CRS_DRV_*.BIN>               – gültige Fahrlinienpunkte: i x y z
 // idss road <CRS_ROAD_*.BIN> [CRS_ENV_*.BIN] [CRS_FLR_*.BIN] – i x y z [top bottom left right] [flare]
@@ -173,7 +173,7 @@ static void ExportCar(string path, string outDir, uint? paint)
         .ToDictionary(e => e.Name[(name.Length + 1)..], e => Mesh.Parse(pac.AsSpan(e.Offset, e.Size)))
         .ToDictionary(p => p.Key, p => paint is { } rgb ? CarPaint.Apply(p.Value, rgb) : p.Value);
     using var obj = new Obj(Path.Combine(outDir, name + ".obj"));
-    foreach (var (part, cmd) in parts.Where(p => CarParts.IsDefaultBody(p.Key)))
+    foreach (var (part, cmd) in CarParts.Body(name, parts, Livery.Rival, 0))
         obj.Add(part, cmd, System.Numerics.Matrix4x4.Identity);
 
     // Räder an den Achs-Knoten der Karosserie; rechte Seite um 180° gedreht
@@ -181,7 +181,7 @@ static void ExportCar(string path, string outDir, uint? paint)
     for (var i = 0; i < wheels.Length; i++)
     {
         var (node, t) = (CarParts.WheelNodes[i], wheels[i]);
-        foreach (var w in new[] { "tire00FL", "Bdisk00" })
+        foreach (var w in new[] { CarParts.Tire(parts, CarParts.SetupOf(name, Livery.Rival)), "Bdisk00" })
             if (parts.TryGetValue(w, out var c)) obj.Add($"{w}_{node}", c, t);
         var cali = "Bcali00" + node.ToUpperInvariant().Replace("_", "")[..2].Replace("FR", "F").Replace("RE", "R") + (node.EndsWith("_l") ? "L" : "R");
         if (parts.TryGetValue(cali, out var cc)) obj.Add(cali, cc, t);

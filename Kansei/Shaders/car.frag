@@ -64,11 +64,13 @@ vec3 droplet(vec3 q, vec3 m)
 void main()
 {
     vec4 t = texture(uTexture, vUv);
-    if (t.a < 0.5) discard;
+    float kind = vColor.a;
+    bool decal = kind > 3.5; // decal pass (CarRenderer, alpha-blended): kind + 4, soft edges instead of the 0.5 alpha test
+    if (decal) kind -= 4.0;
+    if (t.a < (decal ? 0.02 : 0.5)) discard;
     vec3 v = normalize(pc.uEye.xyz - vPos);
     vec3 n = normalize(vNormal);
     if (dot(n, v) < 0.0) n = -n; // no culling: shade the side we see
-    float kind = vColor.a;
     bool glass = abs(kind - 0.5) < 0.1, paint = abs(kind - 1.0) < 0.1, lamp = kind > 1.5;
     float rain = pc.uParams.y;
     vec3 base = t.rgb * vColor.rgb * (glass ? 0.25 : 1.0) * (paint ? 1.0 - 0.2 * rain : 1.0);
@@ -119,6 +121,7 @@ void main()
     }
     vec3 fogged = applyFog(c, vPos);
     float share = dot(ambient, vec3(0.2126, 0.7152, 0.0722)) * (1.0 - fogAmount(vPos)) / max(dot(fogged, vec3(0.2126, 0.7152, 0.0722)), 1e-5);
-    FragColor = vec4(fogged, 1.0);
-    Gbuf = vec4(clamp(share, 0.0, 1.0), 0.0, 0.0, 1.0);
+    float alpha = decal ? t.a : 1.0;
+    FragColor = vec4(fogged, alpha);
+    Gbuf = vec4(clamp(share, 0.0, 1.0), 0.0, 0.0, alpha);
 }

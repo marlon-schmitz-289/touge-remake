@@ -7,7 +7,7 @@ namespace Touge;
 /// <summary>
 ///     <c>--zfight</c>: <see cref="ZFight.Find"/> over the geometry exactly as the game draws it — every course variant in
 ///     COURSE.AFS (world after <see cref="CourseLoader.Flatten"/> dedup, and the sky) and every car in HCAR.AFS and
-///     CAR.AFS (default body in <see cref="CarModel.Flatten"/> order, wheel). Per asset: pairs, overlap area, gap
+///     CAR.AFS (body as drawn, <see cref="CarParts.Body"/> in <see cref="CarModel.Flatten"/> order, wheel). Per asset: pairs, overlap area, gap
 ///     classes, layered triangles, and the largest (batch, batch) groups with a location.
 /// </summary>
 public static class ZFightReport
@@ -40,7 +40,7 @@ public static class ZFightReport
                 var parts = Pac.Entries(pac).Where(p => p.Type == 3 && p.Name.Length > car.Length + 1 && Mesh.IsCmd(pac.AsSpan(p.Offset, p.Size)))
                     .DistinctBy(p => p.Name[(car.Length + 1)..]).ToDictionary(p => p.Name[(car.Length + 1)..], p => Mesh.Parse(pac.AsSpan(p.Offset, p.Size)));
                 if (!parts.ContainsKey("body00")) continue;
-                PrintCar($"{archive}/{car} body", parts.Where(p => CarParts.IsDefaultBody(p.Key)).Select(p => (p.Key, p.Value)));
+                PrintCar($"{archive}/{car} body", CarParts.Body(car, parts, Livery.Rival, 0));
                 if (parts.TryGetValue("tire00FL", out var tire) && parts.TryGetValue("Bdisk00", out var disk))
                     PrintCar($"{archive}/{car} wheel", [("tire00FL", tire), ("Bdisk00", disk)]);
             }

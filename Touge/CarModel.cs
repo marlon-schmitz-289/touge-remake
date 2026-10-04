@@ -5,15 +5,17 @@ using Touge.Formats;
 namespace Touge;
 
 /// <summary>
-///     A car from HCAR.AFS with paint from CAR_ENV.BIN: default body parts as one mesh, one wheel mesh
-///     (tire + brake disk; calipers left out) and the four wheel transforms in car space (fr_l, fr_r, re_l, re_r).
-///     <see cref="Paints"/> = number of CAR_ENV colours of the car.
+///     A car from HCAR.AFS with paint from CAR_ENV.BIN: the parts the game shows for <see cref="Livery"/> (default the
+///     character's car: stickers, rival livery, tuning parts; <see cref="CarParts.Body"/>) plus number plates
+///     (NUM_TEX.PAC composed like the game) as one mesh, one wheel mesh (tire of the setup + brake disk; calipers left
+///     out) and the four wheel transforms in car space (fr_l, fr_r, re_l, re_r). <see cref="Paints"/> = number of
+///     CAR_ENV colours of the car.
 /// </summary>
-public sealed record CarModel(StaticMesh Body, StaticMesh Wheel, Matrix4x4[] Wheels, float WheelRadius, int Paints) : IDisposable
+public sealed record CarModel(StaticMesh Body, StaticMesh Decals, StaticMesh Wheel, Matrix4x4[] Wheels, float WheelRadius, int Paints) : IDisposable
 {
-    public static CarModel Load(Iso9660 iso, string car, int paint, WorldRenderer renderer)
+    public static CarModel Load(Iso9660 iso, string car, int paint, WorldRenderer renderer, Livery livery = Livery.Rival)
     {
-        var hcar = Afs.FromBytes(iso.ReadFile("CDVD/DATA/MODEL/HCAR.AFS"), iso.ReadFile("CDVD/DATA/MODEL/HCAR.TBL"));
+        var hcar = iso.OpenAfs("CDVD/DATA/MODEL/HCAR.AFS");
         var pac = hcar.Read(hcar.Find(car + ".PAC") ?? throw new FileNotFoundException(car + ".PAC"));
         var colours = CarPaint.Parse(iso.ReadFile("CDVD/DATA/BINARY/CAR_ENV.BIN"))[Array.IndexOf(CarPaint.Cars, car)];
         paint = Math.Clamp(paint, 0, colours.Length - 1);
@@ -28,40 +30,53 @@ public sealed record CarModel(StaticMesh Body, StaticMesh Wheel, Matrix4x4[] Whe
         var parts = entries.Where(e => e.Type == 3 && Mesh.IsCmd(pac.AsSpan(e.Offset, e.Size)))
             .ToDictionary(e => e.Name[(car.Length + 1)..], e => CarPaint.Apply(Mesh.Parse(pac.AsSpan(e.Offset, e.Size)), colours[paint]));
 
-        var tire = parts["tire00FL"];
+        var setup = CarParts.SetupOf(car, livery);
+        if (CarParts.PlateNumber(car, setup.Driver) is { } number)
+        {
+            var tex = iso.OpenAfs("CDVD/DATA/MODEL/TEXTURE.AFS");
+            var num = tex.Read(tex.Find("NUM_TEX.PAC")!.Value);
+            var gims = Pac.Entries(num).ToDictionary(e => e.Name, e => Gim.Decode(num.AsSpan(e.Offset, e.Size)).Rgba);
+            textures["plate"] = renderer.AddTexture(64, 32, CarParts.Plate(gims[car == "CAPPU" ? "NUM_PLATE_Y" : "NUM_PLATE_W"], gims["NUM_TEX"], number), "plate", 0.5f);
+        }
+        var tire = parts[CarParts.Tire(parts, setup)];
         var radius = tire.Materials.SelectMany(m => m.Triangles).Max(v => v.Position.Y);
-        var emblem = CarParts.Emblem(car, paint);
-        return new CarModel(
-            Build(renderer.Device, parts.Where(p => CarParts.IsDefaultBody(p.Key) && p.Key != emblem.Hide || p.Key == emblem.Show)
-                .Select(p => (p.Key, CarParts.Placed(p.Key, p.Value, parts["body00"]))), textures),
-            Build(renderer.Device, [("tire00FL", tire), ("Bdisk00", parts["Bdisk00"])], textures),
+        var (body, decals) = Build(renderer.Device, CarParts.Body(car, parts, livery, paint, textures.ContainsKey("plate") ? "plate" : null), textures, true);
+        return new CarModel(body, decals!, Build(renderer.Device, [("tire", tire), ("Bdisk00", parts["Bdisk00"])], textures, false).Opaque,
             CarParts.Wheels(parts["body00"]), radius, colours.Length);
     }
 
     /// <summary>
     ///     One batch per material in <see cref="Flatten"/> order, split into overlay layers where parts lie on each
     ///     other (<see cref="CourseLoader.Layered"/>: decals, emblems, lamps, stacked trim). Material RGB (0x80 = 1.0) is baked into the vertex
-    ///     colour, alpha carries the kind for car.frag: paint 1 (flag 0x100, and the untextured 0x1000 parts =
+    ///     colour, alpha carries the kind for car.frag: paint 1 (flag 0x100; body decals 0x400 too, so stickers get the same clear
+    ///     coat as the paint under them, with their own colour; and the untextured 0x1000 parts =
     ///     the near-black lower body), windows (part <c>wind</c>) 0.5, rear lamps (part <c>Blamp</c>) 2, else 0 (matte).
+    ///     <paramref name="split"/>: the decal batches (0x400 without 0x800, i.e. not the windows) go into a second mesh,
+    ///     kind + 4, that <see cref="CarRenderer"/> alpha-blends like the PS2 instead of alpha-testing (soft sticker edges,
+    ///     no edge shimmer); layers are computed over both together.
     /// </summary>
-    private static StaticMesh Build(Penelope.IPenelopeDevice device, IEnumerable<(string Name, Mesh Mesh)> meshes, Dictionary<string, int> textures)
+    private static (StaticMesh Opaque, StaticMesh? Decals) Build(Penelope.IPenelopeDevice device, IEnumerable<(string Name, Mesh Mesh)> meshes,
+        Dictionary<string, int> textures, bool split)
     {
         var verts = new List<CarVertex>();
-        var batches = new List<(int Texture, int First)>();
+        var batches = new List<(int Texture, int First, bool Decal)>();
         foreach (var (name, mesh, m) in Flatten(meshes))
         {
             // a few parts name textures their PAC does not contain (S15: S15067_002): drawn untextured
             var tex = textures.GetValueOrDefault(m.Texture >= 0 && m.Texture < mesh.Textures.Length ? mesh.Textures[m.Texture] : "", textures[""]);
             var rgb = new Vector3(m.Rgba & 0xFF, (m.Rgba >> 8) & 0xFF, (m.Rgba >> 16) & 0xFF) / 128f;
             var gloss = name.StartsWith("Blamp") ? 2f : name.StartsWith("wind") ? 0.5f
-                : (m.Flags & CarPaint.PaintFlag) != 0 || m.Flags == 0x1000 && m.Texture < 0 && !name.StartsWith("tire") ? 1f : 0f;
+                : (m.Flags & CarPaint.PaintFlag) != 0 || (m.Flags & 0x400) != 0 && name != "tire"
+                  || m.Flags == 0x1000 && m.Texture < 0 && name != "tire" ? 1f : 0f;
+            var decal = split && (m.Flags & 0xC00) == 0x400;
             var first = verts.Count;
-            foreach (var v in m.Triangles) verts.Add(new CarVertex(v.Position, v.Normal, v.Uv, new Vector4(rgb, gloss)));
-            if (verts.Count > first) batches.Add((tex, first / 3));
+            foreach (var v in m.Triangles) verts.Add(new CarVertex(v.Position, v.Normal, v.Uv, new Vector4(rgb, gloss + (decal ? 4 : 0))));
+            if (verts.Count > first) batches.Add((tex, first / 3, decal));
         }
         var (indices, ranges) = CourseLoader.Layered([.. verts.Select(v => v.Position)], [.. batches.Select(b => b.First)], true);
-        return new StaticMesh(device, verts.ToArray(), indices,
-            [.. ranges.Select(r => new MeshBatch(batches[r.Batch].Texture, r.First * 3, r.Count * 3, r.Layer))]);
+        StaticMesh Part(bool decals) => new(device, verts.ToArray(), indices,
+            [.. ranges.Where(r => batches[r.Batch].Decal == decals).Select(r => new MeshBatch(batches[r.Batch].Texture, r.First * 3, r.Count * 3, r.Layer))]);
+        return (Part(false), split ? Part(true) : null);
     }
 
     /// <summary>
@@ -79,6 +94,7 @@ public sealed record CarModel(StaticMesh Body, StaticMesh Wheel, Matrix4x4[] Whe
     public void Dispose()
     {
         Body.Dispose();
+        Decals.Dispose();
         Wheel.Dispose();
     }
 }
