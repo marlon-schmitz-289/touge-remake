@@ -164,6 +164,7 @@ vec3 wetLights(vec3 p, vec3 n, vec3 v, float across, float along)
 // Light scattered towards the camera by the fog between the eye and p: the street lights' glow, point sources,
 // ∫ I / (h² + t²) dt along the ray solved exactly. Headlight beams scatter only in dense fog (σ > 0, 8 steps over the
 // first 60 m); in thin haze they are left to the bloom on their lenses, there the cones read as solid. Rear lamps: bloom.
+// The sum saturates at LightCap like surface irradiance.
 vec3 lightGlow(vec3 p)
 {
     if (pc.uFog.a <= 0.0) return vec3(0.0);
@@ -200,7 +201,7 @@ vec3 lightGlow(vec3 p)
             }
         }
     }
-    return sum * pc.uFog.a;
+    return capped(sum * pc.uFog.a); // the veil obeys the same cap as lit surfaces: high beam in fog glares, never blows out
 }
 
 // Fog over a lit surface colour at p (fog.glsl); the light glow is added per pixel afterwards (glow.frag).
