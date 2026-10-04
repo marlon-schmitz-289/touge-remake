@@ -37,12 +37,11 @@ public sealed partial class Menu
         else if (k.X != 0 || k.Ok)
         {
             var off = settings.MusicOff;
-            if (_song == 0)
-            {
-                if (off.Count > 0) off.Clear();
-                else off.UnionWith(Jukebox.Songs.Select(s => s.File));
-            }
-            else if (!off.Remove(Jukebox.Songs[_song - 1].File)) off.Add(Jukebox.Songs[_song - 1].File);
+            // LEFT = ON plate, RIGHT = OFF plate, CONFIRM toggles
+            var files = _song == 0 ? Jukebox.Songs.Select(s => s.File).ToArray() : [Jukebox.Songs[_song - 1].File];
+            var turnOff = k.X != 0 ? k.X > 0 : _song == 0 ? off.Count == 0 : !off.Contains(files[0]);
+            if (turnOff) off.UnionWith(files);
+            else off.ExceptWith(files);
             Sound?.Invoke("SYS005");
             return Action.SettingsChanged;
         }

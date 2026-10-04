@@ -43,6 +43,41 @@ public class JukeboxTests
         Assert.Equal(2, shuffle.Next(i => i == 2)); // the only song repeats rather than silence
     }
 
+    /// <summary>Picks superseded while loading (fast skips) are not marked played and stay in the round.</summary>
+    [Fact]
+    public void Shuffle_UnstartedPicksStayInRound()
+    {
+        var shuffle = new Jukebox.Shuffle(3, new Random(4));
+        for (var n = 0; n < 10; n++) shuffle.Pick(_ => true); // skipped before they started
+        var round = Enumerable.Range(0, 3).Select(_ => shuffle.Next(_ => true)).ToArray();
+        Assert.Equal([0, 1, 2], round.Order());
+    }
+
+    /// <summary>Stop reports the device's unplayed tail; Rewind replays exactly those frames, then continues the song.</summary>
+    [Fact]
+    public void Rewind_ReplaysUnplayedTail()
+    {
+        var next = 0; // counting mono source, 3000 frames long
+        var r = new Jukebox.Rewind(dst =>
+        {
+            var n = Math.Min(dst.Length, 3000 - next);
+            for (var i = 0; i < n; i++) dst[i] = (short)next++;
+            return n;
+        }, 1);
+        var a = new short[1000];
+        Assert.Equal(1000, r.Read(a));
+        r.Back(300);
+        var b = new short[1000];
+        Assert.Equal(300, r.Read(b)); // the replayed tail first
+        Assert.Equal(a[700..], b[..300]);
+        Assert.Equal(1000, r.Read(b));
+        Assert.Equal(1999, b[^1]);
+        r.Back(int.MaxValue); // clamped to what was read
+        var c = new short[4000];
+        Assert.Equal(2000, r.Read(c)); // whole song so far (ring holds more)
+        Assert.Equal(0, c[0]);
+    }
+
     /// <summary>Playlist: toggles per song and ALL SONGS write Settings.MusicOff; Back returns to the PLAYLIST row of Options.</summary>
     [Fact]
     public void Playlist_TogglesSettings()

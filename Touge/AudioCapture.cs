@@ -266,9 +266,9 @@ internal static class AudioCapture
         var frame = new short[perFrame * 2];
         for (var n = 0; n < seconds * 60; n++, t = n / 60f)
         {
-            if (n == 10 * 60) { Console.WriteLine($"[Music] {t:0.00} s M (next)"); box.Next(background: false); }
-            if (n == 30 * 60) { Console.WriteLine($"[Music] {t:0.00} s menu music (stop)"); box.Stop(); }
-            if (n == 40 * 60) { Console.WriteLine($"[Music] {t:0.00} s back to the race (play)"); box.Play(background: false); }
+            if (n == 10 * 60) { Console.WriteLine(FormattableString.Invariant($"[Music] {t:0.00} s M (next)")); box.Next(background: false); }
+            if (n == 30 * 60) { Console.WriteLine(FormattableString.Invariant($"[Music] {t:0.00} s menu music (stop)")); box.Stop(); }
+            if (n == 40 * 60) { Console.WriteLine(FormattableString.Invariant($"[Music] {t:0.00} s back to the race (play)")); box.Play(background: false); }
             box.Update(1 / 60f, background: false);
             dev.Render(frame);
         }

@@ -17,6 +17,8 @@ public delegate int PcmSource(Span<short> dst);
 public sealed unsafe class AudioDevice : IDisposable
 {
     private const int SfxVoices = 16, StreamBuffers = 4, StreamFrames = 8192;
+    /// <summary>Most music frames queued at once (what <see cref="StopMusic"/> can report as unplayed).</summary>
+    public const int MusicBufferFrames = StreamBuffers * StreamFrames;
     private const int LoopPointsSoft = 0x2015; // AL_LOOP_POINTS_SOFT (OpenAL Soft)
 
     private readonly AL _al;
@@ -42,6 +44,8 @@ public sealed unsafe class AudioDevice : IDisposable
     private BufferFormat _streamFormat;
     private int _streamRate, _streamChannels;
     private readonly short[] _streamPcm = new short[StreamFrames * 2];
+    private readonly int[] _bufferFrames = new int[StreamBuffers];
+    private int _queuedFrames;
 
     public bool Enabled => _device != null;
 
@@ -161,10 +165,11 @@ public sealed unsafe class AudioDevice : IDisposable
         }
     }
 
-    public void StopMusic()
+    /// <summary>Stops the music; returns the frames it had queued but not played yet (to resume seamlessly).</summary>
+    public int StopMusic()
     {
-        if (!Enabled) return;
-        lock (_lock) StopMusicLocked();
+        if (!Enabled) return 0;
+        lock (_lock) return StopMusicLocked();
     }
 
     /// <summary>True while the music stream has queued audio.</summary>
@@ -181,17 +186,23 @@ public sealed unsafe class AudioDevice : IDisposable
         }
     }
 
-    private void StopMusicLocked()
+    private int StopMusicLocked()
     {
+        _al.GetSourceProperty(_musicSource, GetSourceInteger.SampleOffset, out var played); // within the queue
+        var unplayed = _stream == null ? 0 : Math.Max(0, _queuedFrames - played);
+        _queuedFrames = 0;
         _al.SourceStop(_musicSource);
         _al.SetSourceProperty(_musicSource, SourceInteger.Buffer, 0); // unqueues everything
         _stream = null;
+        return unplayed;
     }
 
     private bool Fill(uint buffer)
     {
         var frames = _stream!(_streamPcm.AsSpan(0, StreamFrames * _streamChannels));
         if (frames == 0) return false;
+        _bufferFrames[Array.IndexOf(_streamBuffers, buffer)] = frames;
+        _queuedFrames += frames;
         fixed (short* p = _streamPcm) _al.BufferData(buffer, _streamFormat, p, frames * _streamChannels * 2, _streamRate);
         return true;
     }
@@ -213,6 +224,7 @@ public sealed unsafe class AudioDevice : IDisposable
         {
             uint b;
             _al.SourceUnqueueBuffers(_musicSource, 1, &b);
+            _queuedFrames -= _bufferFrames[Array.IndexOf(_streamBuffers, b)];
             if (Fill(b)) _al.SourceQueueBuffers(_musicSource, 1, &b);
         }
         _al.GetSourceProperty(_musicSource, GetSourceInteger.SourceState, out var st);

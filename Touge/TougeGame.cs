@@ -502,7 +502,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         var dt = time.DeltaTime;
         _menuTime += dt;
         SyncAudio();
-        _jukebox?.Update(dt);
+        _jukebox?.Update(dt, hold: _menu?.Current == Menu.Screen.Pause);
         var keys = Flow != null ? FlowKeys(dt) : _frontKeys.Read(Input, dt);
         if (_front is { Active: true })
         {

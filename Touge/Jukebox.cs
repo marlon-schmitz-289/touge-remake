@@ -45,6 +45,7 @@ public sealed class Jukebox
     private int _request, _count;
     private volatile bool _ended;
     private PcmSource? _source;
+    private Rewind? _rewind;
     private int _channels, _rate;
 
     /// <summary>Song playing (or paused by <see cref="Stop"/>); null before the first or when every song is off.</summary>
@@ -84,7 +85,7 @@ public sealed class Jukebox
         if (!Playing) return;
         Playing = false;
         _request++;
-        _dev.StopMusic();
+        _rewind?.Back(_dev.StopMusic()); // resume where the listener left off, not after the device's buffered tail
     }
 
     /// <summary>Next shuffled song (M / pad D-pad right, or the current one ended); silence when none is enabled.</summary>
@@ -92,12 +93,14 @@ public sealed class Jukebox
     {
         Playing = true;
         var request = ++_request;
-        var i = _shuffle.Next(Enabled);
+        _ended = false; // a drained song must not trigger a second Next while this one loads
+        int i;
+        lock (_shuffle) i = _shuffle.Pick(Enabled);
         if (i < 0)
         {
-            (Current, _source) = (null, null);
+            (Current, _source, _rewind) = (null, null, null);
             _dev.StopMusic();
-            Log("no song enabled, silence");
+            Log($"no song enabled, silence");
             return;
         }
         var song = Songs[i];
@@ -106,26 +109,28 @@ public sealed class Jukebox
         {
             var adx = new Adx(_afs.Read(_afs.Find(song.File + ".ADX")!.Value));
             if (request != _request) return; // superseded (next / stop) while loading
-            var reader = adx.Open(loop: false);
+            lock (_shuffle) _shuffle.Played(i);
+            var rewind = new Rewind(adx.Open(loop: false).Read, adx.Channels);
             PcmSource source = dst =>
             {
-                var k = reader.Read(dst);
+                var k = rewind.Read(dst);
                 if (k == 0) _ended = true;
                 return k;
             };
             _dev.PlayMusic(source, adx.Channels, adx.SampleRate); // stops the old stream first, so its end flag can be cleared
             _ended = false;
-            (Current, _source, _channels, _rate, Since) = (song, source, adx.Channels, adx.SampleRate, 0);
+            (Current, _source, _rewind, _channels, _rate, Since) = (song, source, rewind, adx.Channels, adx.SampleRate, 0);
             Log($"#{n} {song.Title} - {song.Artist} ({adx.SampleCount / (float)adx.SampleRate:0.0} s)");
         }
         if (background) Task.Run(Start);
         else Start();
     }
 
-    /// <summary>Per frame: toast clock; a song that played out (and drained) moves on to the next.</summary>
-    public void Update(float dt, bool background = true)
+    /// <summary>Per frame: toast clock (<paramref name="hold"/>: toast held, pause screen); a song that played out (and drained) moves on to the next.</summary>
+    public void Update(float dt, bool background = true, bool hold = false)
     {
         Since += dt;
+        if (hold) Since = MathF.Min(Since, NowPlaying.In + NowPlaying.Hold); // held toast slides out after the pause, no pop
         if (Playing && _ended && !_dev.MusicPlaying)
         {
             _ended = false;
@@ -134,7 +139,39 @@ public sealed class Jukebox
         }
     }
 
-    private void Log(string s) => Console.WriteLine($"[Music] {(Clock is { } c ? $"{c():0.00} s " : "")}{s}");
+    private void Log(FormattableString s) =>
+        Console.WriteLine(FormattableString.Invariant($"[Music] {(Clock is { } c ? FormattableString.Invariant($"{c():0.00} s ") : "")}{FormattableString.Invariant(s)}"));
+
+    /// <summary>
+    ///     Song stream that remembers its last <see cref="AudioDevice.MusicBufferFrames"/> frames, so the tail the device had
+    ///     queued but not played when stopped can be replayed (<see cref="Back"/>): resuming is seamless.
+    /// </summary>
+    public sealed class Rewind(PcmSource reader, int channels)
+    {
+        private readonly short[] _ring = new short[AudioDevice.MusicBufferFrames * channels];
+        private long _written; // frames read from the song
+        private int _replay; // frames of the ring still to replay
+
+        /// <summary>Rewinds <paramref name="frames"/> (as far as the ring reaches).</summary>
+        public void Back(int frames) => _replay = (int)Math.Min(Math.Min(_replay + (long)frames, _ring.Length / channels), _written);
+
+        public int Read(Span<short> dst)
+        {
+            if (_replay > 0)
+            {
+                var n = Math.Min(_replay, dst.Length / channels);
+                var at = (_written - _replay) * channels;
+                for (var i = 0; i < n * channels; i++) dst[i] = _ring[(at + i) % _ring.Length];
+                _replay -= n;
+                return n;
+            }
+            var k = reader(dst);
+            var w = _written * channels;
+            for (var i = 0; i < k * channels; i++) _ring[(w + i) % _ring.Length] = dst[i];
+            _written += k;
+            return k;
+        }
+    }
 
     /// <summary>
     ///     Random order without repeats: picks among enabled songs not yet played this round; when all are played a new
@@ -148,6 +185,17 @@ public sealed class Jukebox
         /// <summary>Index of the next song, −1 when <paramref name="enabled"/> allows none.</summary>
         public int Next(Func<int, bool> enabled)
         {
+            var i = Pick(enabled);
+            if (i >= 0) Played(i);
+            return i;
+        }
+
+        /// <summary>Marks <paramref name="i"/> as played this round (when it really starts, not when it was picked).</summary>
+        public void Played(int i) => _played.Add(_last = i);
+
+        /// <summary>Like <see cref="Next"/> without marking: a pick superseded while loading (fast skips) stays in the round.</summary>
+        public int Pick(Func<int, bool> enabled)
+        {
             var pool = Enumerable.Range(0, count).Where(i => enabled(i) && !_played.Contains(i)).ToList();
             if (pool.Count == 0)
             {
@@ -155,10 +203,7 @@ public sealed class Jukebox
                 pool = [.. Enumerable.Range(0, count).Where(i => enabled(i) && i != _last)];
                 if (pool.Count == 0 && _last >= 0 && enabled(_last)) pool.Add(_last); // the only song left
             }
-            if (pool.Count == 0) return -1;
-            _last = pool[rng.Next(pool.Count)];
-            _played.Add(_last);
-            return _last;
+            return pool.Count == 0 ? -1 : pool[rng.Next(pool.Count)];
         }
     }
 }
