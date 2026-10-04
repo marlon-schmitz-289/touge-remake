@@ -106,6 +106,27 @@ public class UiTests
         Assert.True(problems.Count == 0, string.Join("; ", problems));
     }
 
+    /// <summary>
+    ///     Dash row (course dial left, cluster right): 1.6× the old size at 100 % on 16:9, grows with HUD SIZE, and at every
+    ///     aspect and size the cluster box stays right of the car's free centre and the dial left of it.
+    /// </summary>
+    [Fact]
+    public void HudDash_ScalesAndKeepsCentreFree()
+    {
+        Assert.Equal(Hud.DashSize, Hud.Dash(Style.Safe(1920, 1080), 1));
+        Assert.True(Hud.Dash(Style.Safe(1920, 1080), 1.3f) > Hud.Dash(Style.Safe(1920, 1080), 1));
+        Assert.True(Hud.Dash(Style.Safe(1920, 1080), 0.8f) < Hud.DashSize);
+        foreach (var (w, h) in new[] { (1280, 720), (1024, 768), (1280, 1024), (1680, 1050), (3440, 1440), (5120, 1440) })
+        foreach (var scale in new[] { 0.5f, 0.8f, 1, 1.3f, 3 })
+        {
+            var g = Style.Safe(w, h);
+            var k = Hud.Dash(g, scale);
+            var centre = (g.Left + g.Right) / 2;
+            Assert.True(g.Right - Cluster.Box.X * k * g.U >= centre + Hud.CarClear * g.U - 0.5f, $"{w}x{h} {scale} cluster");
+            Assert.True(g.Left + Cluster.Box.Y * k * g.U <= centre - Hud.CarClear * g.U, $"{w}x{h} {scale} dial");
+        }
+    }
+
     /// <summary>Point within a needle's reach: tail/hub disc, or the swept sector (with about the needle's half width as margin).</summary>
     private static bool Hits(Vector2 p, Cluster.Sweep s)
     {

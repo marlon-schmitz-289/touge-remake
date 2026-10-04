@@ -14,6 +14,8 @@ public sealed class Settings
     /// <summary>Menu and game sound effects 0..1.</summary>
     public float SoundVolume { get; set; } = 1;
     public bool HudOn { get; set; } = true;
+    /// <summary>HUD size 0.8..1.3 (Options HUD SIZE, <see cref="Hud.Scale"/>).</summary>
+    public float HudScale { get; set; } = 1;
     public Hud.MapMode MapMode { get; set; }
     public bool BumperCam { get; set; }
     public string Course { get; set; } = "AKINA_DAY";

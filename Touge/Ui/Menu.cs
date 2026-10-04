@@ -425,11 +425,11 @@ public sealed class Menu(Catalog catalog, Settings settings)
 
     // ---------------------------------------------------------------- options
 
-    private static readonly string[] OptionRows = ["GRAPHICS", "MUSIC", "MUSIC VOLUME", "SE VOLUME", "HUD", "NAVI MAP", "CAMERA", "STICKERS", "CONTROLS"];
+    private static readonly string[] OptionRows = ["GRAPHICS", "MUSIC", "MUSIC VOLUME", "SE VOLUME", "HUD", "HUD SIZE", "NAVI MAP", "CAMERA", "STICKERS", "CONTROLS"];
 
     private static readonly string[][] OptionValues =
     [
-        ["HIGH", "LOW"], ["ON", "OFF"], [], [], ["ON", "OFF"], ["ROTATING", "NORTH UP", "WHOLE"], ["CHASE", "BUMPER"], ["ANIME", "STOCK", "NONE"],
+        ["HIGH", "LOW"], ["ON", "OFF"], [], [], ["ON", "OFF"], ["80%", "90%", "100%", "110%", "120%", "130%"], ["ROTATING", "NORTH UP", "WHOLE"], ["CHASE", "BUMPER"], ["ANIME", "STOCK", "NONE"],
         ["KEYBOARD", "PAD"],
     ];
 
@@ -437,7 +437,7 @@ public sealed class Menu(Catalog catalog, Settings settings)
     [
         ["HIGH: 4x MSAA, bloom and sun shadows.", "LOW: for slower machines."],
         ["Menu music and the Eurobeat in the race."], ["Volume of the music."], ["Volume of engine, tyres and menu sounds."],
-        ["Times, drift meter, course dial and the car's own gauges."],
+        ["Times, drift meter, course dial and the car's own gauges."], ["Size of the HUD: course dial, gauges and times."],
         ["Course dial: turns with the car, north up,", "or shows the whole course."], ["Chase camera behind the car, or the bumper view."],
         ["ANIME: the character's car with its stickers.", "STOCK: the game's stock car.  NONE: no stickers or plates."],
     ];
@@ -451,8 +451,8 @@ public sealed class Menu(Catalog catalog, Settings settings)
     /// <summary>Selected value of option row <paramref name="row"/>.</summary>
     private int OptionValue(int row) => row switch
     {
-        0 => settings.HighQuality ? 0 : 1, 1 => settings.MusicOn ? 0 : 1, 4 => settings.HudOn ? 0 : 1, 5 => (int)settings.MapMode,
-        6 => settings.BumperCam ? 1 : 0, 7 => settings.Livery switch { Livery.Rival => 0, Livery.Stock => 1, _ => 2 }, 8 => _padHelp ? 1 : 0, _ => 0,
+        0 => settings.HighQuality ? 0 : 1, 1 => settings.MusicOn ? 0 : 1, 4 => settings.HudOn ? 0 : 1, 5 => (int)MathF.Round((settings.HudScale - 0.8f) * 10), 6 => (int)settings.MapMode,
+        7 => settings.BumperCam ? 1 : 0, 8 => settings.Livery switch { Livery.Rival => 0, Livery.Stock => 1, _ => 2 }, 9 => _padHelp ? 1 : 0, _ => 0,
     };
 
     /// <summary>Steps option <see cref="_row"/> by <paramref name="step"/>; false if nothing changed.</summary>
@@ -467,7 +467,13 @@ public sealed class Menu(Catalog catalog, Settings settings)
                 if (_row == 2) s.MusicVolume = v;
                 else s.SoundVolume = v;
                 return true;
-            case 8:
+            case 5:
+                // a size steps and stops at its ends instead of wrapping
+                var size = Math.Clamp(OptionValue(5) + step, 0, OptionValues[5].Length - 1);
+                if (size == OptionValue(5)) return false;
+                s.HudScale = 0.8f + size / 10f;
+                return true;
+            case 9:
                 _padHelp = !_padHelp;
                 return true;
         }
@@ -477,9 +483,9 @@ public sealed class Menu(Catalog catalog, Settings settings)
             case 0: s.HighQuality = n == 0; break;
             case 1: s.MusicOn = n == 0; break;
             case 4: s.HudOn = n == 0; break;
-            case 5: s.MapMode = (Hud.MapMode)n; break;
-            case 6: s.BumperCam = n == 1; break;
-            case 7: s.Livery = n switch { 0 => Livery.Rival, 1 => Livery.Stock, _ => Livery.None }; break;
+            case 6: s.MapMode = (Hud.MapMode)n; break;
+            case 7: s.BumperCam = n == 1; break;
+            case 8: s.Livery = n switch { 0 => Livery.Rival, 1 => Livery.Stock, _ => Livery.None }; break;
         }
         return true;
     }
@@ -860,7 +866,7 @@ public sealed class Menu(Catalog catalog, Settings settings)
     {
         for (var i = 0; i < OptionRows.Length; i++)
         {
-            var y = 70 + i * 30;
+            var y = 64 + i * 28;
             // dark-steel label tab
             Vector2 min = Vector2.Round(c.P(36, y)), max = Vector2.Round(c.P(196, y + 26));
             c.O.Rect(min, max, Overlay.Rgba(0.5f, 0.51f, 0.53f));
@@ -882,15 +888,16 @@ public sealed class Menu(Catalog catalog, Settings settings)
             var sel = OptionValue(i);
             for (var j = 0; j < values.Length; j++)
             {
-                var x = 204 + 276 * (j + 0.5f) / values.Length;
+                var inset = values.Length > 3 ? 20 : 0; // many choices: clear of the plate screws
+                var x = 204 + inset + (276 - 2 * inset) * (j + 0.5f) / values.Length;
                 var on = j == sel;
                 c.Text(values[j], x, y + 18, 13, on ? Overlay.Rgba(0.05f, 0.3f, 0.1f) : Overlay.Rgba(0.35f, 0.42f, 0.38f, 0.55f), 0.5f, 0, 0, on ? 0.6f : 0);
             }
         }
-        var gy = 70 + _row * 30;
+        var gy = 64 + _row * 28;
         c.Glow(200, gy - 4, 484, gy + 30, Canvas.Pulse(Theta));
         c.Carbon(36, 344, 480, 426, 1, false);
-        var help = _row == 8 ? _padHelp ? PadHelp : KeyboardHelp : OptionHelp[_row];
+        var help = _row == 9 ? _padHelp ? PadHelp : KeyboardHelp : OptionHelp[_row];
         for (var i = 0; i < help.Length; i++) c.Text(help[i], 50, 366 + i * 20, 11.5f, Canvas.White, 0, 0.12f);
         Hint(c, "UP/DOWN: Select    LEFT/RIGHT: Change    BACK: Main menu");
     }

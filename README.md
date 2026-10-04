@@ -31,6 +31,7 @@ dotnet run --project Touge -- "<iso>" --autodrive 60 [--shot out/ad.png]   # Pil
 dotnet run --project Touge -- "<iso>" AKINA_DAY --at 710 --autodrive 40 [--ram] [--reverse]   # hinter dem Ziel: Auslauf bis vor die Endsperre bzw. mit --ram Vollgas in die Sperre; Zusammenfassung (Weg hinter dem Ziel, Abstand zur Sperre, Wandkontakt, Höhe)
 dotnet run --project Touge -- "<iso>" AKINA_DAY --reverse [--autodrive 60|--shot …|--ground …]   # Gegenrichtung (bergauf): CRS_COLI_<KURS>_1 + CRS_DRV_<KURS>_O, Start am anderen Ende
 dotnet run --project Touge -- "<iso>" --hud overview --shot out/map.png   # Minimap-Modus beim Start (north|overview|off)
+dotnet run --project Touge -- "<iso>" --hud-scale 130 --shot-size 1920x1080 --shot out/h.png   # HUD-Größe 80–130 % (Menü: Options → HUD SIZE)
 dotnet run --project Touge -- "<iso>" AKINA_NIT --bench 900 [--quality off] [--offscreen]   # Pilot fährt in Echtzeit (Fenster) bis ins Ziel (höchstens 900 s): pro Sekunde Position, fps, Frametime, CPU-ms, Draws, Effekte, GC, Speicher, macOS-Wärmezustand; am Ende avg/p99/max, Frames > 18/25 ms, je 500 m. --offscreen (Metal): ohne Display-Takt, Frametime = GPU-Zeit
 dotnet run --project Touge -- "<iso>" AKINA_RIN --flow out/proof --bench 900   # wie ein Spieler: Front-End → Kurs/Zeit/Wetter wie angegeben → 24 Autovorschauen + Lackwechsel → Rennen mit --bench-Log
 dotnet run --project Touge -- "<iso>" --at 300 --autodrive 5.2 --drift --shot out/drift.png   # --drift: Pilot reißt alle 7 s (ab 4,5 s) einen Handbremsdrift (auch mit --bench)
@@ -65,7 +66,7 @@ Streckenenden: bergab endet, wo bergauf startet, und umgekehrt (Auto steht 5 m h
 „FINISH!!“ bzw. „NEW RECORD!!“ (das Spiel übernimmt das Auto wie ein Arcade-Racer: rollt aus und bremst gleichmäßig bis
 4,5 m vor die Endsperre, vor Kurven des Auslaufs auch stärker, `Drive.Coast`; WIN-Jingle) → Ergebnis (Gesamt-/Sektorzeiten mit Delta, Bestzeit, Differenz, Driftpunkte, Zeilen zählen mit
 NAME001, BGM „JOY“) → Retry / Course Select / Car Select / Exit. Rekorde: Bestzeit je Kurs und Route. Optionen: Grafik, Musik an/aus,
-Musik-/SE-Lautstärke, HUD, Navi-Karte, Kamera, Aufkleber (ANIME/STOCK/NONE), Steuerung (Tastatur/Pad-Belegung). Zurück geht die besuchten
+Musik-/SE-Lautstärke, HUD, HUD-Größe (80–130 %), Navi-Karte, Kamera, Aufkleber (ANIME/STOCK/NONE), Steuerung (Tastatur/Pad-Belegung). Zurück geht die besuchten
 Schritte rückwärts. Zwischen Modulen 30-Frame-Schwarzblenden. Ton: Original-SE aus SYSSE (SYS005 Cursor, SYS006 Bestätigen, BEEP001
 Zurück/gesperrt, sys002 START, alarm_02 Pause, CAR010/011 Countdown, NAME001 Ergebniszeilen) und Menü-BGM aus BGM.AFS mit Loop-Punkten:
 Titel/Hauptmenü „GAMBLE RUMBLE“ (eigene Wahl, das Original ist dort still bzw. spielt den Vorspannfilm), Kurswahl „LIVE IN TOKYO“,
@@ -73,7 +74,9 @@ Hersteller/Auto/Rekorde „WORRY“, Laden still, Countdown/Rennen/Pause Eurobea
 Navigation Pfeile/WASD, Enter, Esc bzw. D-Pad/Stick, A, B.
 Einstellungen, letzte Wahl und Bestzeiten liegen als JSON im App-Data-Ordner (macOS `~/Library/Application Support/InitialDRemake/settings.json`,
 Windows `%APPDATA%\InitialDRemake`), nicht im Repo; Starts mit Kurs oder Test-Flags lesen/schreiben sie nicht.
-HUD: F4 an/aus, N Minimap mitdrehend → nordausgerichtet → ganze Strecke (`--hud north|overview|off` beim Start). Oben links Zeit, Bestzeit
+HUD: F4 an/aus, N Minimap mitdrehend → nordausgerichtet → ganze Strecke (`--hud north|overview|off` beim Start), Größe in den Optionen
+(HUD SIZE 80–130 %, `--hud-scale 80..130` für Testläufe; Streckenuhr und Kombiinstrument bei 100 % 1,6× so groß wie früher – 640×304 px bei
+1080p –, auf schmalen Bildern (4:3, 5:4) gedeckelt, damit das Auto in der Mitte frei bleibt; oben rechts bleibt frei). Oben links Zeit, Bestzeit
 und 4 Sektoren (je 25 % der Strecke, Delta zur Bestzeit grün/rot; Zeit läuft ab der Startlinie, stoppt im Ziel), oben Mitte Drift-Kombo
 (Punkte aus Winkel × Tempo, Multiplikator, Wandkontakt löscht), unten links die Streckenuhr (`Ui/MapWidget`: rundes Instrument im Stil des
 Kombiinstruments mit Minimap – vorausliegende Straße hell, gefahrene gedimmt, Zoom nach Tempo, nachts in der Instrumentenfarbe des Autos –,

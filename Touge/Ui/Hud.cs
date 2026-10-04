@@ -31,6 +31,20 @@ public sealed class Hud
     /// <summary>Light switch for the cluster's tell-tales.</summary>
     public Headlights.Mode Lights;
     public MapMode Mode = MapMode.Rotating;
+    /// <summary>Options HUD SIZE (0.8..1.3): scales every HUD element.</summary>
+    public float Scale = 1;
+
+    /// <summary>Dash row (course dial + cluster) at 100 %, relative to <see cref="Cluster.Box"/> (400×190 px at 1080p → 640×304).</summary>
+    public const float DashSize = 1.6f;
+
+    /// <summary>
+    ///     Factor on <see cref="Cluster.Box"/> for the dash row of <paramref name="g"/> at HUD size <paramref name="scale"/>; on narrow
+    ///     screens (4:3, 5:4) capped so the cluster ends <see cref="CarClear"/> right of the centre, clear of the chase-cam car.
+    /// </summary>
+    public static float Dash(Style.Grid g, float scale) => MathF.Min(DashSize * Math.Clamp(scale, 0.8f, 1.3f), (g.Units / 2 - CarClear) / Cluster.Box.X);
+
+    /// <summary>Half width (units) kept free around the screen centre for the car.</summary>
+    public const float CarClear = 160;
     public LapTimer Timer { get; }
     public DriftMeter Drift { get; } = new();
 
@@ -85,13 +99,14 @@ public sealed class Hud
     {
         o.Clear();
         var g = Style.Safe(width, height);
-        var u = g.U;
+        var u = g.U * Math.Clamp(Scale, 0.8f, 1.3f);
+        var k = Dash(g, Scale);
         // course dial bottom left, same height as the cluster box (Cluster.Box.Y), so the two read as one dash row
-        var s = g.U * Cluster.Box.Y / (2 * MapWidget.Radius);
+        var s = g.U * k * Cluster.Box.Y / (2 * MapWidget.Radius);
         _map.Draw(o, new Vector2(g.Left + MapWidget.Radius * s, g.Bottom - MapWidget.Radius * s), s, Mode, Xz(carPos), Xz(carForward),
             _progress, (_pilot.Length - LapTimer.Gate - _start) * (1 - _progress), Timer, Cluster.Cars[carName], Night);
         var gauge = Cluster.Cars[carName];
-        Cluster.Draw(o, gauge, new Vector2(g.Right, g.Bottom), Cluster.Fit(gauge, g),
+        Cluster.Draw(o, gauge, new Vector2(g.Right, g.Bottom), k * Cluster.Fit(gauge, g),
             new Cluster.Reading(car.Rpm, car.SpeedKmh, car.Gear, car.AutomaticGearbox, _boost, Night, time, Lights));
         var timingH = Drift.Total > 0 ? 186 : 150;
         Timing(o, new Vector2(g.Left, g.Top), timingH, u, time);

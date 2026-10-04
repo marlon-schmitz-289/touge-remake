@@ -45,6 +45,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     public bool UseMenus { get; init; }
     /// <summary>--shot-size WxH: size of the --shot frame (default 1280×720).</summary>
     public (int W, int H) ShotSize { get; init; } = (1280, 720);
+    /// <summary>--hud-scale <percent>: HUD size for test runs (menus use the stored Options value).</summary>
+    public float HudScale { get; init; } = 1;
     /// <summary>--menu: front-end step (boot, logo, disclaimer, title, mode) or menu screen (course … options, <see cref="Menu.Screen"/>) to open at start, e.g. for --shot.</summary>
     public string? StartMenu { get; init; }
     private Settings _settings = null!;
@@ -150,7 +152,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         else
             _settings = new Settings
             {
-                HighQuality = highQuality, HudOn = HudMode != "off" && flicker == null, Car = Car, Paint = Paint, Reverse = Reverse, Course = _courseTime, Fog = Fog,
+                HighQuality = highQuality, HudOn = HudMode != "off" && flicker == null, HudScale = HudScale, Car = Car, Paint = Paint, Reverse = Reverse, Course = _courseTime, Fog = Fog,
                 MapMode = HudMode switch { "north" => Hud.MapMode.NorthUp, "overview" => Hud.MapMode.Overview, _ => Hud.MapMode.Rotating }, Livery = Livery,
             };
         if (flicker == null && ContactSheet == null)
@@ -293,7 +295,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _previousBest = _settings.Best.GetValueOrDefault(key)?[^1];
         var hud = new Hud(_course.Road, _drive.Line, _drive.Pilot, _settings.Best.GetValueOrDefault(key), _drive.Start)
         {
-            Visible = _settings.HudOn, Mode = _settings.MapMode, Night = _courseTime.EndsWith("_NIT"),
+            Visible = _settings.HudOn, Mode = _settings.MapMode, Scale = _settings.HudScale, Night = _courseTime.EndsWith("_NIT"),
         };
         hud.Timer.Record += best =>
         {
@@ -688,7 +690,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _renderer.HighQuality = s.HighQuality;
         if (_audioDevice != null) _audioDevice.Music = s.MusicVolume;
         if (_menuAudio != null) _menuAudio.Volume = s.SoundVolume;
-        (_hud.Visible, _hud.Mode, _bumperCam) = (s.HudOn, s.MapMode, s.BumperCam);
+        (_hud.Visible, _hud.Mode, _hud.Scale, _bumperCam) = (s.HudOn, s.MapMode, s.HudScale, s.BumperCam);
         if (s.Livery != _carLivery) SwitchCar(Array.IndexOf(CarPaint.Cars, _carName), _paint);
         if (_persist) s.Save();
     }
