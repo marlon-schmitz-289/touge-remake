@@ -6,7 +6,7 @@ public class CourseEnvTests
 {
     /// <summary>
     ///     Driving along a road whose env sets switch A → B (a 2-point blip) → C → D (a run just long enough): the blip
-    ///     is merged away, every set's share in what the cars reflect changes by less than 3 % per 10 cm (the game's hard
+    ///     is merged away, every set's share in what the cars reflect changes by less than 2 % per 10 cm (the game's hard
     ///     switch: 100 %), and away from the borders it is the plain set.
     /// </summary>
     [Fact]
@@ -31,7 +31,7 @@ public class CourseEnvTests
             maxStep = MathF.Max(maxStep, now.Zip(last, (p, q) => MathF.Abs(p - q)).Max());
             last = now;
         }
-        Assert.True(maxStep < 0.03f, $"max step {maxStep}");
+        Assert.True(maxStep < 0.02f, $"max step {maxStep}");
         Assert.Equal([1f, 0, 0, 0], Shares(20));
         Assert.Equal([0, 0, 0, 1f], Shares(180));
     }

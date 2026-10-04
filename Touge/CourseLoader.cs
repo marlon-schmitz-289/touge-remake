@@ -46,7 +46,7 @@ public static class CourseLoader
             float wa = 0, wb = 0;
             for (var o = -EnvBlend; o <= EnvBlend; o++)
             {
-                var w = MathF.Max(0, 1 - MathF.Abs(o - t) / (EnvBlend + 1));
+                var w = MathF.Max(0, 1 - MathF.Abs(o - t) / EnvBlend); // 0 at the window's ends: continuous when i switches
                 var set = Env[Math.Clamp(i + o, 0, n - 1)];
                 if (set == a) wa += w;
                 else (b, wb) = (b ?? set, wb + w);
