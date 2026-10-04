@@ -8,7 +8,7 @@ namespace Touge;
 public static class CourseLoader
 {
     /// <param name="Road">CRS_ROAD centre points.</param>
-    /// <param name="Env">Per road point the renderer texture indices of ENV_TOP/BOTTOM/LEFT/RIGHT (null: course has no env maps).</param>
+    /// <param name="Env">Per road point the renderer texture indices of ENV_TOP/BOTTOM/LEFT/RIGHT, one shared array per distinct set (null: course has no env maps).</param>
     /// <param name="Lights">CRS_LIGHT points (empty if none).</param>
     /// <param name="FogColour">The original's fog colour for this course and time of day (CRS_INFO, gamma 0..1), null if missing.</param>
     /// <param name="Fog">The original's linear fog start/end in metres for this time of day (CRS_INFO), null if missing.</param>
@@ -24,6 +24,34 @@ public static class CourseLoader
             for (var i = 1; i < Road.Length; i++)
                 if (Vector3.DistanceSquared(Road[i], p) < Vector3.DistanceSquared(Road[best], p)) best = i;
             return best;
+        }
+
+        /// <summary>Road points (~2 m) each side over which <see cref="EnvAt"/> fades; shorter runs are merged at load (<see cref="Debounce"/>).</summary>
+        public const int EnvBlend = 4;
+
+        /// <summary>
+        ///     The env maps around <paramref name="p"/>, continuous along the road: the set of the nearest road point, the
+        ///     other set within ±<see cref="EnvBlend"/> points (at most one, <see cref="Debounce"/>) and its share under a
+        ///     tent centred between the points by projection. The game switches hard at every CRS_ENV change (sky ↔
+        ///     forest), which flipped whole windows to another colour.
+        /// </summary>
+        public (int[] A, int[] B, float Mix) EnvAt(Vector3 p)
+        {
+            var n = Road.Length;
+            var i = NearestRoadPoint(p);
+            var axis = Road[Math.Min(i + 1, n - 1)] - Road[Math.Max(i - 1, 0)];
+            var t = Math.Clamp(2 * Vector3.Dot(p - Road[i], axis) / MathF.Max(axis.LengthSquared(), 1e-6f), -0.5f, 0.5f);
+            var a = Env![i];
+            int[]? b = null;
+            float wa = 0, wb = 0;
+            for (var o = -EnvBlend; o <= EnvBlend; o++)
+            {
+                var w = MathF.Max(0, 1 - MathF.Abs(o - t) / EnvBlend); // 0 at the window's ends: continuous when i switches
+                var set = Env[Math.Clamp(i + o, 0, n - 1)];
+                if (set == a) wa += w;
+                else (b, wb) = (b ?? set, wb + w);
+            }
+            return (a, b ?? a, wb / (wa + wb));
         }
     }
 
@@ -90,7 +118,8 @@ public static class CourseLoader
 
     /// <summary>
     ///     ENV_TEX_&lt;course&gt;_&lt;time&gt;.PAC → renderer textures, CRS_ENV indices → per road point (index mod the ENV
-    ///     length like the game) the four texture ids. Missing maps or table: null (renderer keeps white).
+    ///     length like the game) the four texture ids, one array per distinct set, <see cref="Debounce"/>d. Missing maps
+    ///     or table: null (renderer keeps grey).
     /// </summary>
     private static int[][]? LoadEnv(Afs models, byte[]? table, string courseTime, int roadCount, WorldRenderer renderer)
     {
@@ -104,11 +133,33 @@ public static class CourseLoader
         }
         var env = CourseRoad.ReadEnv(table);
         int Id(string kind, sbyte i) => tex.TryGetValue($"ENV_{kind}{Math.Max((int)i, 0):D2}", out var t) ? t : tex[$"ENV_{kind}00"];
-        return
+        var sets = new Dictionary<(int, int, int, int), int[]>();
+        int[] Set(int top, int bottom, int left, int right) =>
+            sets.TryGetValue((top, bottom, left, right), out var s) ? s : sets[(top, bottom, left, right)] = [top, bottom, left, right];
+        return Debounce(
         [
             .. Enumerable.Range(0, roadCount).Select(i => env[i % env.Length])
-                .Select(e => new[] { Id("TOP", e.Top), Id("BOTTOM", e.Bottom), Id("LEFT", e.Left), Id("RIGHT", e.Right) }),
-        ];
+                .Select(e => Set(Id("TOP", e.Top), Id("BOTTOM", e.Bottom), Id("LEFT", e.Left), Id("RIGHT", e.Right))),
+        ]);
+    }
+
+    /// <summary>
+    ///     Runs of env sets shorter than 2 × <see cref="Course.EnvBlend"/> road points take the set before them (at the
+    ///     start the one after), so a fade window never spans three sets. They are mostly flicker between neighbouring
+    ///     maps (Usui: 22 runs of 1–4 points).
+    /// </summary>
+    public static int[][] Debounce(int[][] env)
+    {
+        var o = (int[][])env.Clone();
+        for (var start = 0; start < o.Length;)
+        {
+            var end = start;
+            while (end < o.Length && o[end] == o[start]) end++;
+            if (end - start < 2 * Course.EnvBlend && (start > 0 || end < o.Length))
+                Array.Fill(o, start > 0 ? o[start - 1] : o[end], start, end - start);
+            start = end;
+        }
+        return o;
     }
 
     /// <summary>
