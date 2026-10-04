@@ -5,52 +5,65 @@ using Penelope;
 namespace Kansei.Graphics;
 
 /// <summary>
-///     HDR scene texture (single-sample; the MSAA target resolves into it) → bloom (soft threshold, 4×4-box
-///     downsample chain to 1/64, tent upsample back) → tonemap/grade/vignette into the output (swapchain format).
+///     Single-sample scene targets the MSAA pass resolves into (HDR colour, <see cref="GbufFormat"/> gbuffer, depth) →
+///     half-res ambient occlusion (ao.frag + 4×4 bilateral blur) and wet-ground reflections (ssr.frag) → bloom (soft
+///     threshold, 4×4-box downsample chain to 1/64, tent upsample back) → tonemap (AO on the ambient share, SSR,
+///     grade, vignette, dither) into the output (swapchain format). AO/SSR/bloom only in high quality.
 /// </summary>
 internal sealed class PostProcess : IDisposable
 {
     public const TextureFormat HdrFormat = TextureFormat.Rgba16Float;
+    /// <summary>Second scene target: r = ambient share of the colour (AO darkens only that), g = reflection weight (SSR), b = streak (SSR blur).</summary>
+    public const TextureFormat GbufFormat = TextureFormat.Rgba8Unorm;
+    public const TextureFormat DepthFormat = TextureFormat.Depth32Float;
     private const int BloomLevels = 6; // 1/2 … 1/64
+    /// <summary>AO search radius (m) and strength (ao.frag).</summary>
+    private const float AoRadius = 1.2f, AoStrength = 1.4f;
 
     private readonly IPenelopeDevice _device;
-    private readonly ShaderHandle _down, _up, _tonemap;
-    private readonly RenderPipelineHandle _downPipeline, _upPipeline, _tonemapPipeline;
-    private readonly BindGroupLayoutHandle _oneTex, _twoTex;
-    private readonly SamplerHandle _sampler;
+    private readonly ShaderHandle[] _shaders;
+    private readonly RenderPipelineHandle _downPipeline, _upPipeline, _tonemapPipeline, _aoPipeline, _blurPipeline, _ssrPipeline;
+    private readonly BindGroupLayoutHandle _oneTex, _threeTex, _sixTex;
+    private readonly SamplerHandle _sampler, _point;
     private readonly List<(TextureHandle Tex, TextureViewHandle View, BindGroupHandle Group, int W, int H)> _targets = [];
-    private BindGroupHandle _tonemapGroup;
+    private (TextureHandle Tex, TextureViewHandle View) _gbuf, _depth, _ao, _aoBlur, _ssr;
+    private BindGroupHandle _tonemapGroup, _aoGroup, _blurGroup, _ssrGroup;
     private int _w, _h;
 
     public TextureViewHandle SceneView => _targets[0].View;
+    public TextureViewHandle GbufView => _gbuf.View;
+    /// <summary>Single-sample scene depth: the MSAA depth resolves into it, or the 1-sample pass renders into it directly.</summary>
+    public TextureViewHandle DepthView => _depth.View;
 
     public PostProcess(IPenelopeDevice device)
     {
         _device = device;
         var asm = typeof(PostProcess).Assembly;
-        _down = device.CreateShader(ShaderLoader.LoadGraphics(asm, "fullscreen", "bloom_down", "bloom_down"));
-        _up = device.CreateShader(ShaderLoader.LoadGraphics(asm, "fullscreen", "bloom_up", "bloom_up"));
-        _tonemap = device.CreateShader(ShaderLoader.LoadGraphics(asm, "fullscreen", "tonemap", "tonemap"));
-        _oneTex = device.GetBindGroupLayout(new BindGroupLayoutDesc(
-            [new BindGroupLayoutEntry(0, BindingType.CombinedImageSampler, ShaderStage.Fragment)], "post-1"));
-        _twoTex = device.GetBindGroupLayout(new BindGroupLayoutDesc(
-        [
-            new BindGroupLayoutEntry(0, BindingType.CombinedImageSampler, ShaderStage.Fragment),
-            new BindGroupLayoutEntry(1, BindingType.CombinedImageSampler, ShaderStage.Fragment),
-        ], "post-2"));
+        _shaders = [.. new[] { "bloom_down", "bloom_up", "tonemap", "ao", "ao_blur", "ssr" }.Select(f => device.CreateShader(ShaderLoader.LoadGraphics(asm, "fullscreen", f, f)))];
+        BindGroupLayoutHandle Layout(int n) => device.GetBindGroupLayout(new BindGroupLayoutDesc(
+            [.. Enumerable.Range(0, n).Select(b => new BindGroupLayoutEntry(b, BindingType.CombinedImageSampler, ShaderStage.Fragment))], $"post-{n}"));
+        (_oneTex, _threeTex, _sixTex) = (Layout(1), Layout(3), Layout(6));
         _sampler = device.GetSampler(SamplerDesc.Linear);
-        _downPipeline = Fullscreen(device, _down, HdrFormat, BlendState.Opaque, _oneTex, 32);
-        _upPipeline = Fullscreen(device, _up, HdrFormat, BlendState.Additive with { SrcColor = BlendFactor.One }, _oneTex, 32);
-        _tonemapPipeline = Fullscreen(device, _tonemap, device.SwapchainFormat, BlendState.Opaque, _twoTex, 48);
+        _point = device.GetSampler(SamplerDesc.Nearest);
+        _downPipeline = Fullscreen(device, _shaders[0], HdrFormat, BlendState.Opaque, _oneTex, 32);
+        _upPipeline = Fullscreen(device, _shaders[1], HdrFormat, BlendState.Additive with { SrcColor = BlendFactor.One }, _oneTex, 32);
+        _tonemapPipeline = Fullscreen(device, _shaders[2], device.SwapchainFormat, BlendState.Opaque, _sixTex, 64);
+        _aoPipeline = Fullscreen(device, _shaders[3], TextureFormat.Rg16Float, BlendState.Opaque, _oneTex, 32);
+        _blurPipeline = Fullscreen(device, _shaders[4], TextureFormat.Rg16Float, BlendState.Opaque, _oneTex, 0);
+        _ssrPipeline = Fullscreen(device, _shaders[5], HdrFormat, BlendState.Opaque, _threeTex, 144);
     }
 
-    /// <summary>Pipeline for a fragment-only pass over <c>fullscreen.vert</c> (no vertex buffer, no depth).</summary>
+    /// <summary>
+    ///     Pipeline for a fragment-only pass over <c>fullscreen.vert</c> (no vertex buffer, no depth test).
+    ///     <paramref name="gbuf"/>: also the scene pass's gbuffer target (the sky).
+    /// </summary>
     internal static RenderPipelineHandle Fullscreen(IPenelopeDevice device, ShaderHandle shader, TextureFormat format, BlendState blend,
-        BindGroupLayoutHandle? layout, int pushBytes, int samples = 1, TextureFormat? depth = null) =>
+        BindGroupLayoutHandle? layout, int pushBytes, int samples = 1, TextureFormat? depth = null, bool gbuf = false) =>
         device.CreateRenderPipeline(new RenderPipelineDesc(
             shader, new VertexLayout(), PrimitiveTopology.TriangleList, RasterizerState.Default, DepthStencilState.Disabled,
-            MultisampleState.Disabled with { SampleCount = samples }, [new ColorTargetState(format, blend)], depth,
-            layout is { } l ? [l] : [], [new PushConstantRange(ShaderStage.Fragment, 0, pushBytes)], "fullscreen"));
+            MultisampleState.Disabled with { SampleCount = samples },
+            gbuf ? [new ColorTargetState(format, blend), new ColorTargetState(GbufFormat, blend)] : [new ColorTargetState(format, blend)], depth,
+            layout is { } l ? [l] : [], pushBytes > 0 ? [new PushConstantRange(ShaderStage.Fragment, 0, pushBytes)] : [], "fullscreen"));
 
     public void Resize(int w, int h)
     {
@@ -65,14 +78,55 @@ internal sealed class PostProcess : IDisposable
             var group = _device.CreateBindGroup(new BindGroupDesc(_oneTex, [BindGroupEntry.CombinedImageSampler(0, view, _sampler)]));
             _targets.Add((tex, view, group, lw, lh));
         }
-        _tonemapGroup = _device.CreateBindGroup(new BindGroupDesc(_twoTex,
-            [BindGroupEntry.CombinedImageSampler(0, _targets[0].View, _sampler), BindGroupEntry.CombinedImageSampler(1, _targets[1].View, _sampler)]));
+        (int W, int H) half = (Math.Max(1, w / 2), Math.Max(1, h / 2));
+        _gbuf = Target(w, h, GbufFormat, TextureUsage.ColorAttachment, "gbuffer");
+        _depth = Target(w, h, DepthFormat, TextureUsage.DepthStencilAttachment, "scene-depth-resolved");
+        _ao = Target(half.W, half.H, TextureFormat.Rg16Float, TextureUsage.ColorAttachment, "ao");
+        _aoBlur = Target(half.W, half.H, TextureFormat.Rg16Float, TextureUsage.ColorAttachment, "ao-blur");
+        _ssr = Target(half.W, half.H, HdrFormat, TextureUsage.ColorAttachment, "ssr");
+        _aoGroup = Group(_oneTex, (_depth.View, _point));
+        _blurGroup = Group(_oneTex, (_ao.View, _point));
+        _ssrGroup = Group(_threeTex, (SceneView, _sampler), (_ao.View, _point), (_gbuf.View, _point));
+        _tonemapGroup = Group(_sixTex, (SceneView, _sampler), (_targets[1].View, _sampler), (_aoBlur.View, _point), (_ssr.View, _sampler),
+            (_gbuf.View, _point), (_depth.View, _point));
     }
 
-    public void Run(ICommandEncoder encoder, Atmosphere a, bool bloom, TextureViewHandle output, int outW, int outH)
+    private (TextureHandle, TextureViewHandle) Target(int w, int h, TextureFormat format, TextureUsage usage, string name)
     {
-        Span<byte> push = stackalloc byte[48];
-        if (bloom)
+        var tex = _device.CreateTexture(new TextureDesc(w, h, format, usage | TextureUsage.Sampled, DebugName: name));
+        return (tex, _device.DefaultTextureView(tex));
+    }
+
+    private BindGroupHandle Group(BindGroupLayoutHandle layout, params (TextureViewHandle View, SamplerHandle Sampler)[] textures) =>
+        _device.CreateBindGroup(new BindGroupDesc(layout, [.. textures.Select((t, i) => BindGroupEntry.CombinedImageSampler(i, t.View, t.Sampler))]));
+
+    /// <summary>
+    ///     <paramref name="high"/>: AO, SSR and bloom. <paramref name="viewRotProj"/> = view rotation (no translation) ×
+    ///     <paramref name="proj"/> (<see cref="WorldRenderer.Perspective"/>), <paramref name="ySign"/> = clip y per uv y.
+    /// </summary>
+    public void Run(ICommandEncoder encoder, Atmosphere a, bool high, TextureViewHandle output, int outW, int outH, in Matrix4x4 viewRotProj,
+        in Matrix4x4 proj, float ySign)
+    {
+        Span<byte> push = stackalloc byte[144];
+        var near = proj.M43;
+        int hw = Math.Max(1, _w / 2), hh = Math.Max(1, _h / 2);
+        var ssr = high && a.Wetness > 0;
+        if (high)
+        {
+            MemoryMarshal.Write(push, new Vector4(1 / proj.M11, 1 / MathF.Abs(proj.M22), near, AoRadius));
+            MemoryMarshal.Write(push[16..], new Vector4(1f / _w, 1f / _h, AoStrength, 0));
+            Pass(encoder, _ao.View, LoadOp.DontCare, hw, hh, _aoPipeline, _aoGroup, push[..32]);
+            Pass(encoder, _aoBlur.View, LoadOp.DontCare, hw, hh, _blurPipeline, _blurGroup, []);
+        }
+        if (ssr)
+        {
+            Matrix4x4.Invert(viewRotProj, out var inv);
+            MemoryMarshal.Write(push, in viewRotProj);
+            MemoryMarshal.Write(push[64..], in inv);
+            MemoryMarshal.Write(push[128..], new Vector4(near, ySign, 1f / _w, 1f / _h));
+            Pass(encoder, _ssr.View, LoadOp.DontCare, hw, hh, _ssrPipeline, _ssrGroup, push);
+        }
+        if (high)
         {
             for (var i = 1; i <= BloomLevels; i++)
             {
@@ -89,10 +143,11 @@ internal sealed class PostProcess : IDisposable
                 Pass(encoder, dst.View, LoadOp.Load, dst.W, dst.H, _upPipeline, src.Group, push[..32]);
             }
         }
-        MemoryMarshal.Write(push, new Vector4(1f / outW, 1f / outH, a.Exposure, bloom ? a.BloomStrength / BloomLevels : 0));
+        MemoryMarshal.Write(push, new Vector4(1f / outW, 1f / outH, a.Exposure, high ? a.BloomStrength / BloomLevels : 0));
         MemoryMarshal.Write(push[16..], new Vector4(a.Tint, a.Saturation));
         MemoryMarshal.Write(push[32..], new Vector4(a.Vignette, (float)outW / outH, a.Contrast, 0));
-        Pass(encoder, output, LoadOp.DontCare, outW, outH, _tonemapPipeline, _tonemapGroup, push);
+        MemoryMarshal.Write(push[48..], new Vector4(high ? 1 : 0, near, ssr ? 1 : 0, 1));
+        Pass(encoder, output, LoadOp.DontCare, outW, outH, _tonemapPipeline, _tonemapGroup, push[..64]);
     }
 
     private static void Pass(ICommandEncoder encoder, TextureViewHandle target, LoadOp load, int w, int h, RenderPipelineHandle pipeline,
@@ -104,17 +159,22 @@ internal sealed class PostProcess : IDisposable
         pass.SetScissor(0, 0, w, h);
         pass.SetPipeline(pipeline);
         pass.SetBindGroup(0, group);
-        pass.SetPushConstants(ShaderStage.Fragment, 0, push);
+        if (push.Length > 0) pass.SetPushConstants(ShaderStage.Fragment, 0, push);
         pass.Draw(3);
     }
 
     private void ReleaseTargets()
     {
         if (_targets.Count == 0) return;
-        _device.DestroyBindGroup(_tonemapGroup);
+        foreach (var g in new[] { _tonemapGroup, _aoGroup, _blurGroup, _ssrGroup }) _device.DestroyBindGroup(g);
         foreach (var (tex, view, group, _, _) in _targets)
         {
             _device.DestroyBindGroup(group);
+            _device.DestroyTextureView(view);
+            _device.DestroyTexture(tex);
+        }
+        foreach (var (tex, view) in new[] { _gbuf, _depth, _ao, _aoBlur, _ssr })
+        {
             _device.DestroyTextureView(view);
             _device.DestroyTexture(tex);
         }
@@ -124,7 +184,7 @@ internal sealed class PostProcess : IDisposable
     public void Dispose()
     {
         ReleaseTargets();
-        foreach (var p in new[] { _downPipeline, _upPipeline, _tonemapPipeline }) _device.DestroyRenderPipeline(p);
-        foreach (var s in new[] { _down, _up, _tonemap }) _device.DestroyShader(s);
+        foreach (var p in new[] { _downPipeline, _upPipeline, _tonemapPipeline, _aoPipeline, _blurPipeline, _ssrPipeline }) _device.DestroyRenderPipeline(p);
+        foreach (var s in _shaders) _device.DestroyShader(s);
     }
 }

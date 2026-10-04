@@ -178,7 +178,9 @@ public readonly record struct DepthStencilAttachment(
     StoreOp StencilStore,
     byte StencilClear,
     bool DepthReadOnly,
-    bool StencilReadOnly);
+    bool StencilReadOnly,
+    /// <summary>MSAA depth resolve target (sample 0), single-sample. Metal only; other backends ignore it.</summary>
+    TextureViewHandle ResolveTarget = default);
 
 public readonly record struct RenderPassDesc(
     ColorAttachment[] ColorAttachments,

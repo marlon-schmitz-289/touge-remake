@@ -29,7 +29,7 @@ public sealed class WorldRenderer : IDisposable
     private const int LayerPush = 572; // uPointColor.w
     private const int SkyPushBytes = 192;
     private const float AlphaCutoff = 0.3f; // world.frag
-    private static readonly TextureFormat DepthFormat = TextureFormat.Depth32Float;
+    private const TextureFormat DepthFormat = PostProcess.DepthFormat;
     internal static readonly TextureFormat ShadowFormat = TextureFormat.Depth32Float;
 
     private readonly IPenelopeDevice _device;
@@ -46,8 +46,9 @@ public sealed class WorldRenderer : IDisposable
     private readonly SamplerHandle _sampler;
     private readonly PostProcess _post;
     private readonly List<(TextureHandle Tex, TextureViewHandle View, BindGroupHandle Group)> _textures = [];
-    private TextureHandle _depth, _msaa;
-    private TextureViewHandle _depthView, _msaaView;
+    private TextureHandle _depth, _msaa, _msaaGbuf;
+    private TextureViewHandle _depthView, _msaaView, _msaaGbufView;
+    private Matrix4x4 _viewRotProj, _proj;
     private int _w, _h, _samples;
 
     public IPenelopeDevice Device => _device;
@@ -84,7 +85,7 @@ public sealed class WorldRenderer : IDisposable
             var ms = MultisampleState.Disabled with { SampleCount = Samples(q), AlphaToCoverageEnabled = q == 1 };
             _pipeline[q] = ScenePipeline(_shader, WorldVertex.Layout, ms, true, PushBytes, "world");
             _skyMesh[q] = ScenePipeline(_shader, WorldVertex.Layout, ms with { AlphaToCoverageEnabled = false }, false, PushBytes, "sky-mesh");
-            _sky[q] = PostProcess.Fullscreen(device, _skyShader, PostProcess.HdrFormat, BlendState.Opaque, null, SkyPushBytes, Samples(q), DepthFormat);
+            _sky[q] = PostProcess.Fullscreen(device, _skyShader, PostProcess.HdrFormat, BlendState.Opaque, null, SkyPushBytes, Samples(q), DepthFormat, true);
         }
     }
 
@@ -97,7 +98,7 @@ public sealed class WorldRenderer : IDisposable
         _device.CreateRenderPipeline(new RenderPipelineDesc(
             shader, layout, PrimitiveTopology.TriangleList, RasterizerState.Default,
             depth ? DepthStencilState.DepthLessWrite with { DepthCompare = CompareFunc.GreaterEqual, DepthWriteEnabled = blend == null } : DepthStencilState.Disabled, ms,
-            [new ColorTargetState(PostProcess.HdrFormat, blend ?? BlendState.Opaque)], DepthFormat,
+            [new ColorTargetState(PostProcess.HdrFormat, blend ?? BlendState.Opaque), new ColorTargetState(PostProcess.GbufFormat, blend ?? BlendState.Opaque)], DepthFormat,
             [_layout, _sceneLayout], [new PushConstantRange(ShaderStage.Vertex | ShaderStage.Fragment, 0, pushBytes)], name));
 
     /// <summary>
@@ -233,11 +234,14 @@ public sealed class WorldRenderer : IDisposable
     public IRenderPassEncoder BeginScene(ICommandEncoder encoder, in Matrix4x4 view, in Matrix4x4 proj, FrameCapture? target = null)
     {
         EnsureTargets(target?.Width ?? _device.SwapchainWidth, target?.Height ?? _device.SwapchainHeight, Samples(Quality));
-        var color = _samples > 1
-            ? new ColorAttachment(_msaaView, LoadOp.DontCare, StoreOp.DontCare, ClearColor.Black, _post.SceneView)
-            : new ColorAttachment(_post.SceneView, LoadOp.DontCare, StoreOp.Store, ClearColor.Black);
-        var pass = encoder.BeginRenderPass(new RenderPassDesc([color],
-            new DepthStencilAttachment(_depthView, LoadOp.Clear, StoreOp.DontCare, 0f, LoadOp.Load, StoreOp.DontCare, 0, false, false),
+        // HDR colour + gbuffer (PostProcess.GbufFormat) + depth; with MSAA all three resolve into PostProcess's single-sample targets
+        var ms = _samples > 1;
+        ColorAttachment[] color = ms
+            ? [new(_msaaView, LoadOp.DontCare, StoreOp.DontCare, ClearColor.Black, _post.SceneView), new(_msaaGbufView, LoadOp.Clear, StoreOp.DontCare, ClearColor.Transparent, _post.GbufView)]
+            : [new(_post.SceneView, LoadOp.DontCare, StoreOp.Store, ClearColor.Black), new(_post.GbufView, LoadOp.Clear, StoreOp.Store, ClearColor.Transparent)];
+        var pass = encoder.BeginRenderPass(new RenderPassDesc(color,
+            new DepthStencilAttachment(ms ? _depthView : _post.DepthView, LoadOp.Clear, ms ? StoreOp.DontCare : StoreOp.Store, 0f, LoadOp.Load, StoreOp.DontCare, 0, false,
+                false, ms ? _post.DepthView : default),
             DebugName: "scene"));
         pass.SetViewport(0, 0, _w, _h);
         pass.SetScissor(0, 0, _w, _h);
@@ -245,7 +249,8 @@ public sealed class WorldRenderer : IDisposable
         Matrix4x4.Invert(view, out var camera);
         PickStreetLights(camera.Translation);
         var a = Atmosphere;
-        Matrix4x4.Invert(view with { M41 = 0, M42 = 0, M43 = 0 } * proj, out var inv);
+        (_viewRotProj, _proj) = (view with { M41 = 0, M42 = 0, M43 = 0 } * proj, proj);
+        Matrix4x4.Invert(_viewRotProj, out var inv);
         Span<byte> push = stackalloc byte[SkyPushBytes];
         MemoryMarshal.Write(push, in inv);
         MemoryMarshal.Write(push[64..], new Vector4(a.Zenith, 1f / _w));
@@ -266,7 +271,8 @@ public sealed class WorldRenderer : IDisposable
     public void EndScene(ICommandEncoder encoder, IRenderPassEncoder pass, FrameCapture? target = null)
     {
         pass.Dispose();
-        _post.Run(encoder, Atmosphere, HighQuality, target?.View ?? _device.CurrentSwapchainView, _w, _h);
+        _post.Run(encoder, Atmosphere, HighQuality, target?.View ?? _device.CurrentSwapchainView, _w, _h, _viewRotProj, _proj,
+            _device.Backend == BackendKind.Metal ? -1 : 1);
     }
 
     /// <summary>
@@ -315,10 +321,12 @@ public sealed class WorldRenderer : IDisposable
         _post.Resize(w, h);
         if (w == _w && h == _h && samples == _samples) return;
         ReleaseTargets();
-        _depth = _device.CreateTexture(TextureDesc.DepthAttachment(w, h, DepthFormat, "scene-depth") with { SampleCount = samples });
-        _depthView = _device.DefaultTextureView(_depth);
-        if (samples > 1)
+        if (samples > 1) // 1 sample: renders straight into PostProcess's depth/gbuffer
         {
+            _depth = _device.CreateTexture(TextureDesc.DepthAttachment(w, h, DepthFormat, "scene-depth") with { SampleCount = samples });
+            _depthView = _device.DefaultTextureView(_depth);
+            _msaaGbuf = _device.CreateTexture(new TextureDesc(w, h, PostProcess.GbufFormat, TextureUsage.ColorAttachment, SampleCount: samples, DebugName: "gbuffer-msaa"));
+            _msaaGbufView = _device.DefaultTextureView(_msaaGbuf);
             _msaa = _device.CreateTexture(new TextureDesc(w, h, PostProcess.HdrFormat, TextureUsage.ColorAttachment, SampleCount: samples, DebugName: "scene-msaa"));
             _msaaView = _device.DefaultTextureView(_msaa);
         }
@@ -331,7 +339,9 @@ public sealed class WorldRenderer : IDisposable
         if (!_depth.IsNull) _device.DestroyTexture(_depth);
         if (!_msaaView.IsNull) _device.DestroyTextureView(_msaaView);
         if (!_msaa.IsNull) _device.DestroyTexture(_msaa);
-        (_depth, _depthView, _msaa, _msaaView) = (default, default, default, default);
+        if (!_msaaGbufView.IsNull) _device.DestroyTextureView(_msaaGbufView);
+        if (!_msaaGbuf.IsNull) _device.DestroyTexture(_msaaGbuf);
+        (_depth, _depthView, _msaa, _msaaView, _msaaGbuf, _msaaGbufView) = (default, default, default, default, default, default);
     }
 
     public void Dispose()

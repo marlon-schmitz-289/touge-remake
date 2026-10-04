@@ -89,6 +89,12 @@ internal sealed unsafe class MetalCommandEncoder : ICommandEncoder
             dattach.ClearDepth = ds.DepthClear;
             dattach.Level = (ulong)view.BaseMip;
             dattach.Slice = (ulong)view.BaseLayer;
+            if (!ds.ResolveTarget.IsNull)
+            {
+                dattach.ResolveTexture = _dev.GetViewTexture(_dev.GetTextureView(ds.ResolveTarget));
+                dattach.StoreAction = ds.DepthStore == StoreOp.Store ? MTLStoreAction.StoreAndMultisampleResolve : MTLStoreAction.MultisampleResolve;
+                dattach.DepthResolveFilter = MTLMultisampleDepthResolveFilter.Sample0;
+            }
             if (tex.Format is TextureFormat.Depth24PlusStencil8 or TextureFormat.Depth32FloatStencil8)
             {
                 var sattach = rpd.StencilAttachment;

@@ -38,4 +38,33 @@ public class EffectsTests
         for (var t = 0f; t < Effects.SkidFade + 2; t += 0.5f) fx.Update(0.5f);
         Assert.Equal(0, fx.BuildSkids(v));
     }
+
+    [Fact]
+    public void Spray_ArcsDownAndDies_SmokeRises()
+    {
+        var fx = new Effects();
+        fx.EmitSpray(Vector3.Zero, new Vector3(0, 3, 0), 0.2f, 1);
+        fx.EmitSmoke(new Vector3(0, 0, 10), Vector3.Zero, 0.3f, 1);
+        var eye = new Vector3(500, 0, 0); // far along x: the quads' pull towards the eye does not move them in y
+        var v = new WorldVertex[12];
+        float Height(float z) // centre of the puff near z (mean of its quad's corners)
+        {
+            var n = fx.BuildSmoke(v, eye, Vector3.UnitZ, Vector3.UnitY);
+            var quad = v.Take(n).Chunk(6).Single(q => MathF.Abs(q.Average(x => x.Position.Z) - z) < 3);
+            return (quad[0].Position.Y + quad[1].Position.Y + quad[2].Position.Y + quad[5].Position.Y) / 4;
+        }
+        void Run(float seconds)
+        {
+            for (var t = 0f; t < seconds; t += 1 / 120f) fx.Update(1 / 120f);
+        }
+
+        Run(0.3f);
+        var top = Height(0);
+        Assert.InRange(top, 0.25f, 0.5f); // thrown up …
+        Run(0.4f);
+        Assert.True(Height(0) < 0, "spray falls back below where it left the tyre");
+        Assert.True(Height(10) > 0.05f, "smoke keeps rising");
+        Run(0.6f);
+        Assert.Equal(1, fx.SmokeCount); // spray gone after ≤ 1.2 s, smoke lives on
+    }
 }

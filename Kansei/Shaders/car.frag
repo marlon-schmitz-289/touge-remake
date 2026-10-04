@@ -5,8 +5,11 @@
 // environment maps (ENV_TOP/BOTTOM/LEFT/RIGHT of the nearest road point, a crude cube in car space, see envAt)
 // plus a sharp sun highlight that feeds the bloom. Glass is darker (the cabin behind it is dark). Rear lamps
 // (kind 2) glow: dim with the headlights on, bright when braking. Rain: paint a bit darker (wet), beaded with
-// droplets — small domes (hashed per 1.8 cm cell in car space, on the plane facing the normal) that bend the normal,
-// so they catch the env map and the lamps; no extra sheen. Fog + light glow last (fog.glsl).
+// droplets — small domes (hashed per 1.8 cm cell in car space, on the plane facing the normal) that only add light:
+// a sharp highlight of the sun/lamps and the bright upper environment refracted through the bent surface, over a
+// very faint wet spot. Antialiased by derivatives: soft drop edges over ~1 px, and drops fade out (to nothing,
+// not to an average) once a cell gets smaller than ~3 px, so distant cars do not sparkle with rounding.
+// Fog + light glow last (fog.glsl).
 
 layout(location = 0) in vec3 vPos;
 layout(location = 1) in vec3 vNormal;
@@ -26,6 +29,7 @@ layout(set = 1, binding = 4) uniform sampler2D uEnvLeft;
 layout(set = 1, binding = 5) uniform sampler2D uEnvRight;
 
 layout(location = 0) out vec4 FragColor;
+layout(location = 1) out vec4 Gbuf; // PostProcess.GbufFormat: r ambient share (AO)
 
 // Reflection direction → env colour. The 64×32 maps are small panoramas (v = 0 at the top): up = TOP, down = BOTTOM,
 // car left (+x) / right (−x) = LEFT/RIGHT with u running front to back; front/back reflect the side maps' centres.
@@ -40,17 +44,21 @@ vec3 envAt(vec3 r)
     return mix(mix(horizontal, top, up), bottom, down);
 }
 
-// Droplet slope at car-space point q with car-space normal m (0 outside a drop): cells on the plane the normal faces most.
-vec2 droplet(vec3 q, vec3 m)
+// Droplet at car-space point q with car-space normal m: xy = slope, z = coverage 0..1 (edge and distance faded by the
+// pixel footprint). Cells on the plane the normal faces most.
+vec3 droplet(vec3 q, vec3 m)
 {
     vec3 am = abs(m);
-    vec2 uv = am.y > max(am.x, am.z) ? q.xz : am.x > am.z ? q.zy : q.xy;
-    vec2 cell = floor(uv * 55.0);
-    if (hash(cell) > 0.25) return vec2(0.0);
-    vec2 d = fract(uv * 55.0) - 0.5 - (vec2(hash(cell + 1.7), hash(cell + 5.3)) - 0.5) * 0.4;
+    vec2 uv = (am.y > max(am.x, am.z) ? q.xz : am.x > am.z ? q.zy : q.xy) * 55.0;
+    float px = max(length(fwidth(uv)), 1e-4); // cells per pixel
+    float fade = 1.0 - smoothstep(0.2, 0.45, px);
+    vec2 cell = floor(uv);
+    if (fade <= 0.0 || hash(cell) > 0.25) return vec3(0.0);
+    vec2 d = fract(uv) - 0.5 - (vec2(hash(cell + 1.7), hash(cell + 5.3)) - 0.5) * 0.4;
     float radius = 0.12 + 0.18 * hash(cell + 9.1);
-    float r = length(d) / radius;
-    return r < 1.0 ? d / radius * 0.6 : vec2(0.0);
+    float r = length(d);
+    float cover = smoothstep(radius, radius - px, r) * fade;
+    return vec3(d / radius * 0.6, cover);
 }
 
 void main()
@@ -69,30 +77,48 @@ void main()
     float sh = shadowAt(vPos, n);
     vec3 spec = vec3(0.0);
     vec3 dyn = dynamicLight(vPos, n, v, 256.0, spec);
-    vec3 c = base * (pc.uAmbient.rgb * hemisphere(n) + pc.uSun.w * pc.uSunColor.rgb * sh * max(dot(n, l), 0.0) + dyn);
+    vec3 ambient = base * pc.uAmbient.rgb * hemisphere(n);
+    vec3 c = ambient + base * (pc.uSun.w * pc.uSunColor.rgb * sh * max(dot(n, l), 0.0) + dyn);
 
     if (glass || paint)
     {
-        if (rain > 0.0)
-        {
-            mat3 rot = mat3(pc.uModel);
-            vec3 m = transpose(rot) * n;
-            vec2 s = droplet(transpose(rot) * (vPos - pc.uModel[3].xyz), m) * rain;
-            vec3 am = abs(m);
-            vec3 bump = am.y > max(am.x, am.z) ? vec3(s.x, 0.0, s.y) : am.x > am.z ? vec3(0.0, s.y, s.x) : vec3(s.x, s.y, 0.0);
-            n = normalize(n + rot * bump);
-        }
         float f0 = glass ? 0.06 : 0.04;
         float fresnel = f0 + (1.0 - f0) * pow(1.0 - max(dot(n, v), 0.0), 5.0);
         vec3 env = envAt(reflect(-v, n)) * pc.uParams.z;
         vec3 h = normalize(l + v);
         float sun = pc.uSun.w * sh * max(dot(n, l), 0.0) * (1000.0 + 8.0) / 25.13 * pow(max(dot(n, h), 0.0), 1000.0);
         c = c * (1.0 - fresnel) + fresnel * (env + sun * pc.uSunColor.rgb) + f0 * spec;
+        ambient = ambient * (1.0 - fresnel) + fresnel * env;
+        if (rain > 0.0)
+        {
+            mat3 rot = mat3(pc.uModel);
+            vec3 m = transpose(rot) * n;
+            vec3 drop = droplet(transpose(rot) * (vPos - pc.uModel[3].xyz), m) * vec3(1.0, 1.0, rain);
+            if (drop.z > 0.0)
+            {
+                vec3 am = abs(m);
+                vec3 bump = am.y > max(am.x, am.z) ? vec3(drop.x, 0.0, drop.y) : am.x > am.z ? vec3(0.0, drop.y, drop.x) : vec3(drop.x, drop.y, 0.0);
+                vec3 nd = normalize(n + rot * bump);
+                // the dome mirrors the sky above it, never the dark road: reflection folded into the upper hemisphere
+                vec3 rd = reflect(-v, nd);
+                rd.y = abs(rd.y);
+                float fd = 0.02 + 0.98 * pow(1.0 - max(dot(nd, v), 0.0), 5.0);
+                vec3 hd = normalize(l + v);
+                float glint = pc.uSun.w * sh * max(dot(nd, l), 0.0) * (300.0 + 8.0) / 25.13 * pow(max(dot(nd, hd), 0.0), 300.0);
+                vec3 lamps = vec3(0.0);
+                dynamicLight(vPos, nd, v, 300.0, lamps);
+                vec3 lit = envAt(rd) * pc.uParams.z * (0.15 + fd) + glint * pc.uSunColor.rgb + 0.5 * lamps;
+                c = c * (1.0 - 0.12 * drop.z) + lit * (0.6 * drop.z);
+            }
+        }
     }
     if (lamp)
     {
         float on = dot(pc.uSpotColor.rgb, vec3(1.0)) > 0.0 ? 1.0 : 0.0;
         c += t.rgb * vColor.rgb * (1.5 * on + 8.0 * pc.uParams.w);
     }
-    FragColor = vec4(applyFog(c, vPos), 1.0);
+    vec3 fogged = applyFog(c, vPos);
+    float share = dot(ambient, vec3(0.2126, 0.7152, 0.0722)) * (1.0 - fogAmount(vPos)) / max(dot(fogged, vec3(0.2126, 0.7152, 0.0722)), 1e-5);
+    FragColor = vec4(fogged, 1.0);
+    Gbuf = vec4(clamp(share, 0.0, 1.0), 0.0, 0.0, 1.0);
 }

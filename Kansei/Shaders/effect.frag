@@ -18,6 +18,7 @@ layout(location = 3) in vec3 vNormal;
 #include "noise.glsl"
 
 layout(location = 0) out vec4 FragColor;
+layout(location = 1) out vec4 Gbuf; // blends the AO share/reflection weight underneath towards 0 by the alpha (sparks: additive, none)
 
 vec3 lit(vec3 albedo, vec3 n, float wrap)
 {
@@ -35,6 +36,7 @@ void main()
     {
         float a = 1.0 - vUv.y * vUv.y;
         FragColor = vec4(vColor.rgb * (1.0 - fogAmount(vPos)), a);
+        Gbuf = vec4(0.0);
         return;
     }
     if (mode > 0.5)
@@ -44,6 +46,7 @@ void main()
         float a = vColor.a * edge * streak;
         if (a <= 0.003) discard;
         FragColor = vec4(applyFog(lit(vColor.rgb, normalize(vNormal), 0.0), vPos), a);
+        Gbuf = vec4(0.0, 0.0, 0.0, a);
         return;
     }
     vec2 local = fract(vUv) * 2.0 - 1.0;
@@ -59,4 +62,5 @@ void main()
     // forward scattering: thin smoke lights up when the sun is behind it
     c += vColor.rgb * pc.uSun.w * 0.8 * pow(max(dot(-v, pc.uSun.xyz), 0.0), 6.0) * (1.0 - a);
     FragColor = vec4(applyFog(c, vPos), a);
+    Gbuf = vec4(0.0, 0.0, 0.0, a);
 }

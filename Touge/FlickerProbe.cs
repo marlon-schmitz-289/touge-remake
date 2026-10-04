@@ -8,8 +8,9 @@ namespace Touge;
 ///     <c>--flicker</c>: measures z-fighting in the rendered image. Every view is rendered <see cref="Spins"/>.Length
 ///     times with camera and world turned together about the world Y axis (folded into the view matrix): the same
 ///     picture in exact maths, but every vertex's depth is rounded differently (~|position| × 1e-7, like a camera that
-///     turns while driving), x/y move by a few hundredths of a pixel. Pixels whose colour then jumps (any channel ≥
-///     <see cref="Threshold"/>) show surfaces with tied depth = z-fight; the rest is edge noise (silhouettes with MSAA).
+///     turns while driving), x/y move by a few hundredths of a pixel. Pixels whose colour then jumps (any channel ≥ the view's threshold,
+///     <see cref="ThresholdFor"/>: <see cref="Threshold"/> at day brightness, scaled down with the frame's mean luma so
+///     night views count too) show surfaces with tied depth = z-fight; the rest is edge noise (silhouettes with MSAA).
 ///     Groups: <c>course</c> = <see cref="CoursePoints"/> points evenly along the driving line from <c>firstPoint</c>
 ///     (car hidden), <c>car</c> = <see cref="CarAngles"/> orbit angles around the parked car (course hidden),
 ///     <c>spots</c> = the largest overlaps the detector rates critical (<see cref="Spots"/>), seen from ≤ 10 m.
@@ -19,6 +20,8 @@ namespace Touge;
 public sealed class FlickerProbe
 {
     public const int CoursePoints = 8, CarAngles = 8, Threshold = 40, Crop = 160;
+    /// <summary>Mean luma (0–255) of a typical day frame, where <see cref="Threshold"/> applies unscaled.</summary>
+    public const double DayLuma = 70;
     /// <summary>Turns in radians.</summary>
     public static readonly float[] Spins = [0, 0.013f, -0.029f];
     private static readonly string[] Groups = ["course", "car", "spots"];
@@ -31,6 +34,8 @@ public sealed class FlickerProbe
     private int _job;
     private readonly List<byte[]> _frames = [];
     private readonly long[] _flips = new long[3], _pixels = new long[3];
+    private readonly double[] _thresholds = new double[3];
+    private readonly int[] _counts = new int[3];
     private readonly (int Count, byte[]? Rgba, bool[]? Mask, int X, int Y)[] _worst = new (int, byte[]?, bool[]?, int, int)[3];
 
     public FlickerProbe(string prefix, string label, Vector3[] line, int firstPoint, Vector3[] spots)
@@ -83,13 +88,16 @@ public sealed class FlickerProbe
         var group = _views[_job - 1].Group;
         var mask = new bool[w * h];
         var flips = 0;
+        var threshold = ThresholdFor(_frames[0]);
+        _thresholds[group] += threshold;
+        _counts[group]++;
         for (var i = 0; i < mask.Length; i++)
         {
             var d = 0;
             for (var f = 1; f < _frames.Count; f++)
             for (var c = 0; c < 3; c++)
                 d = Math.Max(d, Math.Abs(_frames[f][i * 4 + c] - _frames[0][i * 4 + c]));
-            if (d < Threshold) continue;
+            if (d < threshold) continue;
             mask[i] = true;
             flips++;
         }
@@ -100,13 +108,24 @@ public sealed class FlickerProbe
         _frames.Clear();
     }
 
+    /// <summary>
+    ///     Colour jump that counts as a flip in this frame: <see cref="Threshold"/> × mean luma / <see cref="DayLuma"/>,
+    ///     clamped to 6…<see cref="Threshold"/> (a night frame at ~23 mean luma → 13: the same contrast relative to the image).
+    /// </summary>
+    public static int ThresholdFor(byte[] rgba)
+    {
+        long sum = 0;
+        for (var i = 0; i < rgba.Length; i += 4) sum += (rgba[i] * 299 + rgba[i + 1] * 587 + rgba[i + 2] * 114) / 1000;
+        return (int)Math.Round(Math.Clamp(Threshold * (sum / (rgba.Length / 4.0)) / DayLuma, 6, Threshold));
+    }
+
     /// <summary>Prints the flip shares and writes the worst crops.</summary>
     public void Finish(int w)
     {
         for (var g = 0; g < Groups.Length; g++)
         {
             Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
-                $"[Flicker] {_label} {Groups[g]}: {_flips[g]} von {_pixels[g]} Pixeln flackern ({100.0 * _flips[g] / Math.Max(_pixels[g], 1):F4} %), dichtester Ausschnitt {_worst[g].Count} Pixel"));
+                $"[Flicker] {_label} {Groups[g]}: {_flips[g]} von {_pixels[g]} Pixeln flackern ({100.0 * _flips[g] / Math.Max(_pixels[g], 1):F4} %), dichtester Ausschnitt {_worst[g].Count} Pixel, Schwelle ⌀ {_thresholds[g] / Math.Max(_counts[g], 1):F0}"));
             if (_worst[g].Rgba is not { } rgba) continue;
             var mask = _worst[g].Mask!;
             Png.Write($"{_prefix}_{Groups[g]}.png", Crop * 4, Crop * 2, CropImage(rgba, mask, w, _worst[g].X, _worst[g].Y));

@@ -12,6 +12,7 @@ layout(location = 2) in float vAlpha;
 #include "lighting.glsl"
 
 layout(location = 0) out vec4 FragColor;
+layout(location = 1) out vec4 Gbuf; // blends the AO share/reflection weight underneath towards 0 by its alpha
 
 void main()
 {
@@ -19,4 +20,5 @@ void main()
     if (a <= 0.002) discard;
     vec3 c = pc.uFog.rgb * 1.6 + pc.uAmbient.rgb * 0.3 + lightAt(vPos) * 0.6;
     FragColor = vec4(mix(c, fogColour(normalize(vPos - pc.uEye.xyz)), fogAmount(vPos)), a);
+    Gbuf = vec4(0.0, 0.0, 0.0, a);
 }

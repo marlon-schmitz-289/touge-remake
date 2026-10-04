@@ -18,6 +18,7 @@ layout(push_constant) uniform Push {
 #include "fog.glsl"
 
 layout(location = 0) out vec4 FragColor;
+layout(location = 1) out vec4 Gbuf; // nothing to occlude or reflect
 
 void main()
 {
@@ -33,4 +34,5 @@ void main()
     float disk = smoothstep(pc.uSun.w, pc.uSun.w + 0.0004, s);
     c += pc.uSunColor.rgb * (disk + 0.02 * pow(s, 64.0) + 0.004 * pow(s, 6.0));
     FragColor = vec4(mix(c, fogColour(d), skyFog(d)), 1.0);
+    Gbuf = vec4(0.0);
 }

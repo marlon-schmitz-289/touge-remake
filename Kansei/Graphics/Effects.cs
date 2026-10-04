@@ -22,6 +22,7 @@ public sealed class Effects
         public Vector3 Pos, Vel;
         public float Age, Life, Size, Grow, Opacity, Spin;
         public int Seed;
+        public bool Spray; // water spray: falls (gravity, more drag), shorter life, lighter colour
     }
 
     private struct Segment
@@ -50,6 +51,20 @@ public sealed class Effects
         {
             Pos = pos, Vel = vel, Life = 2.2f + 1.6f * _rng.NextSingle(), Size = size, Grow = 0.9f + 0.6f * _rng.NextSingle(),
             Opacity = opacity, Spin = (_rng.NextSingle() - 0.5f) * 1.2f, Seed = _seed++ & 255,
+        };
+    }
+
+    /// <summary>
+    ///     Tyre spray in the wet: a mist puff from the smoke pool that is thrown with <paramref name="vel"/>, arcs down
+    ///     under gravity and drag, spreads and fades within ~1 s.
+    /// </summary>
+    public void EmitSpray(Vector3 pos, Vector3 vel, float size, float opacity)
+    {
+        if (_smokeCount == MaxSmoke) return;
+        _smoke[_smokeCount++] = new Particle
+        {
+            Pos = pos, Vel = vel, Life = 0.7f + 0.5f * _rng.NextSingle(), Size = size, Grow = 0.3f + 0.3f * _rng.NextSingle(),
+            Opacity = opacity, Spin = (_rng.NextSingle() - 0.5f) * 2f, Seed = _seed++ & 255, Spray = true,
         };
     }
 
@@ -94,7 +109,7 @@ public sealed class Effects
     /// <summary>Ages and moves everything; dead particles are swapped out (pool order is not kept).</summary>
     public void Update(float dt)
     {
-        var smokeDrag = MathF.Exp(-1.6f * dt);
+        float smokeDrag = MathF.Exp(-1.6f * dt), sprayDrag = MathF.Exp(-2.5f * dt);
         for (var i = 0; i < _smokeCount; i++)
         {
             ref var p = ref _smoke[i];
@@ -105,7 +120,9 @@ public sealed class Effects
                 i--;
                 continue;
             }
-            p.Vel = p.Vel * smokeDrag + new Vector3(0.15f, 0.7f, 0.05f) * dt; // buoyancy + a light breeze
+            p.Vel = p.Spray
+                ? p.Vel * sprayDrag - new Vector3(0, 7f * dt, 0) // drops fall, the mist around them is slowed by the air
+                : p.Vel * smokeDrag + new Vector3(0.15f, 0.7f, 0.05f) * dt; // buoyancy + a light breeze
             p.Pos += p.Vel * dt;
         }
         var sparkDrag = MathF.Exp(-2f * dt);
@@ -151,7 +168,7 @@ public sealed class Effects
             var (s, c) = MathF.SinCos(p.Spin * p.Age + p.Seed);
             var ax = (right * c + up * s) * radius;
             var ay = (up * c - right * s) * radius;
-            var colour = new Vector4(0.72f, 0.72f, 0.74f, alpha);
+            var colour = p.Spray ? new Vector4(0.8f, 0.82f, 0.85f, alpha) : new Vector4(0.72f, 0.72f, 0.74f, alpha);
             Quad(dst[(m++ * 6)..], centre, ax, ay, p.Seed, colour, toEye);
         }
         return m * 6;

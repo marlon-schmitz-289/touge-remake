@@ -47,6 +47,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     private string _carName = "";
     private int _paint, _sheetCar;
     private byte[]? _sheet;
+    /// <summary>--sun: free camera at the start point looking towards the sun (glare check).</summary>
+    public bool LookAtSun { get; init; }
     private readonly Effects _fx = new();
     private readonly Random _rng = new(3);
     private readonly float[] _smokeDebt = new float[4], _sprayDebt = new float[4];
@@ -119,6 +121,12 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             _fly = true;
             UpdateCarMatrices(1);
             OrbitCar(deg * MathF.PI / 180);
+        }
+        if (LookAtSun)
+        {
+            var s = Vector3.Normalize(_renderer.Atmosphere.SunDirection);
+            (_fly, _yaw, _pitch) = (true, MathF.Atan2(s.X, s.Z), MathF.Asin(s.Y) - 0.3f);
+            _pos += Vector3.Normalize(s with { Y = 0 }) * -7 + Vector3.UnitY * 0.3f; // the parked car in front, against the light
         }
         if (shotPath != null) (_capture, _shotState) = (new FrameCapture(Device, 1280, 720), 1);
         else if (ContactSheet != null) (_capture, _sheet, _fly) = (new FrameCapture(Device, 1280, 720), new byte[SheetW * SheetH * 4], true);
@@ -254,13 +262,13 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
                 var jitter = new Vector3(_rng.NextSingle() - 0.5f, _rng.NextSingle() * 0.5f, _rng.NextSingle() - 0.5f);
                 _fx.EmitSmoke(contact + up * 0.2f + jitter * 0.3f, car.Velocity * 0.12f + jitter * 1.5f + up * 0.5f, 0.3f, 0.12f + 0.25f * smoke);
             }
-            // ponytail: spray reuses the smoke puffs (rise slowly instead of falling); own particles if it reads wrong up close
             if (!w.Contact || i < 2) continue; // rear wheels: the fronts spray into the rears
             _sprayDebt[i] += spray * 30 * dt;
             for (; _sprayDebt[i] >= 1; _sprayDebt[i]--)
             {
+                // thrown up and back off the tread (the car's velocity carried partly), then arcs down (Effects.EmitSpray)
                 var jitter = new Vector3(_rng.NextSingle() - 0.5f, _rng.NextSingle(), _rng.NextSingle() - 0.5f);
-                _fx.EmitSmoke(contact + up * 0.15f + jitter * 0.2f, car.Velocity * 0.55f + up * (0.8f + 1.5f * jitter.Y) + jitter * 1.2f, 0.25f, 0.05f * spray);
+                _fx.EmitSpray(contact + up * 0.15f + jitter * 0.2f, car.Velocity * 0.45f + up * (1.2f + 2f * jitter.Y) + jitter * 1.5f, 0.22f, 0.2f * spray);
             }
         }
 
@@ -449,14 +457,14 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         {
             Zenith = new(0.004f, 0.006f, 0.016f), Horizon = new(0.018f, 0.022f, 0.035f),
             SunDirection = Vector3.Normalize(new Vector3(-0.5f, 0.45f, 0.6f)), SunDisk = new(1.2f, 1.3f, 1.5f), // moon
-            SunIntensity = 0.12f, Ambient = new(0.025f, 0.03f, 0.045f), BakedKeep = 0.88f, BakedSun = 0.15f, EnvStrength = 2f,
+            SunIntensity = 0.12f, Ambient = new(0.025f, 0.03f, 0.045f), BakedKeep = 0.88f, BakedSun = 0.15f, EnvStrength = 2f, ContactShadow = 0.6f,
             FogColor = new(0.010f, 0.014f, 0.026f), FogSun = Vector3.Zero, FogStart = 10, FogEnd = 4000, HeightFogDensity = 0.0012f, LightGlow = 0.00012f,
             Exposure = 3.2f, BloomThreshold = 0.5f, BloomStrength = 1.0f, Tint = new(0.92f, 0.97f, 1.1f), Saturation = 0.9f, Vignette = 0.35f,
         },
         "RIN" => new Atmosphere
         {
             Zenith = new(0.17f, 0.18f, 0.20f), Horizon = new(0.27f, 0.28f, 0.30f), SunDisk = Vector3.Zero, Shadows = false,
-            SunIntensity = 0.15f, Ambient = new(0.30f, 0.32f, 0.35f), BakedKeep = 0.9f, BakedSun = 0.1f, Wetness = 1f,
+            SunIntensity = 0.15f, Ambient = new(0.30f, 0.32f, 0.35f), BakedKeep = 0.9f, BakedSun = 0.1f, Wetness = 1f, ContactShadow = 0.7f,
             SunDirection = Vector3.Normalize(new Vector3(0.2f, 1f, 0.15f)), EnvStrength = 4f,
             FogColor = new(0.22f, 0.23f, 0.25f), FogSun = Vector3.Zero, FogStart = 15, FogEnd = 1300, HeightFogDensity = 0.0025f, LightGlow = 0.0004f,
             Exposure = 1.5f, BloomThreshold = 1.6f, BloomStrength = 0.4f, Tint = new(0.96f, 0.99f, 1.03f), Saturation = 0.9f, Vignette = 0.3f,
