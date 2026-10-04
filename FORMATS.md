@@ -58,6 +58,7 @@ Kursreihenfolge im ELF (Tabelle `0x24CD00`, Index = Byte `0x328156`): MYOUGI0, U
 - `CRS_LIGHT_<KURS>.BIN`: u32 n, 12 B ?, n × (f32 x, y, z, w = 1) Lichtpunkte (Aufhellung des Autos im 16-m-Radius), Reader `CourseRoad.ReadLights`. Akina: 8 Punkte in zwei Vierergruppen (Start, Ziel), 6–7 m über und 5–10 m neben der Fahrlinie = Laternenköpfe. USUI: 2 Punkte bei x = −79 km (Platzhalter).
 - Env-Maps `ENV_TEX_<KURS>_<ZEIT>.PAC`: 64×32-GIMs `ENV_TOP00…`, `ENV_BOTTOM00…`, `ENV_LEFT00…`, `ENV_RIGHT00…` (Akina Tag: 9/4/3/3), kleine Panoramen (Himmel mit Baumkante, Straße/Leitplanke, Waldrand). Wie das Spiel sie auf das Auto projiziert, ist nicht nachgesehen; das Remake nimmt sie als groben Würfel im Auto-Raum (`car.frag`).
 - `CRS_NAVI_<KURS>.BIN`: u32 n + 12 B, n × 16 B (normierte 2D-Koordinaten, vermutlich Minimap). Nicht weiter analysiert.
+- `CRS_INFO_<KURS>.BIN` (Magic `CIF\0`, u32 Version 0x40000): Loader `0x162420` (Name aus `"CRS_INFO_"` + Kurs + `".BIN"`, Magic-Prüfung). **Nebel** teilweise geknackt: `0x162290(kurs, datei+0x1E0, slot)` mit slot = Byte `+0x1D7` × 2 + Byte `+0x1D8` des Kursobjekts, ab 3 auf 2 begrenzt; nach den Farben Tag = 0, Regen = 1, Nacht = 2. Farbe: 4 × f32 RGBA (0..255) bei `0x200 + 16 × slot`, halbiert als GS-Farbwort nach Kursobjekt `+0x160` (Akina 205/210/200, 130/130/135, 0/0/0; Reader `CourseInfo.FogColour`). Davor 8 × s32 bei `0x1E0` (Akina −1200, −400, 0, −50, 9000, 1300, 4000, 2500): das Spiel kopiert `[slot]` nach `+0x158` und `[slot + 3]` nach `+0x15C` – wie daraus Start/Ende werden, ist nicht nachverfolgt (als 4 + 4 gelesen ergäben sich durchgehend plausible Paare Start ≤ Ende, z. B. Regen −400…1300). Das Remake nimmt nur den Farbton und schätzt die Entfernungen nach diesen Werten. Rest der Datei nicht analysiert.
 - `CRS_COLI_<KURS>_0/1.BIN`: Kollision, siehe unten.
 
 ## Kollision `CRS_COLI_<KURS>_0/1.BIN` – geknackt
@@ -101,12 +102,12 @@ Rollen (aus Dateinamen; „?" = geraten):
 - **Rennstimmen** RACEVOIC `b_<figur>_<situation>_NNN` (Situation: `start`, `front`, `rear`, `ppass`/`rpass` = überholt/wird überholt?, `fwin`/`rwin`/`pwin`, `flose`, `meter`, `special` …; ~40 Figuren). Story-Stimmen MG_VC `K<kapitel>_<szene>_NNN`.
 - **Motor** CARSE `<AUTO>_U` / `_D` (= Last / Schub, siehe DAT), je 8 geloopte Schichten. Autos: AE86, AL (Altezza), CP (Cappuccino), EK9, EVO, FD, GC8, GTR, MR2, MRS (MR-S), NA6, S13 – mehrere Wagen teilen sich eine Bank (Zuordnung im ELF nicht gesucht). AE86: Schichten 4–7 haben tonale Grundfrequenz 65 → 237 Hz (4-Zylinder ≈ 1950 → 7100 U/min), 0–3 sind breitbandiger (Ansaug/Auspuff?); `_U` und `_D` teilen sich die Hälfte der Samples (D0=U0, D2=U1, D4=U4, D7=U6, dekodiert byte-gleich).
 - **Reifen** CARSE `SRIP_A/B` (4 Samples, 2 davon 18,9 kHz ohne Loop), `RAIN_SRIP` (nass), **Turbo** `TURBO` (1 Loop).
-- **SYSSE**: `backfire001`, `zbackfire002a–h`, `popoff`, `Blow` (Fehlzündung/Abblasventil), `cr001/002` (Crash?), `rain`, `water`, `Steam`, `jump`, UI/System (`BEEP001`, `SKIP001`, `NAME001–003`, `CAR001–012`, `parts_ch`, `sys002`, `SYS005/006`, `alarm_01/02`).
+- **SYSSE**: `backfire001`, `zbackfire002a–h`, `popoff`, `Blow` (Fehlzündung/Abblasventil), `cr001/002` (Crash?), `rain` (7 s, ohne Loop-Punkt; im Remake mit 0,4-s-Überblendung geloopt als Regen-Ambiente), `water`, `Steam`, `jump`, UI/System (`BEEP001`, `SKIP001`, `NAME001–003`, `CAR001–012`, `parts_ch`, `sys002`, `SYS005/006`, `alarm_01/02`).
 
 Stichprobe (WAV-Export + Spektrum, Python/numpy): alle Exporte nicht still (RMS −18 … −2 dBFS) und tonal statt Rauschen (spektrale Flachheit 0,000–0,39; weißes Rauschen 1,0). Musik Schwerpunkt ~1,4–1,7 kHz, Stimme ~1,1 kHz, Reifen-Quietschen Spitze bei ~1 kHz.
 
 ## Offen
-- NAVI, INFO (`CIF`); zweites u32 im ROAD-Header
+- NAVI, INFO (`CIF`, außer Nebelfarbe; Nebel-Entfernungen: Lesart `[slot]`/`[slot + 3]` vs. 4 + 4); zweites u32 im ROAD-Header
 - Bedeutung von VU addr 4, Material-Flags außer 0x100/0x200/0x400
 - CAR_ENV-Bytepaar-Tabelle: welcher Lichtzustand welche Zeile
 - CARSE: Drehzahl → SECT-Index (sub_0018A170), Pitch-Bend-Bereich, Zuordnung Auto → Motor-Bank, SRIP-Index (Kurven springen, eher Zufall/LFO als Schlupf?), HD-Chunks außer `IECSigaV`/`IECSlpmS`/`IECSgorP`

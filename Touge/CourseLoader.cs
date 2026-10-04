@@ -10,7 +10,8 @@ public static class CourseLoader
     /// <param name="Road">CRS_ROAD centre points.</param>
     /// <param name="Env">Per road point the renderer texture indices of ENV_TOP/BOTTOM/LEFT/RIGHT (null: course has no env maps).</param>
     /// <param name="Lights">CRS_LIGHT points (empty if none).</param>
-    public sealed record Course(StaticMesh World, StaticMesh Sky, Vector3[] DrivingLine, Vector3[] Road, int[][]? Env, Vector3[] Lights)
+    /// <param name="FogColour">The original's fog colour for this course and time of day (CRS_INFO, gamma 0..1), null if missing.</param>
+    public sealed record Course(StaticMesh World, StaticMesh Sky, Vector3[] DrivingLine, Vector3[] Road, int[][]? Env, Vector3[] Lights, Vector3? FogColour)
     {
         /// <summary>Index of the road point nearest to <paramref name="p"/>.</summary>
         public int NearestRoadPoint(Vector3 p)
@@ -48,7 +49,8 @@ public static class CourseLoader
         byte[]? Data(string name) => data.Find(name) is { } e ? data.Read(e) : null;
         var road = CourseRoad.Read(Data($"CRS_ROAD_{course}.BIN") ?? throw new FileNotFoundException($"CRS_ROAD_{course}.BIN"));
         var lights = Data($"CRS_LIGHT_{course}.BIN") is { } l ? CourseRoad.ReadLights(l) : [];
-        return new Course(world, sky, ReadDrivingLine(iso, course), road, LoadEnv(models, Data($"CRS_ENV_{course}.BIN"), courseTime, road.Length, renderer), lights);
+        Vector3? fog = Data($"CRS_INFO_{course}.BIN") is { } cif ? CourseInfo.FogColour(cif, CourseInfo.FogSlot(courseTime[(courseTime.LastIndexOf('_') + 1)..])) : null;
+        return new Course(world, sky, ReadDrivingLine(iso, course), road, LoadEnv(models, Data($"CRS_ENV_{course}.BIN"), courseTime, road.Length, renderer), lights, fog);
     }
 
     /// <summary>

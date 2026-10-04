@@ -5,27 +5,19 @@
 //   headlights/street lights) and glowing when backlit by the sun; uv = seed + 0..1 corner.
 // 1 skid mark: dark rubber, soft edges across the strip, streaky along it, lit like the road.
 // 2 spark: emissive streak (additive blend), soft across.
-// Everything fogs like the world.
+// Everything fogs like the world (sparks only fade: they are additive).
 
 layout(location = 0) in vec2 vUv;
 layout(location = 1) in vec4 vColor;
-layout(location = 2) in float vFog;
-layout(location = 3) in vec3 vPos;
-layout(location = 4) in vec3 vNormal;
+layout(location = 2) in vec3 vPos;
+layout(location = 3) in vec3 vNormal;
 
 #include "scene_push.glsl"
+#include "fog.glsl"
 #include "lighting.glsl"
+#include "noise.glsl"
 
 layout(location = 0) out vec4 FragColor;
-
-float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-
-float noise(vec2 p)
-{
-    vec2 i = floor(p), f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0)), f.x), f.y);
-}
 
 vec3 lit(vec3 albedo, vec3 n, float wrap)
 {
@@ -39,11 +31,10 @@ vec3 lit(vec3 albedo, vec3 n, float wrap)
 void main()
 {
     float mode = pc.uEye.w;
-    float fog = vFog * vFog;
     if (mode > 1.5)
     {
         float a = 1.0 - vUv.y * vUv.y;
-        FragColor = vec4(vColor.rgb * (1.0 - fog), a);
+        FragColor = vec4(vColor.rgb * (1.0 - fogAmount(vPos)), a);
         return;
     }
     if (mode > 0.5)
@@ -52,7 +43,7 @@ void main()
         float streak = 0.65 + 0.35 * noise(vec2(vUv.x * 1.5, vUv.y * 4.0 + 7.0));
         float a = vColor.a * edge * streak;
         if (a <= 0.003) discard;
-        FragColor = vec4(mix(lit(vColor.rgb, normalize(vNormal), 0.0), pc.uFog.rgb, fog), a);
+        FragColor = vec4(applyFog(lit(vColor.rgb, normalize(vNormal), 0.0), vPos), a);
         return;
     }
     vec2 local = fract(vUv) * 2.0 - 1.0;
@@ -67,5 +58,5 @@ void main()
     vec3 c = lit(vColor.rgb, normalize(vNormal), 0.6);
     // forward scattering: thin smoke lights up when the sun is behind it
     c += vColor.rgb * pc.uSun.w * 0.8 * pow(max(dot(-v, pc.uSun.xyz), 0.0), 6.0) * (1.0 - a);
-    FragColor = vec4(mix(c, pc.uFog.rgb, fog), a);
+    FragColor = vec4(applyFog(c, vPos), a);
 }

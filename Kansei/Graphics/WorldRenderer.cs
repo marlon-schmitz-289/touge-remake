@@ -10,15 +10,15 @@ namespace Kansei.Graphics;
 ///     <see cref="EndScene"/> (resolve → bloom → ACES tonemap/grade into the swapchain or a <see cref="FrameCapture"/>).
 ///     World: sRGB texture (mipmapped, trilinear + anisotropic) × baked vertex light re-lit by the sun with cascaded
 ///     shadows (<see cref="RenderShadows"/>, world.frag), + <see cref="Lights"/>, alpha test (alpha-to-coverage with
-///     MSAA), distance fog in the horizon colour. World and car shaders share one push-constant block
+///     MSAA), per-pixel distance + height fog (fog.glsl). World and car shaders share one push-constant block
 ///     (scene_push.glsl, <see cref="WritePush"/>) and bind group 1 (shadow atlas + env maps, <see cref="SetEnvironment"/>). No backface culling (the PS2 draws foliage cards from both sides);
 ///     exact duplicates must be removed by the caller. Reversed-Z (use <see cref="Perspective"/>) with GreaterEqual:
 ///     overlay layers a few cm apart stay stable at distance, exactly coplanar layers resolve by draw order (later wins).
 /// </summary>
 public sealed class WorldRenderer : IDisposable
 {
-    internal const int PushBytes = 576; // scene_push.glsl
-    private const int SkyPushBytes = 128;
+    internal const int PushBytes = 672; // scene_push.glsl
+    private const int SkyPushBytes = 192;
     private const float AlphaCutoff = 0.3f; // world.frag
     private static readonly TextureFormat DepthFormat = TextureFormat.Depth32Float;
     internal static readonly TextureFormat ShadowFormat = TextureFormat.Depth32Float;
@@ -52,6 +52,8 @@ public sealed class WorldRenderer : IDisposable
     public SceneLights Lights { get; } = new();
     /// <summary>4× MSAA (+ alpha-to-coverage), bloom and shadows; off = 1 sample, no bloom/shadows (tonemapping stays).</summary>
     public bool HighQuality = true;
+    /// <summary>Seconds, animates rain ripples.</summary>
+    public float Time;
 
     public WorldRenderer(IPenelopeDevice device)
     {
@@ -160,7 +162,7 @@ public sealed class WorldRenderer : IDisposable
         var l = Lights;
         MemoryMarshal.Write(push, in mvp);
         MemoryMarshal.Write(push[64..], in model);
-        MemoryMarshal.Write(push[128..], new Vector4(a.Horizon, sky ? 0 : 1f / a.FogDistance));
+        MemoryMarshal.Write(push[128..], new Vector4(a.FogColor, a.LightGlow));
         MemoryMarshal.Write(push[144..], new Vector4(eye, sky ? 1 : 0));
         MemoryMarshal.Write(push[160..], new Vector4(Vector3.Normalize(a.SunDirection), car ? a.SunIntensity : a.BakedSun));
         MemoryMarshal.Write(push[176..], new Vector4(a.Ambient, a.BakedKeep));
@@ -176,6 +178,18 @@ public sealed class WorldRenderer : IDisposable
         MemoryMarshal.Write(push[480..], new Vector4(l.HeadlightColor, l.HeadlightRange));
         for (var i = 0; i < 4; i++) MemoryMarshal.Write(push[(496 + i * 16)..], _points[i]);
         MemoryMarshal.Write(push[560..], new Vector4(l.StreetLightColor, 0));
+        WriteFog(push[576..]);
+        MemoryMarshal.Write(push[608..], new Vector4(a.Zenith, Time));
+        for (var i = 0; i < 2; i++) MemoryMarshal.Write(push[(624 + i * 16)..], new Vector4(l.TailLightPosition[i], 0));
+        MemoryMarshal.Write(push[656..], new Vector4(l.TailLightColor, 0));
+    }
+
+    /// <summary>uFogParams + uFogSun (scene_push.glsl, sky.frag).</summary>
+    private void WriteFog(Span<byte> dst)
+    {
+        var a = Atmosphere;
+        MemoryMarshal.Write(dst, new Vector4(a.FogStart, 1 / MathF.Max(a.FogEnd - a.FogStart, 1), a.HeightFogDensity, 1 / a.HeightFogScale));
+        MemoryMarshal.Write(dst[16..], new Vector4(a.FogSun, a.HeightFogBase));
     }
 
     internal void BindScene(IRenderPassEncoder pass) => pass.SetBindGroup(1, _sceneGroup);
@@ -227,6 +241,9 @@ public sealed class WorldRenderer : IDisposable
         MemoryMarshal.Write(push[96..], new Vector4(Vector3.Normalize(a.SunDirection), 0.99995f));
         // gl_FragCoord.y runs down on Metal/Vulkan; Vulkan's projection is Y-flipped already, Metal's is not
         MemoryMarshal.Write(push[112..], new Vector4(a.SunDisk, _device.Backend == BackendKind.Metal ? -1 : 1));
+        MemoryMarshal.Write(push[128..], new Vector4(camera.Translation, 0));
+        MemoryMarshal.Write(push[144..], new Vector4(a.FogColor, 0));
+        WriteFog(push[160..]);
         pass.SetPipeline(_sky[Quality]);
         pass.SetPushConstants(ShaderStage.Fragment, 0, push);
         pass.Draw(3);
@@ -240,9 +257,12 @@ public sealed class WorldRenderer : IDisposable
         _post.Run(encoder, Atmosphere, HighQuality, target?.View ?? _device.CurrentSwapchainView, _w, _h);
     }
 
-    /// <summary>The course sky mesh: no fog, no depth (painted over the analytic sky in draw order), vertex alpha ignored.</summary>
-    public void DrawSky(IRenderPassEncoder pass, StaticMesh mesh, in Matrix4x4 viewProj) =>
-        DrawMesh(pass, _skyMesh[Quality], mesh, viewProj, Vector3.Zero, true);
+    /// <summary>
+    ///     The course sky mesh, centred under the camera at <paramref name="eye"/> (x/z): horizon fog only, no depth
+    ///     (painted over the analytic sky in draw order), vertex alpha ignored.
+    /// </summary>
+    public void DrawSky(IRenderPassEncoder pass, StaticMesh mesh, in Matrix4x4 viewProj, Vector3 eye) =>
+        DrawMesh(pass, _skyMesh[Quality], mesh, viewProj, eye, true);
 
     public void Draw(IRenderPassEncoder pass, StaticMesh mesh, in Matrix4x4 viewProj, Vector3 eye) =>
         DrawMesh(pass, _pipeline[Quality], mesh, viewProj, eye, false);
