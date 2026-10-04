@@ -93,8 +93,10 @@ public sealed class Battle(BattleRule rule, float goal, int startLeader = 1)
     public BattleOutcome Outcome { get; private set; }
     /// <summary>Why it was decided: GOAL, BREAKAWAY, OVERTAKE, NO GAP (draw).</summary>
     public string Reason { get; private set; } = "";
-    /// <summary>Battle time when it was decided.</summary>
+    /// <summary>Battle time, time gap and distance gap when it was decided.</summary>
     public float DecidedAt { get; private set; }
+    public float DecidedGap { get; private set; }
+    public float DecidedGapMetres { get; private set; }
     public float Time => _time;
     /// <summary>The player leads (debounced).</summary>
     public bool PlayerLeads => Leader == 0;
@@ -147,6 +149,6 @@ public sealed class Battle(BattleRule rule, float goal, int startLeader = 1)
     private void End(int winner, string reason)
     {
         Outcome = winner switch { 0 => BattleOutcome.Win, 1 => BattleOutcome.Lose, _ => BattleOutcome.Draw };
-        (Reason, DecidedAt) = (reason, _time);
+        (Reason, DecidedAt, DecidedGap, DecidedGapMetres) = (reason, _time, Gap, GapMetres);
     }
 }

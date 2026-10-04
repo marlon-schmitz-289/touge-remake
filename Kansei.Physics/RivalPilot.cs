@@ -63,6 +63,9 @@ public sealed class RivalPilot
     /// <summary>Following distance (m, centre to centre) behind a car at <paramref name="speed"/> m/s.</summary>
     public static float FollowGap(float speed, float aggression) => 5.5f + speed * (0.35f - 0.2f * aggression);
 
+    /// <summary>Closest centre distance behind a car while pulling out to pass it: a car length and a little, more with speed.</summary>
+    public static float PassFollowGap(float speed, float aggression) => 4.8f + speed * (0.1f - 0.04f * aggression);
+
     /// <summary>Lateral room at <paramref name="along"/>: less near a tight bend.</summary>
     public float MaxOffset(float along)
     {
@@ -144,7 +147,9 @@ public sealed class RivalPilot
             // little; alongside, drive past
             if (MathF.Abs(lat - o.Lateral) < Alongside)
             {
-                var gap = _passSide != 0 ? 6 - Style.Aggression : FollowGap(o.Speed, Style.Aggression);
+                // pulling out only counts where the road leaves room to get alongside; else it is following
+                var pulling = _passSide != 0 && MathF.Abs(Math.Clamp(target, lo, hi) - o.Lateral) >= Alongside;
+                var gap = pulling ? PassFollowGap(o.Speed, Style.Aggression) : FollowGap(o.Speed, Style.Aggression);
                 cap = MathF.Max(o.Speed + 1.2f * (dsAhead - gap), 0);
                 if (cap < v && State == Mode.Line) State = Mode.Follow;
             }

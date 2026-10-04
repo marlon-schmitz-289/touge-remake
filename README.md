@@ -42,7 +42,25 @@ dotnet run --project Touge -- "<iso>" --zfight [AKINA]   # Z-Fighting-Kandidaten
 dotnet run --project Touge -- "<iso>" USUI0_RIN --flicker out/proof/fl [--at n]   # Flackern messen: 8 Fahrlinienpunkte, 8 Winkel ums Auto, 8 Fundstellen, je 3× mit anderer Rundung (Schwelle nach Bildhelligkeit); dazu „motion“: dieselben Punkte/Winkel mit Auto, Kamera 3× je 1 cm vor, je mit/ohne SSR – zählt Pixel, deren Spiegelungsanteil nicht gleichmäßig mitläuft
 dotnet run --project Touge -- "<iso>" --sun --shot out/sun.png   # freie Kamera hinter dem Auto, Blick zur Sonne (Blendung prüfen)
 dotnet run --project Touge -- "<iso>" AKINA_NIT --fog [--autodrive 25 --shot out/fog.png]   # Wetter FOG: dichter Nebel (Sicht ~60 m) über dem Tag- oder Nachtkurs
+dotnet run --project Touge -- "<iso>" AKINA_NIT --battle keisuke [--rule race|chase] [--lead player|rival] [--car AE86T]   # Schnellbattle gegen die KI: Telop „VS …“, 3-2-1-GO, Battle, YOU WIN/LOSE, Ergebnis
+dotnet run --project Touge -- "<iso>" IROHA_DAY --battle takumi --autodrive 420   # ohne Fenster: Autopilot (Spielerauto) gegen die KI, Log je Sekunde (Abstand s/m, Führung, KI-Modus, Kontakte) + Ergebnis
+dotnet run --project Touge -- "<iso>" IROHA_DAY --battle itsuki --autodrive 110 --shot out/proof/b.png [--battle-result]   # Bild nach dem Battle: Zielbanner bzw. Ergebnisblatt
 ```
+
+Battle (`Touge/Race`, Grundlage für Legend of the Streets, Story und Multiplayer): `RaceSession` mit N Autos, jedes mit einem Fahrer
+(`ICarDriver`: Spieler-Eingabe, KI, später Replay/Netz), Startaufstellung, Zusammenstößen, Auslauf nach dem Ziel und den Regeln (`Battle`).
+Rivalen (`--battle <id>` oder ein Auto): itsuki, iketani, kenji, takeshi, shingo, mako, kai, seiji, kyoichi, keisuke, ryosuke, wataru, takumi, bunta
+(Auto mit der Lackierung der Figur, je eigener Fahrstil: Können, Aggressivität, Drift). Regeln: `race` (Standard, wie das Original: nebeneinander,
+wer zuerst im Ziel ist, gewinnt; dazu Sieg vorzeitig ab 8 s Vorsprung) und `chase` (Lead/Chase wie im Anime: der Verfolger gewinnt, wenn er
+überholt und 1,5 s vorne bleibt; der Führende mit 4 s Vorsprung oder ≥ 1 s Vorsprung im Ziel; klebt der Verfolger am Ziel dran: DRAW;
+`--lead player|rival` wer vorne startet, Standard der Rivale). KI (`Kansei.Physics/RivalPilot`): fährt die Fahrlinie des Kurses (CRS_DRV _I/_O)
+mit Bremspunkten nach Kurvenradius und Können, folgt mit Abstand, überholt innen vor Kurven oder auf der freien Seite (nur wo die Straße breit
+genug ist), verteidigt die Innenseite vor Kurven, Drift-Stil mit kurzem Handbremsimpuls in Haarnadeln; dezentes Gummiband (±5 % Tempo ab
+30 m Abstand zum Spieler). Auto gegen Auto: Kastenkollision (SAT, über den Tick abgetastet – kein Durchtunneln), Impulse mit Drall, Funken,
+Kamerawackeln und Crash-Ton. HUD oben rechts: VS + Rivale, Position 1ST/2ND, LEAD/CHASE, ADVANTAGE (Zeitabstand), Abstandsbalken bis zur
+Vorsprungsgrenze, OVERTAKE!/OVERTAKEN; roter Punkt auf der Streckenuhr. Ton des Rivalen (Motor, Reifen, Wand) nach Entfernung, mit Doppler
+und Stereo. Ende: YOU WIN!!/YOU LOSE/DRAW mit WIN.adx/LOSE.adx, Ergebnisblatt (Rivale, Auto, entschieden durch, Abstand, Zeiten, Führungswechsel,
+Kontakte) → Retry / Course Select / Car Select / Exit. Steuerung wie beim Fahren (Tastatur und Pad); B (Richtung wechseln) ist im Battle aus.
 
 Fahren (Standard): W/S oder ↑/↓ Gas/Bremse, A/D oder ←/→ lenken, Leertaste Handbremse, S im Stand halten = Rückwärts (Automatik), T Automatik/Manuell,
 Shift/Strg hoch-/runterschalten (manuell, auch in R), R (Pad: Y) zurück auf die Fahrlinie (nächster freier Punkt, Blick in Fahrtrichtung), B Richtung wechseln (bergab ↔ bergauf, setzt auf die Fahrlinie der Gegenrichtung; Minimap/Fortschritt folgen), C Verfolger-/Stoßstangenkamera,

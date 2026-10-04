@@ -156,6 +156,23 @@ Rollen (aus Dateinamen; „?" = geraten):
 
 Stichprobe (WAV-Export + Spektrum, Python/numpy): alle Exporte nicht still (RMS −18 … −2 dBFS) und tonal statt Rauschen (spektrale Flachheit 0,000–0,39; weißes Rauschen 1,0). Musik Schwerpunkt ~1,4–1,7 kHz, Stimme ~1,1 kHz, Reifen-Quietschen Spitze bei ~1 kHz.
 
+## Battle (Position, Rennende, Sieg) – teils geknackt
+Aus dem Recomp (ELF-Adresse = Dateioffset + 0xFFF80):
+- **Position** `0x15E690` (je Frame): zwei Autos (Zeiger `gp−0x79B0`, `gp−0x79B4`), verglichen wird zuerst der Abschnittsindex `+0x17B2`
+  (s16, Fortschritt entlang des Kurses), bei Gleichstand der Float `+0x17B8` (Weg im Abschnitt). `+0x1799` = 1 „hinten“, 0 „vorne“; `+0x179C`
+  zählt, wie lange die Position unverändert ist; erst wenn 2 × Zähler > 6 (also nach 6 Frames bei 60 Hz) wird sie nach `+0x179A` (angezeigt)
+  übernommen – Positionswechsel sind entprellt. Remake: `Battle.PositionHold` = 0,1 s.
+- **Rennende** `0x16B600` (aus der Rennschleife `0x1677C0`): prüft nur das Spielerauto (Rennstruct `+0xC`) – erreicht sein Abschnitt den letzten
+  der Kurstabelle, ist das Rennen aus; dann `+0x120` = (`+0x1799` des Spielers == 0), also **Sieg, wenn der Spieler in dem Moment vorne ist**.
+  Einen vorzeitigen Sieg nach Abstand gibt es dort nicht (nicht gefunden); der Remake ergänzt ihn (`Battle.Breakaway`).
+- **Musik/Bild**: `+0x120` ≠ 0 → `WIN.adx`, sonst bei `+0xBC` ≠ 0 `LOSE.adx` (`sub_177AD0`, Gruppe 2, ohne Loop); Zielbilder `FINISH.PAC`
+  `fin_win`/`fin_lose`/`fin_finish`/`fin_timeup`/`fin_clear`/`fin_failed`/`fin_retire`. Sieg-/Niederlagenzähler je Figur: Bytes
+  `0x327950 + Figur × 2` (Siege) bzw. `+1` (Niederlagen), bei 127 gedeckelt; Modusbyte `0x32791E` (Werte 0, 1, 2, 8 verzweigen die Ziel-/Zeitlogik).
+- **Battle-HUD** (`TEXTURE.AFS/RACEVIEW.PAC`): Platten `rview_posadv` („POSITION“, „ADVANTAGE“), `rview_mycar`/`rview_enemy` (grüner/roter
+  Punkt der Karte), Namensbilder `rview_rname00–26`, Reiter `rview_type` (RECORDS, DIFFERENCE, TIME, …, ADVANTAGE, PLAYER(S)), `rview_extention`
+  „TIME EXTENSION“; Telop `TELOP.PAC` `TLP_VS0/1` („VS“), `TLP_NAME`. Rennstimmen `RACEVOIC` je Figur mit `front`/`rear`/`ppass`/`rpass`/`fwin`/`flose`/`meter`.
+  Im Remake nachgebaut (nicht gezeichnet): `Ui/BattleHud`.
+
 ## Offen
 - INFO: 0x150…0x1DF (Ambient je Slot?), 0x2A0…0x2BF, Abschnitts-Flag; LOD-Abstand `gp−0x7C14`; zweites u32 im ROAD-Header
 - Bedeutung von VU addr 4, Material-Flags außer 0x100/0x200/0x400

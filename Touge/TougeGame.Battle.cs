@@ -190,7 +190,8 @@ public sealed partial class TougeGame
     /// </summary>
     private bool BattleFinished()
     {
-        if (_race is not { Battle: { Outcome: not BattleOutcome.None } b } || _finished || _menu == null) return false;
+        // --bench keeps racing (its log runs to the time limit)
+        if (_race is not { Battle: { Outcome: not BattleOutcome.None } b } || _finished || _menu == null || bench != null) return false;
         if (b.Time - b.DecidedAt < 1 && shotPath == null) return false;
         _finished = true;
         var rival = Battle!.Rival;

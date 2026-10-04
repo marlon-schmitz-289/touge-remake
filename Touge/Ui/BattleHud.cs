@@ -13,7 +13,7 @@ public sealed record BattleReport(BattleOutcome Outcome, string Reason, BattleRu
     public static BattleReport Of(RaceSession race, Rivals.Rival rival, string rivalCar)
     {
         var b = race.Battle!;
-        return new BattleReport(b.Outcome, b.Reason, b.Rule, b.StartLeader == 0, rival.Name, rival.Team, rivalCar, b.Gap, b.GapMetres, b.DecidedAt,
+        return new BattleReport(b.Outcome, b.Reason, b.Rule, b.StartLeader == 0, rival.Name, rival.Team, rivalCar, b.DecidedGap, b.DecidedGapMetres, b.DecidedAt,
             race.Cars[0].FinishedAt, race.Cars[1].FinishedAt, b.Overtakes, b.PlayerPasses, race.Contacts, race.MaxImpact);
     }
 
