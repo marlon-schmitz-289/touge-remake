@@ -2,7 +2,8 @@
 
 // Car shading, linear light. Diffuse = albedo × (ambient + sun × shadow × N·L + headlights/street lights). Paint and
 // glass get a clear coat on top: Schlick Fresnel (F0 0.04 / 0.06) blends towards the reflection of the course's
-// environment maps (ENV_TOP/BOTTOM/LEFT/RIGHT of the nearest road point, a crude cube in car space, see envAt)
+// environment maps (ENV_TOP/BOTTOM/LEFT/RIGHT around the car, two sets faded along the road, a crude cube in car
+// space in the scene sky's hue, see envAt)
 // plus a sharp sun highlight that feeds the bloom. Glass is darker (the cabin behind it is dark). Rear lamps
 // (kind 2) glow: dim with the headlights on, bright when braking. Rain: paint a bit darker (wet), beaded with
 // droplets — small domes (hashed per 1.8 cm cell in car space, on the plane facing the normal) that only add light:
@@ -27,21 +28,36 @@ layout(set = 1, binding = 2) uniform sampler2D uEnvTop;
 layout(set = 1, binding = 3) uniform sampler2D uEnvBottom;
 layout(set = 1, binding = 4) uniform sampler2D uEnvLeft;
 layout(set = 1, binding = 5) uniform sampler2D uEnvRight;
+// the next set along the road, faded in by uShadeGround.w (Course.EnvAt)
+layout(set = 1, binding = 7) uniform sampler2D uEnvTop2;
+layout(set = 1, binding = 8) uniform sampler2D uEnvBottom2;
+layout(set = 1, binding = 9) uniform sampler2D uEnvLeft2;
+layout(set = 1, binding = 10) uniform sampler2D uEnvRight2;
 
 layout(location = 0) out vec4 FragColor;
 layout(location = 1) out vec4 Gbuf; // PostProcess.GbufFormat: r ambient share (AO)
 
-// Reflection direction → env colour. The 64×32 maps are small panoramas (v = 0 at the top): up = TOP, down = BOTTOM,
-// car left (+x) / right (−x) = LEFT/RIGHT with u running front to back; front/back reflect the side maps' centres.
+// Reflection direction → env colour. The 64×32 maps are small panoramas (v = 0 at the top): car left (+x) / right (−x)
+// = LEFT/RIGHT with u running front to back, front/back reflect the side maps' centres. TOP looks up with the road
+// running along v (tree walls at the u edges: car right at u = 1), BOTTOM down, both projected straight down the
+// hemisphere so their rims meet the side maps' horizon.
 vec3 envAt(vec3 r)
 {
     vec3 d = transpose(mat3(pc.uModel)) * r; // car space: +x left, +y up, +z front
-    float up = smoothstep(0.1, 0.6, d.y), down = smoothstep(0.0, 0.4, -d.y);
+    float up = smoothstep(0.1, 0.6, d.y), down = smoothstep(0.0, 0.4, -d.y), left = smoothstep(-0.4, 0.4, d.x);
     vec2 side = vec2(0.5 - 0.5 * d.z, 0.5 - 0.5 * d.y);
-    vec3 horizontal = mix(texture(uEnvRight, side).rgb, texture(uEnvLeft, side).rgb, smoothstep(-0.4, 0.4, d.x));
-    vec3 top = texture(uEnvTop, vec2(0.5 - 0.5 * d.z, 1.0 - d.y)).rgb;
-    vec3 bottom = texture(uEnvBottom, vec2(0.5 + 0.5 * d.x, 0.5 - 0.5 * d.z)).rgb;
-    return mix(mix(horizontal, top, up), bottom, down);
+    vec2 top = vec2(0.5 - 0.5 * d.x, 0.5 - 0.5 * d.z), bottom = vec2(0.5 + 0.5 * d.x, 0.5 - 0.5 * d.z);
+    vec3 c = mix(mix(mix(texture(uEnvRight, side).rgb, texture(uEnvLeft, side).rgb, left), texture(uEnvTop, top).rgb, up),
+        texture(uEnvBottom, bottom).rgb, down);
+    if (pc.uShadeGround.w > 0.0)
+        c = mix(c, mix(mix(mix(texture(uEnvRight2, side).rgb, texture(uEnvLeft2, side).rgb, left), texture(uEnvTop2, top).rgb, up),
+            texture(uEnvBottom2, bottom).rgb, down), pc.uShadeGround.w);
+    // the maps' sky is one flat lavender grey whatever the scene's sky: keep their brightness (sky vs tree walls vs
+    // road), take half the hue of this scene's sky in that direction (as world.frag's wet reflections; the full hue
+    // turns night windows deep blue)
+    vec3 sky = mix(fogColour(r), pc.uSky.rgb, pow(max(r.y, 0.0), 0.45));
+    const vec3 lum = vec3(0.2126, 0.7152, 0.0722);
+    return dot(c, lum) * mix(vec3(1.0), sky / max(dot(sky, lum), 1e-5), 0.5);
 }
 
 // Droplet at car-space point q with car-space normal m: xy = slope, z = coverage 0..1 (edge and distance faded by the

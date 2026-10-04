@@ -36,8 +36,9 @@ public sealed class WorldRenderer : IDisposable
     private readonly ShaderHandle _shader, _skyShader;
     private readonly BindGroupLayoutHandle _layout, _sceneLayout;
     private readonly ShadowMap _shadow;
-    private readonly Dictionary<(int, int, int, int), BindGroupHandle> _sceneGroups = [];
+    private readonly Dictionary<(int[], int[]), BindGroupHandle> _sceneGroups = [];
     private BindGroupHandle _sceneGroup;
+    private float _envMix;
     private bool _shadowsThisFrame;
     private readonly Vector4[] _points = new Vector4[4];
     private readonly Func<int, BindGroupHandle> _textureGroup;
@@ -75,12 +76,13 @@ public sealed class WorldRenderer : IDisposable
         _sampler = device.GetSampler(SamplerDesc.LinearWrap with { MaxAnisotropy = 8 });
         _post = new PostProcess(device);
         _sceneLayout = device.GetBindGroupLayout(new BindGroupLayoutDesc(
-            [.. Enumerable.Range(1, 5).Select(b => new BindGroupLayoutEntry(b, BindingType.CombinedImageSampler, ShaderStage.Fragment)),
+            [.. Enumerable.Range(1, 9).Select(b => new BindGroupLayoutEntry(b < 6 ? b : b + 1, BindingType.CombinedImageSampler, ShaderStage.Fragment)),
                 PostProcess.UniformEntry(6, ShaderStage.Vertex | ShaderStage.Fragment)], "scene"));
         _shadow = new ShadowMap(device, _layout);
         _textureGroup = TextureGroup;
         var grey = AddTexture(1, 1, [118, 118, 118, 255], "env-grey"); // 18 % linear until a course sets its maps
-        SetEnvironment(grey, grey, grey, grey);
+        int[] greys = [grey, grey, grey, grey];
+        SetEnvironment(greys, greys, 0);
         for (var q = 0; q < 2; q++)
         {
             var ms = MultisampleState.Disabled with { SampleCount = Samples(q), AlphaToCoverageEnabled = q == 1 };
@@ -132,21 +134,23 @@ public sealed class WorldRenderer : IDisposable
         return _textures.Count - 1;
     }
 
-    /// <summary>Env maps (texture indices) the cars reflect from now on: ENV_TOP/BOTTOM/LEFT/RIGHT of the current road point.</summary>
-    public void SetEnvironment(int top, int bottom, int left, int right)
+    /// <summary>
+    ///     Env maps the cars reflect from now on: two sets of ENV_TOP/BOTTOM/LEFT/RIGHT texture indices, <paramref name="mix"/>
+    ///     of <paramref name="b"/> (car.frag fades between them). Bind groups are cached per pair of set arrays (by reference).
+    /// </summary>
+    public void SetEnvironment(int[] a, int[] b, float mix)
     {
-        if (_sceneGroups.TryGetValue((top, bottom, left, right), out _sceneGroup)) return;
+        _envMix = mix;
+        if (_sceneGroups.TryGetValue((a, b), out _sceneGroup)) return;
         var sampler = _device.GetSampler(SamplerDesc.Linear);
         _sceneGroup = _device.CreateBindGroup(new BindGroupDesc(_sceneLayout,
         [
             BindGroupEntry.CombinedImageSampler(1, _shadow.View, _shadow.Sampler),
-            BindGroupEntry.CombinedImageSampler(2, _textures[top].View, sampler),
-            BindGroupEntry.CombinedImageSampler(3, _textures[bottom].View, sampler),
-            BindGroupEntry.CombinedImageSampler(4, _textures[left].View, sampler),
-            BindGroupEntry.CombinedImageSampler(5, _textures[right].View, sampler),
+            .. a.Select((t, i) => BindGroupEntry.CombinedImageSampler(2 + i, _textures[t].View, sampler)),
+            .. b.Select((t, i) => BindGroupEntry.CombinedImageSampler(7 + i, _textures[t].View, sampler)),
             BindGroupEntry.UniformBuffer(6, _post.UniformBuffer, 0, PostProcess.UniformBytes),
         ], "scene"));
-        _sceneGroups[(top, bottom, left, right)] = _sceneGroup;
+        _sceneGroups[(a, b)] = _sceneGroup;
     }
 
     /// <summary>
@@ -196,7 +200,7 @@ public sealed class WorldRenderer : IDisposable
         MemoryMarshal.Write(push[656..], new Vector4(l.TailLightColor, 0));
         MemoryMarshal.Write(push[672..], new Vector4(a.SunColor, a.Specular));
         MemoryMarshal.Write(push[688..], new Vector4(a.ShadeSky, a.ContactShadow));
-        MemoryMarshal.Write(push[704..], new Vector4(a.ShadeGround, 0));
+        MemoryMarshal.Write(push[704..], new Vector4(a.ShadeGround, _envMix));
     }
 
     /// <summary>uFogParams + uFogSun (scene_push.glsl, sky.frag).</summary>

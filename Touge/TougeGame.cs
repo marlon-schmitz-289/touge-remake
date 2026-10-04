@@ -832,10 +832,10 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         for (var i = 0; i < 2; i++) l.TailLightPosition[i] = Vector3.Transform(new Vector3(i == 0 ? 0.5f : -0.5f, 0.7f, -2.15f), _carBody);
         l.TailLightColor = new Vector3(1f, 0.08f, 0.03f) * ((l.HeadlightColor != Vector3.Zero ? 0.08f : 0) + 0.8f * l.Brake);
         l.Car = _carBody;
-        if (_course.Env is { } env)
+        if (_course.Env != null)
         {
-            var e = env[_course.NearestRoadPoint(_carBody.Translation)];
-            _renderer.SetEnvironment(e[0], e[1], e[2], e[3]);
+            var (a, b, mix) = _course.EnvAt(_carBody.Translation);
+            _renderer.SetEnvironment(a, b, mix);
         }
     }
 

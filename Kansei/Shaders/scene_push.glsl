@@ -23,5 +23,5 @@ layout(set = 1, binding = 6, std140) uniform Push {
     vec4 uTailColor;    // rgb intensity (0 = off)
     vec4 uSunColor;     // rgb tint of the direct sun, w = sun glints on the world (0 = none)
     vec4 uShadeSky;     // rgb tint of the shade (baked keep / car ambient) on upward normals, w = contact shadow under the car (world)
-    vec4 uShadeGround;  // rgb tint of the shade on downward normals (bounce from the ground)
+    vec4 uShadeGround;  // rgb tint of the shade on downward normals (bounce from the ground), w = share of the second env set (car.frag)
 } pc;
