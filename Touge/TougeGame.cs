@@ -275,7 +275,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         }
         (_carName, _paint) = (name, paint);
         LoadCarModel(iso);
-        Console.WriteLine($"\n[Touge] Auto {_carName} (Lack {_paint + 1}/{_car.Paints}), {_drive.Car.Spec.Mass:F0} kg, Antrieb vorn {_drive.Car.Spec.DriveFront:P0}, Motor {GameAudio.Engines[Array.IndexOf(CarPaint.Cars, _carName)].Bank}");
+        Console.WriteLine($"\n[Touge] Auto {_carName} (Lack {_paint + 1}/{_car.Paints}), {_drive.Car.Spec.Mass:F0} kg, Antrieb vorn {_drive.Car.Spec.DriveFront:P0}, Motor {GameAudio.Engines[Array.IndexOf(CarPaint.Cars, _carName)]}");
     }
 
     private const int SheetCols = 4, SheetTile = 4, SheetW = SheetCols * 1280 / SheetTile, SheetH = 8 * 720 / SheetTile; // 32 cars, 320×180 each

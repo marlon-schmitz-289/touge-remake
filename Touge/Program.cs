@@ -8,6 +8,7 @@ using Touge;
 // --orbit <grad> Kamera ums geparkte Auto (0 vorne, 90 links, 180 hinten).
 // --autodrive <s>: Pilot fährt die Fahrlinie ab, Log pro Sekunde; ohne --shot ohne Fenster, mit --shot Verfolgerbild am Ende.
 // --audio-capture <wav> <s> (mit --autodrive): Spielton offline (OpenAL-Loopback) als WAV + Auswertung, ohne Fenster; --no-music ohne BGM.
+// --audio-capture <wav> 0 --sweep: nur Motor, Drehzahlrampe Leerlauf → Begrenzer (Vollgas, 3. Gang) und zurück (Schub), WAV + CSV je Tick.
 // --ground <png>: Kollision des Kurses laden, Raycasts timen, Draufsicht mit Wandsegmenten schreiben (ohne Fenster).
 // --bench <s>: Pilot fährt <s> Sekunden in Echtzeit mit Verfolgerkamera und Ton, danach Frametimes (avg/p99/max) und Ende.
 // --quality off: ohne MSAA/Bloom starten (F2 schaltet um).
@@ -57,6 +58,11 @@ float? bench = Arg("--bench") is { } b ? float.Parse(b, CultureInfo.InvariantCul
 if (Arg("--audio-capture") is { } wav)
 {
     var capIndex = Array.IndexOf(args, "--audio-capture");
+    if (args.Contains("--sweep"))
+    {
+        using var sweepIso = new Touge.Formats.Iso9660(iso);
+        return AudioCapture.Sweep(sweepIso, wav, car) ? 0 : 2;
+    }
     if (autodrive == null || capIndex + 2 >= args.Length)
     {
         Console.Error.WriteLine("usage: touge <iso> [KURS] --autodrive <s> --audio-capture <out.wav> <s> [--no-music]");
