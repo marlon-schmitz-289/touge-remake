@@ -197,7 +197,7 @@ public sealed class Settings
         (Width, Height) = Width is >= 640 and <= 16384 && Height is >= 360 and <= 16384 ? (Width, Height) : (1600, 900);
         if (!FrameCaps.Contains(FrameCap)) FrameCap = 0;
         if (!RenderScales.Contains(RenderScale)) RenderScale = 100;
-        (SteerAssist, DriftAssist, Fov) = (Math.Clamp(SteerAssist, 0, 2), Math.Clamp(DriftAssist, 0, 2), Math.Clamp(Fov, FovMin, FovMax));
+        (SteerAssist, DriftAssist, Fov) = (Math.Clamp(SteerAssist, 0, 2), Math.Clamp(DriftAssist, 0, 2), (int)Math.Round(Math.Clamp(Fov, FovMin, FovMax) / 5.0) * 5); // the row steps in 5°
         Course ??= "AKINA_DAY";
         Car ??= "AE86T";
         Best ??= [];
@@ -216,4 +216,8 @@ public sealed class Settings
     ///     keys; older ones started up to 57 m earlier and are not comparable, so they stay unused in the file.
     /// </summary>
     public static string BestKey(string course, bool reverse) => course + (reverse ? "_R" : "") + (course.EndsWith('0') ? "" : "_A");
+
+    /// <summary>Record key of a run with these assists: the stock handling (FULL/NORMAL) keeps <see cref="BestKey"/> (RECORDS), others get their own list.</summary>
+    public string RunKey(string course, bool reverse) =>
+        BestKey(course, reverse) + ((SteerAssist, DriftAssist) == (2, 1) ? "" : $"+S{SteerAssist}D{DriftAssist}");
 }

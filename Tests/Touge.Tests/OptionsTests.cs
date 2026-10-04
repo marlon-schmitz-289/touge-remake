@@ -80,6 +80,7 @@ public class OptionsTests
             """);
         Assert.Equal((Settings.CurrentVersion, 1f, 0f, Settings.FovMax, 100, 0, 2), (s.Version, s.MasterVolume, s.MusicVolume, s.Fov, s.RenderScale, s.FrameCap, s.SteerAssist));
         Assert.Equal((1600, 900, Settings.DisplayMode.Fullscreen, "AKINA_DAY"), (s.Width, s.Height, s.Display, s.Course));
+        Assert.Equal(65, Settings.FromJson("""{ "Fov": 63 }""").Fov); // on the row's 5 degree grid
     }
 
     [Fact]
@@ -109,6 +110,10 @@ public class OptionsTests
         var a = s.Assisted(spec);
         Assert.Equal((0f, spec.DriftDamping * 0.5f), (a.CounterSteerAssist, a.DriftDamping));
         Assert.Equal(spec.MaxSteer, a.MaxSteer);
+        // records: stock assists race the RECORDS list, any other mix its own
+        Assert.Equal("AKINA_A+S0D0", s.RunKey("AKINA", false));
+        (s.SteerAssist, s.DriftAssist) = (2, 1);
+        Assert.Equal(Settings.BestKey("AKINA", false), s.RunKey("AKINA", false));
     }
 
     /// <summary>Section list → page → change values (wrap, slider ends) → back to the list → leave; sounds as the other menus.</summary>

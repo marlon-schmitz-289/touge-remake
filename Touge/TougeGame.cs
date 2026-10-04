@@ -186,6 +186,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
                 Kansei.Windowing.FullscreenMode.Exclusive => Settings.DisplayMode.Fullscreen,
                 _ => Settings.DisplayMode.Borderless,
             };
+            Window.FullscreenModeChanged += _ => { _applied = DisplayState; if (_persist) _settings.Save(); };
         }
         // the front end shows Akina at night behind the title, like the original's photo; course select loads the choice
         var title = _front != null && (_persist || Flow != null);
@@ -307,7 +308,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     /// <summary>HUD for the loaded line, with the stored best run of this course and direction; a new record is kept (and saved with the menus).</summary>
     private Hud NewHud()
     {
-        var key = Settings.BestKey(_courseTime[.._courseTime.LastIndexOf('_')], _drive.Reverse);
+        var key = _settings.RunKey(_courseTime[.._courseTime.LastIndexOf('_')], _drive.Reverse); // other assists race their own records
         _previousBest = _settings.Best.GetValueOrDefault(key)?[^1];
         var hud = new Hud(_course.Road, _drive.Line, _drive.Pilot, _settings.Best.GetValueOrDefault(key), _drive.Start)
         {
@@ -725,11 +726,15 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     }
 
     private bool? _vsync;
+    private object? _applied;
+    private object DisplayState => (_settings.Display, _settings.Width, _settings.Height, _settings.VSync, _settings.FrameCap);
 
     /// <summary>Window mode, size, vsync and frame cap from the settings (only with the menus: test runs keep their fixed window).</summary>
     private void ApplyDisplay()
     {
         var s = _settings;
+        if (Equals(_applied, DisplayState)) return; // other options must not snap a dragged window back to the saved size
+        _applied = DisplayState;
         Window.SetFullscreenMode(s.Display switch
         {
             Settings.DisplayMode.Borderless => Kansei.Windowing.FullscreenMode.Borderless,
