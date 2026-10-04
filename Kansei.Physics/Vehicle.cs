@@ -464,6 +464,33 @@ public sealed class Vehicle
         Position += moved;
     }
 
+    /// <summary>
+    ///     A car simulated elsewhere (network peer): body pose and motion as received, wheels as far as drawing, sound and
+    ///     effects need them — steering lock from <paramref name="steer"/> (−1..1 of <see cref="CarSpec.MaxSteer"/>), spin from
+    ///     the forward speed, suspension <paramref name="compression"/> (0..1 of travel) and tyre slide speed
+    ///     <paramref name="slide"/> (m/s, as <see cref="WheelState.SlipRatio"/> × speed). No physics step follows.
+    /// </summary>
+    public void SetRemote(Vector3 position, Quaternion orientation, Vector3 velocity, Vector3 angularVelocity, float rpm, int gear, float throttle,
+        float steer, ReadOnlySpan<float> compression, ReadOnlySpan<float> slide, bool wall, float dt)
+    {
+        (Position, Orientation, Velocity, AngularVelocity, Rpm, Gear, Throttle) = (position, orientation, velocity, angularVelocity, rpm, gear, throttle);
+        WallContacts = wall ? 1 : 0;
+        var forward = Vector3.Dot(velocity, Vector3.Transform(Vector3.UnitZ, orientation));
+        var speed = MathF.Max(velocity.Length(), VMin);
+        SlipAngle = forward < 1 ? 0 : MathF.Atan2(-Vector3.Dot(velocity, Vector3.Transform(Vector3.UnitX, orientation)), forward);
+        for (var i = 0; i < 4; i++)
+        {
+            ref var w = ref _wheels[i];
+            w.SteerAngle = i < 2 ? steer * Spec.MaxSteer : 0;
+            w.AngularVelocity = forward / Spec.WheelRadius;
+            w.SpinAngle = (w.SpinAngle + w.AngularVelocity * dt) % MathF.Tau;
+            w.Compression = Math.Clamp(compression[i], 0, 1) * Spec.Travel;
+            w.Contact = compression[i] > 0;
+            w.LocalCenter = _mounts[i] - Vector3.UnitY * (Spec.Travel - w.Compression);
+            (w.SlipRatio, w.SlipAngle, w.Load) = (slide[i] / speed, 0, w.Contact ? Spec.NominalLoad : 0);
+        }
+    }
+
     // ---- contact with other bodies (CarCollision): impulses at a world point, positional correction
     /// <summary>Velocity of the body at world <paramref name="point"/>.</summary>
     public Vector3 VelocityAt(Vector3 point) => PointVelocity(point);

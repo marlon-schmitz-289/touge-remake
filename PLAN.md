@@ -141,6 +141,22 @@ Jede Phase endet mit etwas Sichtbarem/Fahrbarem.
 - Host-autoritativ: Countdown, Checkpoints, Zieleinlauf, Ergebnis
 - Modi: **Battle** (Lead/Chase, Abstand gewinnt), **Time Attack** mit Bestenliste, **Free Roam**
 - **Fertig:** 2 Leute übers Internet fahren ein Battle auf Akina, Ergebnis stimmt auf beiden Seiten.
+- Stand Versus (`Ui/Versus`, `TougeGame.Versus`, `Touge/Net`): Hauptmenü VERSUS (nach TIME ATTACK) → SPLIT SCREEN oder ONLINE.
+  Geteilter Bildschirm: zwei Ansichten (oben/unten oder links/rechts) über `WorldRenderer.BeginScene/EndScene(viewport)` (Szene je Ansicht in
+  ihrer Größe, Tonemap in das Rechteck, Rest bleibt), je Spieler Kamera, HUD (`Overlay.Shift`), Licht; Geräte je Spieler über
+  `InputSnapshot.Pads` + `DriverInput.PadOf` bzw. geteilte Tastatur (`SplitKeys`); 60 fps bei 3200×1800 ULTRA, GPU 8,4 ms (allein 7,3).
+  Online statt LiteNetLib/Steam eigenes kleines UDP-Protokoll (keine Abhängigkeit, FORMATS.md): Host/Join per IP:Port, LAN-Suche per Broadcast,
+  Lobby (Host wählt Rennen, jeder Auto/Lack/READY, Ping), Owner-Authority 30 Hz, Hermite-Interpolation/Extrapolation + weiches Nachführen,
+  Host entscheidet (Countdown auf gemeinsamer Rennuhr, Zielreihenfolge nach Zielzeiten der Fahrer, Battle-Vorsprung, DNF, Abgang),
+  Kontakte lokal je Auto (fremdes Auto gibt nicht nach), Rematch/Lobby, Verbindungsabbruch. Bis 4 Spieler, Startaufstellung in Zweierreihen.
+  `--headless` (Host/Bot ohne Fenster, `--net-sim`). Belege `out/proof/mp_*`: Fenster-Host gegen Bot (50 ms, 5 %), Fenster-Client gegen
+  Headless-Host, Headless gegen Headless 2 Rennen IROHA mit 80 ± 20 ms und 5 % Verlust je Richtung (Ergebnis auf beiden Seiten gleich,
+  Korrektur Ø 6–7 cm / max 36 cm, Uhren ~6 ms auseinander), 4 Spieler mit 40–150 ms und 2–10 % Verlust (einer geht mittendrin → DNF),
+  Bilder geteilter Bildschirm Tag oben/unten und Nacht links/rechts, Lobbys, Ergebnis. Tests: Protokoll (Rundreise, Müll), Snapshots
+  (Reihenfolge, Verlust, Hermite, Extrapolation, 20 % Verlust + Jitter), Schiedsrichter, Sitzung über Loopback mit 20 % Verlust, Zeitüberschreitung,
+  volle Sitzung, LAN-Suche, Kontakt mit fremdem Auto, geteilte Tastatur, Versus-Menüs. Offen: Steam-Lobby/Einladen und NAT-Durchdringung
+  (nur Portweiterleitung/VPN, README), Time Attack/Free Roam online, Ghost-Bestenliste, geteilter Bildschirm für 3–4, Lenkrad-FFB für Spieler 2,
+  echtes Internet-Spiel mit Freunden (nur Loopback getestet), Bremslicht/Scheinwerferkegel fremder Autos beleuchten die Straße nicht.
 
 ### Phase 5 – Feinschliff
 - Alle Strecken/Varianten, alle Autos tunen

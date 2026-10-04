@@ -62,13 +62,13 @@ internal sealed class PostProcess : IDisposable
             [.. Enumerable.Range(0, 3).Select(b => new BindGroupLayoutEntry(b, BindingType.CombinedImageSampler, ShaderStage.Fragment)),
                 UniformEntry(3, ShaderStage.Fragment)], "post-ssr"));
         _uniformAlign = Math.Max(256, device.Limits.MinUniformBufferOffsetAlignment);
-        // ponytail: fixed 1 MB per frame (~1300 draws); grow if the scene ever draws more batches with own blocks
-        _uniforms = new TransientBufferRing(device, 1 << 20, BufferUsage.Uniform, "uniform-slices");
+        // ponytail: fixed 2 MB per frame (~2600 draws: a split-screen frame draws the scene twice); grow if it ever draws more batches with own blocks
+        _uniforms = new TransientBufferRing(device, 2 << 20, BufferUsage.Uniform, "uniform-slices");
         _sampler = device.GetSampler(SamplerDesc.Linear);
         _point = device.GetSampler(SamplerDesc.Nearest);
         _downPipeline = Fullscreen(device, _shaders[0], HdrFormat, BlendState.Opaque, [_oneTex], 32);
         _upPipeline = Fullscreen(device, _shaders[1], HdrFormat, BlendState.Additive with { SrcColor = BlendFactor.One }, [_oneTex], 32);
-        _tonemapPipeline = Fullscreen(device, _shaders[2], device.SwapchainFormat, BlendState.Opaque, [_sixTex], 64);
+        _tonemapPipeline = Fullscreen(device, _shaders[2], device.SwapchainFormat, BlendState.Opaque, [_sixTex], 80);
         _aoPipeline = Fullscreen(device, _shaders[3], TextureFormat.Rg16Float, BlendState.Opaque, [_oneTex], 32);
         _blurPipeline = Fullscreen(device, _shaders[4], TextureFormat.Rg16Float, BlendState.Opaque, [_oneTex], 0);
         _ssrPipeline = Fullscreen(device, _shaders[5], HdrFormat, BlendState.Opaque, [_ssrLayout], 0);
@@ -139,10 +139,12 @@ internal sealed class PostProcess : IDisposable
     /// <summary>
     ///     <paramref name="ao"/>, <paramref name="bloom"/>, <paramref name="reflections"/> (SSR, wet only) per pass; the output may differ
     ///     in size from the scene (render scale). <paramref name="viewRotProj"/> = view rotation (no translation) ×
-    ///     <paramref name="proj"/> (<see cref="WorldRenderer.Perspective"/>), <paramref name="ySign"/> = clip y per uv y.
+    ///     <paramref name="proj"/> (<see cref="WorldRenderer.Perspective"/>), <paramref name="ySign"/> = clip y per uv y. The tonemap
+    ///     writes the <paramref name="outW"/>×<paramref name="outH"/> rectangle at (<paramref name="outX"/>, <paramref name="outY"/>);
+    ///     <paramref name="keep"/>: the rest of the output stays (split screen: the other view is already there).
     /// </summary>
     public void Run(ICommandEncoder encoder, Atmosphere a, bool ao, bool bloom, bool reflections, TextureViewHandle output, int outW, int outH, in Matrix4x4 viewRotProj,
-        in Matrix4x4 proj, float ySign)
+        in Matrix4x4 proj, float ySign, int outX = 0, int outY = 0, bool keep = false)
     {
         Span<byte> push = stackalloc byte[144];
         var near = proj.M43;
@@ -186,16 +188,17 @@ internal sealed class PostProcess : IDisposable
         MemoryMarshal.Write(push[16..], new Vector4(a.Tint, a.Saturation));
         MemoryMarshal.Write(push[32..], new Vector4(a.Vignette, (float)outW / outH, a.Contrast, 0));
         MemoryMarshal.Write(push[48..], new Vector4(ao ? 1 : 0, near, ssr ? 1 : 0, 1));
-        Pass(encoder, output, LoadOp.DontCare, outW, outH, _tonemapPipeline, _tonemapGroup, push[..64]);
+        MemoryMarshal.Write(push[64..], new Vector4(outX, outY, 0, 0));
+        Pass(encoder, output, keep ? LoadOp.Load : LoadOp.DontCare, outW, outH, _tonemapPipeline, _tonemapGroup, push[..80], -1, outX, outY);
     }
 
     private static void Pass(ICommandEncoder encoder, TextureViewHandle target, LoadOp load, int w, int h, RenderPipelineHandle pipeline,
-        BindGroupHandle group, ReadOnlySpan<byte> push, int uniformOffset = -1)
+        BindGroupHandle group, ReadOnlySpan<byte> push, int uniformOffset = -1, int x = 0, int y = 0)
     {
         using var pass = encoder.BeginRenderPass(new RenderPassDesc(
             [new ColorAttachment(target, load, StoreOp.Store, ClearColor.Black)], DebugName: "post"));
-        pass.SetViewport(0, 0, w, h);
-        pass.SetScissor(0, 0, w, h);
+        pass.SetViewport(x, y, w, h);
+        pass.SetScissor(x, y, w, h);
         pass.SetPipeline(pipeline);
         if (uniformOffset < 0) pass.SetBindGroup(0, group);
         else pass.SetBindGroup(0, group, [uniformOffset]);

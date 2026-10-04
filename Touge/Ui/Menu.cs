@@ -127,6 +127,12 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
         Enter(Screen.Finish, false);
     }
 
+    /// <summary>Online: the intro's clock set so GO falls on the shared race clock (<paramref name="raceTime"/> = seconds since GO, negative before).</summary>
+    public void SyncIntro(float raceTime)
+    {
+        if (Current == Screen.Intro) _t = MathF.Max(0, GoAt + raceTime);
+    }
+
     /// <summary>Skips the fade-in and entrance (screenshots).</summary>
     public void Settle(float at = 1) => (_t, _fadeIn) = (MathF.Max(_t, at), false);
 

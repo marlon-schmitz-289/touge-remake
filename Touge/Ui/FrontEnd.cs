@@ -16,21 +16,21 @@ namespace Touge.Ui;
 public sealed class FrontEnd
 {
     public enum Step { Boot, Logo, Disclaimer, Title, Modes }
-    public enum Result { None, TimeAttack, Records, Options, Quit, Guide }
+    public enum Result { None, TimeAttack, Records, Options, Quit, Guide, Versus }
 
     /// <summary>
-    ///     Main menu in the original's drum order (sub_1F0E00, wraps 0 ↔ 6), English labels; on desktop builds the remake's
-    ///     QUIT GAME last (<see cref="QuitPrompt"/>).
+    ///     Main menu in the original's drum order (sub_1F0E00, wraps 0 ↔ 6), English labels, plus the remake's VERSUS (split screen
+    ///     and online, <see cref="Versus"/>) after TIME ATTACK; on desktop builds the remake's QUIT GAME last (<see cref="QuitPrompt"/>).
     /// </summary>
     public static readonly string[] Modes =
     [
-        "LEGEND OF THE STREETS", "TIME ATTACK", "STORY", "REPLAY & RECORD", "IKETANI'S CAR GUIDE", "SAVE & LOAD", "OPTIONS",
+        "LEGEND OF THE STREETS", "TIME ATTACK", "VERSUS", "STORY", "REPLAY & RECORD", "IKETANI'S CAR GUIDE", "SAVE & LOAD", "OPTIONS",
         .. QuitPrompt.Available ? new[] { "QUIT GAME" } : [],
     ];
 
     /// <summary>What each mode leads to in this build (None: not rebuilt yet, deciding it beeps; Quit asks first).</summary>
     private static readonly Result[] ModeResults =
-        [Result.None, Result.TimeAttack, Result.None, Result.Records, Result.Guide, Result.None, Result.Options, Result.Quit];
+        [Result.None, Result.TimeAttack, Result.Versus, Result.None, Result.Records, Result.Guide, Result.None, Result.Options, Result.Quit];
 
     public const float Fade = 30 / 60f, CardHold = 181 / 60f, BootHold = 2.5f, TitleIdle = 601 / 60f, ModesIdle = 1801 / 60f;
     private const float RollFade = 7 / 60f, RollSlide = 48 / 9f / 60, Roll = 2 * RollFade + RollSlide;

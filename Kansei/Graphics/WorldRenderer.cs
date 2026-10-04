@@ -283,13 +283,15 @@ public sealed class WorldRenderer : IDisposable
     }
 
     /// <summary>
-    ///     Opens the HDR scene pass sized like the swapchain (or <paramref name="target"/>) and fills it with the analytic
-    ///     sky seen through <paramref name="view"/>/<paramref name="proj"/>. Close with <see cref="EndScene"/>.
+    ///     Opens the HDR scene pass sized like the swapchain (or <paramref name="target"/>, or the <paramref name="viewport"/> of it:
+    ///     split screen, one scene per view into its rectangle) and fills it with the analytic sky seen through
+    ///     <paramref name="view"/>/<paramref name="proj"/>. Close with <see cref="EndScene"/> (same viewport).
     /// </summary>
-    public IRenderPassEncoder BeginScene(ICommandEncoder encoder, in Matrix4x4 view, in Matrix4x4 proj, FrameCapture? target = null)
+    public IRenderPassEncoder BeginScene(ICommandEncoder encoder, in Matrix4x4 view, in Matrix4x4 proj, FrameCapture? target = null, Core.Viewport? viewport = null)
     {
         var scale = Math.Clamp(RenderScale, 0.25f, 2);
-        EnsureTargets(Math.Max(1, (int)((target?.Width ?? _device.SwapchainWidth) * scale)), Math.Max(1, (int)((target?.Height ?? _device.SwapchainHeight) * scale)), Samples(Quality));
+        var (ow, oh) = viewport is { } vp ? (vp.Width, vp.Height) : (target?.Width ?? _device.SwapchainWidth, target?.Height ?? _device.SwapchainHeight);
+        EnsureTargets(Math.Max(1, (int)(ow * scale)), Math.Max(1, (int)(oh * scale)), Samples(Quality));
         // HDR colour + gbuffer (PostProcess.GbufFormat) + depth; with MSAA all three resolve into PostProcess's single-sample targets
         var ms = _samples > 1;
         ColorAttachment[] color = ms
@@ -324,14 +326,14 @@ public sealed class WorldRenderer : IDisposable
         return pass;
     }
 
-    /// <summary>Ends the scene pass and runs bloom + tonemapping into the swapchain or <paramref name="target"/>.</summary>
-    public void EndScene(ICommandEncoder encoder, IRenderPassEncoder pass, FrameCapture? target = null)
+    /// <summary>Ends the scene pass and runs bloom + tonemapping into the swapchain or <paramref name="target"/> (into <paramref name="viewport"/> of it, the rest kept).</summary>
+    public void EndScene(ICommandEncoder encoder, IRenderPassEncoder pass, FrameCapture? target = null, Core.Viewport? viewport = null)
     {
         pass.Dispose();
         DrawGlow(encoder);
-        _post.Run(encoder, Atmosphere, Ao, Bloom, Reflections, target?.View ?? _device.CurrentSwapchainView, target?.Width ?? _device.SwapchainWidth,
-            target?.Height ?? _device.SwapchainHeight, _viewRotProj, _proj,
-            _device.Backend == BackendKind.Metal ? -1 : 1);
+        var out0 = viewport ?? new Core.Viewport(0, 0, target?.Width ?? _device.SwapchainWidth, target?.Height ?? _device.SwapchainHeight);
+        _post.Run(encoder, Atmosphere, Ao, Bloom, Reflections, target?.View ?? _device.CurrentSwapchainView, out0.Width, out0.Height, _viewRotProj, _proj,
+            _device.Backend == BackendKind.Metal ? -1 : 1, out0.X, out0.Y, viewport != null);
     }
 
     /// <summary>

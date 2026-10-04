@@ -20,6 +20,7 @@ layout(push_constant) uniform Push {
     vec4 uTint; // rgb multiplied before tonemapping, a = saturation
     vec4 uB;    // x = vignette strength, y = width / height, z = contrast (power around mid grey, 1 = none)
     vec4 uC;    // x = AO on, y = near plane (m), z = SSR on, w = dither amplitude (1/255 units)
+    vec4 uD;    // xy = origin of the output rectangle in the target (split screen), pixels
 } pc;
 
 layout(location = 0) out vec4 FragColor;
@@ -53,7 +54,7 @@ float upsampleAo(vec2 frag)
 
 void main()
 {
-    vec2 uv = gl_FragCoord.xy * pc.uA.xy;
+    vec2 uv = (gl_FragCoord.xy - pc.uD.xy) * pc.uA.xy;
     vec3 c = texture(uScene, uv).rgb;
     if (pc.uC.x > 0.0 || pc.uC.z > 0.0)
     {
