@@ -30,7 +30,7 @@ public sealed class PhotoMode
     private float _flash;
     private string _flashText = "";
 
-    public static string Folder { get; set; } = Path.Combine(Path.GetDirectoryName(Settings.FilePath)!, "Screenshots");
+    public static string Folder => Path.Combine(Path.GetDirectoryName(Settings.FilePath)!, "Screenshots");
 
     public void Open(System.Numerics.Vector3 eye, System.Numerics.Vector3 look, float fovDegrees)
     {
@@ -78,7 +78,7 @@ public sealed class PhotoMode
             c.Lettering("PHOTO MODE", c.Left + 26, 52, 30, Canvas.White, Overlay.Rgba(0.72f, 0.73f, 0.75f), 0, 0.18f, false);
             c.Carbon(c.Left + 20, 70, c.Left + 190, 130, 1, false);
             Row(c, "FIELD OF VIEW", $"{Fov:0}°", 92);
-            Row(c, "EXPOSURE", $"{(Ev >= 0 ? "+" : "")}{Ev:0.0} EV", 118);
+            Row(c, "EXPOSURE", (MathF.Round(Ev, 1) + 0f).ToString("+0.0;-0.0", System.Globalization.CultureInfo.InvariantCulture) + " EV", 118);
             Menu.Hint(c, "WASD/QE: Move  IJKL/MOUSE: Look  UP/DOWN: Zoom  LEFT/RIGHT: Exposure  H: Hide  ENTER: Take photo  ESC: Back");
         }
         if (_flash > 0) c.Text(_flashText, 256, 400, 14, Style.Fade(Canvas.White, MathF.Min(1, _flash * 2)), 0.5f, 0.15f, 0.1f, 0.3f);

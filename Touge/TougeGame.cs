@@ -798,6 +798,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
                 ResetRun();
                 break;
             case Menu.Action.Exit:
+                EndRecording(); // the finished run is saved now, not at the next run
                 _inRace = false;
                 if (_front == null) Window.ShouldClose = true; // a --menu start has no main menu to go back to
                 else _front.Open(FrontEnd.Step.Modes);
@@ -1000,11 +1001,12 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         // pause → REPLAY (the run so far, TV camera) → back; → PHOTO → back; CONTINUE
         ("Pause", 0.8f, "pause", 1, 0, false, false), ("Pause", 0.3f, null, 1, 0, false, false), ("Pause", 0.3f, null, 0, 0, true, false),
         ("Replay", 2.5f, "replay_pause", 0, 0, false, true),
-        ("Pause", 0.5f, null, 1, 0, false, false), ("Pause", 0.3f, null, 1, 0, false, false), ("Pause", 0.3f, null, 1, 0, false, false), ("Pause", 0.3f, null, 0, 0, true, false),
-        ("Photo", 1, "photo", 0, 0, false, true), ("Pause", 0.5f, null, 0, 0, true, false),
+        ("Pause", 0.5f, "pause_back_replay", 1, 0, false, false), ("Pause", 0.3f, null, 0, 0, true, false), // the cursor stays on REPLAY
+        ("Photo", 1, "photo", 0, 0, false, true),
+        ("Pause", 0.5f, "pause_back_photo", -1, 0, false, false), ("Pause", 0.3f, null, -1, 0, false, false), ("Pause", 0.3f, null, -1, 0, false, false), ("Pause", 0.3f, null, 0, 0, true, false),
         ("Finish", 1.2f, "finish", 0, 0, false, false), ("Result", 3.6f, "result", 1, 0, false, false), ("Result", 0.3f, null, 0, 0, true, false),
         ("Replay", 3, "replay_result", 0, 0, false, true), ("Result", 0.8f, "result_back", 1, 0, false, false),
-        ("Result", 0.3f, null, 1, 0, false, false), ("Result", 0.3f, null, 1, 0, false, false), ("Result", 0.3f, null, 1, 0, false, false),
+        ("Result", 0.3f, null, 1, 0, false, false), ("Result", 0.3f, null, 1, 0, false, false),
         ("Result", 0.5f, "result_exit", 0, 0, true, false),
         ("Modes", 1, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 0, true, false),
         ("ReplayMenu", 1, "replay_menu", 0, 0, false, true),

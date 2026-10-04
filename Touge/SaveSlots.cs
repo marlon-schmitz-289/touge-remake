@@ -7,7 +7,7 @@ namespace Touge;
 ///     a copy of every progress file — all <c>*.json</c> directly in the app-data folder: settings.json (options, last choice,
 ///     records) and whatever other modes keep there (Legend, Story …: no registration, a new store is saved by just living
 ///     there) — plus <c>slot.json</c> (name, play time, date). Loading copies them back (and removes progress files the slot
-///     did not have) and raises <see cref="Loaded"/> for stores that keep their state in memory. <c>Saves/saves.json</c> keeps
+///     did not have), the profile's best runs too (<see cref="Folders"/>), and raises <see cref="Loaded"/> for stores that keep their state in memory. <c>Saves/saves.json</c> keeps
 ///     the active slot, autosave and the play time of the current profile (it is not a progress file itself).
 /// </summary>
 public sealed class SaveSlots(string root)
@@ -38,7 +38,7 @@ public sealed class SaveSlots(string root)
     /// <summary>After a load: the progress files are back in the app-data folder, stores should re-read them.</summary>
     public static event Action? Loaded;
 
-    public static SaveSlots Default { get; set; } = new(Path.GetDirectoryName(Ui.Settings.FilePath)!);
+    public static SaveSlots Default => new(Path.GetDirectoryName(Ui.Settings.FilePath)!);
 
     public string Root => root;
     private string Dir => Path.Combine(root, "Saves");
@@ -50,6 +50,9 @@ public sealed class SaveSlots(string root)
     public void WriteState(State s) => WriteJson(StatePath, s);
 
     public Meta? Read(int i) => ReadJson<Meta>(Path.Combine(SlotDir(i), "slot.json"));
+
+    /// <summary>Progress folders (relative to the app-data folder) a slot holds as well: the best runs (their times are the profile's records, they are its ghosts).</summary>
+    public static readonly string[] Folders = [Path.Combine("Replays", "Best")];
 
     /// <summary>The progress files now: every *.json directly in the app-data folder.</summary>
     public string[] ProgressFiles() => Directory.Exists(root) ? [.. Directory.GetFiles(root, "*.json").Select(Path.GetFileName).Order().OfType<string>()] : [];
@@ -63,6 +66,7 @@ public sealed class SaveSlots(string root)
         Directory.CreateDirectory(tmp);
         var files = ProgressFiles();
         foreach (var f in files) File.Copy(Path.Combine(root, f), Path.Combine(tmp, f));
+        foreach (var d in Folders) CopyDir(Path.Combine(root, d), Path.Combine(tmp, d));
         WriteJson(Path.Combine(tmp, "slot.json"), new Meta
         {
             Name = name, PlaySeconds = playSeconds, Saved = DateTime.Now, Files = [.. files.Select(Path.GetFileNameWithoutExtension).OfType<string>()],
@@ -89,6 +93,12 @@ public sealed class SaveSlots(string root)
             var dst = Path.Combine(root, f);
             File.Copy(Path.Combine(dir, f), dst + ".tmp", true);
             File.Move(dst + ".tmp", dst, true);
+        }
+        foreach (var d in Folders)
+        {
+            var dst = Path.Combine(root, d);
+            if (Directory.Exists(dst)) Directory.Delete(dst, true);
+            CopyDir(Path.Combine(dir, d), dst);
         }
         var s = ReadState();
         (s.Active, s.PlaySeconds) = (i, meta.PlaySeconds);
@@ -122,6 +132,13 @@ public sealed class SaveSlots(string root)
             if (p is { CanRead: true, CanWrite: true } && !MachineSettings.Contains(p.Name)
                 && p.GetCustomAttributes(typeof(System.Text.Json.Serialization.JsonIgnoreAttribute), false).Length == 0)
                 p.SetValue(to, p.GetValue(from));
+    }
+
+    private static void CopyDir(string from, string to)
+    {
+        if (!Directory.Exists(from)) return;
+        Directory.CreateDirectory(to);
+        foreach (var f in Directory.GetFiles(from)) File.Copy(f, Path.Combine(to, Path.GetFileName(f)), true);
     }
 
     private static int RecordsIn(string settings)

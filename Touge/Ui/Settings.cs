@@ -125,7 +125,8 @@ public sealed class Settings
 
     // ------------------------------------------------------------ file
 
-    public static string FilePath { get; } =
+    /// <summary>settings.json; its folder holds every other store (replays, save slots, photos); --data-dir moves it.</summary>
+    public static string FilePath { get; set; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "InitialDRemake", "settings.json");
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };

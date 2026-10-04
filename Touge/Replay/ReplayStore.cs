@@ -2,14 +2,20 @@ namespace Touge.Replays;
 
 /// <summary>
 ///     Replay files in the app-data folder (next to settings.json): <c>Replays/</c> every finished run and battle (the newest
-///     <see cref="Keep"/>), <c>Replays/Best/&lt;record key&gt;.rpl</c> the best run per course, direction and assists (its
+///     <see cref="Keep"/> plus the kept ones), <c>Replays/Best/&lt;record key&gt;.rpl</c> the best run per course, direction and assists (its
 ///     time is the record; the time attack ghost).
 /// </summary>
 public static class ReplayStore
 {
     public const int Keep = 40;
 
-    public static string Root { get; set; } = Path.Combine(Path.GetDirectoryName(Ui.Settings.FilePath)!, "Replays");
+    private static string? _root;
+
+    public static string Root
+    {
+        get => _root ?? Path.Combine(Path.GetDirectoryName(Ui.Settings.FilePath)!, "Replays");
+        set => _root = value;
+    }
     public static string BestDir => Path.Combine(Root, "Best");
 
     public static string BestPath(string runKey) => Path.Combine(BestDir, runKey + ".rpl");
@@ -19,7 +25,7 @@ public static class ReplayStore
     {
         var path = Path.Combine(Root, $"{r.Info.Date:yyyyMMdd-HHmmss}_{r.Info.Course}{(r.Info.Reverse ? "_R" : "")}.rpl");
         r.Save(path);
-        foreach (var old in Directory.GetFiles(Root, "*.rpl").Order(StringComparer.Ordinal).SkipLast(Keep)) File.Delete(old);
+        foreach (var old in Directory.GetFiles(Root, "*.rpl").Where(f => !IsKept(f)).Order(StringComparer.Ordinal).SkipLast(Keep)) File.Delete(old);
         return path;
     }
 
@@ -39,6 +45,20 @@ public static class ReplayStore
                 Console.WriteLine($"[Replay] {Path.GetFileName(path)} übersprungen: {e.Message}");
             }
         return [.. list.OrderByDescending(x => x.Item2.Date)];
+    }
+
+    private const string KeptPrefix = "KEEP_";
+
+    /// <summary>A kept replay (REPLAY &amp; RECORD: KEEP) is never pruned.</summary>
+    public static bool IsKept(string path) => Path.GetFileName(path).StartsWith(KeptPrefix, StringComparison.Ordinal);
+
+    /// <summary>Keeps <paramref name="path"/> or gives it back to pruning; returns its new path.</summary>
+    public static string ToggleKept(string path)
+    {
+        var name = Path.GetFileName(path);
+        var to = Path.Combine(Path.GetDirectoryName(path)!, IsKept(path) ? name[KeptPrefix.Length..] : KeptPrefix + name);
+        File.Move(path, to);
+        return to;
     }
 
     public static void Delete(string path)

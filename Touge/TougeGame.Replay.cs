@@ -26,6 +26,9 @@ public sealed partial class TougeGame
     public ReplayViewer.Camera ReplayCam { get; init; } = ReplayViewer.Camera.Tv;
     /// <summary>--ghost: a replay file to drive as the ghost (test runs; with the menus the best run of the course).</summary>
     public string? GhostFile { get; init; }
+    /// <summary>--data-dir: finished runs, best runs and autosaves are written also in a test run (into that folder).</summary>
+    public bool SaveRuns { get; init; }
+    private bool SavesRuns => _persist || SaveRuns;
 
     private ReplayMenu? _replayMenu;
     private SaveLoadScreen? _saveMenu;
@@ -42,7 +45,7 @@ public sealed partial class TougeGame
         if (_menu == null || _catalog == null) return;
         _replayMenu = new ReplayMenu(_catalog, _settings) { Sound = n => _menuAudio?.Play(n) };
         _saveMenu = new SaveLoadScreen(SaveSlots.Default) { Sound = n => _menuAudio?.Play(n), PlaySeconds = () => _playSeconds };
-        _playSeconds = _persist ? SaveSlots.Default.ReadState().PlaySeconds : 0;
+        _playSeconds = SavesRuns ? SaveSlots.Default.ReadState().PlaySeconds : 0;
         _menu.Options.Find("GAME SETTING")?.Rows.Add(Options.Row.Toggle("GHOST", () => _settings.Ghost, v => _settings.Ghost = v,
             "Time attack: your best run on this course and route", "drives along as a see-through car."));
     }
@@ -114,7 +117,7 @@ public sealed partial class TougeGame
     /// <summary>Per frame: our screens, the viewer and photo mode take the input; true when one of them is up.</summary>
     private bool UpdateReplay((int X, int Y, bool Ok, bool Back) keys, float dt)
     {
-        if (_persist) _playSeconds += dt;
+        if (SavesRuns) _playSeconds += dt;
         if (_photo.Active)
         {
             UpdatePhoto(keys, dt);
@@ -260,7 +263,7 @@ public sealed partial class TougeGame
     {
         var rec = _rec;
         _rec = null;
-        if (rec is not { Valid: true } || rec.Replay.Info.Time == null || !_persist) return;
+        if (rec is not { Valid: true } || rec.Replay.Info.Time == null || !SavesRuns) return;
         try
         {
             ReplayStore.SaveRecent(rec.Replay);
@@ -286,7 +289,7 @@ public sealed partial class TougeGame
     /// <summary>Autosave into the active slot (SAVE &amp; LOAD) after a finished run, with the menus.</summary>
     private void Autosave()
     {
-        if (!_persist) return;
+        if (!SavesRuns) return;
         var slots = SaveSlots.Default;
         var s = slots.ReadState();
         if (!s.Autosave || s.Active < 0 || slots.Read(s.Active) is not { } meta) return;
@@ -367,7 +370,7 @@ public sealed partial class TougeGame
     private void LoadGhost()
     {
         var path = GhostFile ?? ReplayStore.BestPath(_settings.RunKey(_courseTime[.._courseTime.LastIndexOf('_')], _drive.Reverse));
-        if (GhostFile == null && (!_persist || !_settings.Ghost || _race != null || _menu == null) || !File.Exists(path))
+        if (GhostFile == null && (!SavesRuns || !_settings.Ghost || _race != null || _menu == null) || !File.Exists(path))
         {
             DisposeShowCars();
             return;
@@ -523,10 +526,12 @@ public sealed partial class TougeGame
         {
             case Back.Pause:
                 OpenMenu(Menu.Screen.Pause);
+                _menu!.Select("Replay");
                 break;
             case Back.Result:
                 OpenMenu(Menu.Screen.Result);
                 _menu!.Settle(Menu.ButtonsAt + 0.3f);
+                _menu.Select("REPLAY");
                 break;
             default:
                 DisposeShowCars();
@@ -715,7 +720,11 @@ public sealed partial class TougeGame
                 a.Exposure = _photoExposure;
                 _photoAtmosphere = null;
                 _photo.Close();
-                if (_player == null) OpenMenu(Menu.Screen.Pause);
+                if (_player == null)
+                {
+                    OpenMenu(Menu.Screen.Pause);
+                    _menu!.Select("Photo");
+                }
                 return;
             case PhotoMode.Command.Capture when _shotState == 0:
                 Directory.CreateDirectory(PhotoMode.Folder);

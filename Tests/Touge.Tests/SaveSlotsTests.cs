@@ -17,6 +17,9 @@ public class SaveSlotsTests : IDisposable
     {
         File.WriteAllText(P("settings.json"), """{ "Best": { "AKINA_A": [1, 2, 3, 200.5], "IROHA_A": [1, 2, 3, 150] } }""");
         File.WriteAllText(P("legend.json"), """{ "Stage": 3 }""");
+        var best = Path.Combine(_root, SaveSlots.Folders[0]);
+        Directory.CreateDirectory(best);
+        File.WriteAllText(Path.Combine(best, "AKINA_A.rpl"), "takumi");
         var slots = new SaveSlots(_root);
         slots.Save(1, "TAKUMI", 3600);
         var meta = slots.Read(1)!;
@@ -29,12 +32,16 @@ public class SaveSlotsTests : IDisposable
         // play on: more progress, a new store appears, then load the slot
         File.WriteAllText(P("settings.json"), "{}");
         File.WriteAllText(P("story.json"), "{}");
+        File.WriteAllText(Path.Combine(best, "AKINA_A.rpl"), "other profile");
+        File.WriteAllText(Path.Combine(best, "IROHA_A.rpl"), "other profile");
         var loaded = 0;
         SaveSlots.Loaded += () => loaded++;
         Assert.True(slots.Load(1));
         Assert.Contains("200.5", File.ReadAllText(P("settings.json")));
         Assert.Equal("""{ "Stage": 3 }""", File.ReadAllText(P("legend.json")));
         Assert.False(File.Exists(P("story.json")), "progress the slot did not have");
+        Assert.Equal("takumi", File.ReadAllText(Path.Combine(best, "AKINA_A.rpl"))); // its ghost, not the other profile's
+        Assert.False(File.Exists(Path.Combine(best, "IROHA_A.rpl")));
         Assert.True(loaded >= 1);
         Assert.Equal(3600, slots.ReadState().PlaySeconds);
 
@@ -69,6 +76,9 @@ public class SaveSlotsTests : IDisposable
         try
         {
             var r = new Replay { Info = { Cars = [new("YOU", "AE86T", 0)] } };
+            r.Info.Date = new DateTime(2025, 1, 1);
+            var kept = ReplayStore.ToggleKept(ReplayStore.SaveRecent(r)); // the oldest, but kept
+            Assert.True(ReplayStore.IsKept(kept));
             for (var i = 0; i < ReplayStore.Keep + 3; i++)
             {
                 r.Info.Date = new DateTime(2026, 1, 1).AddMinutes(i);
@@ -76,8 +86,10 @@ public class SaveSlotsTests : IDisposable
             }
             File.WriteAllText(Path.Combine(_root, "zz_broken.rpl"), "nope");
             var list = ReplayStore.List(_root);
-            Assert.Equal(ReplayStore.Keep, list.Count);
+            Assert.Equal(ReplayStore.Keep + 1, list.Count);
             Assert.Equal(new DateTime(2026, 1, 1).AddMinutes(ReplayStore.Keep + 2), list[0].Info.Date); // newest first, oldest gone
+            Assert.Equal(kept, list[^1].Path);
+            Assert.False(ReplayStore.IsKept(ReplayStore.ToggleKept(kept)));
         }
         finally
         {

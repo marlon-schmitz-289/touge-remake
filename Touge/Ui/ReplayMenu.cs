@@ -8,7 +8,7 @@ namespace Touge.Ui;
 ///     REPLAY &amp; RECORD (main menu, BGM WORRY as the original): three chrome tabs on the left — REPLAYS (every finished run
 ///     and battle, newest first), BEST RUNS (the record run per course, direction and assists) and RECORDS (best time per
 ///     course and route, the former Records screen) — and the list in the carbon panel. ←/→ tabs ↔ list, ↑/↓ move, DECIDE
-///     watch, X/DELETE (pad X) delete with a YES/NO question, BACK to the tabs / main menu.
+///     watch, K (pad Y) keeps a replay from pruning, X/DELETE (pad X) delete with a YES/NO question, BACK to the tabs / main menu.
 /// </summary>
 public sealed class ReplayMenu(Catalog catalog, Settings settings)
 {
@@ -68,6 +68,7 @@ public sealed class ReplayMenu(Catalog catalog, Settings settings)
             return Result.None;
         }
         var pad = input.Gamepad;
+        var keep = input.Keyboard.IsKeyPressed(Key.K) || pad.IsConnected && pad.IsButtonPressed(GamepadButton.Y);
         var delete = input.Keyboard.IsKeyPressed(Key.Delete) || input.Keyboard.IsKeyPressed(Key.X) || pad.IsConnected && pad.IsButtonPressed(GamepadButton.X);
         if (!InList)
         {
@@ -109,6 +110,20 @@ public sealed class ReplayMenu(Catalog catalog, Settings settings)
             Active = false;
             return Result.Play;
         }
+        else if (keep && Tab == 0 && Items.Count > 0)
+        {
+            try
+            {
+                var path = ReplayStore.ToggleKept(Items[_row].Path);
+                Items[_row] = (path, Items[_row].Info);
+                Sound?.Invoke("SYS006");
+            }
+            catch (IOException e)
+            {
+                Console.WriteLine($"[Replay] {Items[_row].Path}: {e.Message}");
+                Sound?.Invoke("BEEP001");
+            }
+        }
         else if (delete && Items.Count > 0)
         {
             Sound?.Invoke("SYS006");
@@ -140,7 +155,7 @@ public sealed class ReplayMenu(Catalog catalog, Settings settings)
         _confirm.Draw(c, Theta);
         c.Marquee("REPLAY & RECORD", true, _clock);
         Menu.Hint(c, Tab == 2 ? "UP/DOWN: Tab    BACK: Main menu"
-            : InList ? "UP/DOWN: Select    DECIDE: Watch    X / DELETE: Delete    BACK: Tabs"
+            : InList ? $"UP/DOWN: Select    DECIDE: Watch    {(Tab == 0 ? "Y / K: Keep    " : "")}X / DELETE: Delete    BACK: Tabs"
             : "UP/DOWN: Tab    DECIDE / RIGHT: List    BACK: Main menu");
         c.Fade(1 - Math.Clamp(_t / Menu.Fade, 0, 1));
     }
@@ -166,7 +181,7 @@ public sealed class ReplayMenu(Catalog catalog, Settings settings)
         }
         for (var i = _top; i < Math.Min(Items.Count, _top + Visible); i++)
         {
-            var (_, info) = Items[i];
+            var (path, info) = Items[i];
             var y = 84 + (i - _top) * 47;
             var sel = InList && i == _row;
             c.Rule(196, 484, y + 44);
@@ -174,6 +189,7 @@ public sealed class ReplayMenu(Catalog catalog, Settings settings)
             c.Fit(Where(info), 210, y + 19, 186, 0, sel ? Canvas.Yellow : Canvas.White, 0.15f, 0.06f, 14);
             var cars = string.Join("  VS  ", info.Cars.Select(x => CarName(x.Car)));
             c.Fit($"{(info.Mode == "BATTLE" ? $"BATTLE {info.Result}" : info.Mode)}   {cars}", 210, y + 37, 186, 0, Overlay.Rgba(0.75f, 0.78f, 0.8f), 0.12f, 0, 11);
+            if (Tab == 0 && ReplayStore.IsKept(path)) c.Text("KEPT", 400, y + 37, 10, Canvas.Yellow, 0, 0.12f);
             c.Text(Style.Time(info.Time), 484, y + 19, 15, Canvas.White, 1, 0.15f, 0, 0.3f);
             c.Text(info.Date.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture), 484, y + 37, 10, Overlay.Rgba(0.75f, 0.78f, 0.8f), 1, 0.1f);
         }

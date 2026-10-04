@@ -53,17 +53,19 @@ dotnet run --project Touge -- "<iso>" IROHA_DAY --battle itsuki --autodrive 110 
 dotnet run --project Touge -- "<iso>" AKINA_DAY --replay-test 380 [--battle keisuke] [--drift] [--save out/proof/r.rpl]   # ohne Fenster: Lauf aufnehmen, Datei schreiben/lesen, auf frischen Autos abspielen, Positionsfehler je Tick (mit Keyframes) und nur aus Eingaben, 20 Sprünge
 dotnet run --project Touge -- "<iso>" --replay out/proof/r.rpl [--replay-at 30] [--replay-cam tv|chase|bumper|free] [--shot out/proof/rv.png]   # Replay im Viewer
 dotnet run --project Touge -- "<iso>" AKINA_DAY --ghost out/proof/r.rpl --autodrive 9 --drift --shot out/proof/ghost.png   # Geist aus einer Replay-Datei (mit Menüs: der Bestzeit-Lauf)
-dotnet run --project Touge -- "<iso>" --replay-dir out/proof/replays --save-dir out/proof/savedata --menu replay|replay-best|replay-records|replay-delete|saveload|saveload-actions|saveload-name --shot out/proof/m.png   # REPLAY & RECORD / SAVE & LOAD als Bild (andere Ordner: die echten bleiben unberührt)
+dotnet run --project Touge -- "<iso>" --data-dir out/proof/data --menu replay|replay-best|replay-records|replay-delete|saveload|saveload-actions|saveload-name --shot out/proof/m.png   # REPLAY & RECORD / SAVE & LOAD als Bild (anderer App-Daten-Ordner: die echten Daten bleiben unberührt)
+dotnet run --project Touge -- "<iso>" --flow out/proof/flow --data-dir out/proof/flow_data   # --flow mit echtem Speichern: Ergebnis → EXIT legt Replay + Bestzeit-Lauf in out/proof/flow_data/Replays ab, REPLAY & RECORD zeigt ihn
 dotnet run --project Touge -- "<iso>" AKINA_DAY --menu photo --shot out/proof/photo.png   # Fotomodus über dem pausierten Rennen
 ```
 
 REPLAY & RECORD (`Touge/Replay`, `Ui/ReplayMenu`, `Ui/ReplayViewer`, BGM „WORRY“ wie im Original): jeder Lauf und jedes Battle wird aufgenommen
 (`ReplayRecorder`: Eingaben aller Autos je Physik-Tick + alle 0,5 s und nach jedem Versetzen (R, Neustart der KI) der volle Zustand jedes Autos,
 `Vehicle.Save/Load`). Die Physik ist deterministisch: Abspielen nur aus den Eingaben trifft die Aufnahme auf den Millimeter (`--replay-test`), die
-Keyframes machen Springen billig und tragen, was die Eingaben nicht haben. Fertige Läufe landen mit den Menüs in `Replays/` neben settings.json
-(die neuesten 40, gzip, ~1–2,5 KiB/s), ein neuer Rekord zusätzlich als `Replays/Best/<Rekordschlüssel>.rpl`. Zuschauen: Pause → Replay (der Lauf
+Keyframes machen Springen billig und tragen, was die Eingaben nicht haben. Fertige Läufe landen mit den Menüs (oder `--data-dir`) in `Replays/` neben settings.json,
+sobald der Lauf endet (Ergebnis/Pause → EXIT, neuer Lauf, Beenden) (die neuesten 40 plus behaltene, gzip, ~1–2,5 KiB/s), ein neuer Rekord zusätzlich als `Replays/Best/<Rekordschlüssel>.rpl`. Zuschauen: Pause → Replay (der Lauf
 bis hier, danach geht das Rennen genau dort weiter), Ergebnis → REPLAY, Hauptmenü → REPLAY & RECORD (Reiter REPLAYS, BEST RUNS, RECORDS = die
-Bestzeiten wie bisher; ↑/↓, Entscheiden ansehen, X/Entf bzw. Pad X löschen mit JA/NEIN). Viewer: blinkendes REPLAY, Auto/Tempo/Gang, Zeitleiste;
+Bestzeiten wie bisher; ↑/↓, Entscheiden ansehen, K bzw. Pad Y behalten (KEPT: nie weggekürzt), X/Entf bzw. Pad X löschen mit JA/NEIN).
+Zurück aus Viewer/Fotomodus steht der Cursor wieder auf REPLAY bzw. PHOTO. Viewer: blinkendes REPLAY, Auto/Tempo/Gang, Zeitleiste;
 Kameras C bzw. Pad Y: TV (die Originalkameras aus `REPLAY.AFS`/REPCAM je Kurs und Richtung, an der Strecke, Zoom und Fahrt wie im Original,
 schauen aufs Auto), Verfolger, Stoßstange, frei (WASD/QE, IJKL oder rechte Maustaste, Shift schnell; Pad Sticks + Trigger). Leertaste/Enter bzw.
 Pad A Pause, ←/→ (Pad D-Pad/LB/RB) gehalten zurück/vor (4×), ↑/↓ Tempo ¼–4×, Tab (Pad BACK) anderes Auto, H (Pad X) Overlay aus, R (Pad L3)
@@ -74,7 +76,7 @@ FOTOMODUS (Pause → Photo oder P im Replay): Spiel steht, freie Kamera wie oben
 Enter/Leertaste (Pad A) speichert ein PNG ohne Overlay in `Screenshots/` neben settings.json, Esc (Pad B) zurück. Tiefenunschärfe: nicht gebaut.
 SAVE & LOAD (`SaveSlots`, `Ui/SaveLoadScreen`): 3 Spielstände (Name, Spielzeit, Rekorde, Fortschritt, Datum). Ein Spielstand ist eine Kopie aller
 `*.json` direkt im App-Data-Ordner (settings.json + was andere Modi dort ablegen, z. B. legend.json/story.json – ohne Anmeldung) in
-`Saves/Slot<n>/`; Laden kopiert sie zurück (fehlende Fortschrittsdateien werden entfernt), übernimmt alles außer Steuerung und Bildschirm dieses
+`Saves/Slot<n>/`, dazu die Bestzeit-Läufe `Replays/Best/` (Geister und BEST RUNS gehören zum Profil); Laden kopiert sie zurück (fehlende Fortschrittsdateien werden entfernt), übernimmt alles außer Steuerung und Bildschirm dieses
 Rechners und meldet `SaveSlots.Loaded` (für Modi mit Zustand im Speicher). Entscheiden auf einem Platz: SAVE / LOAD / RENAME / DELETE / CANCEL
 (Überschreiben, Laden, Löschen fragen JA/NEIN), ein leerer Platz fragt nach dem Namen (Arcade-Eingabe ↑/↓ Buchstabe, ←/→ Stelle, oder tippen).
 AUTOSAVE (an/aus) speichert nach jedem fertigen Lauf und beim Beenden in den Platz in Benutzung (zuletzt gespeichert/geladen).

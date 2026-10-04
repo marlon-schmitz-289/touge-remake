@@ -132,6 +132,9 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
 
     public void Close() => Current = Screen.None;
 
+    /// <summary>The cursor on the pause/result button <paramref name="label"/> (back from the replay viewer or photo mode).</summary>
+    public void Select(string label) => _row = Math.Max(0, Array.IndexOf(Current == Screen.Pause ? PauseButtons : ResultButtons, label));
+
     private void Enter(Screen s, bool fadeIn)
     {
         (Current, _t, _fadeIn, _inModels, _loadAsked) = (s, 0, fadeIn, false, false);
