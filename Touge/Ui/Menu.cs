@@ -13,7 +13,7 @@ namespace Touge.Ui;
 ///     carbon MODEL panel) → car (the 3D car turning behind, body colour) → transmission → loading (white, "Now Loading...")
 ///     → course telop and 3-2-1-GO (TLP_STG, CAR010/CAR011) → race; pause bar (Continue/Retry/Exit, PAUSE.PAC) →
 ///     finish banner (FINISH.PAC) → result sheet with tallied rows (RESULT.PAC, NAME001) and the action buttons
-///     (ACTCHOICE: Retry, Course Select, Car Select, Exit). Records (REC_TEX) and Options (OPGM rows) hang off the main
+///     (ACTCHOICE: Retry, Course Select, Car Select, Exit). Records (REC_TEX) and Options (<see cref="Ui.Options"/>: OPSL sections, OPGM rows) hang off the main
 ///     menu. 30-frame black fades between modules, steps inside a module switch in place. Back walks the visited steps.
 ///     UI sounds by SYSSE name through <see cref="Sound"/> (SYS005 move, SYS006 decide, BEEP001 back/locked); the
 ///     game reads <see cref="Music"/>, reacts to the returned <see cref="Action"/> and reads the selection.
@@ -54,11 +54,13 @@ public sealed class Menu(Catalog catalog, Settings settings)
     private readonly QuitPrompt _quit = new();
 
     public Screen Current { get; private set; }
+    /// <summary>The OPTIONS sections and pages (<see cref="Ui.Options"/>; other features add their pages here).</summary>
+    public Options Options { get; } = new(settings);
     /// <summary>Original UI sound by SYSSE name.</summary>
     public Action<string>? Sound { get; set; }
 
     private int _slot, _maker, _model, _car, _paint, _choice, _row;
-    private bool _reverse, _night, _wet, _fog, _manual, _inModels, _loadAsked, _fadeIn, _padHelp;
+    private bool _reverse, _night, _wet, _fog, _manual, _inModels, _loadAsked, _fadeIn;
     private float _t, _clock, _leave = -1;
     private Screen _next;
     private Action _then;
@@ -130,6 +132,7 @@ public sealed class Menu(Catalog catalog, Settings settings)
             Screen.Gearbox => _manual ? 1 : 0, _ => 0,
         };
         _row = 0;
+        if (s == Screen.Options) Options.Open();
     }
 
     /// <summary>Screens of one module switch in place, between modules the screen fades through black.</summary>
@@ -401,16 +404,12 @@ public sealed class Menu(Catalog catalog, Settings settings)
                 if (k.Back || k.Ok) Back();
                 break;
             case Screen.Options:
-                if (k.Y != 0)
+                switch (Options.Update(k, Sound))
                 {
-                    _row = Wrap(_row + k.Y, OptionRows.Length);
-                    Sound?.Invoke("SYS005");
-                }
-                else if (k.Back) Back();
-                else if ((k.X != 0 || k.Ok) && ChangeOption(k.X != 0 ? k.X : 1))
-                {
-                    Sound?.Invoke("SYS005");
-                    return Action.SettingsChanged;
+                    case Options.Result.Changed: return Action.SettingsChanged;
+                    case Options.Result.Leave:
+                        Back();
+                        break;
                 }
                 break;
         }
@@ -421,67 +420,6 @@ public sealed class Menu(Catalog catalog, Settings settings)
     {
         Current = Screen.None;
         return Action.Resume;
-    }
-
-    // ---------------------------------------------------------------- options
-
-    private static readonly string[] OptionRows = ["GRAPHICS", "MUSIC", "MUSIC VOLUME", "SE VOLUME", "HUD", "NAVI MAP", "CAMERA", "STICKERS", "CONTROLS"];
-
-    private static readonly string[][] OptionValues =
-    [
-        ["HIGH", "LOW"], ["ON", "OFF"], [], [], ["ON", "OFF"], ["ROTATING", "NORTH UP", "WHOLE"], ["CHASE", "BUMPER"], ["ANIME", "STOCK", "NONE"],
-        ["KEYBOARD", "PAD"],
-    ];
-
-    private static readonly string[][] OptionHelp =
-    [
-        ["HIGH: 4x MSAA, bloom and sun shadows.", "LOW: for slower machines."],
-        ["Menu music and the Eurobeat in the race."], ["Volume of the music."], ["Volume of engine, tyres and menu sounds."],
-        ["Times, drift meter, course dial and the car's own gauges."],
-        ["Course dial: turns with the car, north up,", "or shows the whole course."], ["Chase camera behind the car, or the bumper view."],
-        ["ANIME: the character's car with its stickers.", "STOCK: the game's stock car.  NONE: no stickers or plates."],
-    ];
-
-    private static readonly string[] KeyboardHelp =
-        ["W/S or UP/DOWN throttle and brake, A/D or LEFT/RIGHT steer, SPACE handbrake,", "SHIFT/CTRL gear up/down (MT), T AT/MT, R back to the road, C camera,", "L lights, H high beam, F2 graphics, F3 music, F4 HUD, N map, ESC pause."];
-
-    private static readonly string[] PadHelp =
-        ["Left stick steer, right/left trigger throttle and brake, A handbrake,", "bumpers gear up/down (MT), Y back to the road, START pause.", "D-pad up/down lights/high beam. Menus: D-pad or stick, A decide, B back."];
-
-    /// <summary>Selected value of option row <paramref name="row"/>.</summary>
-    private int OptionValue(int row) => row switch
-    {
-        0 => settings.HighQuality ? 0 : 1, 1 => settings.MusicOn ? 0 : 1, 4 => settings.HudOn ? 0 : 1, 5 => (int)settings.MapMode,
-        6 => settings.BumperCam ? 1 : 0, 7 => settings.Livery switch { Livery.Rival => 0, Livery.Stock => 1, _ => 2 }, 8 => _padHelp ? 1 : 0, _ => 0,
-    };
-
-    /// <summary>Steps option <see cref="_row"/> by <paramref name="step"/>; false if nothing changed.</summary>
-    private bool ChangeOption(int step)
-    {
-        var s = settings;
-        switch (_row)
-        {
-            case 2 or 3:
-                var v = Math.Clamp(MathF.Round((_row == 2 ? s.MusicVolume : s.SoundVolume) * 10 + step) / 10, 0, 1);
-                if (v == (_row == 2 ? s.MusicVolume : s.SoundVolume)) return false;
-                if (_row == 2) s.MusicVolume = v;
-                else s.SoundVolume = v;
-                return true;
-            case 8:
-                _padHelp = !_padHelp;
-                return true;
-        }
-        var n = Wrap(OptionValue(_row) + step, OptionValues[_row].Length);
-        switch (_row)
-        {
-            case 0: s.HighQuality = n == 0; break;
-            case 1: s.MusicOn = n == 0; break;
-            case 4: s.HudOn = n == 0; break;
-            case 5: s.MapMode = (Hud.MapMode)n; break;
-            case 6: s.BumperCam = n == 1; break;
-            case 7: s.Livery = n switch { 0 => Livery.Rival, 1 => Livery.Stock, _ => Livery.None }; break;
-        }
-        return true;
     }
 
     // ---------------------------------------------------------------- drawing
@@ -541,15 +479,15 @@ public sealed class Menu(Catalog catalog, Settings settings)
                 break;
             case Screen.Options:
                 c.Backdrop(_clock);
-                OptionsScreen(c);
-                c.Marquee("OPTIONS", true, _clock);
+                Options.Draw(c, Theta);
+                c.Marquee(Options.Title, true, _clock);
                 break;
         }
         c.Fade(_leave >= 0 ? Math.Clamp(_leave / Fade, 0, 1) : _fadeIn ? 1 - Math.Clamp(_t / Fade, 0, 1) : 0);
     }
 
     /// <summary>Red hint line along the bottom, as the original's small red help strips.</summary>
-    private static void Hint(Canvas c, string text)
+    internal static void Hint(Canvas c, string text)
     {
         c.O.Rect(new Vector2(0, MathF.Round(c.P(0, 428).Y)), new Vector2(c.Width, MathF.Round(c.P(0, 448).Y)), Overlay.Rgba(0, 0, 0, 0.65f));
         c.Text(text, 256, 442, 11.5f, Overlay.Rgba(1, 0.2f, 0.15f), 0.5f, 0.15f, 0, 0.3f);
@@ -854,45 +792,6 @@ public sealed class Menu(Catalog catalog, Settings settings)
             }
         }
         Hint(c, "Best time per course and route    BACK: Main menu");
-    }
-
-    private void OptionsScreen(Canvas c)
-    {
-        for (var i = 0; i < OptionRows.Length; i++)
-        {
-            var y = 70 + i * 30;
-            // dark-steel label tab
-            Vector2 min = Vector2.Round(c.P(36, y)), max = Vector2.Round(c.P(196, y + 26));
-            c.O.Rect(min, max, Overlay.Rgba(0.5f, 0.51f, 0.53f));
-            c.O.RectGradient(min + new Vector2(1.5f, 1.5f) * c.S, max - new Vector2(1.5f, 1.5f) * c.S, Overlay.Rgba(0.24f, 0.25f, 0.26f), Overlay.Rgba(0.1f, 0.1f, 0.11f));
-            c.Fit(OptionRows[i], 116, y + 18, 130, 0.5f, Canvas.White, 0.1f, 0, 13);
-            // chrome value plate with engraved choices, the active one lit
-            c.Plate(204, y, 276, 26, 1);
-            var values = OptionValues[i];
-            if (i is 2 or 3)
-            {
-                var v = MathF.Round((i == 2 ? settings.MusicVolume : settings.SoundVolume) * 10);
-                for (var s = 0; s < 10; s++)
-                {
-                    float sx = 232 + s * 22;
-                    c.O.Rect(Vector2.Round(c.P(sx, y + 7)), Vector2.Round(c.P(sx + 16, y + 19)), s < v ? Overlay.Rgba(0.15f, 0.42f, 0.2f) : Overlay.Rgba(0.45f, 0.47f, 0.46f, 0.6f));
-                }
-                continue;
-            }
-            var sel = OptionValue(i);
-            for (var j = 0; j < values.Length; j++)
-            {
-                var x = 204 + 276 * (j + 0.5f) / values.Length;
-                var on = j == sel;
-                c.Text(values[j], x, y + 18, 13, on ? Overlay.Rgba(0.05f, 0.3f, 0.1f) : Overlay.Rgba(0.35f, 0.42f, 0.38f, 0.55f), 0.5f, 0, 0, on ? 0.6f : 0);
-            }
-        }
-        var gy = 70 + _row * 30;
-        c.Glow(200, gy - 4, 484, gy + 30, Canvas.Pulse(Theta));
-        c.Carbon(36, 344, 480, 426, 1, false);
-        var help = _row == 8 ? _padHelp ? PadHelp : KeyboardHelp : OptionHelp[_row];
-        for (var i = 0; i < help.Length; i++) c.Text(help[i], 50, 366 + i * 20, 11.5f, Canvas.White, 0, 0.12f);
-        Hint(c, "UP/DOWN: Select    LEFT/RIGHT: Change    BACK: Main menu");
     }
 }
 

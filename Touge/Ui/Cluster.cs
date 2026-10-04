@@ -146,7 +146,12 @@ public static class Cluster
 
     /// <summary>What the dials show this frame; <see cref="Boost"/> in bar (−1..1), <see cref="Time"/> in s for blinking, <see cref="Lights"/> the tell-tales.</summary>
     public readonly record struct Reading(float Rpm, float Kmh, int Gear, bool Automatic, float Boost, bool Night, float Time,
-        Headlights.Mode Lights = Headlights.Mode.Off);
+        Headlights.Mode Lights = Headlights.Mode.Off, bool Mph = false)
+    {
+        /// <summary>Speed in the chosen unit (Options: UNITS); the speedo scale stays, as on an export car's mph dial.</summary>
+        public float Speed => Mph ? Kmh / 1.609344f : Kmh;
+        public string Unit => Mph ? "mph" : "km/h";
+    }
 
     /// <summary>Needle sweep of one dial in px: hub, start angle and span (rad), needle length, tail length.</summary>
     public readonly record struct Sweep(Vector2 C, float From, float Span, float Len, float Tail);
@@ -208,8 +213,8 @@ public static class Cluster
                     break;
                 case Kind.Speedo:
                     var speedo = new Scale(SpeedoMax, 20, g.Minor > 0 ? g.Minor : 2, 20, float.MaxValue, 1);
-                    Dial(o, c, rad, u, k, speedo, r.Kmh, "km/h", 16 * g.NumSize * MathF.Min(1, m.R / 90));
-                    SpeedWindow(o, watch ? column + new Vector2(0, 92 * u) : c + new Vector2(0, 0.66f * rad), watch ? 70 * u : rad, u, k, r.Kmh);
+                    Dial(o, c, rad, u, k, speedo, r.Speed, r.Unit, 16 * g.NumSize * MathF.Min(1, m.R / 90));
+                    SpeedWindow(o, watch ? column + new Vector2(0, 92 * u) : c + new Vector2(0, 0.66f * rad), watch ? 70 * u : rad, u, k, r.Speed);
                     break;
                 case Kind.Mfd:
                     Mfd(o, c, rad, u, r, g.TachMax);
@@ -557,8 +562,8 @@ public static class Cluster
         var sp = new Vector2(c.X - 20 * u, max.Y - 28 * u);
         var big = 56 * u;
         o.Text("888", sp, big, unlit, 1, 0.5f * u, 0, 0.08f);
-        o.Text($"{MathF.Round(r.Kmh):0}", sp, big, g.Ink, 1, 0.5f * u, 0, 0.08f);
-        o.Text("km/h", sp + new Vector2(8 * u, 0), 14 * u, Style.Fade(g.Ink, 0.8f), 0, 0.2f * u);
+        o.Text($"{MathF.Round(r.Speed):0}", sp, big, g.Ink, 1, 0.5f * u, 0, 0.08f);
+        o.Text(r.Unit, sp + new Vector2(8 * u, 0), 14 * u, Style.Fade(g.Ink, 0.8f), 0, 0.2f * u);
         // gear box
         var gc = new Vector2(c.X + 70 * u, max.Y - 48 * u);
         var half = new Vector2(24, 22) * u;

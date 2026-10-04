@@ -9,7 +9,7 @@ namespace Kansei.Graphics;
 ///     half-res ambient occlusion (ao.frag + 4×4 bilateral blur) and wet-ground reflections (ssr.frag + vertical streak
 ///     blur ssr_blur.frag) → bloom (soft
 ///     threshold, 4×4-box downsample chain to 1/64, tent upsample back) → tonemap (AO on the ambient share, SSR,
-///     grade, vignette, dither) into the output (swapchain format). AO/SSR/bloom only in high quality.
+///     grade, vignette, dither) into the output (swapchain format). AO, SSR and bloom each switchable.
 /// </summary>
 internal sealed class PostProcess : IDisposable
 {
@@ -137,17 +137,18 @@ internal sealed class PostProcess : IDisposable
         _device.CreateBindGroup(new BindGroupDesc(layout, [.. textures.Select((t, i) => BindGroupEntry.CombinedImageSampler(i, t.View, t.Sampler))]));
 
     /// <summary>
-    ///     <paramref name="high"/>: AO, SSR and bloom. <paramref name="viewRotProj"/> = view rotation (no translation) ×
+    ///     <paramref name="ao"/>, <paramref name="bloom"/>, <paramref name="reflections"/> (SSR, wet only) per pass; the output may differ
+    ///     in size from the scene (render scale). <paramref name="viewRotProj"/> = view rotation (no translation) ×
     ///     <paramref name="proj"/> (<see cref="WorldRenderer.Perspective"/>), <paramref name="ySign"/> = clip y per uv y.
     /// </summary>
-    public void Run(ICommandEncoder encoder, Atmosphere a, bool high, bool reflections, TextureViewHandle output, int outW, int outH, in Matrix4x4 viewRotProj,
+    public void Run(ICommandEncoder encoder, Atmosphere a, bool ao, bool bloom, bool reflections, TextureViewHandle output, int outW, int outH, in Matrix4x4 viewRotProj,
         in Matrix4x4 proj, float ySign)
     {
         Span<byte> push = stackalloc byte[144];
         var near = proj.M43;
         int hw = Math.Max(1, _w / 2), hh = Math.Max(1, _h / 2);
-        var ssr = high && reflections && a.Wetness > 0;
-        if (high)
+        var ssr = reflections && a.Wetness > 0;
+        if (ao)
         {
             MemoryMarshal.Write(push, new Vector4(1 / proj.M11, 1 / MathF.Abs(proj.M22), near, AoRadius));
             MemoryMarshal.Write(push[16..], new Vector4(1f / _w, 1f / _h, AoStrength, 0));
@@ -164,7 +165,7 @@ internal sealed class PostProcess : IDisposable
             MemoryMarshal.Write(push, new Vector4(1f / hw, 1f / hh, SsrStreak * hh, 0));
             Pass(encoder, _ssrBlur.View, LoadOp.DontCare, hw, hh, _ssrBlurPipeline, _ssrBlurGroup, push[..16]);
         }
-        if (high)
+        if (bloom)
         {
             for (var i = 1; i <= BloomLevels; i++)
             {
@@ -181,10 +182,10 @@ internal sealed class PostProcess : IDisposable
                 Pass(encoder, dst.View, LoadOp.Load, dst.W, dst.H, _upPipeline, src.Group, push[..32]);
             }
         }
-        MemoryMarshal.Write(push, new Vector4(1f / outW, 1f / outH, a.Exposure, high ? a.BloomStrength / BloomLevels : 0));
+        MemoryMarshal.Write(push, new Vector4(1f / outW, 1f / outH, a.Exposure, bloom ? a.BloomStrength / BloomLevels : 0));
         MemoryMarshal.Write(push[16..], new Vector4(a.Tint, a.Saturation));
         MemoryMarshal.Write(push[32..], new Vector4(a.Vignette, (float)outW / outH, a.Contrast, 0));
-        MemoryMarshal.Write(push[48..], new Vector4(high ? 1 : 0, near, ssr ? 1 : 0, 1));
+        MemoryMarshal.Write(push[48..], new Vector4(ao ? 1 : 0, near, ssr ? 1 : 0, 1));
         Pass(encoder, output, LoadOp.DontCare, outW, outH, _tonemapPipeline, _tonemapGroup, push[..64]);
     }
 

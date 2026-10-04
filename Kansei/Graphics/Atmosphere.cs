@@ -30,7 +30,7 @@ public sealed class Atmosphere
     public float Specular;
     /// <summary>Darkening of the ground right under the car (0 = none … 1 = black at the centre).</summary>
     public float ContactShadow;
-    /// <summary>Cascaded sun shadows (also needs <see cref="WorldRenderer.HighQuality"/>).</summary>
+    /// <summary>Cascaded sun shadows (also needs <see cref="WorldRenderer.Shadows"/>).</summary>
     public bool Shadows = true;
     /// <summary>Rain: 0 dry … 1 pouring (soaked albedo, glossy ground and puddles, droplets on cars, falling rain).</summary>
     public float Wetness;

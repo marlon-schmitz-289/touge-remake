@@ -90,6 +90,8 @@ public sealed class GameAudio : IDisposable
     public float ScrapeGain => _scrapeGain;
     public int Crashes { get; private set; }
     public float Slip { get; private set; }
+    /// <summary>Engine loudness 0..1 on top of the SFX volume (Options: ENGINE).</summary>
+    public float EngineLevel { get; set; } = 1;
     public string Track => Path.GetFileNameWithoutExtension(_tracks[_track].Name);
 
     public GameAudio(Iso9660 iso, string courseTime, AudioDevice dev, string car = "AE86T")
@@ -326,7 +328,7 @@ public sealed class GameAudio : IDisposable
             var zone = i / 8 * 4 + i % 4; // voices k and k + 4 of a bank = zone k
             var gain = _level[i] * _weight[zone] * (i < 8 ? loadGain : overrunGain) * cut * _dip;
             var pitch = LayerRate(_x, _native[zone]) * pitchMul;
-            _engine[i].Gain = gain;
+            _engine[i].Gain = gain * EngineLevel;
             _engine[i].Pitch = pitch;
             (sumGain, sumPitch) = (sumGain + gain, sumPitch + gain * pitch);
         }

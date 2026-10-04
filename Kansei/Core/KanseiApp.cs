@@ -72,6 +72,18 @@ public static class KanseiApp
         while (!window.ShouldClose)
         {
             var now = sdl.GetPerformanceCounter();
+            if (game.FrameCap > 0)
+            {
+                // sleep most of the remaining frame, spin the last ~1 ms (sleep granularity)
+                var due = last + (ulong)(freq / game.FrameCap);
+                while (now < due)
+                {
+                    var left = (due - now) / freq;
+                    if (left > 0.002) System.Threading.Thread.Sleep(TimeSpan.FromSeconds(left - 0.0015));
+                    else System.Threading.Thread.SpinWait(50);
+                    now = sdl.GetPerformanceCounter();
+                }
+            }
             var dt = (now - last) / freq;
             last = now;
             acc += Math.Min(dt, 0.25); // ponytail: drop time after hitches instead of spiral-of-death catch-up

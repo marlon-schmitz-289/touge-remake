@@ -74,6 +74,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     private string? _flowShot;
     /// <summary>--hud: "north", "overview" (minimap mode at start) or "off"; default rotating map, HUD on.</summary>
     public string? HudMode { get; init; }
+    /// <summary>--render-scale: 3D resolution in percent of the window (test runs; the menus use the saved option).</summary>
+    public int RenderScale { get; init; } = 100;
     /// <summary>--reverse: start in the reverse (uphill) direction; B switches direction at runtime (<see cref="Drive.Reverse"/>).</summary>
     public bool Reverse { get; init; }
     /// <summary>--fog: dense fog over the day or night course (<see cref="FogAtmosphere"/>); chosen in the menus as weather FOG.</summary>
@@ -151,7 +153,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             _settings = new Settings
             {
                 HighQuality = highQuality, HudOn = HudMode != "off" && flicker == null, Car = Car, Paint = Paint, Reverse = Reverse, Course = _courseTime, Fog = Fog,
-                MapMode = HudMode switch { "north" => Hud.MapMode.NorthUp, "overview" => Hud.MapMode.Overview, _ => Hud.MapMode.Rotating }, Livery = Livery,
+                MapMode = HudMode switch { "north" => Hud.MapMode.NorthUp, "overview" => Hud.MapMode.Overview, _ => Hud.MapMode.Rotating }, Livery = Livery, RenderScale = RenderScale,
             };
         if (flicker == null && ContactSheet == null)
         {
@@ -174,6 +176,18 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             }
         }
         _bumperCam = _settings.BumperCam;
+        if (_persist) ApplyDisplay();
+        if (_menu != null)
+        {
+            _menu.Options.Resolutions = Resolutions;
+            Window.FullscreenModeChanged += m => _settings.Display = m switch // F11 keeps the setting in step
+            {
+                Kansei.Windowing.FullscreenMode.Windowed => Settings.DisplayMode.Window,
+                Kansei.Windowing.FullscreenMode.Exclusive => Settings.DisplayMode.Fullscreen,
+                _ => Settings.DisplayMode.Borderless,
+            };
+            Window.FullscreenModeChanged += _ => { _applied = DisplayState; if (_persist) _settings.Save(); };
+        }
         // the front end shows Akina at night behind the title, like the original's photo; course select loads the choice
         var title = _front != null && (_persist || Flow != null);
         LoadCourse(iso, title ? "AKINA_NIT" : _persist ? _settings.Course : _courseTime, _settings.Reverse, _settings.Car, _settings.Paint, startPoint, !title && _settings.Fog);
@@ -205,10 +219,14 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         if (_front != null) _inRace = false;
         else if (_menu != null && StartMenu != null)
         {
-            var screen = StartMenu == "settings" ? Menu.Screen.Options
+            // options:<page> opens an options page directly (screenshots)
+            var page = StartMenu.StartsWith("options:", StringComparison.OrdinalIgnoreCase) ? StartMenu[8..] : null;
+            var screen = StartMenu == "settings" || page != null ? Menu.Screen.Options
                 : Enum.TryParse<Menu.Screen>(StartMenu, true, out var s) && s is not (Menu.Screen.None or Menu.Screen.Loading or Menu.Screen.Finish or Menu.Screen.Result) ? s
                 : throw new ArgumentException($"--menu {StartMenu}: unbekannt");
             OpenMenu(screen);
+            if (page != null && !_menu.Options.OpenPage(page))
+                throw new ArgumentException($"--menu options:{page}: unbekannt, möglich: {string.Join(' ', _menu.Options.Pages.Select(p => p.Title.Replace(" ", "").ToLowerInvariant()))}");
             _inRace = screen is Menu.Screen.Pause or Menu.Screen.Intro;
             if (shotPath != null) _menu.Settle();
         }
@@ -234,8 +252,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         }
         else
         {
-            _audioDevice = new AudioDevice { Music = _settings.MusicVolume };
-            if (_menu != null) _menuAudio = new MenuAudio(iso, _audioDevice) { Volume = _settings.SoundVolume, Clock = () => _menuTime };
+            _audioDevice = new AudioDevice { Music = _settings.MusicVolume, Master = _settings.MasterVolume };
+            if (_menu != null) _menuAudio = new MenuAudio(iso, _audioDevice) { Volume = _settings.MenuVolume, Clock = () => _menuTime };
             StartAudio(iso);
         }
     }
@@ -259,13 +277,14 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             _renderer.Dispose();
         }
         (_courseTime, _fog) = (courseTime, fog && !courseTime.EndsWith("_RIN"));
-        _renderer = new WorldRenderer(Device) { Atmosphere = AtmosphereFor(courseTime), HighQuality = _settings.HighQuality };
+        _renderer = new WorldRenderer(Device) { Atmosphere = AtmosphereFor(courseTime) };
+        ApplyGraphics();
         var sw = System.Diagnostics.Stopwatch.StartNew();
         _course = CourseLoader.Load(iso, courseTime, _renderer, reverse);
         SetupFog(_renderer.Atmosphere);
         if (_fog) _renderer.Atmosphere = FogAtmosphere(courseTime.EndsWith("_NIT"));
         if (!courseTime.EndsWith("_NIT") && _course.SunDirection is { } sun) _renderer.Atmosphere.SunDirection = sun; // the original's key light
-        _drive = new Drive(iso, courseTime, reverse, CarSpecs.All[car]);
+        _drive = new Drive(iso, courseTime, reverse, _settings.Assisted(CarSpecs.All[car]));
         Console.WriteLine($"[Touge] {courseTime} geladen in {sw.ElapsedMilliseconds} ms, {_course.World.Batches.Count} Batches, {_drive.Ground.Walls.Length} Wandsegmente");
         _carRenderer = new CarRenderer(_renderer);
         _fxRenderer = new EffectsRenderer(_renderer);
@@ -281,7 +300,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
 
     private void StartAudio(Iso9660 iso)
     {
-        _audio = new GameAudio(iso, _courseTime, _audioDevice!, _carName);
+        _audio = new GameAudio(iso, _courseTime, _audioDevice!, _carName) { EngineLevel = _settings.EngineVolume };
         if (_persist) _audioDevice!.Music = _settings.MusicVolume; // GameAudio sets its own default
         _music = ""; // SyncMusic starts the race or menu music
     }
@@ -289,11 +308,11 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     /// <summary>HUD for the loaded line, with the stored best run of this course and direction; a new record is kept (and saved with the menus).</summary>
     private Hud NewHud()
     {
-        var key = Settings.BestKey(_courseTime[.._courseTime.LastIndexOf('_')], _drive.Reverse);
+        var key = _settings.RunKey(_courseTime[.._courseTime.LastIndexOf('_')], _drive.Reverse); // other assists race their own records
         _previousBest = _settings.Best.GetValueOrDefault(key)?[^1];
         var hud = new Hud(_course.Road, _drive.Line, _drive.Pilot, _settings.Best.GetValueOrDefault(key), _drive.Start)
         {
-            Visible = _settings.HudOn, Mode = _settings.MapMode, Night = _courseTime.EndsWith("_NIT"),
+            Visible = _settings.HudOn, Mode = _settings.MapMode, Night = _courseTime.EndsWith("_NIT"), Mph = _settings.Mph,
         };
         hud.Timer.Record += best =>
         {
@@ -328,7 +347,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _car.Dispose();
         if (name != _carName)
         {
-            _drive.ChangeCar(CarSpecs.All[name]);
+            _drive.ChangeCar(_settings.Assisted(CarSpecs.All[name]));
             _audio?.SetCar(name);
             SyncPose();
         }
@@ -539,7 +558,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         }
         if (k.IsKeyPressed(Key.F2))
         {
-            _renderer.HighQuality = _settings.HighQuality = !_renderer.HighQuality;
+            _settings.HighQuality = !_settings.HighQuality;
+            ApplyGraphics();
             Console.WriteLine($"\n[Touge] Grafik: {(_renderer.HighQuality ? "hoch (4× MSAA, Bloom, Schatten)" : "niedrig (ohne MSAA/Bloom/Schatten)")}");
         }
         if (_audio != null && k.IsKeyPressed(Key.M))
@@ -672,6 +692,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     /// <summary>Car back at the start of the line (gearbox as chosen in the menus), fresh timing and drift score, race camera behind it.</summary>
     private void ResetRun()
     {
+        var spec = _settings.Assisted(CarSpecs.All[_carName]); // assists changed in the options since the car was loaded
+        if (spec != _drive.Car.Spec) _drive.ChangeCar(spec);
         _drive.ResetTo(0);
         if (_front != null) _drive.Car.AutomaticGearbox = !_settings.Manual;
         _hud = NewHud();
@@ -682,15 +704,54 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         (_inRace, _camSnap, _fly) = (true, true, false);
     }
 
+    /// <summary>Options changed: everything live except the assists (next run, <see cref="ResetRun"/>); saved with the menus.</summary>
     private void ApplySettings()
     {
         var s = _settings;
-        _renderer.HighQuality = s.HighQuality;
-        if (_audioDevice != null) _audioDevice.Music = s.MusicVolume;
-        if (_menuAudio != null) _menuAudio.Volume = s.SoundVolume;
-        (_hud.Visible, _hud.Mode, _bumperCam) = (s.HudOn, s.MapMode, s.BumperCam);
+        ApplyGraphics();
+        if (_persist) ApplyDisplay();
+        if (_audioDevice != null) (_audioDevice.Music, _audioDevice.Master) = (s.MusicVolume, s.MasterVolume);
+        if (_menuAudio != null) _menuAudio.Volume = s.MenuVolume;
+        if (_audio != null) _audio.EngineLevel = s.EngineVolume;
+        (_hud.Visible, _hud.Mode, _hud.Mph, _bumperCam) = (s.HudOn, s.MapMode, s.Mph, s.BumperCam);
         if (s.Livery != _carLivery) SwitchCar(Array.IndexOf(CarPaint.Cars, _carName), _paint);
         if (_persist) s.Save();
+    }
+
+    private void ApplyGraphics()
+    {
+        var s = _settings;
+        (_renderer.Msaa, _renderer.Shadows, _renderer.Ao, _renderer.Bloom, _renderer.Reflections, _renderer.RenderScale) =
+            (s.Msaa, s.Shadows, s.Ao, s.Bloom, s.Ssr, s.RenderScale / 100f);
+    }
+
+    private bool? _vsync;
+    private object? _applied;
+    private object DisplayState => (_settings.Display, _settings.Width, _settings.Height, _settings.VSync, _settings.FrameCap);
+
+    /// <summary>Window mode, size, vsync and frame cap from the settings (only with the menus: test runs keep their fixed window).</summary>
+    private void ApplyDisplay()
+    {
+        var s = _settings;
+        if (Equals(_applied, DisplayState)) return; // other options must not snap a dragged window back to the saved size
+        _applied = DisplayState;
+        Window.SetFullscreenMode(s.Display switch
+        {
+            Settings.DisplayMode.Borderless => Kansei.Windowing.FullscreenMode.Borderless,
+            Settings.DisplayMode.Fullscreen => Kansei.Windowing.FullscreenMode.Exclusive,
+            _ => Kansei.Windowing.FullscreenMode.Windowed,
+        });
+        if (s.Display != Settings.DisplayMode.Borderless) Window.SetResolution(s.Width, s.Height);
+        if (_vsync != s.VSync) Device.SetVSync((_vsync = s.VSync).Value);
+        FrameCap = s.FrameCap;
+    }
+
+    /// <summary>Sizes for RESOLUTION: the display's modes, in a window only those that fit its usable area (from 1024 wide).</summary>
+    private IReadOnlyList<(int W, int H)> Resolutions()
+    {
+        var display = Math.Max(0, Window.DisplayIndex);
+        var (w, h) = _settings.Display == Settings.DisplayMode.Fullscreen ? (int.MaxValue, int.MaxValue) : Window.GetUsableBounds(display);
+        return [.. Window.GetResolutions(display).Where(r => r.W >= 1024 && r.W <= w && r.H <= h)];
     }
 
     /// <summary>
@@ -780,7 +841,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         ("Modes", 1, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 0, true, false),
         ("Records", 1, "records", 0, 0, false, true),
         ("Modes", 1, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 0, true, false),
-        ("Options", 1, "options", 0, 1, false, false), ("Options", 0.5f, "options_music", 0, 0, false, true), ("Modes", 1.2f, "modes_end", 0, 0, false, false),
+        ("Options", 1, "options", 0, 4, false, false), ("Options", 0.5f, "options_sound_section", 0, 0, true, false), ("Options", 0.5f, "options_sound", 0, 0, false, true),
+        ("Options", 0.5f, null, 0, 0, false, true), ("Modes", 1.2f, "modes_end", 0, 0, false, false),
     ];
 
     /// <summary>
@@ -1105,7 +1167,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             var up = Vector3.TransformNormal(Vector3.UnitY, _carPose);
             _pos = pos + up * 0.15f + fwd * (car.Spec.Length / 2 + 0.05f);
             _camLook = _pos + fwd * 10;
-            _fov = MathF.PI / 3;
+            _fov = _settings.Fov * MathF.PI / 180;
             _camSnap = false;
             return;
         }
@@ -1115,11 +1177,11 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         float a = _camSnap ? 1 : 1 - MathF.Exp(-6 * dt), b = _camSnap ? 1 : 1 - MathF.Exp(-12 * dt);
         _pos = Vector3.Lerp(_pos, desired, a);
         _camLook = Vector3.Lerp(_camLook, look, b);
-        _fov = MathF.PI / 3 + MathF.Min(car.SpeedKmh / 180, 1) * 0.2f;
+        _fov = _settings.Fov * MathF.PI / 180 + MathF.Min(car.SpeedKmh / 180, 1) * 0.2f;
         _camSnap = false;
         // wall hits shake the camera briefly (up to 12 cm, decays in ~0.3 s)
         _shake *= MathF.Exp(-10 * dt);
-        _shakeOffset = new Vector3(MathF.Sin(_simTime * 53), MathF.Sin(_simTime * 47 + 1), MathF.Sin(_simTime * 61 + 2)) * (0.12f * _shake);
+        _shakeOffset = new Vector3(MathF.Sin(_simTime * 53), MathF.Sin(_simTime * 47 + 1), MathF.Sin(_simTime * 61 + 2)) * (0.12f * _shake * _settings.CameraShake);
     }
 
     public override void Render(in FrameContext ctx)
