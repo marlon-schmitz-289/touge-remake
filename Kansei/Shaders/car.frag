@@ -20,15 +20,15 @@ layout(location = 3) in vec4 vColor;
 layout(set = 0, binding = 0) uniform sampler2D uTexture;
 
 #include "scene_push.glsl"
+#include "noise.glsl"
 #include "fog.glsl"
 #include "lighting.glsl"
-#include "noise.glsl"
 
 layout(set = 1, binding = 2) uniform sampler2D uEnvTop;
 layout(set = 1, binding = 3) uniform sampler2D uEnvBottom;
 layout(set = 1, binding = 4) uniform sampler2D uEnvLeft;
 layout(set = 1, binding = 5) uniform sampler2D uEnvRight;
-// the next set along the road, faded in by uShadeGround.w (Course.EnvAt)
+// the next set along the road, faded in by uTailPos[1].w (Course.EnvAt)
 layout(set = 1, binding = 7) uniform sampler2D uEnvTop2;
 layout(set = 1, binding = 8) uniform sampler2D uEnvBottom2;
 layout(set = 1, binding = 9) uniform sampler2D uEnvLeft2;
@@ -49,9 +49,9 @@ vec3 envAt(vec3 r)
     vec2 top = vec2(0.5 - 0.5 * d.x, 0.5 - 0.5 * d.z), bottom = vec2(0.5 + 0.5 * d.x, 0.5 - 0.5 * d.z);
     vec3 c = mix(mix(mix(texture(uEnvRight, side).rgb, texture(uEnvLeft, side).rgb, left), texture(uEnvTop, top).rgb, up),
         texture(uEnvBottom, bottom).rgb, down);
-    if (pc.uShadeGround.w > 0.0)
+    if (pc.uTailPos[1].w > 0.0)
         c = mix(c, mix(mix(mix(texture(uEnvRight2, side).rgb, texture(uEnvLeft2, side).rgb, left), texture(uEnvTop2, top).rgb, up),
-            texture(uEnvBottom2, bottom).rgb, down), pc.uShadeGround.w);
+            texture(uEnvBottom2, bottom).rgb, down), pc.uTailPos[1].w);
     // the maps' sky is one flat lavender grey whatever the scene's sky: keep their brightness (sky vs tree walls vs
     // road), take half the hue of this scene's sky in that direction (as world.frag's wet reflections; the full hue
     // turns night windows deep blue)

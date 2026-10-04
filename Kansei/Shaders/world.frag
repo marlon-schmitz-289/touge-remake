@@ -22,9 +22,9 @@ layout(location = 3) in vec3 vNormal;
 layout(set = 0, binding = 0) uniform sampler2D uTexture;
 
 #include "scene_push.glsl"
+#include "noise.glsl"
 #include "fog.glsl"
 #include "lighting.glsl"
-#include "noise.glsl"
 
 layout(location = 0) out vec4 FragColor;
 layout(location = 1) out vec4 Gbuf; // PostProcess.GbufFormat: r ambient share (AO), g reflection weight (SSR), b streak

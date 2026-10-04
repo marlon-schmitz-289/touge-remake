@@ -12,6 +12,7 @@ public class HeadlightsTests
         Assert.Equal(Headlights.Mode.Off, Headlights.For("AKINA_DAY"));
         Assert.Equal(Headlights.Mode.Low, Headlights.For("AKINA_NIT"));
         Assert.Equal(Headlights.Mode.Low, Headlights.For("AKINA_RIN"));
+        Assert.Equal(Headlights.Mode.Low, Headlights.For("AKINA_DAY", fog: true));
 
         var h = new Headlights(Headlights.Mode.Off);
         h.ToggleHigh();

@@ -77,6 +77,7 @@ vec3 capped(vec3 e)
 
 const int Lights = 8;
 const float TailRange = 8.0;
+const float FogLightCap = 0.3; // most irradiance a lamp lends a surface in dense fog
 
 // Point light j (0–3 street lights, 4–5 rear lamps): position + radius, colour. A rear lamp lights surfaces by the
 // night share (uTailColor.w) but stays `mirror`ed at full strength: a brake light streaks on a wet road by day too.
@@ -103,7 +104,11 @@ vec3 lightIn(int i, vec3 p, bool mirror, out vec3 l)
     float w = 1.0 - (d2 * d2) / (range * range * range * range);
     float att = w * w / (d2 + 1.0);
     if (spot) att *= beam(i, -l);
-    return colour * att;
+    vec3 e = colour * att;
+    if (pc.uTailPos[0].w <= 0.0) return e;
+    // dense fog swallows the light on its way and scatters the rest: soft cap, so a beam reads as a veil, not a white spot
+    e *= exp(-pc.uTailPos[0].w * sqrt(d2));
+    return e / (1.0 + max(e.r, max(e.g, e.b)) / FogLightCap);
 }
 
 // Diffuse irradiance of all dynamic lights (capped in sum); adds an energy-normalised Blinn-Phong highlight (exponent
@@ -155,8 +160,8 @@ vec3 wetLights(vec3 p, vec3 n, vec3 v, float across, float along)
 }
 
 // Light scattered towards the camera by the fog between the eye and p: the street lights' glow, point sources,
-// ∫ I / (h² + t²) dt along the ray solved exactly. Headlights and rear lamps are left to the bloom on their lenses — their
-// beams in the fog read as solid cones.
+// ∫ I / (h² + t²) dt along the ray solved exactly. Headlight beams scatter only in dense fog (σ > 0, 8 steps over the
+// first 60 m); in thin haze they are left to the bloom on their lenses, there the cones read as solid. Rear lamps: bloom.
 vec3 lightGlow(vec3 p)
 {
     if (pc.uFog.a <= 0.0) return vec3(0.0);
@@ -165,6 +170,7 @@ vec3 lightGlow(vec3 p)
     float len = length(d);
     vec3 rd = d / max(len, 1e-4);
     vec3 sum = vec3(0.0);
+    float sigma = pc.uTailPos[0].w; // fog extinction (0 = thin haze): dense fog swallows the lamps' light on its way
     for (int j = 0; j < 4; j++)
     {
         vec3 colour;
@@ -173,7 +179,24 @@ vec3 lightGlow(vec3 p)
         vec3 ol = lp.xyz - o;
         float tc = dot(ol, rd);
         float h = sqrt(max(dot(ol, ol) - tc * tc, 0.0)) + 0.1;
-        sum += colour * ((atan((len - tc) / h) + atan(tc / h)) / h);
+        float glow = (atan((len - tc) / h) + atan(tc / h)) / h;
+        sum += colour * (sigma > 0.0 ? glow * exp(-sigma * length(ol)) : glow);
+    }
+    if (sigma > 0.0 && dot(pc.uSpotColor.rgb, pc.uSpotColor.rgb) > 0.0)
+    {
+        float reach = min(len, 60.0), step = reach / 8.0;
+        // lamp -> sample -> eye is about twice the sample's distance (the lamps sit near the camera): exp(-2 sigma t), stepped
+        float fade = exp(-sigma * step), decay = fade * fade;
+        for (int k = 0; k < 8; k++, fade *= decay)
+        {
+            vec3 q = o + rd * ((float(k) + 0.5) * step);
+            for (int i = 0; i < 2; i++)
+            {
+                vec3 dl = q - pc.uSpotPos[i].xyz;
+                float d2 = dot(dl, dl);
+                sum += pc.uSpotColor.rgb * (beam(i, dl * inversesqrt(max(d2, 1e-4))) * step * fade / (d2 + 1.0));
+            }
+        }
     }
     return sum * pc.uFog.a;
 }

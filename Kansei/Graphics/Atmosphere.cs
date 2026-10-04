@@ -41,9 +41,11 @@ public sealed class Atmosphere
     ///     negative = some haze right away) combined with height fog of <see cref="HeightFogDensity"/> (1/m) at
     ///     <see cref="HeightFogBase"/> (world altitude), falling off ×1/e every <see cref="HeightFogScale"/> m upwards.
     ///     <see cref="FogSun"/> is added towards the sun, <see cref="LightGlow"/> scales the glow of the dynamic lights.
+    ///     The height fog's extinction at the camera also dims the lamps' light on its way; <see cref="FogDrift"/> lets slow
+    ///     noise vary its density by ±drift/2 (fog banks).
     /// </summary>
     public Vector3 FogColor = new(0.55f, 0.62f, 0.70f), FogSun = new(0.25f, 0.20f, 0.12f);
-    public float FogStart = 30, FogEnd = 9000, HeightFogDensity = 0.0004f, HeightFogBase, HeightFogScale = 60, LightGlow;
+    public float FogStart = 30, FogEnd = 9000, HeightFogDensity = 0.0004f, HeightFogBase, HeightFogScale = 60, LightGlow, FogDrift;
     public float Exposure = 1.2f;
     public float BloomThreshold = 1.4f, BloomStrength = 0.6f;
     public Vector3 Tint = Vector3.One;

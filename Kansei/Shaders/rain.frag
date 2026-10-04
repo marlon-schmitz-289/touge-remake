@@ -8,6 +8,7 @@ layout(location = 1) in vec3 vPos;
 layout(location = 2) in float vAlpha;
 
 #include "scene_push.glsl"
+#include "noise.glsl"
 #include "fog.glsl"
 #include "lighting.glsl"
 

@@ -13,9 +13,9 @@ layout(location = 2) in vec3 vPos;
 layout(location = 3) in vec3 vNormal;
 
 #include "scene_push.glsl"
+#include "noise.glsl"
 #include "fog.glsl"
 #include "lighting.glsl"
-#include "noise.glsl"
 
 layout(location = 0) out vec4 FragColor;
 layout(location = 1) out vec4 Gbuf; // blends the AO share/reflection weight underneath towards 0 by the alpha (sparks: additive, none)

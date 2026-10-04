@@ -5,7 +5,7 @@ namespace Touge;
 
 /// <summary>
 ///     The car's light switch: <see cref="Mode"/> off / low / high beam (L lights on/off, H high beam on/off — also switches
-///     the lights on; pad D-pad up/down), on by default at night and in rain, off by day. Pop-up lamps travel
+///     the lights on; pad D-pad up/down), on by default at night, in rain and fog, off on a clear day. Pop-up lamps travel
 ///     <see cref="PopUpSeconds"/> and light up only once nearly open. <see cref="Apply"/> puts the car's lamps into the
 ///     <see cref="SceneLights"/>: two beams at the lens centres along the car's axis, lens glow, rear lamps (running, brake,
 ///     reverse) as small red point lights.
@@ -27,8 +27,8 @@ public sealed class Headlights(Headlights.Mode start)
     /// <summary>Pop-up lamps: 0 closed … 1 open.</summary>
     public float Open { get; private set; } = start == Mode.Off ? 0 : 1;
 
-    /// <summary>Lights at the start of a course: on at night and in rain, off by day.</summary>
-    public static Mode For(string courseTime) => courseTime.EndsWith("_DAY") ? Mode.Off : Mode.Low;
+    /// <summary>Lights at the start of a course: on at night, in rain and in fog, off on a clear day.</summary>
+    public static Mode For(string courseTime, bool fog = false) => courseTime.EndsWith("_DAY") && !fog ? Mode.Off : Mode.Low;
 
     public void Toggle() => State = State == Mode.Off ? Mode.Low : Mode.Off;
 
