@@ -43,7 +43,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     public bool UseMenus { get; init; }
     /// <summary>--shot-size WxH: size of the --shot frame (default 1280×720).</summary>
     public (int W, int H) ShotSize { get; init; } = (1280, 720);
-    /// <summary>--menu: screen to open at start (title, course, car, pause, settings), e.g. for --shot.</summary>
+    /// <summary>--menu: front-end step (boot, logo, disclaimer, title, mode) or menu screen (course … options, <see cref="Menu.Screen"/>) to open at start, e.g. for --shot.</summary>
     public string? StartMenu { get; init; }
     private Settings _settings = null!;
     private bool _persist, _inRace;
@@ -53,12 +53,23 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     private FrontEnd? _front;
     private MenuAudio? _menuAudio;
     private readonly MenuKeys _frontKeys = new();
-    /// <summary>What the music stream plays: null silence, <see cref="RaceMusic"/>, or a BGM.AFS track of the menus ("" = decide again).</summary>
+    /// <summary>What the music stream plays: null silence, <see cref="Menu.RaceMusic"/>, or a BGM.AFS track of the menus ("" = decide again).</summary>
     private string? _music = "";
-    private const string RaceMusic = "race";
-    private bool InMenus => _front is { Active: true } || _menu?.Current is not (null or Menu.Screen.None);
-    private int _loadingFrames;
+    /// <summary>Front end or a menu holds the game (no physics); the intro lets go at GO, the finish banner lets the pilot drive on.</summary>
+    private bool Frozen => _front is { Active: true } || _menu is { Freezes: true };
+    /// <summary>The run's finish was handed to the menus (once per run).</summary>
+    private bool _finished;
     private float _flyS, _menuTime;
+    /// <summary>
+    ///     --flow &lt;dir&gt;: scripted pass through the whole front end in the window (boot → … → course/car selection → load →
+    ///     telop/countdown → race (pilot, 16× time) → pause → finish → result → records → options) with the keys of
+    ///     <see cref="FlowScript"/>, a PNG per step into the directory; the settings file is not touched.
+    /// </summary>
+    public string? Flow { get; init; }
+    private int _flowStep, _flowShots;
+    private float _flowT;
+    private bool _flowShotTaken;
+    private string? _flowShot;
     /// <summary>--hud: "north", "overview" (minimap mode at start) or "off"; default rotating map, HUD on.</summary>
     public string? HudMode { get; init; }
     /// <summary>--reverse: start in the reverse (uphill) direction; B switches direction at runtime (<see cref="Drive.Reverse"/>).</summary>
@@ -81,6 +92,9 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     private float _simTime, _shake;
     private Vector3 _prevVelocity, _shakeOffset, _lastCamPos, _camVelocity;
     private CarModel _car = null!;
+    private Livery _carLivery;
+    /// <summary>Best total of this course and direction when the run started (result sheet).</summary>
+    private float? _previousBest;
     private Matrix4x4 _carBody, _carPose, _modelToBody;
     private readonly Matrix4x4[] _carWheels = new Matrix4x4[4];
     private FrameCapture? _capture;
@@ -126,7 +140,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             _settings = new Settings
             {
                 HighQuality = highQuality, HudOn = HudMode != "off" && flicker == null, Car = Car, Paint = Paint, Reverse = Reverse, Course = _courseTime,
-                MapMode = HudMode switch { "north" => Hud.MapMode.NorthUp, "overview" => Hud.MapMode.Overview, _ => Hud.MapMode.Rotating },
+                MapMode = HudMode switch { "north" => Hud.MapMode.NorthUp, "overview" => Hud.MapMode.Overview, _ => Hud.MapMode.Rotating }, Livery = Livery,
             };
         if (flicker == null && ContactSheet == null)
         {
@@ -135,10 +149,10 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             if (_persist && !_catalog.Courses.Any(c => _settings.Course == $"{c.Id}_DAY" || _settings.Course == $"{c.Id}_NIT" || _settings.Course == $"{c.Id}_RIN"))
                 _settings.Course = "AKINA_DAY";
             _menu.Sound = n => _menuAudio?.Play(n);
-            FrontEnd.Step? step = StartMenu switch
+            FrontEnd.Step? step = Flow != null ? FrontEnd.Step.Boot : StartMenu switch
             {
-                null => UseMenus ? FrontEnd.Step.Boot : null, "course" or "car" or "pause" or "settings" => null, "boot" => FrontEnd.Step.Boot,
-                "logo" => FrontEnd.Step.Logo, "disclaimer" => FrontEnd.Step.Disclaimer, "mode" or "modes" => FrontEnd.Step.Modes, _ => FrontEnd.Step.Title,
+                null => UseMenus ? FrontEnd.Step.Boot : null, "boot" => FrontEnd.Step.Boot, "logo" => FrontEnd.Step.Logo,
+                "disclaimer" => FrontEnd.Step.Disclaimer, "title" => FrontEnd.Step.Title, "mode" or "modes" => FrontEnd.Step.Modes, _ => null,
             };
             if (step is { } first)
             {
@@ -149,7 +163,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         }
         _bumperCam = _settings.BumperCam;
         // the front end shows Akina at night behind the title, like the original's photo; course select loads the choice
-        LoadCourse(iso, _front != null && _persist ? "AKINA_NIT" : _persist ? _settings.Course : _courseTime, _settings.Reverse, _settings.Car, _settings.Paint, startPoint);
+        LoadCourse(iso, _front != null && (_persist || Flow != null) ? "AKINA_NIT" : _persist ? _settings.Course : _courseTime, _settings.Reverse, _settings.Car, _settings.Paint, startPoint);
         _drive.ForceDrift = drift;
         if (autodrive is { } seconds)
         {
@@ -178,15 +192,19 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         if (_front != null) _inRace = false;
         else if (_menu != null && StartMenu != null)
         {
-            var screen = StartMenu switch
-            {
-                "course" => Menu.Screen.Course, "car" => Menu.Screen.Car, "pause" => Menu.Screen.Pause, _ => Menu.Screen.Settings,
-            };
+            var screen = StartMenu == "settings" ? Menu.Screen.Options
+                : Enum.TryParse<Menu.Screen>(StartMenu, true, out var s) && s is not (Menu.Screen.None or Menu.Screen.Loading or Menu.Screen.Finish or Menu.Screen.Result) ? s
+                : throw new ArgumentException($"--menu {StartMenu}: unbekannt");
             OpenMenu(screen);
-            _inRace = screen == Menu.Screen.Pause;
+            _inRace = screen is Menu.Screen.Pause or Menu.Screen.Intro;
             if (shotPath != null) _menu.Settle();
         }
         else _inRace = true;
+        if (Flow != null)
+        {
+            Directory.CreateDirectory(Flow);
+            _capture = new FrameCapture(Device, ShotSize.W, ShotSize.H); // and sound as usual (below)
+        }
         if (shotPath != null) (_capture, _shotState) = (new FrameCapture(Device, ShotSize.W, ShotSize.H), 1);
         else if (ContactSheet != null) (_capture, _sheet, _fly) = (new FrameCapture(Device, 1280, 720), new byte[SheetW * SheetH * 4], true);
         else if (flicker != null)
@@ -246,7 +264,6 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     {
         _audio = new GameAudio(iso, _courseTime, _audioDevice!, _carName);
         if (_persist) _audioDevice!.Music = _settings.MusicVolume; // GameAudio sets its own default
-        _audioDevice!.Sfx = InMenus ? 0 : _settings.SoundVolume;
         _music = ""; // SyncMusic starts the race or menu music
     }
 
@@ -254,6 +271,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     private Hud NewHud()
     {
         var key = Settings.BestKey(_courseTime[.._courseTime.LastIndexOf('_')], _drive.Reverse);
+        _previousBest = _settings.Best.GetValueOrDefault(key)?[^1];
         var hud = new Hud(_course.Road, _drive.Line, _drive.Pilot, _settings.Best.GetValueOrDefault(key))
         {
             Visible = _settings.HudOn, Mode = _settings.MapMode, Night = _courseTime.EndsWith("_NIT"),
@@ -272,7 +290,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     /// </summary>
     private void LoadCarModel(Iso9660 iso)
     {
-        _car = CarModel.Load(iso, _carName, _paint, _renderer, Livery);
+        (_car, _carLivery) = (CarModel.Load(iso, _carName, _paint, _renderer, _settings.Livery), _settings.Livery);
         var spec = _drive.Car.Spec;
         var modelWheels = Vector3.Zero;
         foreach (var w in _car.Wheels) modelWheels += w.Translation / 4;
@@ -339,10 +357,11 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
 
     public override void Tick(float dt)
     {
-        if (_probe != null || InMenus) return; // frozen scene / menus pause the game
+        if (_probe != null || Frozen) return; // frozen scene / menus pause the game
         var car = _drive.Car;
         (_prevPos, _prevRot) = (car.Position, car.Orientation);
-        var input = autodrive != null || bench != null ? _drive.PilotInput(_simTime)
+        // the pilot drives for --autodrive/--bench/--flow and on past the finish line (as the original's auto-run after the goal)
+        var input = autodrive != null || bench != null || Flow != null || _menu?.Current == Menu.Screen.Finish ? _drive.PilotInput(_simTime)
             : _fly ? new VehicleInput(0, 0, 0, true)
             : new VehicleInput(_throttle, _brake, _steer, _handbrake, _pendingShift);
         _pendingShift = 0;
@@ -445,26 +464,42 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         }
         if (_shotState == 2)
         {
-            Png.Write(shotPath!, _capture!.Width, _capture.Height, _capture.ReadRgba());
-            Console.WriteLine($"[Touge] Screenshot -> {shotPath}");
-            Window.ShouldClose = true;
-            return;
+            var path = Flow != null ? Path.Combine(Flow, $"om_step2_flow_{++_flowShots:00}_{_flowShot}.png") : shotPath!;
+            Png.Write(path, _capture!.Width, _capture.Height, _capture.ReadRgba());
+            Console.WriteLine($"\n[Touge] Screenshot -> {path}");
+            if (Flow == null)
+            {
+                Window.ShouldClose = true;
+                return;
+            }
+            _shotState = 0;
         }
         var k = Input.Keyboard;
         var dt = time.DeltaTime;
         _menuTime += dt;
-        SyncMusic();
+        SyncAudio();
+        var keys = Flow != null ? FlowKeys(dt) : _frontKeys.Read(Input, dt);
         if (_front is { Active: true })
         {
-            UpdateFrontEnd(dt);
+            UpdateFrontEnd(keys, dt);
             return;
         }
         if (_menu is { Current: not Menu.Screen.None })
         {
-            UpdateMenu(dt);
+            UpdateMenu(keys, dt);
+            if (_menu.Current != Menu.Screen.Intro || _menu.Freezes) return; // after GO the intro only draws
+        }
+        if (_front != null && !_finished && _hud.Timer.Phase == LapTimer.State.Finished)
+        {
+            // the run is over: finish banner, then the result sheet (only in the front-end flow)
+            _finished = true;
+            var t = _hud.Timer;
+            _menu!.Finish(new Menu.Run(t.Time, (float[])t.Splits.Clone(), [.. Enumerable.Range(0, LapTimer.Sectors).Select(t.Delta)], _previousBest, t.NewRecord, _hud.Drift.Total));
             return;
         }
-        if (k.IsKeyPressed(Key.Escape) || Input.Gamepad.IsButtonPressed(GamepadButton.Start))
+        if (Flow != null)
+            for (var i = 0; i < 15; i++) Tick(Drive.Dt); // --flow: 16× time, the pilot drives the run to the finish
+        if (k.IsKeyPressed(Key.Escape) || Input.Gamepad.IsButtonPressed(GamepadButton.Start) || (Flow != null && keys.Back))
         {
             if (_menu == null) Window.ShouldClose = true;
             else
@@ -517,30 +552,17 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         }
     }
 
-    /// <summary>Opens a menu screen; <paramref name="fromFrontEnd"/>: the course list starts at the saved choice and backing out returns to the main menu.</summary>
+    /// <summary>Opens a menu screen with the selection of the current run; <paramref name="fromFrontEnd"/>: with the saved choice.</summary>
     private void OpenMenu(Menu.Screen screen, bool fromFrontEnd = false)
     {
-        var name = _catalog!.Courses.FirstOrDefault(c => _courseTime.StartsWith(c.Id + "_"));
-        var time = _courseTime[(_courseTime.LastIndexOf('_') + 1)..];
-        if (fromFrontEnd) _menu!.Open(screen, _settings.Course, _settings.Reverse, _carName, _paint, Menu.Screen.Title);
-        else _menu!.Open(screen, _courseTime, _drive.Reverse, _carName, _paint);
-        _menu.Run = ($"{name?.Name} / {Catalog.TimeName(time)} / {(name == null ? "" : Catalog.DirectionName(name, _drive.Reverse))}",
-            _catalog.Cars.First(c => c.Id == _carName).Name.ToUpperInvariant(),
-            _hud.Timer.Phase == Ui.LapTimer.State.Ready ? null : _hud.Timer.Time, _hud.Timer.Best?[^1]);
-        if (_audioDevice != null) _audioDevice.Sfx = 0; // engine/tyre loops pause with the game
+        if (fromFrontEnd) _menu!.Open(screen, _settings.Course, _settings.Reverse, _carName, _paint, _settings.Manual);
+        else _menu!.Open(screen, _courseTime, _drive.Reverse, _carName, _paint, _settings.Manual);
     }
 
-    private void CloseMenu()
+    /// <summary>Front-end input; its results open the game-flow menus behind the main menu or quit.</summary>
+    private void UpdateFrontEnd((int X, int Y, bool Ok, bool Back) keys, float dt)
     {
-        _menu!.Close();
-        (_inRace, _camSnap, _fly) = (true, true, false);
-        if (_audioDevice != null) _audioDevice.Sfx = _settings.SoundVolume;
-    }
-
-    /// <summary>Front-end input; its results open the (own-style) menus behind the main menu or quit.</summary>
-    private void UpdateFrontEnd(float dt)
-    {
-        switch (_front!.Update(_frontKeys.Read(Input, dt), dt))
+        switch (_front!.Update(keys, dt))
         {
             case FrontEnd.Result.Quit:
                 Window.ShouldClose = true;
@@ -548,31 +570,30 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             case FrontEnd.Result.TimeAttack:
                 OpenMenu(Menu.Screen.Course, fromFrontEnd: true);
                 break;
+            case FrontEnd.Result.Records:
+                OpenMenu(Menu.Screen.Records, fromFrontEnd: true);
+                break;
             case FrontEnd.Result.Options:
-                OpenMenu(Menu.Screen.Settings, fromFrontEnd: true);
+                OpenMenu(Menu.Screen.Options, fromFrontEnd: true);
                 break;
         }
     }
 
     /// <summary>
-    ///     Music for the current screen, switched only when it changes: front end per <see cref="FrontEnd.Music"/>, course
-    ///     select TOKYO.adx ("LIVE IN TOKYO", Time Attack in the original), car select WORRY.adx, settings keep what plays,
-    ///     loading silent, race and pause the race BGM; nothing with music off.
+    ///     Sound for the current screen: engine/tyre loops only while the race runs (intro, race, finish); music switched
+    ///     only when it changes, front end per <see cref="FrontEnd.Music"/>, menus per <see cref="Menu.Music"/>; none with music off.
     /// </summary>
-    private void SyncMusic()
+    private void SyncAudio()
     {
         if (_audio == null || _menuAudio == null) return;
-        var want = !_settings.MusicOn ? null
-            : _front is { Active: true } f ? f.Music
-            : _menu!.Current switch
-            {
-                Menu.Screen.Course => "TOKYO.adx", Menu.Screen.Car => "WORRY.adx", Menu.Screen.Loading or Menu.Screen.Title => null,
-                Menu.Screen.Settings => _music, _ => RaceMusic,
-            };
+        var front = _front is { Active: true };
+        var sfx = !front && _menu!.Current is Menu.Screen.None or Menu.Screen.Intro or Menu.Screen.Finish ? _settings.SoundVolume : 0;
+        if (_audioDevice!.Sfx != sfx) _audioDevice.Sfx = sfx; // the setter touches every voice
+        var want = !_settings.MusicOn ? null : front ? _front!.Music : _menu!.Music(_music);
         if (want == _music) return;
-        if (_music == RaceMusic) _audio.MusicOn = false;
+        if (_music == Menu.RaceMusic) _audio.MusicOn = false;
         _music = want;
-        if (want != RaceMusic) _menuAudio.Music(want);
+        if (want != Menu.RaceMusic) _menuAudio.Music(want);
         else
         {
             _menuAudio.Music(null);
@@ -580,27 +601,33 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         }
     }
 
-    /// <summary>Menu input and its actions; a course change shows the loading screen for one frame, then loads.</summary>
-    private void UpdateMenu(float dt)
+    /// <summary>Menu input and its actions; Load loads the chosen course (blocking, the loading screen stays up) or only swaps the car.</summary>
+    private void UpdateMenu((int X, int Y, bool Ok, bool Back) keys, float dt)
     {
         var menu = _menu!;
-        if (menu.Current == Menu.Screen.Loading)
+        switch (menu.Update(keys, dt))
         {
-            if (++_loadingFrames < 3) return;
-            using (var iso = new Iso9660(isoPath)) LoadCourse(iso, menu.CourseTime, menu.Reverse, menu.CarId, menu.Paint);
-            Restart();
-            return;
-        }
-        switch (menu.Update(Input, dt))
-        {
-            case Menu.Action.Quit:
-                Window.ShouldClose = true;
+            case Menu.Action.Load:
+                (_settings.Course, _settings.Reverse, _settings.Car, _settings.Paint, _settings.Manual) = (menu.CourseTime, menu.Reverse, menu.CarId, menu.Paint, menu.Manual);
+                if (_persist) _settings.Save();
+                if (menu.CourseTime != _courseTime || menu.Reverse != _drive.Reverse)
+                {
+                    using var iso = new Iso9660(isoPath);
+                    LoadCourse(iso, menu.CourseTime, menu.Reverse, menu.CarId, menu.Paint);
+                }
+                else if (menu.CarId != _carName || menu.Paint != _paint) SwitchCar(Array.IndexOf(CarPaint.Cars, menu.CarId), menu.Paint);
+                ResetRun();
                 break;
             case Menu.Action.Resume:
-                CloseMenu();
+                (_inRace, _camSnap, _fly) = (true, true, false);
                 break;
             case Menu.Action.Restart:
-                Restart();
+                ResetRun();
+                break;
+            case Menu.Action.Exit:
+                _inRace = false;
+                if (_front == null) Window.ShouldClose = true; // a --menu start has no main menu to go back to
+                else _front.Open(FrontEnd.Step.Modes);
                 break;
             case Menu.Action.PreviewCar:
                 SwitchCar(Array.IndexOf(CarPaint.Cars, menu.CarId), menu.Paint);
@@ -608,36 +635,20 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             case Menu.Action.SettingsChanged:
                 ApplySettings();
                 break;
-            case Menu.Action.None when menu.Current == Menu.Screen.Title: // backed out to the front end
-                menu.Close();
-                _front!.Open(FrontEnd.Step.Modes);
-                break;
-            case Menu.Action.Start:
-                (_settings.Course, _settings.Reverse, _settings.Car, _settings.Paint) = (menu.CourseTime, menu.Reverse, menu.CarId, menu.Paint);
-                if (_persist) _settings.Save();
-                if (menu.CourseTime != _courseTime || menu.Reverse != _drive.Reverse)
-                {
-                    menu.ShowLoading();
-                    _loadingFrames = 0;
-                }
-                else
-                {
-                    if (menu.CarId != _carName || menu.Paint != _paint) SwitchCar(Array.IndexOf(CarPaint.Cars, menu.CarId), menu.Paint);
-                    Restart();
-                }
-                break;
         }
     }
 
-    /// <summary>Car back at the start of the line, fresh timing and drift score, menus closed.</summary>
-    private void Restart()
+    /// <summary>Car back at the start of the line (gearbox as chosen in the menus), fresh timing and drift score, race camera behind it.</summary>
+    private void ResetRun()
     {
         _drive.ResetTo(0);
+        if (_front != null) _drive.Car.AutomaticGearbox = !_settings.Manual;
         _hud = NewHud();
         _fx = new Effects();
         _simTime = 0;
+        _finished = false;
         SyncPose();
-        CloseMenu();
+        (_inRace, _camSnap, _fly) = (true, true, false);
     }
 
     private void ApplySettings()
@@ -647,28 +658,29 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         if (_audioDevice != null) _audioDevice.Music = s.MusicVolume;
         if (_menuAudio != null) _menuAudio.Volume = s.SoundVolume;
         (_hud.Visible, _hud.Mode, _bumperCam) = (s.HudOn, s.MapMode, s.BumperCam);
+        if (s.Livery != _carLivery) SwitchCar(Array.IndexOf(CarPaint.Cars, _carName), _paint);
         if (_persist) s.Save();
     }
 
     /// <summary>
-    ///     Camera behind the menus: car select orbits the parked car (shifted so it sits right of the panels), title and course
-    ///     select fly along the road (CRS_ROAD, ~16 m/s, 9 m up, looking 50 m ahead), the pause menus keep the game's view.
-    ///     Returns false when the game camera should run.
+    ///     Camera behind the menus: car select and the result sheet turn around the parked car (as the original's turntable
+    ///     and result showcase), title and the backdrop screens fly along the road (CRS_ROAD, 9 m up, looking 50 m ahead),
+    ///     pause keeps the game's view. Returns false when the game camera should run (race, intro, finish).
     /// </summary>
     private bool UpdateMenuCamera(float dt)
     {
         var front = _front is { Active: true };
-        if (!front && _menu is not { Current: not Menu.Screen.None }) return false;
-        if (!front && _menu!.Current == Menu.Screen.Car)
+        var screen = _menu?.Current ?? Menu.Screen.None;
+        if (!front && screen is Menu.Screen.None or Menu.Screen.Intro or Menu.Screen.Finish) return false;
+        if (!front && screen is Menu.Screen.Car or Menu.Screen.Gearbox or Menu.Screen.Result)
         {
             OrbitCar(0.6f + _menuTime * 0.35f);
             var fwd = Forward();
-            var right = Vector3.Normalize(Vector3.Cross(fwd, Vector3.UnitY));
-            _pos -= right * 1.5f + fwd * 1.2f;
-            (_camLook, _fov) = (_pos + fwd - Vector3.UnitY * 0.12f, MathF.PI / 4);
+            _pos -= fwd * 1.5f; // further out and looking down: the whole car above the info panel
+            (_camLook, _fov) = (_pos + fwd - Vector3.UnitY * 0.1f, MathF.PI / 4);
             return true;
         }
-        if (!front && _inRace)
+        if (!front && screen == Menu.Screen.Pause)
         {
             if (!_fly) UpdateDriveCamera(0); // keeps the game's view (sets it up if the game opened paused)
             return true;
@@ -714,6 +726,55 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         }
         _camLook = _pos + Forward() * 100; // far target: rounding of the turned target barely tilts the view
         _shotState = 1;
+    }
+
+    /// <summary>
+    ///     --flow: per step the place it waits for (front-end step, menu screen or "Race"), seconds to settle there, the PNG
+    ///     to take (null: none) and the key then pressed. Time Attack on Akina downhill, day, dry, Trueno with the last paint, AT.
+    /// </summary>
+    private static readonly (string At, float Wait, string? Shot, int X, int Y, bool Ok, bool Back)[] FlowScript =
+    [
+        ("Boot", 1.2f, "boot", 0, 0, true, false), ("Logo", 1, "logo", 0, 0, true, false), ("Title", 1.5f, "title", 0, 0, true, false),
+        ("Modes", 1, "modes", 0, 1, false, false), ("Modes", 0.6f, "modes_time_attack", 0, 0, true, false),
+        ("Course", 1, "course", 1, 0, false, false), ("Course", 0.5f, "course_happogahara", -1, 0, false, false), ("Course", 0.5f, null, 0, 0, true, false),
+        ("Route", 0.8f, "route", 0, 0, true, false), ("Time", 0.8f, "time", 0, 0, true, false), ("Weather", 0.8f, "weather", 0, 0, true, false),
+        ("Maker", 1, "maker", 0, 0, true, false), ("Maker", 0.6f, "model", 0, 0, true, false),
+        ("Car", 1.5f, "car", 0, 1, false, false), ("Car", 1, "car_paint", 0, 0, true, false), ("Gearbox", 0.8f, "gearbox", 0, 0, true, false),
+        ("Loading", 0.6f, "loading", 0, 0, false, false), ("Intro", 1, "telop", 0, 0, false, false), ("Intro", 2, "countdown", 0, 0, false, false),
+        ("Race", 2, "race", 0, 0, false, true), ("Pause", 0.8f, "pause", 0, 0, true, false),
+        ("Finish", 1.2f, "finish", 0, 0, false, false), ("Result", 3.6f, "result", 1, 0, false, false), ("Result", 0.3f, null, 1, 0, false, false),
+        ("Result", 0.3f, null, 1, 0, false, false), ("Result", 0.5f, "result_exit", 0, 0, true, false),
+        ("Modes", 1, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 0, true, false),
+        ("Records", 1, "records", 0, 0, false, true),
+        ("Modes", 1, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 0, true, false),
+        ("Options", 1, "options", 0, 1, false, false), ("Options", 0.5f, "options_music", 0, 0, false, true), ("Modes", 1.2f, "modes_end", 0, 0, false, false),
+    ];
+
+    /// <summary>--flow: the scripted key of this frame; asks for the step's PNG first (written next frame), quits after the last step.</summary>
+    private (int X, int Y, bool Ok, bool Back) FlowKeys(float dt)
+    {
+        if (_flowStep >= FlowScript.Length)
+        {
+            Window.ShouldClose = true;
+            return default;
+        }
+        var s = FlowScript[_flowStep];
+        var at = _front is { Active: true } ? _front.Current.ToString() : _menu!.Current != Menu.Screen.None ? _menu.Current.ToString() : "Race";
+        if (at != s.At)
+        {
+            _flowT = 0;
+            return default;
+        }
+        if ((_flowT += dt) < s.Wait) return default;
+        if (s.Shot != null && !_flowShotTaken)
+        {
+            (_shotState, _flowShot, _flowShotTaken) = (1, s.Shot, true);
+            return default;
+        }
+        if (_shotState != 0) return default;
+        (_flowStep, _flowT, _flowShotTaken) = (_flowStep + 1, 0, false);
+        Console.WriteLine($"\n[Flow] {_menuTime:0.00} s {s.At}: {(s.Ok ? "DECIDE" : s.Back ? "BACK" : s.X != 0 || s.Y != 0 ? $"x {s.X} y {s.Y}" : "-")}");
+        return (s.X, s.Y, s.Ok, s.Back);
     }
 
     /// <summary>--bench: frame intervals after a 2 s warm-up; at the end avg/p99/max, frames over 25 ms and the effect peaks.</summary>
@@ -986,11 +1047,12 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _fxRenderer.DrawRain(pass, view * proj, _pos, _camVelocity, _simTime, 2 * MathF.Tan(_fov / 2) / heightPx);
         _renderer.EndScene(ctx.Encoder, pass, shot);
         var (w, h) = shot != null ? (shot.Width, shot.Height) : (Device.SwapchainWidth, Device.SwapchainHeight);
+        var menuShown = _menu is { Current: not Menu.Screen.None };
         if (_front is { Active: true }) _front.Build(_overlay, w, h);
-        else if (_menu is { Current: not Menu.Screen.None }) _menu.Build(_overlay, w, h);
-        else if (_hud.Visible)
+        else if (_hud.Visible && (!menuShown || _menu!.OverRace)) // telop/countdown and pause lie over the HUD
             _hud.Build(_overlay, w, h, _carPose.Translation, Vector3.TransformNormal(Vector3.UnitZ, _carPose), _drive.Car, _carName, _menuTime);
         else _overlay.Clear();
+        if (_front is not { Active: true } && menuShown) _menu!.Build(_overlay, w, h);
         var target = shot?.View ?? Device.CurrentSwapchainView;
         _overlayRenderer.Draw(ctx.Encoder, _overlay, target, w, h);
         _textRenderer.Draw(ctx.Encoder, _overlay, target, w, h);

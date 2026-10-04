@@ -168,41 +168,83 @@ internal static class AudioCapture
     }
 
     /// <summary>
-    ///     <c>--frontend-capture &lt;wav&gt;</c>: a scripted pass through the front end, rendered offline at 60 fps like the
-    ///     game loop — title (START), main menu (down, down, decide a mode not built yet, up, decide Time Attack), then
-    ///     course select's music — with the real <see cref="Ui.FrontEnd"/> and <see cref="MenuAudio"/>. Every SE/BGM trigger
-    ///     is logged with its time, the mix level per 0.5 s follows.
+    ///     <c>--frontend-capture &lt;wav&gt;</c>: a scripted pass through all menus, rendered offline at 60 fps like the game
+    ///     loop, with the real <see cref="Ui.FrontEnd"/>, <see cref="Ui.Menu"/> and <see cref="MenuAudio"/>: title (START) →
+    ///     main menu → Time Attack → course, route, time, weather → maker, model, car, paint → transmission → loading →
+    ///     telop and countdown → (no race offline: the race BGM is left out and a made-up finished run of 3'50 is handed
+    ///     over) → finish → result tally → Exit → Records → Options. Every SE/BGM trigger is logged with its time, the mix
+    ///     level per 0.5 s follows.
     /// </summary>
     public static bool FrontEnd(Iso9660 iso, string wavPath)
     {
         const int perFrame = Rate / 60;
-        const float seconds = 11;
         using var dev = new AudioDevice(Rate);
         if (!dev.Enabled) return false;
         var t = 0f;
         using var audio = new MenuAudio(iso, dev) { Clock = () => t };
         var front = new Ui.FrontEnd { Sound = audio.Play };
+        var menu = new Ui.Menu(new Ui.Catalog(iso), new Ui.Settings()) { Sound = audio.Play };
         front.Open(Ui.FrontEnd.Step.Title);
-        (float At, int Y, bool Ok)[] script = [(1.5f, 0, true), (3, 1, false), (3.7f, 1, false), (4.4f, 0, true), (5.2f, -1, false), (6, 0, true)];
-        var frames = (int)(seconds * 60);
-        var pcm = new short[frames * perFrame * 2];
-        for (int n = 0, next = 0; n < frames; n++, t = n / 60f)
+        (string At, float Wait, int X, int Y, bool Ok, bool Back)[] script =
+        [
+            ("Title", 1.5f, 0, 0, true, false), ("Modes", 1, 0, 1, false, false), ("Modes", 0.6f, 0, 1, false, false), ("Modes", 0.6f, 0, 0, true, false),
+            ("Modes", 0.6f, 0, -1, false, false), ("Modes", 0.6f, 0, 0, true, false), ("Course", 1, 1, 0, false, false), ("Course", 0.5f, -1, 0, false, false),
+            ("Course", 0.5f, 0, 0, true, false), ("Route", 0.8f, 0, 0, true, false), ("Time", 0.8f, 0, 0, true, false), ("Weather", 0.8f, 0, 0, true, false),
+            ("Maker", 1, 0, 0, true, false), ("Maker", 0.6f, 0, 0, true, false), ("Car", 1.5f, 0, 1, false, false), ("Car", 1, 0, 0, true, false),
+            ("Gearbox", 0.8f, 0, 0, true, false), ("Race", 2, 0, 0, false, false), ("Result", 3.6f, 1, 0, false, false), ("Result", 0.3f, 1, 0, false, false),
+            ("Result", 0.3f, 1, 0, false, false), ("Result", 0.5f, 0, 0, true, false), ("Modes", 1, 0, 1, false, false), ("Modes", 0.5f, 0, 1, false, false),
+            ("Modes", 0.5f, 0, 0, true, false), ("Records", 2, 0, 0, false, true), ("Modes", 1, 0, 0, false, false),
+        ];
+        var pcm = new List<short>();
+        var frame = new short[perFrame * 2];
+        var step = 0;
+        var wait = 0f;
+        var music = "";
+        for (var n = 0; step < script.Length && n < 60 * 180; n++, t = n / 60f)
         {
+            var at = front.Active ? front.Current.ToString() : menu.Current != Ui.Menu.Screen.None ? menu.Current.ToString() : "Race";
             var k = (X: 0, Y: 0, Ok: false, Back: false);
-            if (next < script.Length && t >= script[next].At) (k.Y, k.Ok, next) = (script[next].Y, script[next].Ok, next + 1);
-            if (front.Update(k, 1 / 60f) == Ui.FrontEnd.Result.TimeAttack) Console.WriteLine($"[Menu] {t:0.00} s main menu -> {Ui.FrontEnd.Modes[front.Index]} -> course select");
-            audio.Music(front.Active ? front.Music : "TOKYO.adx", background: false);
-            dev.Render(pcm.AsSpan(n * perFrame * 2, perFrame * 2));
+            var s = script[step];
+            if (at != s.At) wait = 0;
+            else if ((wait += 1 / 60f) >= s.Wait)
+            {
+                (k.X, k.Y, k.Ok, k.Back, step, wait) = (s.X, s.Y, s.Ok, s.Back, step + 1, 0);
+                if (at == "Race") // the race itself is not part of this capture: a made-up finished run
+                    menu.Finish(new Ui.Menu.Run(230.4f, [55.1f, 112.9f, 171.2f, 230.4f], [-0.4f, 0.2f, -0.9f, -1.3f], 231.7f, true, 4210));
+            }
+            if (front.Active)
+            {
+                var r = front.Update(k, 1 / 60f);
+                if (r != Ui.FrontEnd.Result.None) Console.WriteLine($"[Menu] {t:0.00} s main menu -> {Ui.FrontEnd.Modes[front.Index]}");
+                if (r == Ui.FrontEnd.Result.TimeAttack) menu.Open(Ui.Menu.Screen.Course, "AKINA_DAY", false, "AE86T", 0);
+                if (r == Ui.FrontEnd.Result.Records) menu.Open(Ui.Menu.Screen.Records, "AKINA_DAY", false, "AE86T", 0);
+            }
+            else if (menu.Current != Ui.Menu.Screen.None)
+            {
+                var a = menu.Update(k, 1 / 60f);
+                if (a == Ui.Menu.Action.Exit) front.Open(Ui.FrontEnd.Step.Modes);
+                if (a is not (Ui.Menu.Action.None or Ui.Menu.Action.Exit)) Console.WriteLine($"[Menu] {t:0.00} s action {a} ({menu.CourseTime}, {(menu.Reverse ? "reverse" : "forward")}, {menu.CarId}, paint {menu.Paint}, {(menu.Manual ? "MT" : "AT")})");
+            }
+            var want = front.Active ? front.Music : menu.Music(music);
+            if (want != music)
+            {
+                music = want;
+                if (want == Ui.Menu.RaceMusic) Console.WriteLine($"[Menu] {t:0.00} s race BGM (Eurobeat, not in this capture)");
+                audio.Music(want == Ui.Menu.RaceMusic ? null : want, background: false);
+            }
+            dev.Render(frame);
+            pcm.AddRange(frame);
         }
-        Wav.Write(wavPath, pcm, 2, Rate);
+        Wav.Write(wavPath, [.. pcm], 2, Rate);
         const int block = Rate / 2 * 2;
-        for (var b = 0; b + block <= pcm.Length; b += block)
+        for (var b = 0; b + block <= pcm.Count; b += block)
         {
             double sum = 0;
             for (var i = b; i < b + block; i++) sum += (double)pcm[i] * pcm[i];
             Console.WriteLine($"[Mix] {b / 2 / (float)Rate,5:0.0} s  RMS {10 * Math.Log10(sum / block / (32768.0 * 32768) + 1e-12),6:0.0} dBFS");
         }
-        Console.WriteLine($"[Menu] -> {wavPath}");
-        return true;
+        Console.WriteLine($"[Menu] -> {wavPath} ({pcm.Count / 2 / (float)Rate:0.0} s, {step}/{script.Length} steps)");
+        return step == script.Length;
     }
 }
+

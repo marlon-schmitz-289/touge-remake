@@ -6,36 +6,62 @@ namespace Touge.Ui;
 
 /// <summary>
 ///     What the menus offer, read once from the ISO: the 11 courses (times of day present in COURSE.AFS, driving line for
-///     the preview, which direction is downhill) and the 32 cars (name, drivetrain, power, weight, paint colours from CAR_ENV).
+///     the preview, which direction is downhill) and the 32 cars (maker, name, drivetrain, power, weight, paint colours from CAR_ENV).
 /// </summary>
 public sealed class Catalog
 {
     /// <param name="Times">"DAY", "NIT", "RIN" as present.</param>
     /// <param name="Line">Forward driving line (XZ).</param>
     /// <param name="ForwardDownhill">Forward (_I) line ends lower than it starts; circuits have neither (<see cref="Circuit"/>).</param>
-    public sealed record Course(string Id, string Name, string[] Times, Vector2[] Line, float LengthM, float ClimbM, bool ForwardDownhill, bool Circuit);
+    public sealed record Course(string Id, string Name, string[] Times, Vector2[] Line, float LengthM, float ClimbM, bool ForwardDownhill, bool Circuit)
+    {
+        /// <summary>
+        ///     The forward line turns clockwise seen from above: shoelace sum over (X, Z); Z points south in the game's
+        ///     right-handed, y-up frame, so a positive sum is clockwise on a north-up map.
+        /// </summary>
+        public bool ForwardClockwise
+        {
+            get
+            {
+                float sum = 0;
+                for (var i = 0; i < Line.Length; i++)
+                {
+                    var (a, b) = (Line[i], Line[(i + 1) % Line.Length]);
+                    sum += a.X * b.Y - b.X * a.Y;
+                }
+                return sum > 0;
+            }
+        }
+    }
 
-    public sealed record Car(string Id, string Name, string Drive, int Ps, int Kg, uint[] Paints);
+    /// <param name="Name">Name as the original's car lists write it (CAR_NAME/T_TRIAL), chassis code in brackets.</param>
+    public sealed record Car(string Id, string Maker, string Name, string Drive, int Ps, int Kg, uint[] Paints);
 
-    // ELF course order (FORMATS.md) regrouped: touge first, the two circuits last
+    /// <summary>Makers in the original's maker select order (T_MKSEL).</summary>
+    public static readonly string[] Makers = ["TOYOTA", "NISSAN", "HONDA", "MITSUBISHI", "MAZDA", "SUBARU", "SUZUKI"];
+
+    /// <summary>
+    ///     The original's course select grid order (3 × 4, KCRSSEL0 h_selnam00; the ELF course table with Shomaru moved):
+    ///     MYOUGI0/USUI0 are the circuits named plain 妙義/碓氷, MYOUGI/USUI the touge 真・妙義/真・碓氷 (MYOGI+/USUI+ in the
+    ///     translation). The twelfth slot, 四峠走破 (four-pass run), has no course of its own and stays locked.
+    /// </summary>
     private static readonly (string Id, string Name)[] CourseNames =
     [
-        ("AKINA", "AKINA"), ("AKAGI", "AKAGI"), ("MYOUGI", "MYOGI"), ("USUI", "USUI"), ("IROHA", "IROHAZAKA"), ("HAPPOU", "HAPPOGAHARA"),
-        ("MOMIJI", "MOMIJI LINE"), ("SHIONA", "SHIONA"), ("SHOMARU", "SHOMARU"), ("MYOUGI0", "MYOGI CIRCUIT"), ("USUI0", "USUI CIRCUIT"),
+        ("MYOUGI0", "MYOGI"), ("USUI0", "USUI"), ("AKAGI", "AKAGI"), ("AKINA", "AKINA"), ("HAPPOU", "HAPPOGAHARA"), ("IROHA", "IROHAZAKA"),
+        ("MYOUGI", "MYOGI+"), ("USUI", "USUI+"), ("SHOMARU", "SHOMARU"), ("MOMIJI", "MOMIJI LINE"), ("SHIONA", "SHIONA"),
     ];
 
     private static readonly Dictionary<string, string> CarNames = new()
     {
-        ["AE86T"] = "Toyota Sprinter Trueno GT-APEX", ["AE86L"] = "Toyota Corolla Levin GT-APEX", ["AE85"] = "Toyota Corolla Levin SR",
-        ["MR2"] = "Toyota MR2 GT-S", ["MRS"] = "Toyota MR-S", ["ALTEZ"] = "Toyota Altezza RS200", ["GT-4"] = "Toyota Celica GT-Four",
-        ["R32"] = "Nissan Skyline GT-R (R32)", ["R34"] = "Nissan Skyline GT-R (R34)", ["ER34"] = "Nissan Skyline 25GT-T",
-        ["S13"] = "Nissan Silvia K's (S13)", ["S14Q"] = "Nissan Silvia Q's (S14)", ["S14"] = "Nissan Silvia K's (S14)", ["S15"] = "Nissan Silvia Spec-R",
-        ["ONE80"] = "Nissan 180SX", ["SIL80"] = "Nissan Sileighty", ["EK9"] = "Honda Civic Type R", ["EG6"] = "Honda Civic SiR-II",
-        ["INTGR"] = "Honda Integra Type R", ["S2000"] = "Honda S2000", ["EVO3"] = "Mitsubishi Lancer Evolution III",
-        ["EVO4"] = "Mitsubishi Lancer Evolution IV", ["EVO7"] = "Mitsubishi Lancer Evolution VII", ["FD3S"] = "Mazda RX-7 Type R (FD3S)",
-        ["FD3SA"] = "Mazda RX-7 Type RS (FD3S)", ["FC3S"] = "Mazda Savanna RX-7 (FC3S)", ["NA6C"] = "Mazda Eunos Roadster",
-        ["NB8C"] = "Mazda Roadster RS", ["IMP"] = "Subaru Impreza WRX STi (GC8)", ["IMP2"] = "Subaru Impreza WRX STi (GDB)",
-        ["IMP3"] = "Subaru Impreza WRX Type R", ["CAPPU"] = "Suzuki Cappuccino",
+        ["AE86T"] = "TRUENO GT-APEX [AE86]", ["AE86L"] = "LEVIN GT-APEX [AE86]", ["AE85"] = "LEVIN SR [AE85]", ["MR2"] = "MR2 G-Limited [SW20]",
+        ["MRS"] = "MR-S S EDITION [ZZW30]", ["ALTEZ"] = "ALTEZZA RS-200 [SXE10]", ["GT-4"] = "CELICA GT-FOUR [ST205]",
+        ["R32"] = "SKYLINE GT-R V-spec II [BNR32]", ["R34"] = "SKYLINE GT-R V-spec II [BNR34]", ["ER34"] = "SKYLINE 25GT TURBO [ER34]",
+        ["S13"] = "SILVIA K's [S13]", ["S14Q"] = "SILVIA Q's [S14]", ["S14"] = "SILVIA K's AERO [S14]", ["S15"] = "SILVIA spec-R [S15]",
+        ["ONE80"] = "180SX TYPE X [RPS13]", ["SIL80"] = "SILEIGHTY [RPS13]", ["EK9"] = "CIVIC TYPE R [EK9]", ["EG6"] = "CIVIC SiR II [EG6]",
+        ["INTGR"] = "INTEGRA TYPE R [DC2]", ["S2000"] = "S2000 [AP1]", ["EVO3"] = "LANCER Evo. III GSR [CE9A]", ["EVO4"] = "LANCER Evo. IV RS [CN9A]",
+        ["EVO7"] = "LANCER Evo. VII GSR [CT9A]", ["FD3S"] = "RX-7 Type R [FD3S]", ["FD3SA"] = "RX-7 SPIRIT R Type A [FD3S]", ["FC3S"] = "RX-7 Infini III [FC3S]",
+        ["NA6C"] = "ROADSTER S Special [NA6CE]", ["NB8C"] = "ROADSTER RS [NB8C]", ["IMP"] = "IMPREZA WRX STi Version VI [GC8]",
+        ["IMP2"] = "IMPREZA WRX STi [GDB]", ["IMP3"] = "IMPREZA WRX type R STi Version V [GC8]", ["CAPPU"] = "Cappuccino [EA11R]",
     };
 
     public IReadOnlyList<Course> Courses { get; }
@@ -63,23 +89,29 @@ public sealed class Catalog
             }),
         ];
         var paints = CarPaint.Parse(iso.ReadFile("CDVD/DATA/BINARY/CAR_ENV.BIN"));
-        Cars = [.. CarPaint.Cars.Select((id, i) => CarFor(id, paints[i]))];
+        Cars = [.. CarPaint.Cars.Select((id, i) => CarFor(id, MakerOf(i), paints[i]))];
     }
 
-    private static Car CarFor(string id, uint[] paints)
+    /// <summary>A catalog from given lists (tests).</summary>
+    public Catalog(IReadOnlyList<Course> courses, IReadOnlyList<Car> cars) => (Courses, Cars) = (courses, cars);
+
+    /// <summary>Maker of HCAR car <paramref name="index"/>: <see cref="CarPaint.Cars"/> is grouped by maker in <see cref="Makers"/> order.</summary>
+    private static string MakerOf(int index) => Makers[index switch { < 7 => 0, < 16 => 1, < 20 => 2, < 23 => 3, < 28 => 4, < 31 => 5, _ => 6 }];
+
+    private static Car CarFor(string id, string maker, uint[] paints)
     {
         var s = CarSpecs.All[id];
         var drive = s.DriveFront >= 1 ? "FF" : s.DriveFront > 0 ? "4WD" : s.FrontWeight < 0.46f ? "MR" : "FR";
         // peak power from the torque curve's points (P = T·ω)
         var watts = s.TorqueRpm.Select((rpm, i) => s.TorqueNm[i] * rpm * MathF.PI / 30).Max();
-        return new Car(id, CarNames.GetValueOrDefault(id, id), drive, (int)MathF.Round(watts / 735.5f), (int)s.Mass, paints);
+        return new Car(id, maker, CarNames.GetValueOrDefault(id, id), drive, (int)MathF.Round(watts / 735.5f), (int)s.Mass, paints);
     }
 
-    public static string TimeName(string t) => t switch { "NIT" => "NIGHT", "RIN" => "RAIN", _ => "DAY" };
+    public static string TimeName(string t) => t switch { "NIT" => "NIGHT", "RIN" => "WET", _ => "DAY" };
 
-    /// <summary>Direction label: circuits normal/reverse, touge downhill/uphill.</summary>
+    /// <summary>Direction as the original's route words: circuits clockwise/counter-clockwise (winding of the line), touge downhill/uphill.</summary>
     public static string DirectionName(Course c, bool reverse) =>
-        c.Circuit ? reverse ? "REVERSE" : "NORMAL" : c.ForwardDownhill != reverse ? "DOWNHILL" : "UPHILL";
+        c.Circuit ? c.ForwardClockwise != reverse ? "CLOCKWISE" : "COUNTER-CLOCKWISE" : c.ForwardDownhill != reverse ? "DOWNHILL" : "UPHILL";
 
     /// <summary>Paint 0xBBGGRR as an overlay colour.</summary>
     public static uint Swatch(uint bgr) => bgr | 0xFF000000;

@@ -20,6 +20,10 @@ public sealed class Settings
     public bool Reverse { get; set; }
     public string Car { get; set; } = "AE86T";
     public int Paint { get; set; }
+    /// <summary>Manual gearbox (the car flow's transmission choice).</summary>
+    public bool Manual { get; set; }
+    /// <summary>Stickers and plates of the car (Options).</summary>
+    public Touge.Formats.Livery Livery { get; set; } = Touge.Formats.Livery.Rival;
     /// <summary>Best run per course and direction ("AKINA", "AKINA_R"): cumulative sector splits, last = total.</summary>
     public Dictionary<string, float[]> Best { get; set; } = [];
 

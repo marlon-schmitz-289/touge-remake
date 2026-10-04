@@ -1,394 +1,871 @@
 using System.Numerics;
 using Kansei.Graphics;
 using Kansei.Input;
+using Touge.Formats;
 
 namespace Touge.Ui;
 
 /// <summary>
-///     Menu screens over the running 3D scene: course select (list, time of day ×
-///     direction, line preview, length/climb/best), car select (list, specs, paint swatches; the game shows the car
-///     turning behind), pause (Esc) and settings. <see cref="Screen.Title"/> stands for the front end (<see cref="FrontEnd"/>):
-///     backing out to it leaves the menu there and the game hands over. UI sounds by name through <see cref="Sound"/>. Arrows/Enter/Esc or D-pad/A/B (stick, Start too). The game reacts to the
-///     returned <see cref="Action"/> and reads the selection (<see cref="CourseTime"/>, <see cref="Reverse"/>, <see cref="CarId"/>, <see cref="Paint"/>).
+///     The game-flow screens behind the main menu, rebuilt in the original's style with <see cref="Canvas"/> (no original
+///     textures), flow after its game-flow controller 0x1702A0 (Time Attack: course first, then the car):
+///     course select (3 × 4 grid as K_CRSSEL, map line in the carbon "monitor" instead of the photo) → route → time of
+///     day → weather (choice pairs as T_TRIAL, steps with one option skipped) → maker select (T_MKSEL: 7 chrome plates,
+///     carbon MODEL panel) → car (the 3D car turning behind, body colour) → transmission → loading (white, "Now Loading...")
+///     → course telop and 3-2-1-GO (TLP_STG, CAR010/CAR011) → race; pause bar (Continue/Retry/Exit, PAUSE.PAC) →
+///     finish banner (FINISH.PAC) → result sheet with tallied rows (RESULT.PAC, NAME001) and the action buttons
+///     (ACTCHOICE: Retry, Course Select, Car Select, Exit). Records (REC_TEX) and Options (OPGM rows) hang off the main
+///     menu. 30-frame black fades between modules, steps inside a module switch in place. Back walks the visited steps.
+///     UI sounds by SYSSE name through <see cref="Sound"/> (SYS005 move, SYS006 decide, BEEP001 back/locked); the
+///     game reads <see cref="Music"/>, reacts to the returned <see cref="Action"/> and reads the selection.
 /// </summary>
 public sealed class Menu(Catalog catalog, Settings settings)
 {
-    public enum Screen { None, Title, Course, Car, Pause, Settings, Loading }
-    public enum Action { None, Start, Resume, Restart, Quit, PreviewCar, SettingsChanged }
-
-    private static readonly string[] PauseRows = ["RESUME", "RESTART", "CHANGE COURSE", "CHANGE CAR", "SETTINGS", "QUIT"],
-        SettingRows = ["GRAPHICS", "MUSIC", "MUSIC VOLUME", "SOUND VOLUME", "HUD", "MINIMAP", "CAMERA", "BACK"];
-
-    public Screen Current { get; private set; }
-    private Screen _settingsFrom, _courseFrom, _carFrom;
-    private int _row, _course, _variant, _car, _paint;
-    private float _t; // seconds since the screen opened (entrance animation)
-    private readonly MenuKeys _keys = new();
-    /// <summary>Original UI sound by SYSSE name: SYS005 cursor, SYS006 decide, BEEP001 back.</summary>
-    public Action<string>? Sound { get; set; }
-
-    /// <summary>Layout grid (units): left text column, top of lists and detail panels, list row height.</summary>
-    private const float ColX = 24, ContentTop = 120, RowH = 50;
-
-    private Catalog.Course SelectedCourse => catalog.Courses[_course];
-    private (string Time, bool Reverse) Variant => Variants(SelectedCourse)[_variant];
-    public string CourseTime => $"{SelectedCourse.Id}_{Variant.Time}";
-    public bool Reverse => Variant.Reverse;
-    public string CarId => catalog.Cars[_car].Id;
-    public int Paint => _paint;
-    /// <summary>Run info for the pause screen: course name, current/best time.</summary>
-    public (string Course, string Car, float? Time, float? Best) Run { get; set; }
-
-    private static List<(string Time, bool Reverse)> Variants(Catalog.Course c) => [.. c.Times.SelectMany(t => new[] { (t, false), (t, true) })];
+    public enum Screen { None, Course, Route, Time, Weather, Maker, Car, Gearbox, Loading, Intro, Pause, Finish, Result, Records, Options }
 
     /// <summary>
-    ///     Opens <paramref name="s"/>; the course/car lists start at the current game's course, direction, car and paint.
-    ///     Backing out of it returns to <paramref name="from"/> (<see cref="Screen.Title"/> = the front end).
+    ///     Load: load <see cref="CourseTime"/>/<see cref="CarId"/>… (the menu goes on into the telop); Restart: car back to the
+    ///     start (the telop follows); Exit: back to the main menu; PreviewCar: show <see cref="CarId"/>/<see cref="Paint"/>.
     /// </summary>
-    public void Open(Screen s, string courseTime, bool reverse, string car, int paint, Screen from = Screen.None)
+    public enum Action { None, Load, Resume, Restart, Exit, PreviewCar, SettingsChanged }
+
+    /// <summary>A finished run for the result sheet.</summary>
+    /// <param name="Deltas">Per sector against the best run it was compared with (null without one).</param>
+    /// <param name="Previous">Best total before this run (null if none).</param>
+    public sealed record Run(float Time, float[] Splits, float?[] Deltas, float? Previous, bool NewRecord, float Drift);
+
+    /// <summary><see cref="Music"/> value for "the race's Eurobeat".</summary>
+    public const string RaceMusic = "race";
+
+    public const float Fade = 30 / 60f;
+    /// <summary>Intro timeline (s): telop until the count, "3" "2" "1" a second apart, GO, the GO sign gone.</summary>
+    public const float CountAt = 2.6f, GoAt = CountAt + 3, IntroEnd = GoAt + 0.8f;
+    /// <summary>Loading: the load is asked for once the white screen has been up this long.</summary>
+    public const float LoadAt = Fade + 0.4f;
+    /// <summary>Finish banner time before the result sheet; result rows one after another, then the buttons.</summary>
+    public const float FinishHold = 3.5f, RowFirst = 0.5f, RowStep = 0.3f;
+    private const int ResultRows = 8;
+    public static float ButtonsAt => RowFirst + RowStep * ResultRows + 0.2f;
+
+    public static readonly string[] PauseButtons = ["Continue", "Retry", "Exit"], ResultButtons = ["RETRY", "COURSE SELECT", "CAR SELECT", "EXIT"];
+    private static readonly string[] PauseCaptions = ["Return to the race.", "Restart the race from the beginning.", "Quit this race."];
+
+    public Screen Current { get; private set; }
+    /// <summary>Original UI sound by SYSSE name.</summary>
+    public Action<string>? Sound { get; set; }
+
+    private int _slot, _maker, _model, _car, _paint, _choice, _row;
+    private bool _reverse, _night, _wet, _manual, _inModels, _loadAsked, _fadeIn, _padHelp;
+    private float _t, _clock, _leave = -1;
+    private Screen _next;
+    private Action _then;
+    private readonly Stack<Screen> _back = new();
+    private Run? _run;
+
+    private const int Slots = 12; // the original's grid; slot 11 = four-pass run, locked
+    private Catalog.Course SelectedCourse => catalog.Courses[Math.Min(_slot, catalog.Courses.Count - 1)];
+    public string CourseTime => $"{SelectedCourse.Id}_{(_night ? "NIT" : _wet ? "RIN" : "DAY")}";
+    public bool Reverse => _reverse;
+    public string CarId => catalog.Cars[_car].Id;
+    public int Paint => _paint;
+    public bool Manual => _manual;
+
+    /// <summary>The game is held (no physics, no driving) while this shows; the intro lets go at GO.</summary>
+    public bool Freezes => Current is not (Screen.None or Screen.Finish) && !(Current == Screen.Intro && _t >= GoAt);
+
+    /// <summary>Drawn over the running race with its HUD (the game builds the HUD first).</summary>
+    public bool OverRace => Current is Screen.Intro or Screen.Pause;
+
+    /// <summary>
+    ///     Music for this screen as the original: course flow TOKYO ("LIVE IN TOKYO"), car flow and records WORRY, loading
+    ///     silent, finish WIN (jingle), result JOY, intro/pause the race's Eurobeat (<see cref="RaceMusic"/>); options keep
+    ///     <paramref name="playing"/>.
+    /// </summary>
+    public string? Music(string? playing) => Current switch
+    {
+        Screen.Course or Screen.Route or Screen.Time or Screen.Weather => "TOKYO.adx",
+        Screen.Maker or Screen.Car or Screen.Gearbox or Screen.Records => "WORRY.adx",
+        Screen.Loading => null, Screen.Finish => "WIN.adx", Screen.Result => "JOY.adx", Screen.Options => playing,
+        _ => RaceMusic,
+    };
+
+    /// <summary>Opens <paramref name="s"/> with the selection at the given course/direction/car/paint; backing out of it leaves to the main menu.</summary>
+    public void Open(Screen s, string courseTime, bool reverse, string car, int paint, bool manual = false)
     {
         var id = courseTime[..courseTime.LastIndexOf('_')];
-        _course = Math.Max(0, catalog.Courses.ToList().FindIndex(c => c.Id == id));
-        _variant = Math.Max(0, Variants(SelectedCourse).IndexOf((courseTime[(courseTime.LastIndexOf('_') + 1)..], reverse)));
+        _slot = Math.Max(0, catalog.Courses.ToList().FindIndex(c => c.Id == id));
+        (_night, _wet, _reverse) = (courseTime.EndsWith("_NIT"), courseTime.EndsWith("_RIN"), reverse);
         _car = Math.Max(0, catalog.Cars.ToList().FindIndex(c => c.Id == car));
-        _paint = paint;
-        Current = from;
-        Go(s);
+        (_paint, _manual) = (paint, manual);
+        _maker = Array.IndexOf(Catalog.Makers, catalog.Cars[_car].Maker);
+        _back.Clear();
+        _leave = -1;
+        Enter(s, s is not (Screen.Pause or Screen.Intro));
     }
 
-    private void Go(Screen s)
+    /// <summary>The race ended: finish banner for <paramref name="run"/>, then the result sheet.</summary>
+    public void Finish(Run run)
     {
-        if (s == Screen.Course && Current != Screen.Car) _courseFrom = Current;
-        if (s == Screen.Car) _carFrom = Current;
-        if (s == Screen.Settings) _settingsFrom = Current;
-        (Current, _row, _t) = (s, 0, 0);
+        _run = run;
+        _back.Clear();
+        Enter(Screen.Finish, false);
     }
 
-    /// <summary>Shows the screen fully faded in (screenshots).</summary>
-    public void Settle() => _t = 10;
+    /// <summary>Skips the fade-in and entrance (screenshots).</summary>
+    public void Settle() => (_t, _fadeIn) = (MathF.Max(_t, 1), false);
 
     public void Close() => Current = Screen.None;
 
-    public void ShowLoading() => Current = Screen.Loading;
-
-    public Action Update(InputSnapshot input, float dt)
+    private void Enter(Screen s, bool fadeIn)
     {
+        (Current, _t, _fadeIn, _inModels, _loadAsked) = (s, 0, fadeIn, false, false);
+        _choice = s switch
+        {
+            Screen.Route => _reverse ? 1 : 0, Screen.Time => _night && Times().Length > 1 ? 1 : 0, Screen.Weather => _wet ? 1 : 0,
+            Screen.Gearbox => _manual ? 1 : 0, _ => 0,
+        };
+        _row = 0;
+    }
+
+    /// <summary>Screens of one module switch in place, between modules the screen fades through black.</summary>
+    private static int Module(Screen s) => s switch
+    {
+        Screen.Course or Screen.Route or Screen.Time or Screen.Weather => 1, Screen.Car or Screen.Gearbox => 2, _ => 10 + (int)s,
+    };
+
+    private void Go(Screen s, bool remember = true)
+    {
+        if (remember) _back.Push(Current);
+        if (Module(s) == Module(Current)) Enter(s, false);
+        else (_leave, _next, _then) = (0, s, Action.None);
+    }
+
+    /// <summary>Fade out, then <paramref name="then"/> is returned and <paramref name="next"/> shows.</summary>
+    private void Leave(Screen next, Action then) => (_leave, _next, _then) = (0, next, then);
+
+    private void Back()
+    {
+        Sound?.Invoke("BEEP001");
+        if (_back.TryPop(out var s) && s != Screen.None) Go(s, false);
+        else Leave(Screen.None, Action.Exit);
+    }
+
+    private string[] Times()
+    {
+        var t = SelectedCourse.Times;
+        return [.. new[] { t.Contains("DAY") || t.Contains("RIN") ? "DAY" : null, t.Contains("NIT") ? "NIGHT" : null }.OfType<string>()];
+    }
+
+    private string[] Choices() => Current switch
+    {
+        Screen.Route => [Catalog.DirectionName(SelectedCourse, false), Catalog.DirectionName(SelectedCourse, true)],
+        Screen.Time => Times(), Screen.Weather => ["DRY", "WET"], Screen.Gearbox => ["AT", "MT"], _ => [],
+    };
+
+    /// <summary>Time of day, or straight on when the course has only one.</summary>
+    private void StepTime()
+    {
+        var times = Times();
+        if (times.Length > 1) Go(Screen.Time);
+        else
+        {
+            _night = times[0] == "NIGHT";
+            StepWeather();
+        }
+    }
+
+    private void StepWeather()
+    {
+        var t = SelectedCourse.Times;
+        if (!_night && t.Contains("DAY") && t.Contains("RIN")) Go(Screen.Weather);
+        else
+        {
+            _wet = !_night && !t.Contains("DAY");
+            Go(Screen.Maker);
+        }
+    }
+
+    private int[] MakerCars(int maker) => [.. Enumerable.Range(0, catalog.Cars.Count).Where(i => catalog.Cars[i].Maker == Catalog.Makers[maker])];
+
+    private static int Wrap(int i, int n) => (i % n + n) % n;
+
+    /// <summary>One frame of menu input (<see cref="MenuKeys"/>); returns what the game should do now.</summary>
+    public Action Update((int X, int Y, bool Ok, bool Back) k, float dt)
+    {
+        if (Current == Screen.None) return Action.None;
+        dt = MathF.Min(dt, 1 / 20f); // a blocking load must not skip the fades
+        var t0 = _t;
         _t += dt;
-        if (Current is Screen.None or Screen.Loading or Screen.Title) return Action.None;
-        var k = _keys.Read(input, dt);
-        if (Sound != null && (k.Back ? "BEEP001" : k.Ok ? "SYS006" : k.Y != 0 || (k.X != 0 && Current != Screen.Pause) ? "SYS005" : null) is { } se) Sound(se);
+        _clock += dt;
+        if (_leave >= 0)
+        {
+            if ((_leave += dt) < Fade) return Action.None;
+            _leave = -1;
+            if (_next == Screen.None) Current = Screen.None;
+            else Enter(_next, true);
+            return _then;
+        }
+        bool Crossed(float at) => t0 < at && _t >= at;
         switch (Current)
         {
-            case Screen.Pause:
-                _row = Wrap(_row + k.Y, PauseRows.Length);
-                if (k.Back) return Action.Resume;
-                if (!k.Ok) return Action.None;
-                switch (_row)
-                {
-                    case 0: return Action.Resume;
-                    case 1: return Action.Restart;
-                    case 2: Go(Screen.Course); return Action.None;
-                    case 3: Go(Screen.Car); return Action.None;
-                    case 4: Go(Screen.Settings); return Action.None;
-                    default: return Action.Quit;
-                }
             case Screen.Course:
-                if (k.Y != 0) (_course, _variant) = (Wrap(_course + k.Y, catalog.Courses.Count), 0);
-                _variant = Wrap(_variant + k.X, Variants(SelectedCourse).Count);
-                if (k.Back) Go(_courseFrom);
-                else if (k.Ok) Go(Screen.Car);
-                return Action.None;
-            case Screen.Car:
-                var before = (_car, _paint);
-                if (k.Y != 0) (_car, _paint) = (Wrap(_car + k.Y, catalog.Cars.Count), 0);
-                _paint = Wrap(_paint + k.X, catalog.Cars[_car].Paints.Length);
-                if (k.Back) Go(_carFrom);
-                else if (k.Ok) return Action.Start;
-                return before != (_car, _paint) ? Action.PreviewCar : Action.None;
-            case Screen.Settings:
-                _row = Wrap(_row + k.Y, SettingRows.Length);
-                if (k.Back || (k.Ok && _row == SettingRows.Length - 1))
+                if (k.X != 0 || k.Y != 0)
                 {
-                    var from = _settingsFrom;
-                    Go(from);
-                    _row = from == Screen.Title ? 1 : 4;
+                    _slot = Wrap(_slot + k.X + 3 * k.Y, Slots);
+                    Sound?.Invoke("SYS005");
+                }
+                else if (k.Ok && _slot >= catalog.Courses.Count) Sound?.Invoke("BEEP001");
+                else if (k.Ok)
+                {
+                    Sound?.Invoke("SYS006");
+                    Go(Screen.Route);
+                }
+                else if (k.Back) Back();
+                break;
+            case Screen.Route or Screen.Time or Screen.Weather or Screen.Gearbox:
+                if (k.X != 0)
+                {
+                    var n = Wrap(_choice + k.X, Choices().Length);
+                    if (n != _choice) Sound?.Invoke("SYS005");
+                    _choice = n;
+                }
+                else if (k.Back) Back();
+                else if (k.Ok)
+                {
+                    Sound?.Invoke("SYS006");
+                    switch (Current)
+                    {
+                        case Screen.Route:
+                            _reverse = _choice == 1;
+                            StepTime();
+                            break;
+                        case Screen.Time:
+                            _night = Choices()[_choice] == "NIGHT";
+                            StepWeather();
+                            break;
+                        case Screen.Weather:
+                            _wet = _choice == 1;
+                            Go(Screen.Maker);
+                            break;
+                        default:
+                            _manual = _choice == 1;
+                            Go(Screen.Loading);
+                            break;
+                    }
+                }
+                break;
+            case Screen.Maker:
+                if (k.Y != 0)
+                {
+                    if (_inModels) _model = Wrap(_model + k.Y, MakerCars(_maker).Length);
+                    else _maker = Wrap(_maker + k.Y, Catalog.Makers.Length);
+                    Sound?.Invoke("SYS005");
+                }
+                else if (k.Ok && !_inModels)
+                {
+                    Sound?.Invoke("SYS006");
+                    _inModels = true;
+                    _model = Math.Max(0, Array.IndexOf(MakerCars(_maker), _car));
+                }
+                else if (k.Ok)
+                {
+                    Sound?.Invoke("SYS006");
+                    var car = MakerCars(_maker)[_model];
+                    if (car != _car) (_car, _paint) = (car, 0);
+                    Go(Screen.Car);
+                    return Action.PreviewCar;
+                }
+                else if (k.Back && _inModels)
+                {
+                    Sound?.Invoke("BEEP001");
+                    _inModels = false;
+                }
+                else if (k.Back) Back();
+                break;
+            case Screen.Car:
+                if (k.X != 0 || k.Y != 0)
+                {
+                    Sound?.Invoke("SYS005");
+                    if (k.X != 0)
+                    {
+                        var cars = MakerCars(_maker);
+                        (_car, _paint) = (cars[Wrap(Array.IndexOf(cars, _car) + k.X, cars.Length)], 0);
+                    }
+                    else _paint = Wrap(_paint + k.Y, catalog.Cars[_car].Paints.Length);
+                    return Action.PreviewCar;
+                }
+                if (k.Ok)
+                {
+                    Sound?.Invoke("SYS006");
+                    Go(Screen.Gearbox);
+                }
+                else if (k.Back) Back();
+                break;
+            case Screen.Loading:
+                if (_loadAsked)
+                {
+                    Leave(Screen.Intro, Action.None);
                     return Action.None;
                 }
-                var step = k.X != 0 ? k.X : k.Ok ? 1 : 0;
-                if (step == 0) return Action.None;
-                switch (_row)
+                if (_t < LoadAt) break;
+                _loadAsked = true;
+                return Action.Load;
+            case Screen.Intro:
+                if (k.Ok && _t < CountAt) _t = CountAt - dt; // START skips the telop
+                if (Crossed(CountAt) || Crossed(CountAt + 1) || Crossed(CountAt + 2)) Sound?.Invoke("CAR010");
+                if (Crossed(GoAt)) Sound?.Invoke("CAR011");
+                if (_t >= IntroEnd) Current = Screen.None;
+                break;
+            case Screen.Pause:
+                if (k.X != 0)
                 {
-                    case 0: settings.HighQuality = !settings.HighQuality; break;
-                    case 1: settings.MusicOn = !settings.MusicOn; break;
-                    case 2: settings.MusicVolume = Math.Clamp(MathF.Round(settings.MusicVolume * 10 + step) / 10, 0, 1); break;
-                    case 3: settings.SoundVolume = Math.Clamp(MathF.Round(settings.SoundVolume * 10 + step) / 10, 0, 1); break;
-                    case 4: settings.HudOn = !settings.HudOn; break;
-                    case 5: settings.MapMode = (Hud.MapMode)Wrap((int)settings.MapMode + step, 3); break;
-                    case 6: settings.BumperCam = !settings.BumperCam; break;
+                    var n = Math.Clamp(_row + k.X, 0, PauseButtons.Length - 1);
+                    if (n != _row) Sound?.Invoke("SYS005");
+                    _row = n;
                 }
-                return Action.SettingsChanged;
+                else if (k.Back) return Resume();
+                else if (k.Ok)
+                {
+                    Sound?.Invoke("SYS006");
+                    switch (_row)
+                    {
+                        case 0: return Resume();
+                        case 1:
+                            Enter(Screen.Intro, false);
+                            return Action.Restart;
+                        default:
+                            Leave(Screen.None, Action.Exit);
+                            break;
+                    }
+                }
+                break;
+            case Screen.Finish:
+                if (_t >= FinishHold || (k.Ok && _t > 1)) Leave(Screen.Result, Action.None);
+                break;
+            case Screen.Result:
+                for (var i = 0; i < ResultRows; i++)
+                    if (Crossed(RowFirst + RowStep * i)) Sound?.Invoke("NAME001");
+                if (_t < ButtonsAt)
+                {
+                    if (k.Ok) _t = ButtonsAt; // decide skips the tally
+                    break;
+                }
+                if (k.X != 0)
+                {
+                    var n = Math.Clamp(_row + k.X, 0, ResultButtons.Length - 1);
+                    if (n != _row) Sound?.Invoke("SYS005");
+                    _row = n;
+                }
+                else if (k.Ok)
+                {
+                    Sound?.Invoke("SYS006");
+                    switch (_row)
+                    {
+                        case 0:
+                            Leave(Screen.Intro, Action.Restart);
+                            break;
+                        case 1:
+                            Go(Screen.Course, false);
+                            break;
+                        case 2:
+                            _back.Push(Screen.Course);
+                            Go(Screen.Maker, false);
+                            break;
+                        default:
+                            Leave(Screen.None, Action.Exit);
+                            break;
+                    }
+                }
+                break;
+            case Screen.Records:
+                if (k.Back || k.Ok) Back();
+                break;
+            case Screen.Options:
+                if (k.Y != 0)
+                {
+                    _row = Wrap(_row + k.Y, OptionRows.Length);
+                    Sound?.Invoke("SYS005");
+                }
+                else if (k.Back) Back();
+                else if ((k.X != 0 || k.Ok) && ChangeOption(k.X != 0 ? k.X : 1))
+                {
+                    Sound?.Invoke("SYS005");
+                    return Action.SettingsChanged;
+                }
+                break;
         }
         return Action.None;
     }
 
-    private static int Wrap(int i, int n) => (i % n + n) % n;
+    private Action Resume()
+    {
+        Current = Screen.None;
+        return Action.Resume;
+    }
+
+    // ---------------------------------------------------------------- options
+
+    private static readonly string[] OptionRows = ["GRAPHICS", "MUSIC", "MUSIC VOLUME", "SE VOLUME", "HUD", "NAVI MAP", "CAMERA", "STICKERS", "CONTROLS"];
+
+    private static readonly string[][] OptionValues =
+    [
+        ["HIGH", "LOW"], ["ON", "OFF"], [], [], ["ON", "OFF"], ["ROTATING", "NORTH UP", "WHOLE"], ["CHASE", "BUMPER"], ["ANIME", "STOCK", "NONE"],
+        ["KEYBOARD", "PAD"],
+    ];
+
+    private static readonly string[][] OptionHelp =
+    [
+        ["HIGH: 4x MSAA, bloom and sun shadows.", "LOW: for slower machines."],
+        ["Menu music and the Eurobeat in the race."], ["Volume of the music."], ["Volume of engine, tyres and menu sounds."],
+        ["Times, drift meter, course dial and the car's own gauges."],
+        ["Course dial: turns with the car, north up,", "or shows the whole course."], ["Chase camera behind the car, or the bumper view."],
+        ["ANIME: the character's car with its stickers.", "STOCK: the game's stock car.  NONE: no stickers or plates."],
+    ];
+
+    private static readonly string[] KeyboardHelp =
+        ["W/S or UP/DOWN throttle and brake, A/D or LEFT/RIGHT steer, SPACE handbrake,", "SHIFT/CTRL gear up/down (MT), T AT/MT, R back to the road, C camera,", "F2 graphics, F3 music, F4 HUD, N map, ESC pause."];
+
+    private static readonly string[] PadHelp =
+        ["Left stick steer, right/left trigger throttle and brake, A handbrake,", "bumpers gear up/down (MT), Y back to the road, START pause.", "Menus: D-pad or stick, A decide, B back."];
+
+    /// <summary>Selected value of option row <paramref name="row"/>.</summary>
+    private int OptionValue(int row) => row switch
+    {
+        0 => settings.HighQuality ? 0 : 1, 1 => settings.MusicOn ? 0 : 1, 4 => settings.HudOn ? 0 : 1, 5 => (int)settings.MapMode,
+        6 => settings.BumperCam ? 1 : 0, 7 => settings.Livery switch { Livery.Rival => 0, Livery.Stock => 1, _ => 2 }, 8 => _padHelp ? 1 : 0, _ => 0,
+    };
+
+    /// <summary>Steps option <see cref="_row"/> by <paramref name="step"/>; false if nothing changed.</summary>
+    private bool ChangeOption(int step)
+    {
+        var s = settings;
+        switch (_row)
+        {
+            case 2 or 3:
+                var v = Math.Clamp(MathF.Round((_row == 2 ? s.MusicVolume : s.SoundVolume) * 10 + step) / 10, 0, 1);
+                if (v == (_row == 2 ? s.MusicVolume : s.SoundVolume)) return false;
+                if (_row == 2) s.MusicVolume = v;
+                else s.SoundVolume = v;
+                return true;
+            case 8:
+                _padHelp = !_padHelp;
+                return true;
+        }
+        var n = Wrap(OptionValue(_row) + step, OptionValues[_row].Length);
+        switch (_row)
+        {
+            case 0: s.HighQuality = n == 0; break;
+            case 1: s.MusicOn = n == 0; break;
+            case 4: s.HudOn = n == 0; break;
+            case 5: s.MapMode = (Hud.MapMode)n; break;
+            case 6: s.BumperCam = n == 1; break;
+            case 7: s.Livery = n switch { 0 => Livery.Rival, 1 => Livery.Stock, _ => Livery.None }; break;
+        }
+        return true;
+    }
 
     // ---------------------------------------------------------------- drawing
 
+    private readonly Canvas _c = new();
+    private float Theta => _clock * 300 % 360; // 5° per frame
+    private static readonly uint HintRed = Overlay.Rgba(0.92f, 0.08f, 0.06f), Grey = Overlay.Rgba(0.72f, 0.73f, 0.75f);
+
+    /// <summary>Draws the current screen into <paramref name="o"/> (not cleared: the game may have put the HUD under it).</summary>
     public void Build(Overlay o, int width, int height)
     {
-        o.Clear();
-        if (Current is Screen.None or Screen.Title) return;
-        var g = Style.Safe(width, height);
-        var u = g.U;
-        if (Current == Screen.Loading)
-        {
-            o.Rect(Vector2.Zero, new Vector2(width, height), Overlay.Rgba(0.01f, 0.012f, 0.02f, 0.85f));
-            Style.Label(o, "LOADING", new Vector2(width / 2f, height / 2f), 64 * u, Style.Text, 0.5f, Style.Slant, 0.5f * u);
-            Style.Label(o, $"{SelectedCourse.Name} / {Catalog.TimeName(Variant.Time)} / {Catalog.DirectionName(SelectedCourse, Variant.Reverse)}",
-                new Vector2(width / 2f, height / 2f + 44 * u), 22 * u, Style.Amber, 0.5f);
-            return;
-        }
-        // darken the left half of the safe frame for the lists, the whole frame when paused
-        o.RectGradient(Vector2.Zero, new Vector2((g.Left + g.Right) / 2, height), Overlay.Rgba(0.01f, 0.012f, 0.02f, 0.82f), Overlay.Rgba(0.01f, 0.012f, 0.02f, 0));
-        if (Current is Screen.Pause or Screen.Settings) o.Rect(Vector2.Zero, new Vector2(width, height), Overlay.Rgba(0, 0, 0, 0.35f));
+        if (Current == Screen.None) return;
+        var c = _c;
+        c.Begin(o, width, height);
         switch (Current)
         {
-            case Screen.Course: CourseScreen(o, g); break;
-            case Screen.Car: CarScreen(o, g); break;
-            case Screen.Pause: PauseScreen(o, g); break;
-            case Screen.Settings: SettingsScreen(o, g); break;
+            case Screen.Course or Screen.Route or Screen.Time or Screen.Weather:
+                c.Backdrop(_clock);
+                CourseScreen(c);
+                c.Marquee(Current switch { Screen.Route => "SELECT A ROUTE", Screen.Time => "SELECT TIME OF DAY", Screen.Weather => "SELECT WEATHER", _ => "SELECT A COURSE" }, false, _clock);
+                break;
+            case Screen.Maker:
+                c.Backdrop(_clock);
+                MakerScreen(c);
+                c.Marquee("SELECT A MAKER", false, _clock);
+                break;
+            case Screen.Car or Screen.Gearbox:
+                CarScreen(c);
+                if (Current == Screen.Gearbox)
+                {
+                    c.Fill(Overlay.Rgba(0, 0, 0, 0.45f));
+                    ChoiceBox(c, 158, 300);
+                }
+                c.Marquee(Current == Screen.Gearbox ? "SELECT TRANSMISSION" : "SELECT A CAR", false, _clock);
+                break;
+            case Screen.Loading:
+                c.Fill(Canvas.White);
+                c.Text("Now Loading...", 476, 428, 15, HintRed, 1, 0.22f, 0, 0.4f);
+                break;
+            case Screen.Intro:
+                Telop(c);
+                Countdown(c);
+                break;
+            case Screen.Pause:
+                PauseScreen(c);
+                break;
+            case Screen.Finish:
+                FinishBanner(c);
+                break;
+            case Screen.Result:
+                ResultScreen(c);
+                break;
+            case Screen.Records:
+                c.Backdrop(_clock);
+                RecordsScreen(c);
+                c.Marquee("RECORDS", true, _clock);
+                break;
+            case Screen.Options:
+                c.Backdrop(_clock);
+                OptionsScreen(c);
+                c.Marquee("OPTIONS", true, _clock);
+                break;
         }
+        c.Fade(_leave >= 0 ? Math.Clamp(_leave / Fade, 0, 1) : _fadeIn ? 1 - Math.Clamp(_t / Fade, 0, 1) : 0);
     }
 
-    /// <summary>Entrance of element <paramref name="i"/>: 0 → 1 with a small stagger.</summary>
-    private float In(int i) => Style.Ease((_t - i * 0.035f) * 5);
-
-    /// <summary>Kicker and title on the text column, the amber slash in front of the title.</summary>
-    private void Header(Overlay o, string kicker, string title, Style.Grid g)
+    /// <summary>Red hint line along the bottom, as the original's small red help strips.</summary>
+    private static void Hint(Canvas c, string text)
     {
-        var (u, m) = (g.U, g.Top);
-        var a = In(0);
-        var x = g.Left + ColX * u - (1 - a) * 30 * u;
-        Style.Label(o, kicker, new Vector2(x, m + 18 * u), 17 * u, Style.Fade(Style.Amber, a), 0, 0, 0.3f * u);
-        o.Quad(new Vector2(x - 18 * u, m + 30 * u), new Vector2(x - 8 * u, m + 30 * u), new Vector2(x - 22 * u, m + 76 * u), new Vector2(x - 32 * u, m + 76 * u), Style.Fade(Style.Amber, a));
-        Style.Label(o, title, new Vector2(x, m + 74 * u), 52 * u, Style.Fade(Style.Text, a), 0, Style.Slant, 0.4f * u);
+        c.O.Rect(new Vector2(0, MathF.Round(c.P(0, 428).Y)), new Vector2(c.Width, MathF.Round(c.P(0, 448).Y)), Overlay.Rgba(0, 0, 0, 0.65f));
+        c.Text(text, 256, 442, 11.5f, Overlay.Rgba(1, 0.2f, 0.15f), 0.5f, 0.15f, 0, 0.3f);
     }
 
-    /// <summary>Key hints along the bottom, first cap flush with the list's selection accent.</summary>
-    private static void Footer(Overlay o, Style.Grid g, params (string Key, string Action)[] hints)
-    {
-        var x = g.Left + (ColX - 22) * g.U;
-        foreach (var (key, action) in hints) x = Style.KeyHint(o, key, action, new Vector2(x, g.Bottom - 12 * g.U), g.U);
-    }
+    /// <summary>Entrance 0 → 1 over <paramref name="seconds"/>.</summary>
+    private float In(float seconds, float delay = 0) => Style.Ease((_t - delay) / seconds);
 
-    /// <summary>Vertical list on the text column; the selected row gets the amber slanted bar. Returns the y below the list.</summary>
-    private float List(Overlay o, IReadOnlyList<string> rows, int selected, Style.Grid g, float y0, float width = 400, float rowH = RowH, float size = 28, int first = 0)
+    private void CourseScreen(Canvas c)
     {
-        var u = g.U;
-        for (var i = 0; i < rows.Count; i++)
+        var o = c.O;
+        var locked = _slot >= catalog.Courses.Count;
+        var course = SelectedCourse;
+        // carbon "monitor" with the course map: white line with green start (and red goal) ticks, as h_selm00-05
+        c.Carbon(16, 72, 250, 306);
+        if (!locked) MapLine(c, course, Current == Screen.Route ? _choice == 1 : _reverse, 34, 90, 232, 288);
+        else c.Text("LOCKED", 133, 196, 22, Grey, 0.5f, 0.2f);
+        // 3 × 4 grid of dark-steel buttons with the course names
+        for (var i = 0; i < Slots; i++)
         {
-            var a = In(i + 1);
-            var y = y0 + i * rowH * u;
-            var x = g.Left + ColX * u - (1 - a) * 40 * u;
-            var sel = i + first == selected;
-            if (sel)
-            {
-                Style.Slanted(o, new Vector2(x - 14 * u, y), new Vector2(x + width * u, y + (rowH - 8) * u), Style.Fade(Style.Amber, a), 0.35f);
-                o.Rect(Vector2.Round(new Vector2(x - 22 * u, y)), Vector2.Round(new Vector2(x - 17 * u, y + (rowH - 8) * u)), Style.Fade(Style.Amber, a));
-            }
-            var baseY = y + (rowH - 8) * u / 2 + o.Font!.CapHeight * size * u / 2;
-            if (sel) o.Text(rows[i], new Vector2(x, baseY), size * u, Style.Fade(Style.Ink, a), 0, 0.5f * u, 0, Style.Slant);
-            else Style.Label(o, rows[i], new Vector2(x, baseY), size * u, Style.Fade(Style.Dim, a), 0, Style.Slant);
+            float x = 266 + i % 3 * 76, y = 74 + i / 3 * 38;
+            var name = i < catalog.Courses.Count ? catalog.Courses[i].Name : "FOUR PASSES";
+            Vector2 min = Vector2.Round(c.P(x, y)), max = Vector2.Round(c.P(x + 70, y + 30));
+            o.Rect(min, max, Overlay.Rgba(0.55f, 0.56f, 0.58f));
+            o.RectGradient(min + new Vector2(1.5f, 1.5f) * c.S, max - new Vector2(1.5f, 1.5f) * c.S, Overlay.Rgba(0.2f, 0.21f, 0.22f), Overlay.Rgba(0.08f, 0.08f, 0.09f));
+            o.Line(new Vector2(min.X + 2 * c.S, min.Y + 2 * c.S), new Vector2(max.X - 2 * c.S, min.Y + 2 * c.S), 1, Overlay.Rgba(1, 1, 1, 0.35f));
+            c.Fit(name, x + 35, y + 20, 60, 0.5f, i < catalog.Courses.Count ? Canvas.White : Overlay.Rgba(1, 1, 1, 0.35f), 0.12f, 0.05f, 13);
         }
-        return y0 + rows.Count * rowH * u;
+        float sx = 266 + _slot % 3 * 76, sy = 74 + _slot / 3 * 38;
+        c.Glow(sx - 3, sy - 3, sx + 73, sy + 33, Current == Screen.Course ? Canvas.Pulse(Theta) : 0.5f);
+        // info panel: length, elevation, best of the shown direction
+        c.Carbon(262, 232, 496, 306, 1, false);
+        if (!locked)
+        {
+            var best = settings.Best.GetValueOrDefault(Settings.BestKey(course.Id, Current == Screen.Route ? _choice == 1 : _reverse));
+            Stat(c, "LENGTH", FormattableString.Invariant($"{course.LengthM / 1000:0.0} km"), 274);
+            Stat(c, "ELEVATION", $"{course.ClimbM:0} m", 352);
+            Stat(c, "BEST", Style.Time(best?[^1]), 418);
+        }
+        // the choice steps put their box where the name is (text lies above every shape, so nothing may sit under it)
+        if (Current != Screen.Course)
+        {
+            ChoiceBox(c, 314, 426);
+            Hint(c, "LEFT/RIGHT: Select    DECIDE: OK    BACK: Return");
+            return;
+        }
+        // course name in big blue lettering with a white outline, yellow arrows either side
+        var label = locked ? "FOUR PASSES" : course.Name;
+        c.Lettering(label, 256, 372, MathF.Min(54, 380 * c.Kx / o.Font!.Measure(label, c.Ky)), Overlay.Rgba(0.35f, 0.45f, 1), Canvas.BrushBlue, 0.5f, 0.12f, true);
+        c.Arrow(40, 340, 40, 370, 24, 355);
+        c.Arrow(472, 340, 472, 370, 488, 355);
+        var times = locked ? "" : string.Join(" / ", course.Times.Select(Catalog.TimeName));
+        c.Text(locked ? "Not available in this remake" : $"{times}   {Catalog.DirectionName(course, false)} / {Catalog.DirectionName(course, true)}", 256, 404, 12, Canvas.White, 0.5f, 0.15f, 0.08f);
+        Hint(c, "ARROWS: Select course    DECIDE: OK    BACK: Main menu");
     }
 
-    private void CourseScreen(Overlay o, Style.Grid g)
+    private static void Stat(Canvas c, string label, string value, float x)
     {
-        var u = g.U;
-        Header(o, "TOUGE", "SELECT COURSE", g);
-        List(o, [.. catalog.Courses.Select(c => c.Name)], _course, g, g.Top + ContentTop * u, 360, 52, 27);
-        // detail panel on the right, top flush with the first row
-        var c = SelectedCourse;
-        var a = In(2);
-        Vector2 min = new(MathF.Max((g.Left + g.Right) / 2, g.Left + 480 * u), g.Top + ContentTop * u), max = new(g.Right, g.Bottom - 50 * u);
-        max.X = MathF.Min(max.X, min.X + 900 * u);
-        min.X += (1 - a) * 40 * u;
-        Style.Slanted(o, min, max, Style.Fade(Style.Panel, a), Style.PanelSlant);
-        var x = min.X + (max.Y - min.Y) * -Style.PanelSlant + 30 * u; // clear of the slanted edge at the top
-        Style.Label(o, c.Name, new Vector2(x, min.Y + 56 * u), 44 * u, Style.Fade(Style.Text, a), 0, Style.Slant, 0.4f * u);
-        // time-of-day and direction chips
-        var cx = x;
-        foreach (var t in new[] { "DAY", "NIT", "RIN" })
-            cx = Chip(o, Catalog.TimeName(t), new Vector2(cx, min.Y + 84 * u), u, c.Times.Contains(t), t == Variant.Time, a);
-        cx += 18 * u;
-        foreach (var rev in new[] { false, true })
-            cx = Chip(o, Catalog.DirectionName(c, rev), new Vector2(cx, min.Y + 84 * u), u, true, rev == Variant.Reverse, a);
-        // stats
-        var best = settings.Best.GetValueOrDefault(Settings.BestKey(c.Id, Variant.Reverse));
-        var sy = min.Y + 160 * u;
-        Stat(o, "LENGTH", FormattableString.Invariant($"{c.LengthM / 1000:0.0} km"), new Vector2(x, sy), u, a);
-        Stat(o, "ELEVATION", $"{c.ClimbM:0} m", new Vector2(x + 170 * u, sy), u, a);
-        Stat(o, "BEST", Style.Time(best?[^1]), new Vector2(x + 340 * u, sy), u, a, best == null);
-        // line preview, north up, fitted into the rest of the panel
-        LinePreview(o, c, Variant.Reverse, new Vector2(x, sy + 30 * u), new Vector2(max.X - 40 * u, max.Y - 30 * u), u, a);
-        Footer(o, g, ("UP/DN", "COURSE"), ("< >", "TIME / DIRECTION"), ("ENTER", "OK"), ("ESC", "BACK"));
+        c.Text(label, x, 256, 10, Grey, 0, 0.1f);
+        c.Text(value, x, 286, 19, Canvas.White, 0, 0.15f, 0, 0.3f);
     }
 
-    private float Chip(Overlay o, string text, Vector2 at, float u, bool available, bool selected, float a)
+    /// <summary>Driving line fitted north-up into the canvas box, the start tick green, the goal tick red (circuits: start only).</summary>
+    private static void MapLine(Canvas c, Catalog.Course course, bool reverse, float x0, float y0, float x1, float y1)
     {
-        var size = 16 * u;
-        var w = o.Font!.Measure(text, size) + 22 * u;
-        Vector2 min = Vector2.Round(at), max = Vector2.Round(at + new Vector2(w, 28 * u));
-        if (selected) Style.Slanted(o, min, max, Style.Fade(Style.Amber, a), 0.3f);
-        else Style.Slanted(o, min, max, Style.Fade(available ? Style.PanelLight : Overlay.Rgba(1, 1, 1, 0.03f), a), 0.3f);
-        var col = selected ? Style.Ink : available ? Style.Text : Overlay.Rgba(1, 1, 1, 0.25f);
-        o.Text(text, new Vector2(min.X + 9 * u, max.Y - 9 * u), size, Style.Fade(col, a), 0, 0.3f * u);
-        return max.X + 8 * u;
-    }
-
-    /// <summary>Label over a value; <paramref name="none"/> = placeholder value, dimmed.</summary>
-    private static void Stat(Overlay o, string label, string value, Vector2 at, float u, float a, bool none = false)
-    {
-        Style.Label(o, label, at, 15 * u, Style.Fade(Style.Dim, a), 0, 0, 0.2f * u);
-        Style.Label(o, value, at + new Vector2(0, 30 * u), 28 * u, Style.Fade(none ? Style.Dim : Style.Text, a), 0, Style.Slant, 0.3f * u);
-    }
-
-    private static void LinePreview(Overlay o, Catalog.Course c, bool reverse, Vector2 min, Vector2 max, float u, float a)
-    {
-        var line = c.Line;
+        var line = course.Line;
         Vector2 lo = new(float.MaxValue), hi = new(float.MinValue);
         foreach (var p in line) (lo, hi) = (Vector2.Min(lo, p), Vector2.Max(hi, p));
-        min.Y += 30 * u;
-        var size = max - min;
-        var k = MathF.Min(size.X / (hi.X - lo.X), size.Y / (hi.Y - lo.Y)) * 0.92f;
+        Vector2 min = c.P(x0, y0), max = c.P(x1, y1);
+        var k = MathF.Min((max.X - min.X) / (hi.X - lo.X), (max.Y - min.Y) / (hi.Y - lo.Y));
         var off = (min + max) / 2 - (lo + hi) / 2 * k;
         Vector2 S(Vector2 p) => off + p * k;
         for (var pass = 0; pass < 2; pass++)
         for (var i = 1; i < line.Length; i++)
-            o.Line(S(line[i - 1]), S(line[i]), (pass == 0 ? 9 : 4.5f) * u, Style.Fade(pass == 0 ? Overlay.Rgba(0, 0, 0, 0.8f) : Overlay.Rgba(0.93f, 0.94f, 0.96f), a));
-        var (start, goal) = reverse ? (line[^1], line[0]) : (line[0], line[^1]);
-        if (!c.Circuit)
+            c.O.Line(S(line[i - 1]), S(line[i]), (pass == 0 ? 6 : 3) * c.S, pass == 0 ? Overlay.Rgba(0, 0, 0, 0.9f) : Overlay.Rgba(0.95f, 0.96f, 0.97f));
+        void Tick(int i, int j, uint color)
         {
-            o.Disc(S(goal), 9 * u, Style.Fade(Style.Red, a));
-            Style.Label(o, "GOAL", S(goal) + new Vector2(14 * u, 6 * u), 15 * u, Style.Fade(Style.Text, a));
+            var d = Vector2.Normalize(S(line[j]) - S(line[i]));
+            var n = new Vector2(-d.Y, d.X) * 7 * c.S;
+            c.O.Line(S(line[i]) - n, S(line[i]) + n, 3 * c.S, color);
         }
-        o.Disc(S(start), 9 * u, Style.Fade(Overlay.Rgba(0.2f, 0.95f, 0.35f), a));
-        Style.Label(o, "START", S(start) + new Vector2(14 * u, 6 * u), 15 * u, Style.Fade(Style.Text, a));
+        var (green, red) = (Overlay.Rgba(0.15f, 0.9f, 0.25f), Overlay.Rgba(0.95f, 0.15f, 0.1f));
+        var (start, goal) = reverse ? (line.Length - 1, 0) : (0, line.Length - 1);
+        Tick(start, start == 0 ? 1 : start - 1, green);
+        if (!course.Circuit) Tick(goal, goal == 0 ? 1 : goal - 1, red);
     }
 
-    private void CarScreen(Overlay o, Style.Grid g)
+    /// <summary>The original's choice pair: two big gradient words in a carbon box (canvas y0..y1), left red, right blue, the chosen one in the yellow frame.</summary>
+    private void ChoiceBox(Canvas c, float y0, float y1)
     {
-        var u = g.U;
-        Header(o, "TOUGE", "SELECT CAR", g);
-        // scrolling list: 11 rows around the selection, scroll track left of the selection accent
-        const int visible = 11;
-        const float rowH = 48;
-        var first = Math.Clamp(_car - visible / 2, 0, catalog.Cars.Count - visible);
-        var rows = catalog.Cars.Skip(first).Take(visible).Select(c => c.Name.ToUpperInvariant()).ToList();
-        var top = g.Top + ContentTop * u;
-        List(o, rows, _car, g, top, 430, rowH, 22, first);
-        var tx = g.Left + (ColX - 32) * u;
-        var span = (visible * rowH - 8) * u;
-        o.Rect(Vector2.Round(new Vector2(tx, top)), Vector2.Round(new Vector2(tx + 3 * u, top + span)), Style.Fade(Style.Faint, In(1)));
-        o.Rect(Vector2.Round(new Vector2(tx, top + span * first / catalog.Cars.Count)),
-            Vector2.Round(new Vector2(tx + 3 * u, top + span * (first + visible) / catalog.Cars.Count)), Style.Fade(Style.Amber, In(1)));
+        var words = Choices();
+        var a = In(0.15f);
+        var mid = (y0 + y1) / 2;
+        var sub = Current == Screen.Gearbox ? 14 : 0; // room for the subtitles
+        c.Carbon(56, y0, 456, y1, a);
+        for (var i = 0; i < words.Length; i++)
+        {
+            var x = words.Length == 1 ? 256 : 156 + i * 200;
+            var sel = i == _choice;
+            var size = MathF.Min(46, 170 * c.Kx / c.O.Font!.Measure(words[i], c.Ky)) * (0.7f + 0.3f * a);
+            var (top, bottom) = i == 0 ? (Overlay.Rgba(1, 0.55f, 0.3f), Canvas.WordRed) : (Overlay.Rgba(0.45f, 0.6f, 1), Canvas.WordBlue);
+            c.Lettering(words[i], x, mid + 16 - sub, size, top, bottom, 0.5f, 0.15f, false, true, a * (sel ? 1 : 0.4f));
+            if (sel) c.Glow(x - 92, mid - 30 - sub, x + 92, mid + 32 - sub, Canvas.Pulse(Theta), a);
+        }
+        if (sub > 0)
+            for (var i = 0; i < 2; i++) c.Text(i == 0 ? "Automatic" : "Manual, shift yourself", 156 + i * 200, mid + 44, 12, Style.Fade(Canvas.White, a), 0.5f, 0.15f);
+    }
 
+    private void MakerScreen(Canvas c)
+    {
+        for (var i = 0; i < Catalog.Makers.Length; i++)
+        {
+            float x = 24, y = 70 + i * 52;
+            var sel = i == _maker;
+            c.Plate(x, y, 220, 40, sel ? 1 : 0.62f);
+            // white name field with the maker in heavy dark letters (plain text, no brand logos)
+            Vector2 min = Vector2.Round(c.P(x + 26, y + 7)), max = Vector2.Round(c.P(x + 206, y + 33));
+            c.O.Rect(min, max, Canvas.Shade(0.96f, 0.96f, 0.97f, sel ? 1 : 0.7f));
+            c.Fit(Catalog.Makers[i], x + 116, y + 28, 150, 0.5f, Canvas.Shade(0.12f, 0.12f, 0.14f, 1), 0.08f, 0, 20);
+        }
+        if (!_inModels) c.Glow(18, 64 + _maker * 52, 250, 116 + _maker * 52, Canvas.Pulse(Theta));
+        // model panel with its tab
+        var cars = MakerCars(_maker);
+        c.Carbon(262, 150, 496, 382);
+        c.Plate(272, 132, 90, 24, 1);
+        c.Text("MODEL", 317, 149, 13, Canvas.Shade(0.1f, 0.1f, 0.1f, 1), 0.5f, 0.15f);
+        for (var i = 0; i < cars.Length; i++)
+        {
+            var y = 182 + i * 22;
+            var sel = _inModels && i == _model;
+            if (sel) c.Diamond(282, y - 4, 5);
+            c.Fit(catalog.Cars[cars[i]].Name, 292, y, 190, 0, sel ? Canvas.Yellow : Canvas.White, 0.15f, 0.06f, 13);
+        }
+        if (_inModels) c.Glow(270, 166 + _model * 22, 490, 188 + _model * 22, Canvas.Pulse(Theta));
+        Hint(c, _inModels ? "UP/DOWN: Select model    DECIDE: OK    BACK: Makers" : "UP/DOWN: Select maker    DECIDE: Models    BACK: Return");
+    }
+
+    private void CarScreen(Canvas c)
+    {
         var car = catalog.Cars[_car];
-        var a = In(2);
-        Vector2 min = new(g.Right - 560 * u + (1 - a) * 40 * u, g.Bottom - 300 * u), max = new(g.Right, g.Bottom - 50 * u);
-        Style.Slanted(o, min, max, Style.Fade(Style.Panel, a), Style.PanelSlant);
-        var x = min.X + 50 * u;
-        var y = min.Y + 10 * u; // ~30u padding top and bottom
-        Style.Label(o, $"{_car + 1:D2} / {catalog.Cars.Count}   {car.Id}", new Vector2(x, y + 30 * u), 15 * u, Style.Fade(Style.Amber, a), 0, 0, 0.2f * u);
-        var name = car.Name.ToUpperInvariant();
-        var nameSize = MathF.Min(36 * u, 460 * u / MathF.Max(o.Font!.Measure(name, 1), 1));
-        Style.Label(o, name, new Vector2(x, y + 70 * u), nameSize, Style.Fade(Style.Text, a), 0, Style.Slant, 0.3f * u);
-        var sy = y + 110 * u;
-        Stat(o, "DRIVE", car.Drive, new Vector2(x, sy), u, a);
-        Stat(o, "POWER", $"{car.Ps} PS", new Vector2(x + 110 * u, sy), u, a);
-        Stat(o, "WEIGHT", $"{car.Kg} kg", new Vector2(x + 240 * u, sy), u, a);
-        Stat(o, "KG/PS", FormattableString.Invariant($"{(float)car.Kg / car.Ps:0.0}"), new Vector2(x + 380 * u, sy), u, a);
-        // power bar against the strongest car
-        var maxPs = catalog.Cars.Max(c => c.Ps);
-        var by = sy + 44 * u;
-        o.Rect(Vector2.Round(new Vector2(x, by)), Vector2.Round(new Vector2(x + 440 * u, by + 5 * u)), Style.Fade(Style.Faint, a));
-        o.Rect(Vector2.Round(new Vector2(x, by)), Vector2.Round(new Vector2(x + 440 * u * car.Ps / maxPs, by + 5 * u)), Style.Fade(Style.Amber, a));
-        // paint swatches
-        Style.Label(o, "PAINT", new Vector2(x, by + 44 * u), 15 * u, Style.Fade(Style.Dim, a), 0, 0, 0.2f * u);
+        var cars = MakerCars(_maker);
+        var a = In(0.25f);
+        var slide = (1 - a) * 60;
+        c.Carbon(16, 318 + slide, 496, 424 + slide);
+        c.Text($"{Catalog.Makers[_maker]}   {Array.IndexOf(cars, _car) + 1} / {cars.Length}", 32, 340 + slide, 11, Grey, 0, 0.12f);
+        c.Fit(car.Name, 32, 366 + slide, 300, 0, Canvas.White, 0.15f, 0.07f, 24);
+        c.Text($"{car.Ps} PS   {car.Kg} kg", 32, 390 + slide, 13, Canvas.White, 0, 0.15f, 0.06f);
+        // drivetrain box: FF MR FR 4WD, the car's one lit
+        c.Text("DRIVE", 350, 340 + slide, 10, Grey, 0, 0.1f);
+        string[] drives = ["FF", "MR", "FR", "4WD"];
+        for (var i = 0; i < drives.Length; i++)
+        {
+            float x = 350 + i * 34, y = 346 + slide;
+            var on = drives[i] == car.Drive;
+            c.O.Rect(Vector2.Round(c.P(x, y)), Vector2.Round(c.P(x + 30, y + 18)), on ? Overlay.Rgba(0.8f, 0.07f, 0.06f) : Overlay.Rgba(0.18f, 0.18f, 0.19f));
+            c.Text(drives[i], x + 15, y + 14, 12, on ? Canvas.White : Overlay.Rgba(1, 1, 1, 0.35f), 0.5f, 0.15f);
+        }
+        // body colour swatches, the yellow diamond over the chosen one
+        c.Text("BODY COLOUR", 350, 384 + slide, 10, Grey, 0, 0.1f);
         for (var i = 0; i < car.Paints.Length; i++)
         {
-            var c = new Vector2(x + 80 * u + i * 40 * u, by + 39 * u);
-            if (i == _paint) o.Disc(c, 16 * u, Style.Fade(Style.Amber, a));
-            o.Disc(c, 12 * u, Style.Fade(Overlay.Rgba(0, 0, 0, 0.9f), a));
-            o.Disc(c, 10.5f * u, Style.Fade(Catalog.Swatch(car.Paints[i]), a));
+            var at = c.P(358 + i * 22, 404 + slide);
+            if (i == _paint) c.Diamond(358 + i * 22, 391 + slide, 4);
+            c.O.Disc(at, 8 * c.S, Overlay.Rgba(0, 0, 0, 0.9f));
+            c.O.Disc(at, 6.5f * c.S, Catalog.Swatch(car.Paints[i]));
         }
-        Footer(o, g, ("UP/DN", "CAR"), ("< >", "PAINT"), ("ENTER", "DRIVE"), ("ESC", "BACK"));
-    }
-
-    private void PauseScreen(Overlay o, Style.Grid g)
-    {
-        var u = g.U;
-        Header(o, "TOUGE", "PAUSE", g);
-        List(o, PauseRows, _row, g, g.Top + ContentTop * u, 340);
-        var a = In(2);
-        var (course, car, time, best) = Run;
-        Vector2 min = new(g.Right - 420 * u + (1 - a) * 40 * u, g.Top + ContentTop * u), max = new(g.Right, g.Top + (ContentTop + 200) * u);
-        Style.Slanted(o, min, max, Style.Fade(Overlay.Rgba(0.02f, 0.03f, 0.05f, 0.85f), a), Style.PanelSlant);
-        var x = min.X + 40 * u;
-        Style.Label(o, course, new Vector2(x, min.Y + 44 * u), 24 * u, Style.Fade(Style.Text, a), 0, Style.Slant, 0.3f * u);
-        Style.Label(o, car, new Vector2(x, min.Y + 74 * u), 18 * u, Style.Fade(Style.Amber, a));
-        Stat(o, "TIME", Style.Time(time), new Vector2(x, min.Y + 130 * u), u, a, time == null);
-        Stat(o, "BEST", Style.Time(best), new Vector2(x + 170 * u, min.Y + 130 * u), u, a, best == null);
-        Footer(o, g, ("UP/DN", "SELECT"), ("ENTER", "OK"), ("ESC", "RESUME"));
-    }
-
-    private void SettingsScreen(Overlay o, Style.Grid g)
-    {
-        var u = g.U;
-        Header(o, "TOUGE", "SETTINGS", g);
-        var top = g.Top + ContentTop * u;
-        List(o, SettingRows, _row, g, top, 620);
-        string[] values =
-        [
-            settings.HighQuality ? "HIGH" : "LOW", settings.MusicOn ? "ON" : "OFF", "", "", settings.HudOn ? "ON" : "OFF",
-            settings.MapMode switch { Hud.MapMode.NorthUp => "NORTH UP", Hud.MapMode.Overview => "WHOLE COURSE", _ => "ROTATING" },
-            settings.BumperCam ? "BUMPER" : "CHASE", "",
-        ];
-        for (var i = 0; i < values.Length; i++)
+        if (Current == Screen.Car)
         {
-            var a = In(i + 1);
-            var y = top + i * RowH * u + (RowH - 8) * u / 2;
-            var sel = i == _row;
-            var col = Style.Fade(sel ? Style.Ink : Style.Text, a);
-            var right = g.Left + (ColX + 540) * u - (1 - a) * 40 * u;
+            c.Arrow(24, 180, 24, 220, 8, 200);
+            c.Arrow(488, 180, 488, 220, 504, 200);
+            Hint(c, "LEFT/RIGHT: Car    UP/DOWN: Body colour    DECIDE: OK    BACK: Maker");
+        }
+    }
+
+    /// <summary>Course-name telop: a black band wipes in from the right with the name in blue lettering, the conditions below; wipes out before the count.</summary>
+    private void Telop(Canvas c)
+    {
+        var wipe = Style.Ease(_t / 0.35f) * (1 - Style.Ease((_t - (CountAt - 0.4f)) / 0.35f));
+        if (wipe <= 0) return;
+        var course = SelectedCourse;
+        var x0 = c.Right - (c.Right - 110) * wipe;
+        c.O.Rect(Vector2.Round(c.P(x0, 150)), Vector2.Round(c.P(c.Right, 214)), Overlay.Rgba(0, 0, 0, 0.88f));
+        c.O.Rect(Vector2.Round(c.P(x0, 214)), Vector2.Round(c.P(c.Right, 216)), Overlay.Rgba(0.8f, 0.07f, 0.06f));
+        var shift = (1 - wipe) * 400;
+        c.Lettering(course.Name, 490 + shift, 200, MathF.Min(46, 330 * c.Kx / c.O.Font!.Measure(course.Name, c.Ky)), Overlay.Rgba(0.35f, 0.45f, 1), Canvas.BrushBlue, 1, 0.12f, true);
+        var tags = $"{(_night ? "NIGHT" : "DAY")}    [{Catalog.DirectionName(course, _reverse)}]    [{(_wet ? "WET" : "DRY")}]";
+        c.Text(tags, 490 + shift, 234, 13, Canvas.White, 1, 0.12f, 0.08f);
+    }
+
+    /// <summary>3, 2, 1 in big red, GO! in the racing orange; each pops in from 1.5× and fades at its end.</summary>
+    private void Countdown(Canvas c)
+    {
+        if (_t < CountAt) return;
+        var n = (int)(_t - CountAt);
+        var local = _t - CountAt - n;
+        var text = n < 3 ? (3 - n).ToString() : "GO!";
+        var size = (n < 3 ? 120 : 96) * (1 + 0.5f * (1 - Style.Ease(local / 0.15f)));
+        var a = n < 3 ? 1 - Style.Ease((local - 0.8f) / 0.2f) : 1 - Style.Ease((_t - GoAt - 0.5f) / 0.3f);
+        if (n < 3) c.Lettering(text, 256, 270, size, Overlay.Rgba(1, 0.35f, 0.3f), Overlay.Rgba(0.75f, 0, 0), 0.5f, 0.15f, true, true, a);
+        else c.Lettering(text, 256, 260, size, Overlay.Rgba(1, 0.82f, 0.25f), Overlay.Rgba(1, 0.38f, 0), 0.5f, 0.18f, false, true, a);
+    }
+
+    private void PauseScreen(Canvas c)
+    {
+        c.Fill(Overlay.Rgba(0, 0, 0, 0.5f));
+        c.O.FadeText(0.5f); // the HUD's text lies above every shape: dim it too
+        c.Lettering("PAUSE", 256, 128, 44, Overlay.Rgba(1, 0.25f, 0.2f), Overlay.Rgba(0.75f, 0, 0), 0.5f, 0.2f, true);
+        // caption bar, then the strip with the "Pause" tab and three chrome buttons
+        c.Carbon(116, 328, 396, 352, 1, false);
+        c.Text(PauseCaptions[_row], 256, 345, 12, Canvas.White, 0.5f, 0.12f);
+        c.Carbon(116, 358, 396, 412, 1, false);
+        c.Text("Pause", 126, 372, 11, Canvas.White, 0, 0.2f);
+        for (var i = 0; i < PauseButtons.Length; i++)
+        {
+            var x = 132 + i * 86;
+            c.Plate(x, 380, 76, 22, 1);
+            c.Text(PauseButtons[i], x + 38, 396, 12, Canvas.Shade(0.08f, 0.08f, 0.08f, 1), 0.5f, 0.18f);
+        }
+        var sx = 132 + _row * 86;
+        c.Glow(sx - 4, 376, sx + 80, 406, Canvas.Pulse(Theta));
+    }
+
+    private void FinishBanner(Canvas c)
+    {
+        var run = _run!;
+        var pop = Style.Ease(_t / 0.25f);
+        var text = run.NewRecord ? "NEW RECORD!!" : "FINISH!!";
+        c.Lettering(text, 256, 196, 58 * (1.8f - 0.8f * pop), Overlay.Rgba(1, 0.85f, 0.3f), Overlay.Rgba(1, 0.38f, 0), 0.5f, 0.2f, false, true, pop);
+        if (run.NewRecord) c.Text("Personal best updated", 256, 222, 15, Style.Fade(Overlay.Rgba(1, 0.15f, 0.1f), pop), 0.5f, 0.15f, 0.1f, 0.3f);
+        c.Text(Style.Time(run.Time), 256, 262, 30, Style.Fade(Canvas.White, pop), 0.5f, 0.15f, 0.06f, 0.5f);
+    }
+
+    private void ResultScreen(Canvas c)
+    {
+        var run = _run!;
+        c.Fill(Overlay.Rgba(0, 0, 0, 0.25f));
+        float Row(int i) => Style.Ease((_t - (RowFirst + RowStep * i)) / 0.15f);
+        void Line(int i, float x0, float x1, float y, string label, string value, uint color, string? extra = null, uint extraColor = 0)
+        {
+            var a = Row(i);
+            c.Rule(x0, x1, y + 6, 1);
+            if (a <= 0) return;
+            c.Text(label, x0 + 6, y - 2, 9.5f, Style.Fade(Canvas.White, a), 0, 0.2f, 0, 0.2f);
+            c.Text(value, x1 - (extra != null ? 52 : 6), y + 2, 17, Style.Fade(color, a), 1, 0.15f, 0, 0.3f);
+            if (extra != null) c.Text(extra, x1 - 6, y + 2, 11, Style.Fade(extraColor, a), 1, 0.15f);
+        }
+        c.Sheet(30, 78, 252, 300, "Result");
+        Line(0, 30, 252, 104, "TOTAL TIME", Style.Time(run.Time), Canvas.White);
+        for (var i = 0; i < LapTimer.Sectors; i++)
+        {
+            var d = run.Deltas[i];
+            Line(1 + i, 30, 252, 134 + i * 30, $"SECTION TIME {i + 1}", Style.Time(run.Splits[i] - (i > 0 ? run.Splits[i - 1] : 0)), Canvas.White,
+                d is { } dd ? Style.Delta(dd) : null, d is <= 0 ? Style.Green : Style.Red);
+        }
+        var course = SelectedCourse;
+        c.Sheet(268, 78, 486, 194, "Record");
+        c.Text($"{course.Name}  {Catalog.DirectionName(course, _reverse)}", 274, 98, 11, Canvas.White, 0, 0.15f, 0, 0.2f);
+        Line(5, 268, 486, 130, "BEST TIME", Style.Time(run.NewRecord ? run.Time : run.Previous), Canvas.White);
+        Line(6, 268, 486, 162, "DIFFERENCE", run.Previous is { } p ? Style.Delta(run.Time - p) : "-", run.Previous is { } q && run.Time <= q ? Style.Green : Canvas.White);
+        c.Sheet(268, 220, 486, 262, "Point");
+        Line(7, 268, 486, 248, "DRIFT POINTS", $"{(int)run.Drift} pts", Canvas.White);
+        if (run.NewRecord && Row(ResultRows - 1) > 0)
+        {
+            var s = Row(ResultRows - 1);
+            c.Lettering("NEW RECORD!!", 377, 300, 26 * (1.6f - 0.6f * s), Overlay.Rgba(1, 0.85f, 0.3f), Overlay.Rgba(1, 0.38f, 0), 0.5f, 0.2f, false, true, s);
+        }
+        // action choice
+        var b = Style.Ease((_t - ButtonsAt) / 0.2f);
+        if (b <= 0) return;
+        for (var i = 0; i < ResultButtons.Length; i++)
+            c.Button(24 + i * 118, 392, 110, 30, ResultButtons[i], i == 0 ? Canvas.ButtonKind.Positive : i == 3 ? Canvas.ButtonKind.Negative : Canvas.ButtonKind.Neutral, b);
+        var x = 24 + _row * 118;
+        c.Glow(x - 4, 388, x + 114, 426, Canvas.Pulse(Theta), b);
+    }
+
+    private void RecordsScreen(Canvas c)
+    {
+        c.Carbon(20, 72, 492, 424);
+        // column heads as the original's RANK/NAME/TIME strip: course, then per direction a white tag and the time
+        c.Text("COURSE", 36, 96, 10, Grey, 0, 0.1f);
+        for (var r = 0; r < 2; r++) c.Text("ROUTE / TIME", 190 + r * 150, 96, 10, Grey, 0, 0.1f);
+        for (var i = 0; i < catalog.Courses.Count; i++)
+        {
+            var course = catalog.Courses[i];
+            var y = 106 + i * 28;
+            c.Rule(30, 482, y + 26);
+            c.Fit(course.Name, 36, y + 21, 140, 0, Canvas.White, 0.15f, 0.06f, 17);
+            for (var r = 0; r < 2; r++)
+            {
+                var best = settings.Best.GetValueOrDefault(Settings.BestKey(course.Id, r == 1));
+                float x = 190 + r * 150, ty = y + 2;
+                var dir = Catalog.DirectionName(course, r == 1);
+                c.O.Rect(Vector2.Round(c.P(x, ty + 4)), Vector2.Round(c.P(x + 64, ty + 14)), Overlay.Rgba(0.95f, 0.95f, 0.96f));
+                c.Fit(dir, x + 32, ty + 12.5f, 58, 0.5f, Canvas.Shade(0.1f, 0.1f, 0.12f, 1), 0, 0, 9);
+                c.Text(Style.Time(best?[^1]), x + 70, y + 19, 13, best == null ? Overlay.Rgba(1, 1, 1, 0.35f) : Canvas.White, 0, 0.15f);
+            }
+        }
+        Hint(c, "Best time per course and route    BACK: Main menu");
+    }
+
+    private void OptionsScreen(Canvas c)
+    {
+        for (var i = 0; i < OptionRows.Length; i++)
+        {
+            var y = 70 + i * 30;
+            // dark-steel label tab
+            Vector2 min = Vector2.Round(c.P(36, y)), max = Vector2.Round(c.P(196, y + 26));
+            c.O.Rect(min, max, Overlay.Rgba(0.5f, 0.51f, 0.53f));
+            c.O.RectGradient(min + new Vector2(1.5f, 1.5f) * c.S, max - new Vector2(1.5f, 1.5f) * c.S, Overlay.Rgba(0.24f, 0.25f, 0.26f), Overlay.Rgba(0.1f, 0.1f, 0.11f));
+            c.Fit(OptionRows[i], 116, y + 18, 130, 0.5f, Canvas.White, 0.1f, 0, 13);
+            // chrome value plate with engraved choices, the active one lit
+            c.Plate(204, y, 276, 26, 1);
+            var values = OptionValues[i];
             if (i is 2 or 3)
             {
-                // volume: 10 slanted segments
+                var v = MathF.Round((i == 2 ? settings.MusicVolume : settings.SoundVolume) * 10);
                 for (var s = 0; s < 10; s++)
                 {
-                    var on = s < MathF.Round((i == 2 ? settings.MusicVolume : settings.SoundVolume) * 10);
-                    var sx = right - 200 * u + s * 20 * u;
-                    Style.Slanted(o, new Vector2(sx, y - 10 * u), new Vector2(sx + 15 * u, y + 10 * u),
-                        Style.Fade(on ? sel ? Style.Ink : Style.Amber : sel ? Overlay.Rgba(0, 0, 0, 0.25f) : Style.Faint, a), 0.3f);
+                    float sx = 232 + s * 22;
+                    c.O.Rect(Vector2.Round(c.P(sx, y + 7)), Vector2.Round(c.P(sx + 16, y + 19)), s < v ? Overlay.Rgba(0.15f, 0.42f, 0.2f) : Overlay.Rgba(0.45f, 0.47f, 0.46f, 0.6f));
                 }
                 continue;
             }
-            if (values[i] == "") continue;
-            var size = 22 * u;
-            var baseY = y + o.Font!.CapHeight * size / 2;
-            // the value stays put; arrows appear around it when selected
-            if (!sel)
+            var sel = OptionValue(i);
+            for (var j = 0; j < values.Length; j++)
             {
-                Style.Label(o, values[i], new Vector2(right, baseY), size, col, 1, Style.Slant);
-                continue;
+                var x = 204 + 276 * (j + 0.5f) / values.Length;
+                var on = j == sel;
+                c.Text(values[j], x, y + 18, 13, on ? Overlay.Rgba(0.05f, 0.3f, 0.1f) : Overlay.Rgba(0.35f, 0.42f, 0.38f, 0.55f), 0.5f, 0, 0, on ? 0.6f : 0);
             }
-            var w = o.Text(values[i], new Vector2(right, baseY), size, col, 1, 0.4f * u, 0, Style.Slant);
-            o.Text("<", new Vector2(right - w - 14 * u, baseY), size, col, 1, 0.4f * u);
-            o.Text(">", new Vector2(right + 12 * u, baseY), size, col, 0, 0.4f * u);
         }
-        Footer(o, g, ("UP/DN", "SELECT"), ("< >", "CHANGE"), ("ESC", "BACK"));
+        var gy = 70 + _row * 30;
+        c.Glow(200, gy - 4, 484, gy + 30, Canvas.Pulse(Theta));
+        c.Carbon(36, 344, 480, 426, 1, false);
+        var help = _row == 8 ? _padHelp ? PadHelp : KeyboardHelp : OptionHelp[_row];
+        for (var i = 0; i < help.Length; i++) c.Text(help[i], 50, 366 + i * 20, 11.5f, Canvas.White, 0, 0.12f);
+        Hint(c, "UP/DOWN: Select    LEFT/RIGHT: Change    BACK: Main menu");
     }
 }
 

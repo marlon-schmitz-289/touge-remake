@@ -11,7 +11,7 @@ namespace Touge;
 /// </summary>
 public sealed class MenuAudio : IDisposable
 {
-    private static readonly string[] Names = ["SYS005", "SYS006", "BEEP001", "sys002", "alarm_02"];
+    private static readonly string[] Names = ["SYS005", "SYS006", "BEEP001", "sys002", "alarm_02", "CAR010", "CAR011", "NAME001"];
     private readonly AudioDevice _dev;
     private readonly Afs _bgm;
     private readonly Dictionary<string, AudioDevice.Clip> _se = new(StringComparer.OrdinalIgnoreCase);
@@ -65,18 +65,23 @@ public sealed class MenuAudio : IDisposable
             var adx = new Adx(_bgm.Read(_bgm.Find(track)!.Value));
             if (request != _request) return; // superseded while loading
             var reader = adx.Open(loop: true);
+            var once = Jingle(track);
             _dev.PlayMusic(dst =>
             {
                 var n = reader.Read(dst);
-                if (n == 0 && adx.Loop == null) n = (reader = adx.Open(loop: false)).Read(dst); // no loop point (gam.adx): from the top
+                if (n == 0 && adx.Loop == null && !once) n = (reader = adx.Open(loop: false)).Read(dst); // no loop point (gam.adx): from the top
                 return n;
             }, adx.Channels, adx.SampleRate);
-            var loop = adx.Loop is var (a, b) ? $"loop {a / (float)adx.SampleRate:0.00}–{b / (float)adx.SampleRate:0.00} s" : "no loop point, repeats whole";
+            var loop = adx.Loop is var (a, b) ? $"loop {a / (float)adx.SampleRate:0.00}–{b / (float)adx.SampleRate:0.00} s"
+                : once ? "jingle, once" : "no loop point, repeats whole";
             Console.WriteLine($"[Menu] {stamp}BGM {track} ({adx.SampleCount / (float)adx.SampleRate:0.0} s, {loop})");
         }
         if (background) Task.Run(Start);
         else Start();
     }
+
+    /// <summary>Race-end jingles (WIN/LOSE/TIMEUP, the original's group 2 without loop) play once.</summary>
+    private static bool Jingle(string track) => track is "WIN.adx" or "LOSE.adx" or "TIMEUP.adx";
 
     public void Dispose()
     {
