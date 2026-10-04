@@ -95,6 +95,15 @@ public class VersusTests
         Assert.Equal("192.168.1.2x:4786", v.Address); // '!' is not part of an address, the last character was erased
         Assert.Equal(Versus.Action.Join, Step(v, None, default, new Versus.TextKeys("", false, true, false)));
         Assert.Null(v.JoinLan);
+        // UDP PORT: digits only, out of range is refused (BEEP, old port kept)
+        Step(v, Down);
+        Step(v, Down);
+        Step(v, Ok);
+        Step(v, None, default, new Versus.TextKeys("5x0123", false, true, false));
+        Assert.Equal(50123, v.Port);
+        Step(v, Ok);
+        Step(v, None, default, new Versus.TextKeys("80", false, true, false));
+        Assert.Equal(50123, v.Port);
         using var host = NetSession.Host(0, "HOST");
         v.OpenLobby(host, "FD3S", 1);
         Assert.Equal(("FD3S", (byte)1, true), (host.Local.Car, host.Local.Paint, host.Local.Ready));

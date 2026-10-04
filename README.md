@@ -51,7 +51,7 @@ dotnet run --project Touge -- "<iso>" AKINA_NIT --battle keisuke [--rule race|ch
 dotnet run --project Touge -- "<iso>" IROHA_DAY --battle takumi --autodrive 420   # ohne Fenster: Autopilot (Spielerauto) gegen die KI, Log je Sekunde (Abstand s/m, Führung, KI-Modus, Kontakte) + Ergebnis
 dotnet run --project Touge -- "<iso>" IROHA_DAY --battle itsuki --autodrive 110 --shot out/proof/b.png [--battle-result]   # Bild nach dem Battle: Zielbanner bzw. Ergebnisblatt
 dotnet run --project Touge -- "<iso>" AKINA_NIT --versus split [--bot] [--split vertical] [--car FD3S --car2 AE86T] [--net-rule battle|race] [--autodrive 25 --shot out/proof/s.png]   # geteilter Bildschirm direkt (Lobby; --bot: beide Autopiloten, Rennen startet sofort)
-dotnet run --project Touge -- "<iso>" AKINA_DAY --versus host|join:<ip[:port]>|online|menu [--bot] [--port 47860] [--name TAKUMI] [--players 2] [--net-sim 80:5%:20] [--shot-after 40 --shot out/proof/o.png]   # online im Fenster (--bot: Lobby läuft von selbst, Autopilot fährt)
+dotnet run --project Touge -- "<iso>" AKINA_DAY --versus host|join:<ip[:port]>|online|menu [--bot] [--port 47860] [--name TAKUMI] [--players 2] [--net-sim 80:5%:20] [--menu pause] [--shot-after 40 --shot out/proof/o.png]   # online im Fenster (--bot: Lobby läuft von selbst, Autopilot fährt; --menu pause: Pause über dem laufenden Rennen fürs Bild)
 dotnet run --project Touge -- "<iso>" AKINA_NIT --flow out/proof/vs --versus flow   # Versus-Ablauf per Skript: Hauptmenü → VERSUS → SPLIT → Lobby (START gesperrt bis READY) → Rennen → Pause → RETRY → EXIT → Lobby → Hauptmenü, PNG je Schritt
 dotnet run --project Touge -- "<iso>" IROHA_DAY --headless --host [--bot] [--port 47860] [--players 2] [--races 2] [--net-rule race] [--seconds 600]   # Host ohne Fenster
 dotnet run --project Touge -- "<iso>" --headless --join 127.0.0.1[:47860] --bot [--car FD3S] [--net-sim 80:5%:20]   # Bot-Client ohne Fenster (wartet, bis der Host da ist), Log je Sekunde + Zusammenfassung je Rennen
@@ -86,13 +86,14 @@ Ergebnis, WIN/LOSE-Jingle beim Entscheid): SPLIT SCREEN oder ONLINE.
   WASD + LEERTASTE). Zwei Ansichten mit je eigener Kamera (C bzw. Kamerataste je Spieler), eigenem HUD (Zeit, Karte mit rotem Punkt für den
   Gegner, Kombiinstrument des eigenen Autos, Platz 1ST/2ND mit Abstand) und eigenem Licht (die Scheinwerfer der jeweiligen Ansicht
   beleuchten die Straße, das andere Auto glüht), Trennfuge mit roter Linie; Pause durch beide (START am Pad von Spieler 2), RETRY, EXIT →
-  Lobby. 60 fps bei 3200×1800 ohne Abstriche (GPU 8,4 statt 7,3 ms je Bild, `--offscreen`).
-- **Online** (2–4 Spieler): HOST A GAME (UDP-Port, Standard 47860, in den Einstellungen `NetPort`), JOIN BY ADDRESS (IP oder Name,
-  optional `:port`, getippt), YOUR NAME, darunter die Spiele im LAN (UDP-Broadcast, Liste aktualisiert sich). Lobby: der Host wählt das
+  Lobby. Die Zeit im HUD läuft für alle ab GO (wie die Zeiten im Ergebnis); der Hinweis „zurück auf die Straße“ nennt die Taste des
+  jeweiligen Spielers. 60 fps bei 3200×1800 ohne Abstriche (GPU 8,4 statt 7,3 ms je Bild, `--offscreen`).
+- **Online** (2–4 Spieler): HOST A GAME, JOIN BY ADDRESS (IP oder Name,
+  optional `:port`, getippt), YOUR NAME, UDP PORT (getippt, 1024–65535, Standard 47860, gespeichert als `NetPort`, `--port` für einen Lauf), darunter die Spiele im LAN (UDP-Broadcast, Liste aktualisiert sich). Lobby: der Host wählt das
   Rennen, jeder sein Auto, Gäste melden READY, Ping je Spieler, der Host startet, wenn alle bereit sind. Laden (wartet auf alle, höchstens
   30 s), gemeinsamer Countdown (GO auf allen Rechnern zur selben Zeit: Host-Sekunden bis GO minus halbe Paketlaufzeit), Rennen, Ergebnis
   (Plätze, Zeiten, „m BEHIND“ bei vorzeitigem Battle-Sieg, DNF) → Host REMATCH/LOBBY/LEAVE, Gäste folgen. Pause hält online nicht an (das
-  Auto bremst), EXIT des Hosts bringt alle in die Lobby, ein Gast verlässt die Sitzung. Verbindungsverlust (5 s still) → Meldung, zurück
+  Auto bremst, RETRY ist ausgegraut), EXIT des Hosts bringt alle in die Lobby, ein Gast verlässt die Sitzung. Verbindungsverlust (5 s still) → Meldung, zurück
   zu ONLINE; ein Gast, der geht, ist DNF (sein Auto verschwindet), bleibt nur einer übrig, gewinnt er.
 - Netz (`Touge/Net`, Protokoll in FORMATS.md): UDP ohne Threads, einmal je Bild abgefragt; Stern um den Host (er leitet Zustände weiter).
   Jedes Auto rechnet nur sein eigener Rechner (keine Eingabeverzögerung), 30 Zustände/s (Lage, Bewegung, Eingabe, Federweg und Rutschen

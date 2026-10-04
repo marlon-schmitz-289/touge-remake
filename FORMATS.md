@@ -177,7 +177,7 @@ Aus dem Recomp (ELF-Adresse = Dateioffset + 0xFFF80):
 
 ## Netzprotokoll (Versus online) – eigenes Format des Remakes
 Das Original hat keinen Mehrspielermodus (Hauptmenü-Trommel ohne VS-Eintrag, s. o.); VERSUS ist eine Ergänzung (`Touge/Net/Protocol.cs`).
-UDP, Standardport 47860, höchstens 1200 Byte je Paket, little-endian. Kopf: `'I' 'D'`, Version (u8, derzeit 1), Typ (u8). Strings: Länge (u8) +
+UDP, Standardport 47860, höchstens 1200 Byte je Paket, little-endian. Kopf: `'I' 'D'`, Version (u8, derzeit 2), Typ (u8). Strings: Länge (u8) +
 UTF-8, beim Lesen auf 32 druckbare Zeichen gekürzt; Listen höchstens 4 Einträge; Spieler-IDs 0–3 (0 = Host). Ungültiges (falscher Kopf/Version,
 zu kurz, Restbytes, NaN/∞, ID/Liste/Phase außerhalb, Orientierung nicht ~normiert) wird verworfen.
 
@@ -186,7 +186,7 @@ zu kurz, Restbytes, NaN/∞, ID/Liste/Phase außerhalb, Orientierung nicht ~norm
 | 1 Discover | Broadcast → Port | leer |
 | 2 Announce | Host → Fragender | Hostname, Spieler (u8), max (u8), Kurs (`AKINA_NIT`), Phase (u8) |
 | 3 Hello | Client → Host, 5/s | Token (u32, erkennt Wiedereintritt/NAT-Portwechsel), Name, Auto (HCAR-Name), Lack (u8), bereit (u8), geladenes Rennen (i32) |
-| 4 Lobby | Host → jeden Client, 5/s | deine ID (u8), Phase (0 Lobby, 1 Laden, 2 Countdown, 3 Rennen, 4 Ergebnis), Rennnummer (i32), Kurs, Flags (1 rückwärts, 2 Nebel), Regel (0 Battle, 1 Race), Spieler [ID, Name, Auto, Lack, bereit, Ping ms (u16), geladenes Rennen], Sekunden bis GO (f32) |
+| 4 Lobby | Host → jeden Client, 5/s | deine ID (u8), Phase (0 Lobby, 1 Laden, 2 Countdown, 3 Rennen, 4 Ergebnis), Rennnummer (i32), Kurs, Flags (1 rückwärts, 2 Nebel), Regel (0 Battle, 1 Race), Spieler [ID, Name, Auto, Lack, bereit, Ping ms (u16), geladenes Rennen], Sekunden bis GO (f32), Folgenummer (u32, steigt je Paket; ältere verwirft der Client) |
 | 5 Ping / 6 Pong | beide | Sendezeit (f64), Pong spiegelt sie |
 | 7 State | Besitzer → Host → andere, 30/s | Rennnummer (i32), ID, Folgenummer (u32), Rennzeit seit GO (f32), Position (3 × f32), Orientierung (Quaternion 4 × f32), Geschwindigkeit, Drehgeschwindigkeit (je 3 × f32), Lenkung, Gas, Bremse, Drehzahl (f32), Gang (s8), Flags (1 Handbremse, 2 Abblend-, 4 Fernlicht, 8 Wandkontakt, 16 im Ziel), Federweg je Rad (4 × u8, 0–255 = 0–Federweg), Rutschgeschwindigkeit je Rad (4 × u8 à 0,25 m/s), Weg auf der Fahrlinie (f32), eigene Zielzeit (f32, −1 = noch nicht) – 103 Byte |
 | 8 Result | Host → alle, 5/s bis zum nächsten Rennen | Rennnummer, Grund (`GOAL`, `BREAKAWAY`, `TIME UP`, `OPPONENTS LEFT`), Einträge [ID, Platz, Zielzeit (−1 = keine), Weg] |

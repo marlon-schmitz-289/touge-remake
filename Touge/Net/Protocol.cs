@@ -86,7 +86,7 @@ public sealed record Hello(uint Token, string Name, string Car, byte Paint, bool
 ///     Host → each client, several times a second: the whole session state (idempotent, so a lost one costs nothing):
 ///     the recipient's id, phase, race number, the host's choice, the players and, in the countdown, the seconds to GO.
 /// </summary>
-public sealed record Lobby(byte YouId, Phase Phase, int RaceId, RaceConfig Config, PlayerInfo[] Players, float SecondsToGo) : INetMessage
+public sealed record Lobby(byte YouId, Phase Phase, int RaceId, RaceConfig Config, PlayerInfo[] Players, float SecondsToGo, uint Seq = 0) : INetMessage
 {
     public MsgType Type => MsgType.Lobby;
     public void Write(ref Protocol.Writer w)
@@ -109,6 +109,7 @@ public sealed record Lobby(byte YouId, Phase Phase, int RaceId, RaceConfig Confi
             w.I32(p.LoadedRace);
         }
         w.F32(SecondsToGo);
+        w.U32(Seq);
     }
 }
 
@@ -195,7 +196,7 @@ public sealed record Bye(byte Id, string Reason = "") : INetMessage
 /// </summary>
 public static class Protocol
 {
-    public const byte Version = 1;
+    public const byte Version = 2;
     public const int MaxPacket = 1200, MaxString = 32, MaxList = 4;
     private const byte Magic0 = (byte)'I', Magic1 = (byte)'D';
 
@@ -340,7 +341,7 @@ public static class Protocol
         var n = r.Count();
         var players = new PlayerInfo[n];
         for (var i = 0; i < n; i++) players[i] = new PlayerInfo(r.Id(), r.Str(), r.Str(), r.U8(), r.U8() != 0, r.U16(), r.I32());
-        return new Lobby(you, phase, raceId, new RaceConfig(course, (flags & 1) != 0, (flags & 2) != 0, rule), players, r.F32());
+        return new Lobby(you, phase, raceId, new RaceConfig(course, (flags & 1) != 0, (flags & 2) != 0, rule), players, r.F32(), r.U32());
     }
 
     private static CarState ReadState(ref Reader r)

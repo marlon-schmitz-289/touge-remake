@@ -65,6 +65,8 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     public BattleReport? Battle { get; set; }
     /// <summary>Rival shown in the telop ("VS …").</summary>
     public string? Versus { get; set; }
+    /// <summary>Online race: the pause's RETRY is greyed out and skipped (one player cannot restart a shared race).</summary>
+    public bool NoRetry { get; set; }
     /// <summary>Original UI sound by SYSSE name.</summary>
     public Action<string>? Sound { get; set; }
 
@@ -355,6 +357,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                 else if (k.X != 0)
                 {
                     var n = Math.Clamp(_row + k.X, 0, PauseButtons.Length - 1);
+                    if (n == 1 && NoRetry) n += k.X;
                     if (n != _row) Sound?.Invoke("SYS005");
                     _row = n;
                 }
@@ -740,13 +743,15 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
         var x0 = 256 - (PauseButtons.Length * 86 - 10) / 2f;
         c.Carbon(x0 - 16, 328, 512 - x0 + 16, 352, 1, false);
         c.Text(PauseCaptions[_row], 256, 345, 12, Canvas.White, 0.5f, 0.12f);
+        var grey = Canvas.Shade(0.08f, 0.08f, 0.08f, 1, 0.4f);
         c.Carbon(x0 - 16, 358, 512 - x0 + 16, 412, 1, false);
         c.Text("Pause", x0 - 6, 372, 11, Canvas.White, 0, 0.2f);
         for (var i = 0; i < PauseButtons.Length; i++)
         {
             var x = x0 + i * 86;
-            c.Plate(x, 380, 76, 22, 1);
-            c.Text(PauseButtons[i], x + 38, 396, 12, Canvas.Shade(0.08f, 0.08f, 0.08f, 1), 0.5f, 0.18f);
+            var off = i == 1 && NoRetry;
+            c.Plate(x, 380, 76, 22, off ? 0.5f : 1);
+            c.Text(PauseButtons[i], x + 38, 396, 12, off ? grey : Canvas.Shade(0.08f, 0.08f, 0.08f, 1), 0.5f, 0.18f);
         }
         var sx = x0 + _row * 86;
         c.Glow(sx - 4, 376, sx + 80, 406, Canvas.Pulse(Theta));

@@ -46,6 +46,8 @@ public sealed class NetSession : IDisposable
     private readonly Func<double> _clock;
     private readonly IPEndPoint? _host;
     private readonly List<double> _goEstimates = [];
+    /// <summary>Host: last Lobby sent; client: newest Lobby taken (older ones arrive reordered and are dropped).</summary>
+    private uint _lobbySeq;
     private double _nextHello, _nextLobby, _nextPing, _phaseSince, _started;
     private uint _seq;
     private float _rttHost = 0.1f;
@@ -255,7 +257,7 @@ public sealed class NetSession : IDisposable
             var toGo = Phase == Phase.Countdown ? (float)(GoAt - now) : 0;
             foreach (var p in Players.Where(p => !p.IsLocal && p.Connected))
             {
-                _link.Send(Protocol.Encode(new Lobby(p.Id, Phase, RaceId, Config, players, toGo)), p.EndPoint!);
+                _link.Send(Protocol.Encode(new Lobby(p.Id, Phase, RaceId, Config, players, toGo, ++_lobbySeq)), p.EndPoint!);
                 if (Result != null) _link.Send(Protocol.Encode(Result), p.EndPoint!);
             }
         }
@@ -389,6 +391,8 @@ public sealed class NetSession : IDisposable
 
     private void OnLobby(Lobby l, double now)
     {
+        if (l.Seq <= _lobbySeq) return; // reordered: an older phase must not come back
+        _lobbySeq = l.Seq;
         if (!_welcomed) Say($"Aufgenommen als #{l.YouId}");
         _welcomed = true;
         Local.Id = l.YouId;

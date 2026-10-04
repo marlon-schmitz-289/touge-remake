@@ -154,7 +154,7 @@ Jede Phase endet mit etwas Sichtbarem/Fahrbarem.
   Korrektur Ø 6–7 cm / max 36 cm, Uhren ~6 ms auseinander), 4 Spieler mit 40–150 ms und 2–10 % Verlust (einer geht mittendrin → DNF),
   Bilder geteilter Bildschirm Tag oben/unten und Nacht links/rechts, Lobbys, Ergebnis. Tests: Protokoll (Rundreise, Müll), Snapshots
   (Reihenfolge, Verlust, Hermite, Extrapolation, 20 % Verlust + Jitter), Schiedsrichter, Sitzung über Loopback mit 20 % Verlust, Zeitüberschreitung,
-  volle Sitzung, LAN-Suche, Kontakt mit fremdem Auto, geteilte Tastatur, Versus-Menüs. Offen: Steam-Lobby/Einladen und NAT-Durchdringung
+  volle Sitzung, LAN-Suche, Kontakt mit fremdem Auto, geteilte Tastatur, Versus-Menüs, veraltete Lobby-Pakete (Folgenummer), Port-Eingabe, HUD-Uhr ab GO. Offen: Steam-Lobby/Einladen und NAT-Durchdringung
   (nur Portweiterleitung/VPN, README), Time Attack/Free Roam online, Ghost-Bestenliste, geteilter Bildschirm für 3–4, Lenkrad-FFB für Spieler 2,
   echtes Internet-Spiel mit Freunden (nur Loopback getestet), Bremslicht/Scheinwerferkegel fremder Autos beleuchten die Straße nicht.
 

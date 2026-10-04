@@ -28,9 +28,9 @@ public class NetTests
             if (m is not (Result or Discover)) Assert.Equal(m, back); // records with arrays compare by reference
         }
         var lobby = new Lobby(1, Phase.Countdown, 4, new RaceConfig("IROHA_RIN", true, false, NetRule.Race),
-            [new PlayerInfo(0, "HOST", "FD3S", 1, true, 0, 4), new PlayerInfo(1, "YOU", "R32", 0, false, 35, 3)], 2.25f);
+            [new PlayerInfo(0, "HOST", "FD3S", 1, true, 0, 4), new PlayerInfo(1, "YOU", "R32", 0, false, 35, 3)], 2.25f, 77);
         var l = Assert.IsType<Lobby>(Protocol.Decode(Protocol.Encode(lobby)));
-        Assert.Equal((lobby.YouId, lobby.Phase, lobby.RaceId, lobby.Config, lobby.SecondsToGo), (l.YouId, l.Phase, l.RaceId, l.Config, l.SecondsToGo));
+        Assert.Equal((lobby.YouId, lobby.Phase, lobby.RaceId, lobby.Config, lobby.SecondsToGo, lobby.Seq), (l.YouId, l.Phase, l.RaceId, l.Config, l.SecondsToGo, l.Seq));
         Assert.Equal(lobby.Players, l.Players);
         var r = Assert.IsType<Result>(Protocol.Decode(Protocol.Encode(all[6])));
         Assert.Equal(((Result)all[6]).Entries, r.Entries);
@@ -224,6 +224,10 @@ public class NetTests
         Assert.True(Run(() => host.Phase == Phase.Race && client.Phase == Phase.Race), "countdown → race");
         // both race clocks: GO at the same moment within the simulated delay/jitter
         Assert.InRange(host.RaceTime - client.RaceTime, -0.06f, 0.06f);
+        // a late, reordered lobby packet of an older phase must not take the client back (it would clear GO)
+        var stale = Protocol.Encode(new Lobby(1, Phase.Lobby, host.RaceId - 1, host.Config, [], 0, 1));
+        for (var i = 0; i < 20; i++) host.Link.Send(stale, new IPEndPoint(IPAddress.Loopback, client.Link.Port));
+        Assert.False(Run(() => client.Phase != Phase.Race, 0.5), "stale lobby ignored");
         Assert.True(Run(() =>
         {
             host.SendState(new CarState(0, 0, host.RaceTime, new Vector3(1, 0, host.RaceTime), Quaternion.Identity, Vector3.UnitZ, Vector3.Zero, 0, 1, 0, 5000, 2, 0, 0, 0, 1, -1));

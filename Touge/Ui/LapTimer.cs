@@ -68,6 +68,9 @@ public sealed class LapTimer(float length, float[]? best)
     /// <summary>Split of sector <paramref name="i"/> minus the best run's at the start of this run (null without one or before that split).</summary>
     public float? Delta(int i) => _ref != null && i < Sector ? Splits[i] - _ref[i] : null;
 
+    /// <summary>Versus: running from GO wherever the car stands, so every player's clock is the race clock.</summary>
+    public void Go() => (Phase, Time, Sector, NewRecord, SinceSplit, _ref) = (State.Running, 0, 0, false, float.MaxValue, Best);
+
     /// <summary>Back to armed (car reset to the start).</summary>
     public void Restart() => (Phase, Time, Sector, SinceSplit, _prev, _ref, _armedAt) = (State.Ready, 0, 0, float.MaxValue, 0, Best, null);
 }

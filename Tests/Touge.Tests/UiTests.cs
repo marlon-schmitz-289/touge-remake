@@ -22,6 +22,17 @@ public class UiTests
         Assert.True(t.Delta(3) < -10);
     }
 
+    /// <summary>Versus: the clock runs from GO even while the car still stands behind the start gate.</summary>
+    [Fact]
+    public void Go_RunsFromStartSignal()
+    {
+        var t = new LapTimer(100, null);
+        t.Update(-5, 0.1f);
+        t.Go();
+        for (var i = 0; i < 10; i++) t.Update(-5, 0.5f);
+        Assert.Equal((LapTimer.State.Running, 5f), (t.Phase, t.Time));
+    }
+
     [Fact]
     public void EveryCarHasCluster_TachCoversRevLimit()
     {

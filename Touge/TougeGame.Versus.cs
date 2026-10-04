@@ -77,13 +77,14 @@ public sealed partial class TougeGame
     private Result? _vsResult;
     private float _vsDecidedAt = -1;
     private int _vsLoaded = -1;
-    private bool _vsSplit, _vsLoadPending, _vsShotTaken;
+    private bool _vsSplit, _vsLoadPending, _vsShotTaken, _vsPauseShown;
     private RaceConfig _vsConfig = new();
     /// <summary>What is loaded for versus (course, cars): a rematch of the same skips the load.</summary>
     private string? _vsLoadedKey;
     private readonly List<VsCar> _vsCars = [];
     private readonly ManualDriver _p1 = new(), _p2 = new();
     private DriverInput? _p2Input, _savedDriver;
+    private string _p2ResetKey = "BACKSPACE";
     private int _p2Shift;
     private Hud? _hud2;
     private CamState _cam2;
@@ -93,7 +94,7 @@ public sealed partial class TougeGame
     private float _vsLog;
 
     private string MyName => PlayerName ?? _settings.PlayerName;
-    private int MyPort => NetPort ?? _settings.NetPort;
+    private int MyPort => _versusUi?.Port ?? NetPort ?? _settings.NetPort; // the ONLINE screen's UDP PORT row
 
     // ------------------------------------------------------------ opening and the screens
 
@@ -102,7 +103,7 @@ public sealed partial class TougeGame
     {
         _versusUi ??= new Versus(_catalog!) { Sound = n => _menuAudio?.Play(n) };
         _versusUi.Open();
-        (_versusUi.Name, _versusUi.Address, _versusUi.Vertical, _versusUi.Port) = (_settings.PlayerName, _settings.JoinAddress, _settings.SplitVertical, MyPort);
+        (_versusUi.Name, _versusUi.Address, _versusUi.Vertical, _versusUi.Port) = (_settings.PlayerName, _settings.JoinAddress, _settings.SplitVertical, NetPort ?? _settings.NetPort);
         _inRace = false;
     }
 
@@ -225,6 +226,11 @@ public sealed partial class TougeGame
             }
         }
         if (_netRace != null && _menu?.Current == Menu.Screen.Intro) _menu.SyncIntro(_net!.RaceTime);
+        if (StartMenu == "pause" && !_vsPauseShown && _netRace != null && _net!.RaceTime > 2 && _menu?.Current == Menu.Screen.None)
+        {
+            _vsPauseShown = true; // --versus … --menu pause: the pause over a running online race (screenshots)
+            OpenMenu(Menu.Screen.Pause);
+        }
         if (VersusBot && _netRace != null && (_vsLog += dt) >= 1)
         {
             _vsLog = 0;
@@ -314,6 +320,7 @@ public sealed partial class TougeGame
     {
         var ui = _versusUi!;
         (_settings.PlayerName, _settings.JoinAddress, _settings.SplitVertical) = (ui.Name, ui.Address, ui.Vertical);
+        if (NetPort == null || ui.Port != NetPort) _settings.NetPort = ui.Port; // a --port run keeps the saved port unless changed on screen
         if (ui.Active && ui.Current == Versus.Screen.Lobby) (_settings.Car, _settings.Paint) = (ui.CarId(0), ui.Seats[0].Paint);
         if (_persist) _settings.Save();
     }
@@ -425,6 +432,7 @@ public sealed partial class TougeGame
         var p1Cfg = Clone(cfg);
         (p2Cfg.Wheel, p2Cfg.Keyboard) = (Unbound(), pad >= 0 ? Unbound() : SplitKeys.P2Keyboard());
         if (pad < 0) (p2Cfg.Pad, p1Cfg.Keyboard) = (Unbound(), SplitKeys.WithoutP2(cfg));
+        _p2ResetKey = (pad >= 0 ? p2Cfg.Pad : p2Cfg.Keyboard)[Control.ResetCar][0].Label;
         _p2Input = new DriverInput(p2Cfg) { PadOf = pad >= 0 ? i => i.Pads.ElementAtOrDefault(pad) : _ => null };
         _savedDriver ??= _driver;
         _driver = new DriverInput(p1Cfg) { PadOf = pad >= 0 ? i => i.Pads.Where((_, n) => n != pad).FirstOrDefault() : null };
@@ -455,7 +463,7 @@ public sealed partial class TougeGame
             _vsReferee = new Referee(_vsConfig.Rule, race.Goal);
             _hud2 = new Hud(_course.Road, _drive.Line, new LinePilot(_drive.Line), null, _drive.Start)
             {
-                Visible = _settings.HudOn, Mode = _settings.MapMode, Scale = _settings.HudScale, Night = _courseTime.EndsWith("_NIT"), Mph = _settings.Mph,
+                Visible = _settings.HudOn, Mode = _settings.MapMode, Scale = _settings.HudScale, Night = _courseTime.EndsWith("_NIT"), Mph = _settings.Mph, ResetKey = _p2ResetKey,
             };
             _cam2 = new CamState { Snap = true, Fov = MathF.PI / 3, Bumper = _cam2.Bumper };
         }
@@ -467,7 +475,7 @@ public sealed partial class TougeGame
         }
         _vsRace = race;
         (_vsResult, _vsDecidedAt) = (null, -1);
-        if (_menu != null) _menu.Versus = string.Join(" / ", _vsCars.Select(c => c.Name)); // the telop's "VS ..."
+        if (_menu != null) (_menu.Versus, _menu.NoRetry) = (string.Join(" / ", _vsCars.Select(c => c.Name)), _netRace != null); // the telop's "VS ..."
         foreach (var c in _vsCars)
         {
             Array.Clear(c.Smoke);
@@ -486,7 +494,7 @@ public sealed partial class TougeGame
         if (_savedDriver != null) (_driver, _savedDriver) = (_savedDriver, null);
         _p2Input = null;
         _finished = false;
-        if (_menu != null) _menu.Versus = null;
+        if (_menu != null) (_menu.Versus, _menu.NoRetry) = (null, false);
     }
 
     /// <summary>EXIT from the pause menu: split screen back to its lobby; online the host takes everybody back to the lobby, a guest leaves.</summary>
@@ -515,6 +523,12 @@ public sealed partial class TougeGame
         {
             _p2.Input = _p2Input.Vehicle(_p2Shift);
             _p2Shift = 0;
+        }
+        // HUD clocks run from GO, not from each car's start-gate crossing: the same time for everybody, as on the result
+        if (_hud.Timer.Phase == LapTimer.State.Ready && (_netRace == null || _net!.RaceTime >= 0))
+        {
+            _hud.Timer.Go();
+            if (_vsSplit) _hud2?.Timer.Go();
         }
         if (_netRace != null)
         {

@@ -76,7 +76,9 @@ public sealed class Versus(Catalog catalog)
     public NetDiscovery.Game? JoinLan { get; private set; }
     public Standings? Result { get; set; }
 
-    private int _mode, _row, _row2, _editing; // _editing: 0 no, 1 address, 2 name
+    private int _mode, _row, _row2, _editing; // _editing: 0 no, 1 address, 2 name, 3 port
+    private string _portText = "";
+    private const int FixedRows = 4; // HOST, JOIN, NAME, PORT; the LAN games follow
     private string _message = "";
     private Screen _afterMessage;
     private float _t, _clock, _p2Flash = -1;
@@ -301,9 +303,23 @@ public sealed class Versus(Catalog catalog)
         return Action.None;
     }
 
-    /// <summary>ONLINE: HOST, JOIN (address), NAME, then the LAN games.</summary>
+    /// <summary>ONLINE: HOST, JOIN (address), NAME, PORT, then the LAN games.</summary>
     private Action OnlineInput((int X, int Y, bool Ok, bool Back) k, TextKeys text)
     {
+        if (_editing == 3)
+        {
+            foreach (var ch in text.Typed)
+                if (char.IsAsciiDigit(ch) && _portText.Length < 5) _portText += ch;
+            if (text.Backspace && _portText.Length > 0) _portText = _portText[..^1];
+            if (text.Escape || text.Enter)
+            {
+                var ok = text.Enter && int.TryParse(_portText, out var port) && port is >= 1024 and <= 65535;
+                Sound?.Invoke(ok ? "SYS006" : "BEEP001");
+                if (ok) Port = int.Parse(_portText);
+                _editing = 0;
+            }
+            return Action.None;
+        }
         if (_editing != 0)
         {
             var value = _editing == 1 ? Address : Name;
@@ -327,7 +343,7 @@ public sealed class Versus(Catalog catalog)
             }
             return Action.None;
         }
-        var rows = 3 + Lan.Count;
+        var rows = FixedRows + Lan.Count;
         if (k.Y != 0)
         {
             var n = Math.Clamp(_row + k.Y, 0, rows - 1);
@@ -342,10 +358,11 @@ public sealed class Versus(Catalog catalog)
                 case 0: return Action.Host;
                 case 1:
                 case 2:
-                    _editing = _row;
+                case 3:
+                    (_editing, _portText) = (_row, "");
                     break;
                 default:
-                    JoinLan = Lan[_row - 3];
+                    JoinLan = Lan[_row - FixedRows];
                     return Action.Join;
             }
         }
@@ -570,16 +587,17 @@ public sealed class Versus(Catalog catalog)
         c.Carbon(56, 76, 456, 384);
         var rows = new List<(string Label, string Value)>
         {
-            ("HOST A GAME", $"UDP PORT {Port}"),
-            ("JOIN BY ADDRESS", _editing == 1 ? Address + (_clock % 1 < 0.5f ? "_" : " ") : Address.Length > 0 ? Address : "type ip[:port]"),
-            ("YOUR NAME", _editing == 2 ? Name + (_clock % 1 < 0.5f ? "_" : " ") : Name),
+            ("HOST A GAME", ""),
+            ("JOIN BY ADDRESS", _editing == 1 ? Address + Cursor : Address.Length > 0 ? Address : "TYPE IP[:PORT]"),
+            ("YOUR NAME", _editing == 2 ? Name + Cursor : Name),
+            ("UDP PORT", _editing == 3 ? _portText + Cursor : Port.ToString()),
         };
         foreach (var g in Lan) rows.Add((g.Host, $"{CourseName(g.CourseTime)}   {g.Players}/{g.Max}{(g.Phase != Phase.Lobby ? "  RACING" : "")}"));
-        c.Rule(66, 446, 216);
-        c.Text("GAMES ON YOUR NETWORK", 72, 236, 11, Grey, 0, 0.12f);
+        c.Rule(66, 446, 228);
+        c.Text("GAMES ON YOUR NETWORK", 72, 244, 11, Grey, 0, 0.12f);
         for (var i = 0; i < rows.Count; i++)
         {
-            var y = 104 + i * 34 + (i >= 3 ? 42 : 0);
+            var y = 104 + i * 34 + (i >= FixedRows ? 30 : 0);
             if (y > 340) break;
             var sel = i == _row;
             c.Plate(72, y - 18, 368, 28, sel ? 1 : 0.62f);
@@ -587,10 +605,12 @@ public sealed class Versus(Catalog catalog)
             c.Fit(rows[i].Value, 426, y + 1, 220, 1, Ink, 0.08f, 0, 13);
             if (sel) c.Glow(66, y - 24, 446, y + 16, _editing != 0 ? 1 : Canvas.Pulse(Theta));
         }
-        if (Lan.Count == 0) c.Text("Searching" + new string('.', 1 + (int)(_clock * 2) % 3), 256, 274, 12, Grey, 0.5f, 0.12f);
+        if (Lan.Count == 0) c.Text("Searching" + new string('.', 1 + (int)(_clock * 2) % 3), 256, 290, 12, Grey, 0.5f, 0.12f);
         c.Text($"Over the internet the host forwards UDP port {Port} to their computer (README)", 256, 372, 10, Grey, 0.5f, 0.1f);
         Menu.Hint(c, _editing != 0 ? "TYPE    ENTER: OK    ESC: Cancel" : "UP/DOWN: Select    DECIDE: OK    BACK: Return");
     }
+
+    private string Cursor => _clock % 1 < 0.5f ? "_" : " ";
 
     private string CourseName(string courseTime)
     {
