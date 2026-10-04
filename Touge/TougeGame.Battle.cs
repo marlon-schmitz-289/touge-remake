@@ -147,7 +147,7 @@ public sealed partial class TougeGame
     {
         if (_race == null || _rivalModel == null) return;
         var r = _race.Cars[1];
-        (_rivalPose, _rivalBody) = PoseCar(r.Vehicle, _rivalModel, _rivalModelToBody, r.PrevPosition, r.PrevOrientation, alpha, _rivalWheels);
+        (_rivalPose, _rivalBody) = PoseCar(r.Vehicle, _rivalModel, _rivalModelToBody, r.PrevPosition, r.PrevOrientation, alpha, _rivalWheels, Matrix4x4.Identity);
     }
 
     /// <summary>The rival's body and wheels as sun-shadow casters into <paramref name="dst"/>; returns how many.</summary>

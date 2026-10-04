@@ -173,6 +173,8 @@ Aus dem Recomp (ELF-Adresse = Dateioffset + 0xFFF80):
   „TIME EXTENSION“; Telop `TELOP.PAC` `TLP_VS0/1` („VS“), `TLP_NAME`. Rennstimmen `RACEVOIC` je Figur mit `front`/`rear`/`ppass`/`rpass`/`fwin`/`flose`/`meter`.
   Im Remake nachgebaut (nicht gezeichnet): `Ui/BattleHud`.
 
+**Iketanis Autovorstellung** (Hauptmenü 池谷先輩の車紹介): Texturen `TSDATA.AFS` `TIKETEX.PAC` (`itag_00…10`: Rahmen, Kappe/Gesichter Iketani, Itsuki, Takumi, Titelband, „STARTボタンでスキップ“, Pfeile, drei Streifen mit den 32 Autonamen + `?????`, Einleitungsdialog als Bild: Itsuki bittet Iketani, Takumi über Autos aufzuklären, Iketani fragt, welches Auto), Animation `TIKEANI.PAC`, BGM `WORRY.adx`. Die Ansage je Auto ist `SOUND/IKETANI.AFS` `INTRO_` + Auto-ID + `.ADX` (ELF-Strings `IKETANI.AFS`, `INTRO_`, `.ADX` bei 0x1CD2F0/0x1CD348), mono 24 kHz, 34–66 s, japanisch; Texte dazu gibt es auf der Disc nicht (WORDS.AFS = Renn-Sprüche `RACEWORDS_*`).
+
 ## Offen
 - INFO: 0x150…0x1DF (Ambient je Slot?), 0x2A0…0x2BF, Abschnitts-Flag; LOD-Abstand `gp−0x7C14`; zweites u32 im ROAD-Header
 - Bedeutung von VU addr 4, Material-Flags außer 0x100/0x200/0x400

@@ -58,11 +58,15 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     private MenuAudio? _menuAudio;
     /// <summary>Race music, shuffled over all enabled songs, independent of the course (<see cref="Jukebox"/>).</summary>
     private Jukebox? _jukebox;
+    /// <summary>IKETANI'S CAR GUIDE (main menu or --menu guide|guide-list|guide-talk) and Iketani's voice; <see cref="_voice"/> = car talking.</summary>
+    private CarGuide? _guide;
+    private GuideVoice? _guideVoice;
+    private string? _voice;
     private readonly MenuKeys _frontKeys = new();
     /// <summary>What the music stream plays: null silence, <see cref="Menu.RaceMusic"/>, or a BGM.AFS track of the menus ("" = decide again).</summary>
     private string? _music = "";
     /// <summary>Front end or a menu holds the game (no physics); the intro lets go at GO, the finish banner lets the pilot drive on.</summary>
-    private bool Frozen => _front is { Active: true } || _menu is { Freezes: true };
+    private bool Frozen => _front is { Active: true } || _guide is { Active: true } || _menu is { Freezes: true };
     /// <summary>The run's finish was handed to the menus (once per run).</summary>
     private bool _finished;
     private float _flyS, _menuTime;
@@ -175,6 +179,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             if (_persist && !_catalog.Courses.Any(c => _settings.Course == $"{c.Id}_DAY" || _settings.Course == $"{c.Id}_NIT" || _settings.Course == $"{c.Id}_RIN"))
                 _settings.Course = "AKINA_DAY";
             _menu.Sound = n => _menuAudio?.Play(n);
+            _guide = new CarGuide(_catalog) { Sound = n => _menuAudio?.Play(n) };
             FrontEnd.Step? step = Flow != null ? FrontEnd.Step.Boot : StartMenu switch
             {
                 null => UseMenus ? FrontEnd.Step.Boot : null, "boot" => FrontEnd.Step.Boot, "logo" => FrontEnd.Step.Logo,
@@ -232,6 +237,13 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             _pos += Vector3.Normalize(s with { Y = 0 }) * -7 + Vector3.UnitY * 0.3f; // the parked car in front, against the light
         }
         if (_front != null) _inRace = false;
+        else if (_guide != null && StartMenu?.StartsWith("guide") == true)
+        {
+            OpenGuide(StartMenu == "guide" ? CarGuide.Step.Intro : CarGuide.Step.List);
+            if (StartMenu == "guide-talk") _guide.Talk(4);
+            if (shotPath != null) _guide.Settle();
+            _inRace = false;
+        }
         else if (_menu != null && StartMenu != null)
         {
             // options:<page> opens an options page directly (screenshots), controls:<device> the controls screen
@@ -277,6 +289,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             _audioDevice = new AudioDevice { Music = _settings.MusicVolume, Master = _settings.MasterVolume };
             if (_menu != null) _menuAudio = new MenuAudio(iso, _audioDevice) { Volume = _settings.MenuVolume, Clock = () => _menuTime };
             _jukebox = new Jukebox(iso, _audioDevice, _settings) { Clock = () => _menuTime };
+            if (_guide != null) _guideVoice = new GuideVoice(iso, _audioDevice);
             StartAudio(iso);
         }
     }
@@ -577,6 +590,11 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             UpdateFrontEnd(keys, dt);
             return;
         }
+        if (_guide is { Active: true })
+        {
+            UpdateGuide(keys, dt);
+            return;
+        }
         if (_menu is { Current: not Menu.Screen.None })
         {
             UpdateMenu(keys, dt);
@@ -671,6 +689,40 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             case FrontEnd.Result.Options:
                 OpenMenu(Menu.Screen.Options, fromFrontEnd: true);
                 break;
+            case FrontEnd.Result.Guide:
+                OpenGuide(CarGuide.Step.Intro);
+                break;
+        }
+    }
+
+    /// <summary>Opens the car guide; its turntable car stands on open road away from the arches (<see cref="CarGuide.Spot"/>).</summary>
+    private void OpenGuide(CarGuide.Step step)
+    {
+        _guide!.Open(_carName, _paint, step);
+        _drive.ResetTo(CarGuide.Spot(_course.DrivingLine));
+        SyncPose();
+    }
+
+    /// <summary>Car guide input: shows the chosen car/paint; on exit the saved car comes back and the main menu opens.</summary>
+    private void UpdateGuide((int X, int Y, bool Ok, bool Back) keys, float dt)
+    {
+        var g = _guide!;
+        switch (g.Update(keys, dt))
+        {
+            case CarGuide.Action.PreviewCar:
+                SwitchCar(Array.IndexOf(CarPaint.Cars, g.CarId), g.Paint);
+                break;
+            case CarGuide.Action.Exit:
+                if (_front == null)
+                {
+                    Window.ShouldClose = true; // a --menu start has no main menu to go back to
+                    break;
+                }
+                if (_carName != _settings.Car || _paint != _settings.Paint) SwitchCar(Array.IndexOf(CarPaint.Cars, _settings.Car), _settings.Paint);
+                _drive.ResetTo(0); // back at the start for car select
+                SyncPose();
+                _front.Open(FrontEnd.Step.Modes);
+                break;
         }
     }
 
@@ -682,9 +734,17 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     {
         if (_audio == null || _menuAudio == null) return;
         var front = _front is { Active: true };
-        var sfx = !front && _menu!.Current is Menu.Screen.None or Menu.Screen.Intro or Menu.Screen.Finish ? _settings.SoundVolume : 0;
+        var guide = _guide is { Active: true };
+        var sfx = !front && !guide && _menu!.Current is Menu.Screen.None or Menu.Screen.Intro or Menu.Screen.Finish ? _settings.SoundVolume : 0;
         if (_audioDevice!.Sfx != sfx) _audioDevice.Sfx = sfx; // the setter touches every voice
-        var want = !_settings.MusicOn ? null : front ? _front!.Music : _menu!.Music(_music);
+        if (_guide?.Voice != _voice && _guideVoice != null)
+        {
+            // the music steps back while Iketani talks
+            _voice = _guide!.Voice;
+            _audioDevice.Music = MusicLevel;
+            _guide.VoiceSeconds = _guideVoice.Play(_voice, _settings.MenuVolume);
+        }
+        var want = !_settings.MusicOn ? null : front ? _front!.Music : guide ? _guide!.Music : _menu!.Music(_music);
         if (want == _music) return;
         if (_music == Menu.RaceMusic) _jukebox!.Stop();
         _music = want;
@@ -759,13 +819,16 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         (_inRace, _camSnap, _fly) = (true, true, false);
     }
 
+    /// <summary>Music volume from the settings; it steps back while Iketani talks.</summary>
+    private float MusicLevel => _settings.MusicVolume * (_voice != null ? 0.35f : 1);
+
     /// <summary>Options changed: everything live except the assists (next run, <see cref="ResetRun"/>); saved with the menus.</summary>
     private void ApplySettings()
     {
         var s = _settings;
         ApplyGraphics();
         if (_persist) ApplyDisplay();
-        if (_audioDevice != null) (_audioDevice.Music, _audioDevice.Master) = (s.MusicVolume, s.MasterVolume);
+        if (_audioDevice != null) (_audioDevice.Music, _audioDevice.Master) = (MusicLevel, s.MasterVolume);
         if (_menuAudio != null) _menuAudio.Volume = s.MenuVolume;
         if (_audio != null) _audio.EngineLevel = s.EngineVolume;
         (_hud.Visible, _hud.Mode, _hud.Scale, _hud.Mph, _bumperCam) = (s.HudOn, s.MapMode, s.HudScale, s.Mph, s.BumperCam);
@@ -816,8 +879,20 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     /// </summary>
     private bool UpdateMenuCamera(float dt)
     {
-        var front = _front is { Active: true };
+        var front = _front is { Active: true } || _guide is { Active: true, ShowsCar: false };
         var screen = _menu?.Current ?? Menu.Screen.None;
+        if (_guide is { ShowsCar: true })
+        {
+            // the guide's turntable: the car turns in place (UpdateCarMatrices), the camera stands on the road behind it; the
+            // car sits right of the list (look turned left by ~0.23 screen heights) and comes to the middle while Iketani talks
+            const float back = 8f;
+            var target = _drive.Car.Position + Vector3.UnitY * 0.15f;
+            var fwd = Vector3.Normalize(Vector3.Transform(Vector3.UnitZ, _drive.Car.Orientation) with { Y = 0 });
+            var right = Vector3.Cross(fwd, Vector3.UnitY);
+            _pos = target - fwd * back + Vector3.UnitY * 1.5f;
+            (_camLook, _fov) = (target - right * (0.19f * back * _guide.Shift), MathF.PI / 4);
+            return true;
+        }
         if (!front && screen is Menu.Screen.None or Menu.Screen.Intro or Menu.Screen.Finish) return false;
         if (!front && screen is Menu.Screen.Car or Menu.Screen.Gearbox or Menu.Screen.Result)
         {
@@ -897,7 +972,13 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         ("Records", 1, "records", 0, 0, false, true),
         ("Modes", 1, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 0, true, false),
         ("Options", 1, "options", 0, 4, false, false), ("Options", 0.5f, "options_sound_section", 0, 0, true, false), ("Options", 0.5f, "options_sound", 0, 0, false, true),
-        ("Options", 0.5f, null, 0, 0, false, true), ("Modes", 1.2f, "modes_end", 0, 0, false, false),
+        ("Options", 0.5f, null, 0, 0, false, true), ("Modes", 1.2f, "modes_end", 0, -1, false, false),
+        // IKETANI'S CAR GUIDE: intro lines, down the list to the R32, next paint, Iketani talks, skip, back to the main menu
+        ("Modes", 0.5f, null, 0, -1, false, false), ("Modes", 0.6f, "modes_guide", 0, 0, true, false),
+        ("GuideIntro", 2, "guide_intro", 0, 0, true, false), ("GuideIntro", 1.5f, null, 0, 0, true, false), ("GuideIntro", 2.6f, "guide_intro_iketani", 0, 0, true, false),
+        ("GuideList", 1.5f, "guide_list", 0, 1, false, false), .. Enumerable.Repeat(("GuideList", 0.4f, (string?)null, 0, 1, false, false), 6),
+        ("GuideList", 1, "guide_r32", 1, 0, false, false), ("GuideList", 1, "guide_r32_paint", 0, 0, true, false),
+        ("GuideList", 3.5f, "guide_talk_r32", 0, 0, true, false), ("GuideList", 1, "guide_skipped", 0, 0, false, true), ("Modes", 1.2f, "guide_back", 0, 0, false, false),
     ];
 
     /// <summary>
@@ -931,7 +1012,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             return default;
         }
         var s = script[_flowStep];
-        var at = _front is { Active: true } ? _front.Current.ToString() : _menu!.Current != Menu.Screen.None ? _menu.Current.ToString() : "Race";
+        var at = _front is { Active: true } ? _front.Current.ToString() : _guide is { Active: true } ? "Guide" + _guide.Current : _menu!.Current != Menu.Screen.None ? _menu.Current.ToString() : "Race";
         if (at != s.At)
         {
             _flowT = 0;
@@ -1195,15 +1276,17 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     /// <summary>Body and wheel world matrices from the physics state, body pose interpolated between the last two ticks.</summary>
     private void UpdateCarMatrices(float alpha)
     {
-        (_carPose, _carBody) = PoseCar(_drive.Car, _car, _modelToBody, _prevPos, _prevRot, alpha, _carWheels);
+        // the guide's turntable turns the parked car in place
+        var spin = _guide is { ShowsCar: true } ? Matrix4x4.CreateRotationY(2.5f + _menuTime * 0.3f) : Matrix4x4.Identity;
+        (_carPose, _carBody) = PoseCar(_drive.Car, _car, _modelToBody, _prevPos, _prevRot, alpha, _carWheels, spin);
         UpdateRivalMatrices(alpha);
     }
 
     /// <summary>Pose (physics body → world) and model matrix of <paramref name="car"/> interpolated by <paramref name="alpha"/>, its wheel matrices into <paramref name="wheels"/>.</summary>
     private static (Matrix4x4 Pose, Matrix4x4 Body) PoseCar(Vehicle car, CarModel model, in Matrix4x4 modelToBody, Vector3 prevPos, Quaternion prevRot, float alpha,
-        Span<Matrix4x4> wheels)
+        Span<Matrix4x4> wheels, in Matrix4x4 spin)
     {
-        var pose = Matrix4x4.CreateFromQuaternion(Quaternion.Slerp(prevRot, car.Orientation, alpha))
+        var pose = spin * Matrix4x4.CreateFromQuaternion(Quaternion.Slerp(prevRot, car.Orientation, alpha))
                    * Matrix4x4.CreateTranslation(Vector3.Lerp(prevPos, car.Position, alpha));
         var body = modelToBody * pose;
         var restY = car.Spec.WheelRadius - car.Spec.CogHeight;
@@ -1299,6 +1382,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         var (w, h) = frame != null ? (frame.Width, frame.Height) : (Device.SwapchainWidth, Device.SwapchainHeight);
         var menuShown = _menu is { Current: not Menu.Screen.None };
         if (_front is { Active: true }) _front.Build(_overlay, w, h);
+        else if (_guide is { Active: true }) _guide.Build(_overlay, w, h);
         else if (_hud.Visible && (!menuShown || _menu!.OverRace)) // telop/countdown and pause lie over the HUD
         {
             _hud.Lights = _lights.State;
@@ -1308,14 +1392,14 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         }
         else _overlay.Clear();
         var target = frame?.View ?? Device.CurrentSwapchainView;
-        if (_front is not { Active: true } && menuShown)
+        if (_front is not { Active: true } && _guide is not { Active: true } && menuShown)
         {
             // HUD as its own layer first: one overlay draws all shapes before all text, so HUD text would land on the menu panels
             DrawOverlay(ctx.Encoder, target, w, h);
             _overlay.Clear();
             _menu!.Build(_overlay, w, h);
         }
-        if (_jukebox is { Playing: true, Current: { } song } && _music == Menu.RaceMusic && _front is not { Active: true })
+        if (_jukebox is { Playing: true, Current: { } song } && _music == Menu.RaceMusic && _front is not { Active: true } && _guide is not { Active: true })
             NowPlaying.Draw(_overlay, w, h, song, _jukebox.Since, hold: _menu?.Current == Menu.Screen.Pause,
                 below: _race?.Battle != null && _hud.Visible ? BattleHud.H + 14 : 0);
         if (InputDebug) InputDebugView.Build(_overlay, w, h, Input, _driver, _ffb);
@@ -1338,6 +1422,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         _audio?.Dispose();
         _rivalAudio?.Dispose();
         _menuAudio?.Dispose();
+        _guideVoice?.Dispose();
         _audioDevice?.Dispose();
         _course.World.Dispose();
         _course.Sky.Dispose();

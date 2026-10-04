@@ -28,7 +28,7 @@ using Touge;
 // --fog: dichter Nebel über dem Tag- oder Nachtkurs (Sicht ~60 m; im Menü Wetter FOG).
 // --sun: freie Kamera am Startpunkt schaut zur Sonne (Blendung prüfen).
 // Ohne Kurs und ohne Test-Flags (außer --backend) startet das Spiel im Front-End (Ui/FrontEnd: Hinweis, Karten, Titel, Hauptmenü) mit den gespeicherten Einstellungen (Ui/Settings).
-// --menu boot|logo|disclaimer|title|mode|quit (Front-End; quit = QUIT GAME mit offener Abfrage) bzw. course|route|time|weather|maker|car|gearbox|intro|pause|records|options: diesen Schritt/dieses Menü beim Start öffnen (auch mit Test-Flags, z. B. --menu mode --shot out/m.png).
+// --menu boot|logo|disclaimer|title|mode|quit (Front-End; quit = QUIT GAME mit offener Abfrage) bzw. course|route|time|weather|maker|car|gearbox|intro|pause|records|options bzw. guide|guide-list|guide-talk (Car Guide: Dialog, Liste, Iketani spricht): diesen Schritt/dieses Menü beim Start öffnen (auch mit Test-Flags, z. B. --menu mode --shot out/m.png).
 // --flow <dir>: ganzer Ablauf per Skript im Fenster (Titel → Auswahl → Laden → Countdown → Rennen (Pilot, 16×) → Pause → Ziel → Ergebnis → Rekorde → Optionen), PNG je Schritt nach <dir>, Einstellungen bleiben unberührt.
 // --jukebox <s>: Renn-Musik (Jukebox) offline ohne Fenster: Zufallsfolge, Weiterschalten, Songende → nächster Titel, Log.
 // --frontend-capture <wav>: ganzer Menüablauf per Skript offline (Titel → Auswahl → Countdown → Ergebnis mit erfundener Fahrt) mit Original-SE/BGM als WAV, Log aller Auslöser.
