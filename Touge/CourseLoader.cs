@@ -38,10 +38,8 @@ public static class CourseLoader
         }
 
         // tree* are local-space templates (placement data not decoded yet), lod/shd are not drawn
-        var meshes = entries.Where(e => e.Type == 3 && !e.Name.Contains("lod") && !e.Name.StartsWith("shd") && !e.Name.StartsWith("tree"))
-            .Select(e => (e.Name, Mesh: Mesh.Parse(pac.AsSpan(e.Offset, e.Size)))).ToList();
-        var world = Build(renderer.Device, meshes.Where(m => !m.Name.StartsWith("sky")).Select(m => m.Mesh), textures, white);
-        var sky = Build(renderer.Device, meshes.Where(m => m.Name.StartsWith("sky")).Select(m => m.Mesh), textures, white);
+        var world = Build(renderer.Device, Meshes(pac, false), textures, white);
+        var sky = Build(renderer.Device, Meshes(pac, true), textures, white);
 
         var course = courseTime[..courseTime.LastIndexOf('_')];
         var data = Afs.FromBytes(iso.ReadFile("CDVD/DATA/COURSE/CRS_DATA.AFS"), iso.ReadFile("CDVD/DATA/COURSE/CRS_DATA.TBL"));
@@ -83,39 +81,58 @@ public static class CourseLoader
     }
 
     /// <summary>
-    ///     Flattens meshes into one vertex/index buffer, one batch per material (texture).
-    ///     Drops triangles whose corners coincide with an earlier one (either winding): the data stores
-    ///     double-sided cards as two opposite triangles and repeats geometry at section seams — drawn
-    ///     without culling they z-fight. Normals: <see cref="Normals.Smooth"/> over everything, so seams between
+    ///     Flattens meshes into one vertex/index buffer, one batch per material (texture) in file order
+    ///     (<see cref="Flatten"/>). Normals: <see cref="Normals.Smooth"/> over everything, so seams between
     ///     sections stay smooth.
     /// </summary>
-    private static StaticMesh Build(Penelope.IPenelopeDevice device, IEnumerable<Mesh> meshes, Dictionary<string, int> textures, int white)
+    private static StaticMesh Build(Penelope.IPenelopeDevice device, IEnumerable<(string Name, Mesh Mesh)> meshes, Dictionary<string, int> textures, int white)
     {
-        var indices = new List<uint>();
-        var batches = new List<MeshBatch>();
-        var seen = new HashSet<(Vector3, Vector3, Vector3)>();
-        var corners = new List<Mesh.Vertex>();
-        foreach (var mesh in meshes)
-        foreach (var m in mesh.Materials)
-        {
-            var tex = m.Texture >= 0 && m.Texture < mesh.Textures.Length && textures.TryGetValue(mesh.Textures[m.Texture], out var t) ? t : white;
-            var first = indices.Count;
-            for (var i = 0; i < m.Triangles.Count; i += 3)
-            {
-                if (!seen.Add(Key(m.Triangles[i].Position, m.Triangles[i + 1].Position, m.Triangles[i + 2].Position))) continue;
-                for (var k = 0; k < 3; k++)
-                {
-                    var v = m.Triangles[i + k];
-                    indices.Add((uint)corners.Count);
-                    corners.Add(v);
-                }
-            }
-            if (indices.Count > first) batches.Add(new MeshBatch(tex, first, indices.Count - first));
-        }
+        var (corners, batches) = Flatten(meshes);
         var normals = Normals.Smooth(corners.Select(v => v.Position).ToArray());
         var verts = corners.Select((v, i) => new WorldVertex(v.Position, v.Uv, v.Color, normals[i])).ToArray();
-        return new StaticMesh(device, verts, indices.ToArray(), batches);
+        var indices = new uint[corners.Count];
+        for (var i = 0; i < indices.Length; i++) indices[i] = (uint)i;
+        return new StaticMesh(device, verts, indices,
+        [
+            .. batches.Select((b, i) => new MeshBatch(textures.GetValueOrDefault(b.Texture, white), b.First * 3,
+                ((i + 1 < batches.Count ? batches[i + 1].First : corners.Count / 3) - b.First) * 3)),
+        ]);
     }
+
+    /// <summary>
+    ///     Triangle corners in draw order (file order: mesh, material) and per batch its first triangle, texture name
+    ///     and a label (mesh/material). Drops triangles whose corners coincide with an earlier one (either winding):
+    ///     the data stores double-sided cards as two opposite triangles and repeats geometry at section seams — drawn
+    ///     without culling they z-fight.
+    /// </summary>
+    public static (List<Mesh.Vertex> Corners, List<(int First, string Texture, string Label)> Batches) Flatten(IEnumerable<(string Name, Mesh Mesh)> meshes)
+    {
+        var batches = new List<(int, string, string)>();
+        var seen = new HashSet<(Vector3, Vector3, Vector3)>();
+        var corners = new List<Mesh.Vertex>();
+        foreach (var (name, mesh) in meshes)
+            for (var mi = 0; mi < mesh.Materials.Length; mi++)
+            {
+                var m = mesh.Materials[mi];
+                var tex = m.Texture >= 0 && m.Texture < mesh.Textures.Length ? mesh.Textures[m.Texture] : "";
+                var first = corners.Count;
+                for (var i = 0; i < m.Triangles.Count; i += 3)
+                {
+                    if (!seen.Add(Key(m.Triangles[i].Position, m.Triangles[i + 1].Position, m.Triangles[i + 2].Position))) continue;
+                    for (var k = 0; k < 3; k++) corners.Add(m.Triangles[i + k]);
+                }
+                if (corners.Count > first) batches.Add((first / 3, tex, $"{name}/m{mi}:{tex}"));
+            }
+        return (corners, batches);
+    }
+
+    /// <summary>Course meshes as drawn: no tree templates, LOD or shadow meshes; sky separate.</summary>
+    public static List<(string Name, Mesh Mesh)> Meshes(byte[] pac, bool sky) =>
+    [
+        .. Pac.Entries(pac).Where(e => e.Type == 3 && !e.Name.Contains("lod") && !e.Name.StartsWith("shd") && !e.Name.StartsWith("tree")
+                                       && e.Name.StartsWith("sky") == sky)
+            .Select(e => (e.Name, Mesh.Parse(pac.AsSpan(e.Offset, e.Size)))),
+    ];
 
     /// <summary>Order-independent key of a triangle's corners, rounded to 1 cm.</summary>
     private static (Vector3, Vector3, Vector3) Key(Vector3 a, Vector3 b, Vector3 c)

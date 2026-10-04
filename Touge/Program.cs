@@ -11,6 +11,8 @@ using Touge;
 // --ground <png>: Kollision des Kurses laden, Raycasts timen, Draufsicht mit Wandsegmenten schreiben (ohne Fenster).
 // --bench <s>: Pilot fährt <s> Sekunden in Echtzeit mit Verfolgerkamera und Ton, danach Frametimes (avg/p99/max) und Ende.
 // --quality off: ohne MSAA/Bloom starten (F2 schaltet um).
+// --flicker <prefix>: Z-Fighting im Bild messen (8 Punkte der Fahrlinie + 8 Winkel ums Auto, je 3× mit verschobener Rundung), Ausschnitte als <prefix>_course/_car.png.
+// --zfight [filter]: Z-Fighting-Kandidaten (fast koplanar, überlappend) aller Kurse und Autos auflisten (ohne Fenster).
 // --drift: Pilot reißt alle 7 s (ab 4,5 s) einen 2,5-s-Handbremsdrift (Reifenrauch/Bremsspuren testen), z. B. --autodrive 6.3 --drift --shot.
 var iso = args.FirstOrDefault(a => a.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
           ?? Environment.GetEnvironmentVariable("INITIALD_ISO");
@@ -19,7 +21,7 @@ if (iso == null || !File.Exists(iso))
     Console.Error.WriteLine("usage: touge <Initial D Special Stage (SLPM-65268).iso> [KURS_ZEIT, z. B. AKINA_DAY]  (oder INITIALD_ISO setzen)");
     return 1;
 }
-string[] valueFlags = ["--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture"];
+string[] valueFlags = ["--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker"];
 string? Arg(string flag) { var i = Array.IndexOf(args, flag); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
 var shot = Arg("--shot");
 var at = int.Parse(Arg("--at") ?? "0");
@@ -48,6 +50,13 @@ if (autodrive is { } seconds && shot == null)
     drive.ForceDrift = args.Contains("--drift");
     return drive.AutoDrive(seconds) ? 0 : 2;
 }
+if (args.Contains("--zfight"))
+{
+    using var isoFile = new Touge.Formats.Iso9660(iso);
+    var filter = Arg("--zfight");
+    ZFightReport.Run(isoFile, filter == null || filter.StartsWith("--") ? null : filter);
+    return 0;
+}
 if (Arg("--ground") is { } groundPng)
 {
     using var isoFile = new Touge.Formats.Iso9660(iso);
@@ -56,7 +65,7 @@ if (Arg("--ground") is { } groundPng)
     return 0;
 }
 
-KanseiApp.Run(new TougeGame(iso, course.ToUpperInvariant(), shot, at, orbit, autodrive, bench, Arg("--quality") != "off", args.Contains("--drift")), new WindowSettings
+KanseiApp.Run(new TougeGame(iso, course.ToUpperInvariant(), shot, at, orbit, autodrive, bench, Arg("--quality") != "off", args.Contains("--drift"), Arg("--flicker")), new WindowSettings
 {
     Title = $"Touge – {course}",
     WindowPixelWidth = 1600,

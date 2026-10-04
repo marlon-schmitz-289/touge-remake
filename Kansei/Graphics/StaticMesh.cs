@@ -39,8 +39,12 @@ public struct CarVertex(Vector3 position, Vector3 normal, Vector2 uv, Vector4 co
         new VertexAttribute(3, VertexFormat.Float4, 32));
 }
 
-/// <summary>One draw range of a <see cref="StaticMesh"/>, sharing a texture.</summary>
-public readonly record struct MeshBatch(int Texture, int FirstIndex, int IndexCount);
+/// <summary>
+///     One draw range of a <see cref="StaticMesh"/>, sharing a texture. <see cref="Layer"/> &gt; 0: overlay drawn over
+///     coplanar earlier geometry, pulled <see cref="WorldRenderer.LayerOffset"/> per layer towards the camera.
+///     Batches are sorted by layer.
+/// </summary>
+public readonly record struct MeshBatch(int Texture, int FirstIndex, int IndexCount, int Layer = 0);
 
 /// <summary>Immutable GPU vertex (<see cref="WorldVertex"/> or <see cref="CarVertex"/>) + index buffer (uint32 indices) split into per-texture batches.</summary>
 public sealed class StaticMesh : IDisposable
