@@ -244,7 +244,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _courseTime = courseTime;
         _renderer = new WorldRenderer(Device) { Atmosphere = AtmosphereFor(courseTime), HighQuality = _settings.HighQuality };
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        _course = CourseLoader.Load(iso, courseTime, _renderer);
+        _course = CourseLoader.Load(iso, courseTime, _renderer, reverse);
         SetupFog(_renderer.Atmosphere);
         if (!courseTime.EndsWith("_NIT") && _course.SunDirection is { } sun) _renderer.Atmosphere.SunDirection = sun; // the original's key light
         _drive = new Drive(iso, courseTime, reverse, CarSpecs.All[car]);

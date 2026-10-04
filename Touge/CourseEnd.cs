@@ -13,9 +13,9 @@ namespace Touge;
 ///     <see cref="Lead"/> m behind its start arch, like the original's line point 0 on Akina. The line's own valid points
 ///     start up to 323 m before the arch (IROHA uphill) or 20 m past it and end 231 m past the goal arch or 78 m short of it, so the line
 ///     is extended behind its first point and past its run-out points (along CRS_ROAD) and cut to spawn…goal. Walls:
-///     across the road behind the spawn and at the end of the run-out – the "road closed" barricades that
-///     <c>gate02</c>/<c>gate00</c> add 13–62 m past the goal, moved on to <see cref="RunOut"/> m where the road goes on
-///     without a hairpin.
+///     across the road behind the spawn and at the end of the run-out: at least where the other direction's "road closed"
+///     barricades stand (<c>gate02</c>/<c>gate00</c>, 13–62 m past the goal, not drawn in this direction:
+///     <see cref="CourseLoader.RaceGates"/>), on to <see cref="RunOut"/> m where the road goes on without a hairpin.
 ///     Circuits (MYOUGI0, USUI0) have neither.
 /// </summary>
 public static class CourseEnd

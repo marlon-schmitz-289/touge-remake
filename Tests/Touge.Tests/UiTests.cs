@@ -142,6 +142,14 @@ public class UiTests
     ///     crossing it, not from driving off, and stops at the goal – the opposite direction's start line – after length − Gate.
     /// </summary>
     [Fact]
+    public void RaceGates_ShowStartAndGoalVariantOfTheDirection()
+    {
+        string[] gates = ["gate00", "gate01", "gate02", "gate03", "gate04", "crs01"];
+        Assert.Equal(["gate00", "gate01", "gate04", "crs01"], gates.Where(g => CourseLoader.RaceGates(g, false)));
+        Assert.Equal(["gate02", "gate03", "gate04", "crs01"], gates.Where(g => CourseLoader.RaceGates(g, true)));
+    }
+
+    [Fact]
     public void LapTimer_RunsFromStartLineToGoal()
     {
         var t = new LapTimer(102, null);
