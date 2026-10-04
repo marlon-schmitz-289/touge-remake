@@ -61,6 +61,8 @@ public sealed class GamepadState
     public bool IsButtonPressed(GamepadButton button) => IsButtonPressed((GameControllerButton)button);
     public bool IsButtonReleased(GamepadButton button) => IsButtonReleased((GameControllerButton)button);
     public float GetAxis(GamepadAxis axis) => GetAxis((GameControllerAxis)axis);
+    /// <summary>Axis without the fixed dead zone (the game applies its own, Options → Controls).</summary>
+    public float RawAxis(GamepadAxis axis) => _axes.GetValueOrDefault((GameControllerAxis)axis);
 
     internal void BeginFrame()
     {

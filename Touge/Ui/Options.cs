@@ -230,7 +230,7 @@ public sealed class Options
                 },
             },
             Playlist.Page(s),
-            new Page("CONTROLLER", "Keyboard and pad layout.")
+            new Page("CONTROLLER", "Keyboard, gamepad and wheel: bindings, calibration, force feedback.")
             {
                 Rows =
                 {

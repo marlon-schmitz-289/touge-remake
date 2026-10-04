@@ -15,7 +15,7 @@ public sealed class Drive
     public const float Dt = 1f / 120;
 
     private readonly string _courseTime;
-    private float[] _grip = [];
+    private float[] _grip = [], _rough = [];
     private LinePilot? _runOut;
     private float _coastDecel;
 
@@ -47,6 +47,7 @@ public sealed class Drive
         var (ground, collision) = CourseGround.Load(iso, _courseTime[.._courseTime.LastIndexOf('_')], reverse ? 1 : 0);
         var ends = CourseEnd.Close(iso, _courseTime, reverse, ground);
         (Ground, Reverse, _grip, Line, Start, EndBarrier) = (ground, reverse, Array.ConvertAll(collision.Materials, Grip), ends.Line, ends.Start, ends.Barrier);
+        _rough = Array.ConvertAll(collision.Materials, Rough);
         Pilot = new LinePilot(Line);
         _runOut = ends.RunOut.Length > 1 ? new LinePilot(ends.RunOut) : null;
     }
@@ -65,6 +66,12 @@ public sealed class Drive
         : material.Contains("gutter") ? 0.85f
         : material.Contains("bump") || material.Contains("redline") ? 0.95f
         : 1f;
+
+    /// <summary>Rumble 0..1 per collision material for force feedback: kerbs (r_bump, r_redline) full, gutters and grass less.</summary>
+    public static float Rough(string material) =>
+        material.Contains("bump") || material.Contains("redline") ? 1 : material.Contains("gutter") ? 0.7f : material.Contains("grass") ? 0.4f : 0;
+
+    public float Roughness(int surface) => (uint)surface < (uint)_rough.Length ? _rough[surface] : 0;
 
     /// <summary>Car at rest on driving-line point <paramref name="i"/> (or the next clear one, <see cref="LinePilot.Spawn" />), facing along the line.</summary>
     /// <remarks>Some lines start off the drivable faces (IROHA point 0 lies ~30 m before the road, on W faces).</remarks>

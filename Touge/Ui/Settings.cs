@@ -81,6 +81,8 @@ public sealed class Settings
     public bool Fog { get; set; }
     public string Car { get; set; } = "AE86T";
     public int Paint { get; set; }
+    /// <summary>Bindings, wheel/pad tuning and force feedback (Options → CONTROLLER).</summary>
+    public ControlSettings Controls { get; set; } = new();
     /// <summary>Best run per course and direction (<see cref="BestKey"/>): cumulative sector splits, last = total.</summary>
     public Dictionary<string, float[]> Best { get; set; } = [];
 

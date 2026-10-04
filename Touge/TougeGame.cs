@@ -126,10 +126,16 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     private Vector3 _prevPos;
     private Quaternion _prevRot;
 
-    // driver input, sampled per frame, consumed per tick
-    private float _throttle, _brake, _steer, _brakeLight;
-    private bool _handbrake;
+    // driver input (bindings: Options → Controls), sampled per frame, consumed per tick; force feedback per tick
+    private DriverInput _driver = null!;
+    private readonly ForceFeedback _ffb = new();
+    private float _brakeLight;
     private int _pendingShift;
+    /// <summary>--input-debug: devices, raw axes/buttons, mapped input and force feedback over the picture (<see cref="InputDebug"/>).</summary>
+    public bool InputDebug { get; init; }
+    /// <summary>--sim-wheel: a virtual wheel (steering swings, pedals pump) for screenshots and tests without hardware.</summary>
+    public bool SimWheel { get; init; }
+    private JoystickState? _simWheel;
 
     // cameras
     private bool _fly, _bumperCam, _camSnap = true;
@@ -159,10 +165,13 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
                 HighQuality = highQuality, HudOn = HudMode != "off" && flicker == null, HudScale = HudScale, Car = Car, Paint = Paint, Reverse = Reverse, Course = _courseTime, Fog = Fog,
                 MapMode = HudMode switch { "north" => Hud.MapMode.NorthUp, "overview" => Hud.MapMode.Overview, _ => Hud.MapMode.Rotating }, Livery = Livery, RenderScale = RenderScale,
             };
+        _driver = new DriverInput(_settings.Controls);
+        _frontKeys.Wheel = _settings.Controls;
+        if (SimWheel) Input.AddVirtual(_simWheel = new JoystickState("Simulated wheel", 4, 20, 1, wheel: true));
         if (flicker == null && ContactSheet == null)
         {
             _catalog = new Catalog(iso);
-            _menu = new Menu(_catalog, _settings);
+            _menu = new Menu(_catalog, _settings) { Controls = new ControlsScreen(_settings.Controls, Input, _driver) };
             if (_persist && !_catalog.Courses.Any(c => _settings.Course == $"{c.Id}_DAY" || _settings.Course == $"{c.Id}_NIT" || _settings.Course == $"{c.Id}_RIN"))
                 _settings.Course = "AKINA_DAY";
             _menu.Sound = n => _menuAudio?.Play(n);
@@ -202,6 +211,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             {
                 TickEffects(Drive.Dt);
                 _hud.Tick(_drive.Car, Drive.Dt);
+                _ffb.Update(_drive.Car, _drive.Roughness, 0, _settings.Controls.FfbStrength, Drive.Dt); // --input-debug shows it
             });
             _simTime = seconds;
             _brakeLight = _drive.Pilot.Drive(_drive.Car).Brake; // the shot frame may come before the first tick
@@ -223,14 +233,19 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         if (_front != null) _inRace = false;
         else if (_menu != null && StartMenu != null)
         {
-            // options:<page> opens an options page directly (screenshots)
+            // options:<page> opens an options page directly (screenshots), controls:<device> the controls screen
             var page = StartMenu.StartsWith("options:", StringComparison.OrdinalIgnoreCase) ? StartMenu[8..] : null;
             var screen = StartMenu == "settings" || page != null ? Menu.Screen.Options
-                : Enum.TryParse<Menu.Screen>(StartMenu, true, out var s) && s is not (Menu.Screen.None or Menu.Screen.Loading or Menu.Screen.Finish or Menu.Screen.Result) ? s
+                : Enum.TryParse<Menu.Screen>(StartMenu.Split(':')[0], true, out var s) && s is not (Menu.Screen.None or Menu.Screen.Loading or Menu.Screen.Finish or Menu.Screen.Result) ? s
                 : throw new ArgumentException($"--menu {StartMenu}: unbekannt");
             OpenMenu(screen);
             if (page != null && !_menu.Options.OpenPage(page))
                 throw new ArgumentException($"--menu options:{page}: unbekannt, möglich: {string.Join(' ', _menu.Options.Pages.Select(p => p.Title.Replace(" ", "").ToLowerInvariant()))}");
+            if (screen == Menu.Screen.Controls)
+            {
+                var device = StartMenu.Split(':') is [_, var d] ? d : "";
+                _menu.Controls!.Open(device.ToLowerInvariant() == "gamepad" ? DeviceKind.Pad : Enum.TryParse<DeviceKind>(device, true, out var dk) ? dk : DeviceKind.Keyboard); // --menu controls:wheel
+            }
             _inRace = screen is Menu.Screen.Pause or Menu.Screen.Intro;
             if (shotPath != null) _menu.Settle();
         }
@@ -407,10 +422,11 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         var input = _front != null && _hud.Timer.Phase == LapTimer.State.Finished ? _drive.Coast()
             : autodrive != null || bench != null || Flow != null ? _drive.PilotInput(_simTime)
             : _fly ? new VehicleInput(0, 0, 0, true)
-            : new VehicleInput(_throttle, _brake, _steer, _handbrake, _pendingShift);
+            : _driver.Vehicle(_pendingShift);
         _pendingShift = 0;
         _brakeLight = input.Brake;
         car.Step(input, _drive.Ground, dt);
+        _ffb.Update(car, _drive.Roughness, _driver.SteerBeyond, _settings.Controls.FfbStrength, dt);
         _simTime += dt;
         _lights.Tick(dt);
         TickEffects(dt);
@@ -524,6 +540,9 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _menuTime += dt;
         SyncAudio();
         _jukebox?.Update(dt, hold: _menu?.Current == Menu.Screen.Pause);
+        if (_simWheel != null) InputDebugView.Simulate(_simWheel, time.TotalTime);
+        _driver.Update(Input, dt);
+        SendForces();
         var keys = Flow != null ? FlowKeys(dt) : _frontKeys.Read(Input, dt);
         if (_front is { Active: true })
         {
@@ -546,7 +565,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         }
         if (Flow != null && bench == null)
             for (var i = 0; i < 15; i++) Tick(Drive.Dt); // --flow: 16× time, the pilot drives the run to the finish
-        if (k.IsKeyPressed(Key.Escape) || Input.Gamepad.IsButtonPressed(GamepadButton.Start) || (Flow != null && keys.Back))
+        if (k.IsKeyPressed(Key.Escape) || _driver.Pressed(Control.Pause) || (Flow != null && keys.Back))
         {
             if (_menu == null) Window.ShouldClose = true;
             else
@@ -588,7 +607,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             else _camSnap = true;
         }
         if (_fly) UpdateFly(time);
-        else UpdateDriver(dt);
+        else UpdateDriver();
 
         _frames++;
         if (time.TotalTime - _statusTime >= 0.1)
@@ -1067,12 +1086,27 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
 
     private static float Luminance(Vector3 c) => Vector3.Dot(c, new Vector3(0.2126f, 0.7152f, 0.0722f));
 
-    private void UpdateDriver(float dt)
+    /// <summary>
+    ///     Force feedback to the wheel (<see cref="ForceFeedback"/>, from the last tick) and rumble to the pad while it is
+    ///     the device in use; held by the menus: no force, except the test on the controls screen.
+    /// </summary>
+    private void SendForces()
+    {
+        var cfg = _settings.Controls;
+        // only the wheel in use gets the physics: forces on an unattended wheel (autocentre off) would turn it and steal the steering
+        var force = Frozen || _fly ? _menu?.Controls?.TestForce ?? 0 : _driver.Active == DeviceKind.Wheel ? _ffb.Output : 0;
+        _driver.Wheel?.SetForce(cfg.FfbInvert ? -force : force);
+        if (Frozen || _fly || _driver.Active != DeviceKind.Pad) return;
+        var (low, high) = _ffb.PadRumble(cfg.Rumble);
+        if (low + high > 0.02f) Input.RumblePad(low, high, 80);
+    }
+
+    private void UpdateDriver()
     {
         var k = Input.Keyboard;
-        var pad = Input.Gamepad;
+        var d = _driver;
         var car = _drive.Car;
-        if (k.IsKeyPressed(Key.R) || pad.IsButtonPressed(GamepadButton.Y))
+        if (d.Pressed(Control.ResetCar))
         {
             _drive.ResetNearest();
             SyncPose();
@@ -1085,27 +1119,12 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             Console.WriteLine($"\n[Touge] Richtung: {(_drive.Reverse ? "rückwärts (CRS_COLI _1, DRV _O)" : "vorwärts (_0, _I)")}");
             SyncPose();
         }
-        if (k.IsKeyPressed(Key.C))
+        if (d.Pressed(Control.Camera))
             (_bumperCam, _settings.BumperCam, _camSnap) = (!_bumperCam, !_bumperCam, true);
         if (k.IsKeyPressed(Key.T)) car.AutomaticGearbox = !car.AutomaticGearbox;
-        if (k.IsKeyPressed(Key.L) || pad.IsButtonPressed(GamepadButton.DpadUp)) _lights.Toggle();
-        if (k.IsKeyPressed(Key.H) || pad.IsButtonPressed(GamepadButton.DpadDown)) _lights.ToggleHigh();
-        if (!car.AutomaticGearbox)
-        {
-            if (k.IsKeyPressed(Key.LeftShift) || k.IsKeyPressed(Key.RightShift) || pad.IsButtonPressed(GamepadButton.RightShoulder)) _pendingShift = 1;
-            if (k.IsKeyPressed(Key.LeftCtrl) || k.IsKeyPressed(Key.RightCtrl) || pad.IsButtonPressed(GamepadButton.LeftShoulder)) _pendingShift = -1;
-        }
-
-        float steerKey = (k.IsKeyDown(Key.D) || k.IsKeyDown(Key.Right) ? 1 : 0) - (k.IsKeyDown(Key.A) || k.IsKeyDown(Key.Left) ? 1 : 0);
-        // keyboard steering ramps in (3/s) and returns faster (6/s), the pad stick is used as is
-        var rate = (steerKey == 0 || MathF.Sign(steerKey) != MathF.Sign(_steer) ? 6 : 3) * dt;
-        var stick = pad.IsConnected ? pad.GetAxis(GamepadAxis.LeftX) : 0;
-        _steer = stick != 0 ? stick : _steer + Math.Clamp(steerKey - _steer, -rate, rate);
-        var keyGas = k.IsKeyDown(Key.W) || k.IsKeyDown(Key.Up) ? 1f : 0;
-        var keyBrake = k.IsKeyDown(Key.S) || k.IsKeyDown(Key.Down) ? 1f : 0;
-        _throttle = MathF.Max(keyGas, pad.IsConnected ? pad.GetAxis(GamepadAxis.TriggerRight) : 0);
-        _brake = MathF.Max(keyBrake, pad.IsConnected ? pad.GetAxis(GamepadAxis.TriggerLeft) : 0);
-        _handbrake = k.IsKeyDown(Key.Space) || pad.IsButtonDown(GamepadButton.A);
+        if (d.Pressed(Control.Lights)) _lights.Toggle();
+        if (d.Pressed(Control.HighBeam)) _lights.ToggleHigh();
+        if (d.Shift(car) is var shift and not 0) _pendingShift = shift; // steering, pedals: DriverInput
     }
 
     private void UpdateFly(in GameTime time)
@@ -1256,6 +1275,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         }
         if (_jukebox is { Playing: true, Current: { } song } && _music == Menu.RaceMusic && _front is not { Active: true })
             NowPlaying.Draw(_overlay, w, h, song, _jukebox.Since, hold: _menu?.Current == Menu.Screen.Pause);
+        if (InputDebug) InputDebugView.Build(_overlay, w, h, Input, _driver, _ffb);
         DrawOverlay(ctx.Encoder, target, w, h);
         if (shot != null)
         {

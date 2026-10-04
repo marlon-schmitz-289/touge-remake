@@ -20,7 +20,7 @@ namespace Touge.Ui;
 /// </summary>
 public sealed partial class Menu(Catalog catalog, Settings settings)
 {
-    public enum Screen { None, Course, Route, Time, Weather, Maker, Car, Gearbox, Loading, Intro, Pause, Finish, Result, Records, Options }
+    public enum Screen { None, Course, Route, Time, Weather, Maker, Car, Gearbox, Loading, Intro, Pause, Finish, Result, Records, Options, Controls }
 
     /// <summary>
     ///     Load: load <see cref="CourseTime"/>/<see cref="CarId"/>… (the menu goes on into the telop); Restart: car back to the
@@ -56,6 +56,9 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     public Screen Current { get; private set; }
     /// <summary>The OPTIONS sections and pages (<see cref="Ui.Options"/>; other features add their pages here).</summary>
     public Options Options { get; } = new(settings);
+    /// <summary>Options → CONTROLLER (needs the live input; without it the page shows the default layout as text).</summary>
+    public ControlsScreen? Controls { get; set; }
+    private const string ControllerPage = "CONTROLLER";
     /// <summary>Original UI sound by SYSSE name.</summary>
     public Action<string>? Sound { get; set; }
 
@@ -92,7 +95,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     {
         Screen.Course or Screen.Route or Screen.Time or Screen.Weather => "TOKYO.adx",
         Screen.Maker or Screen.Car or Screen.Gearbox or Screen.Records => "WORRY.adx",
-        Screen.Loading => null, Screen.Finish => "WIN.adx", Screen.Result => "JOY.adx", Screen.Options => playing,
+        Screen.Loading => null, Screen.Finish => "WIN.adx", Screen.Result => "JOY.adx", Screen.Options or Screen.Controls => playing,
         _ => RaceMusic,
     };
 
@@ -138,7 +141,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     /// <summary>Screens of one module switch in place, between modules the screen fades through black.</summary>
     private static int Module(Screen s) => s switch
     {
-        Screen.Course or Screen.Route or Screen.Time or Screen.Weather => 1, Screen.Car or Screen.Gearbox => 2, _ => 10 + (int)s,
+        Screen.Course or Screen.Route or Screen.Time or Screen.Weather => 1, Screen.Car or Screen.Gearbox => 2, Screen.Options or Screen.Controls => 3, _ => 10 + (int)s,
     };
 
     private void Go(Screen s, bool remember = true)
@@ -404,12 +407,27 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                 if (k.Back || k.Ok) Back();
                 break;
             case Screen.Options:
+                // CONTROLLER opens the controls screen (bindings, wheel, force feedback) when the game gave it the live input
+                if (Controls != null && Options.Current == null && k is { Ok: true, Y: 0 } && Options.Pages[Options.Section].Title == ControllerPage)
+                {
+                    Sound?.Invoke("SYS006");
+                    Controls.Open();
+                    Go(Screen.Controls);
+                    break;
+                }
                 switch (Options.Update(k, Sound))
                 {
                     case Options.Result.Changed: return Action.SettingsChanged;
                     case Options.Result.Leave:
                         Back();
                         break;
+                }
+                break;
+            case Screen.Controls:
+                if (Controls!.Update(k, dt, Sound))
+                {
+                    Back();
+                    return Action.SettingsChanged;
                 }
                 break;
         }
@@ -481,6 +499,12 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                 c.Backdrop(_clock);
                 Options.Draw(c, Theta);
                 c.Marquee(Options.Title, true, _clock);
+                break;
+            case Screen.Controls:
+                c.Backdrop(_clock);
+                Controls!.Draw(c, Theta);
+                Hint(c, "UP/DOWN: Select    LEFT/RIGHT: Change    DECIDE: Bind    BACK: Options");
+                c.Marquee("CONTROLS", true, _clock);
                 break;
         }
         c.Fade(_leave >= 0 ? Math.Clamp(_leave / Fade, 0, 1) : _fadeIn ? 1 - Math.Clamp(_t / Fade, 0, 1) : 0);
@@ -800,6 +824,9 @@ internal sealed class MenuKeys
 {
     private Vector2 _stick;
 
+    /// <summary>Wheel in the menus: hat = arrows, shift paddles = left/right, MENU DECIDE/BACK bindings (Options → Controls).</summary>
+    public ControlSettings? Wheel { get; set; }
+
     public (int X, int Y, bool Ok, bool Back) Read(InputSnapshot input, float dt)
     {
         var k = input.Keyboard;
@@ -823,6 +850,14 @@ internal sealed class MenuKeys
             _stick = s;
             ok |= pad.IsButtonPressed(GamepadButton.A) || pad.IsButtonPressed(GamepadButton.Start);
             back |= pad.IsButtonPressed(GamepadButton.B);
+        }
+        if (Wheel != null && DriverInput.FindWheel(input, Wheel.WheelName) is { } w)
+        {
+            bool P(Control c) => Wheel.Get(DeviceKind.Wheel, c).Any(b => DriverInput.Pressed(b, w));
+            y += (w.HatPressed(0, 4) ? 1 : 0) - (w.HatPressed(0, 1) ? 1 : 0);
+            x += (w.HatPressed(0, 2) || P(Control.ShiftUp) ? 1 : 0) - (w.HatPressed(0, 8) || P(Control.ShiftDown) ? 1 : 0);
+            ok |= P(Control.MenuOk);
+            back |= P(Control.MenuBack);
         }
         return (Math.Sign(x), Math.Sign(y), ok, back);
     }

@@ -20,11 +20,14 @@ public sealed unsafe class InputSnapshot
 
     private int _activeInstanceId = -1;
 
+    private readonly List<JoystickState> _joysticks = [];
+
     internal InputSnapshot(Sdl sdl)
     {
         _sdl = sdl;
         TryOpenAny();
         PromoteActive();
+        for (var i = 0; i < _sdl.NumJoysticks(); i++) OpenJoystick(i);
     }
 
     /// <summary>
@@ -32,7 +35,7 @@ public sealed unsafe class InputSnapshot
     ///     directly, which is what lets a test press a key without a window, a GPU or SDL — see
     ///     <see cref="KeyboardState.OnKeyDown" />. Device polling is skipped rather than faked.
     /// </summary>
-    internal InputSnapshot()
+    public InputSnapshot()
     {
         _sdl = null!;
     }
@@ -43,6 +46,19 @@ public sealed unsafe class InputSnapshot
     public KeyboardState Keyboard { get; } = new();
     public MouseState Mouse { get; } = new();
     public GamepadState Gamepad { get; } = new();
+
+    /// <summary>Every connected joystick as a raw device (wheels, pedals, shifters, pads), plus virtual ones (<see cref="AddVirtual"/>).</summary>
+    public IReadOnlyList<JoystickState> Joysticks => _joysticks;
+
+    /// <summary>Adds a virtual joystick (tests, --sim-wheel); it is driven by its owner.</summary>
+    public void AddVirtual(JoystickState joystick) => _joysticks.Add(joystick);
+
+    /// <summary>Rumble on the active pad, 0..1 per motor (no-op without one).</summary>
+    public void RumblePad(float low, float high, uint ms = 100)
+    {
+        if (HasDevice && _open.TryGetValue(_activeInstanceId, out var c))
+            _sdl.GameControllerRumble((GameController*)c, (ushort)(Math.Clamp(low, 0, 1) * 65535), (ushort)(Math.Clamp(high, 0, 1) * 65535), ms);
+    }
 
     /// <summary>Controller type of the currently active pad (Xbox/PlayStation/Switch/etc), for glyph selection.</summary>
     public GameControllerType ActiveType { get; private set; } = GameControllerType.Unknown;
@@ -67,6 +83,7 @@ public sealed unsafe class InputSnapshot
         Keyboard.BeginFrame();
         Mouse.BeginFrame();
         Gamepad.BeginFrame();
+        foreach (var j in _joysticks) j.BeginFrame();
         TypedText = "";
     }
 
@@ -107,6 +124,25 @@ public sealed unsafe class InputSnapshot
             case EventType.Mousewheel:
                 Mouse.ScrollDelta = evt.Wheel.Y;
                 break;
+            case EventType.Joydeviceadded:
+                OpenJoystick(evt.Jdevice.Which);
+                break;
+            case EventType.Joydeviceremoved:
+                if (Joystick(evt.Jdevice.Which) is { } gone)
+                {
+                    gone.Close();
+                    _joysticks.Remove(gone);
+                }
+                break;
+            case EventType.Joyaxismotion:
+                Joystick(evt.Jaxis.Which)?.OnAxis(evt.Jaxis.Axis, evt.Jaxis.Value);
+                break;
+            case EventType.Joybuttondown or EventType.Joybuttonup:
+                Joystick(evt.Jbutton.Which)?.SetButton(evt.Jbutton.Button, evt.Jbutton.State != 0);
+                break;
+            case EventType.Joyhatmotion:
+                Joystick(evt.Jhat.Which)?.SetHat(evt.Jhat.Hat, evt.Jhat.Value);
+                break;
             case EventType.Controllerdeviceadded:
                 OnDeviceAdded(evt.Cdevice.Which);
                 break;
@@ -138,6 +174,28 @@ public sealed unsafe class InputSnapshot
         _sdl.GetMouseState(ref mx, ref my);
         Mouse.X = mx;
         Mouse.Y = my;
+    }
+
+    private JoystickState? Joystick(int instanceId)
+    {
+        foreach (var j in _joysticks)
+            if (j.InstanceId == instanceId) return j;
+        return null;
+    }
+
+    /// <summary>Opens joystick <paramref name="deviceIndex"/> as a raw device (dedup'd by instance id: SDL also announces the ones present at start).</summary>
+    private void OpenJoystick(int deviceIndex)
+    {
+        var joystick = _sdl.JoystickOpen(deviceIndex);
+        if (joystick == null) return;
+        if (Joystick(_sdl.JoystickInstanceID(joystick)) != null)
+        {
+            _sdl.JoystickClose(joystick); // SDL refcounts opens
+            return;
+        }
+        var j = new JoystickState(_sdl, joystick, _sdl.IsGameController(deviceIndex) == SdlBool.True);
+        _joysticks.Add(j);
+        Console.WriteLine($"[Kansei] Joystick: {j.Name} ({j.AxisCount} axes, {j.ButtonCount} buttons, {j.HatCount} hats{(j.IsWheel ? ", wheel" : "")}{(j.IsGameController ? ", pad" : "")})");
     }
 
     /// <summary>Scans every currently-connected joystick and opens the ones that are game controllers.</summary>
