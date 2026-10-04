@@ -8,25 +8,20 @@ namespace Touge.Ui;
 ///     Driving HUD (F4), built into an <see cref="Overlay"/> every frame; sizes in units of 1/900 of the target height
 ///     inside a safe margin, so it scales with resolution and DPI.
 ///     Top left: run time, best, four sector chips (green/red against the best run) and the split delta (<see cref="LapTimer"/>).
-///     Top centre: drift combo with slip-angle bar (<see cref="DriftMeter"/>). Top right: round minimap from the CRS_ROAD
-///     centre line (road band with outline, start bar, checkered goal, car arrow with glow; N cycles rotating → north up →
-///     whole course; CRS_NAVI is this same line scaled, FORMATS.md) and progress with sector ticks. Bottom right: the
-///     car's own instrument cluster (<see cref="Cluster"/>). Centre: wrong-way banner, finish banner with sector deltas,
+///     Top centre: drift combo with slip-angle bar (<see cref="DriftMeter"/>). Bottom left: course dial with minimap and
+///     progress ring (<see cref="MapWidget"/>; N cycles rotating → north up → whole course; CRS_NAVI is the CRS_ROAD line
+///     scaled, FORMATS.md). Bottom right: the car's own instrument cluster (<see cref="Cluster"/>). Centre: wrong-way banner, finish banner with sector deltas,
 ///     reset hint when stuck. Everything sits in <see cref="Style.Safe"/>. State advances per physics tick (<see cref="Tick"/>).
 /// </summary>
 public sealed class Hud
 {
     public enum MapMode { Rotating, NorthUp, Overview }
 
-    private const float MapRadius = 112, ZoomMetres = 220, TimingW = 340, DriftHalf = 170;
-    private static readonly uint RoadEdge = Overlay.Rgba(0.05f, 0.06f, 0.08f, 0.95f), Road = Overlay.Rgba(0.93f, 0.94f, 0.96f),
-        StartColor = Overlay.Rgba(0.2f, 0.95f, 0.35f), Frame = Overlay.Rgba(1, 1, 1, 0.5f);
+    private const float TimingW = 340, DriftHalf = 170;
 
-    private readonly Vector2[] _road;
     private readonly Vector3[] _line;
     private readonly LinePilot _pilot;
-    private readonly Vector2 _start, _startDir, _goal, _goalDir, _centre;
-    private readonly float _extent;
+    private readonly MapWidget _map;
     private float _progress, _wrongFor, _stuckFor, _wrongA, _driftA, _hintA, _boost = -0.6f;
 
     public bool Visible = true;
@@ -40,13 +35,7 @@ public sealed class Hud
     {
         (_line, _pilot) = (line, pilot);
         Timer = new LapTimer(pilot.Length, best);
-        _road = Array.ConvertAll(road, Xz);
-        (_start, _startDir) = (Xz(line[0]), Vector2.Normalize(Xz(line[1] - line[0])));
-        (_goal, _goalDir) = (Xz(line[^1]), Vector2.Normalize(Xz(line[^1] - line[^2])));
-        Vector2 min = new(float.MaxValue), max = new(float.MinValue);
-        foreach (var p in _road) (min, max) = (Vector2.Min(min, p), Vector2.Max(max, p));
-        _centre = (min + max) / 2;
-        foreach (var p in _road) _extent = MathF.Max(_extent, Vector2.Distance(p, _centre));
+        _map = new MapWidget(road, line);
     }
 
     private static Vector2 Xz(Vector3 v) => new(v.X, v.Z);
@@ -64,6 +53,7 @@ public sealed class Hud
         Timer.Update(along, dt);
         var kmh = car.SpeedKmh;
         Drift.Update(car.SlipAngle, kmh, car.WallContacts > 0, dt);
+        _map.Tick(kmh, dt);
         var seg = Math.Min(_pilot.Segment, _line.Length - 2);
         var tangent = Xz(_line[seg + 1] - _line[seg]);
         var v = Xz(car.Velocity);
@@ -91,15 +81,18 @@ public sealed class Hud
         o.Clear();
         var g = Style.Safe(width, height);
         var u = g.U;
-        Map(o, new Vector2(g.Right - MapRadius * u, g.Top + MapRadius * u), u, Xz(carPos), Xz(carForward));
+        // course dial bottom left, same height as the cluster box (Cluster.Box.Y), so the two read as one dash row
+        var s = g.U * Cluster.Box.Y / (2 * MapWidget.Radius);
+        _map.Draw(o, new Vector2(g.Left + MapWidget.Radius * s, g.Bottom - MapWidget.Radius * s), s, Mode, Xz(carPos), Xz(carForward),
+            _progress, _pilot.Length * (1 - _progress), Timer, Cluster.Cars[carName], Night);
         var gauge = Cluster.Cars[carName];
         Cluster.Draw(o, gauge, new Vector2(g.Right, g.Bottom), Cluster.Fit(gauge, g),
             new Cluster.Reading(car.Rpm, car.SpeedKmh, car.Gear, car.AutomaticGearbox, _boost, Night, time));
         var timingH = Drift.Total > 0 ? 186 : 150;
         Timing(o, new Vector2(g.Left, g.Top), timingH, u, time);
-        // drift combo top centre; when it would crowd the timing panel or the map (4:3, 5:4) it moves below the top row
+        // drift combo top centre; when it would crowd the timing panel (4:3, 5:4) it moves below the top row
         var cx = width / 2f;
-        var fits = cx - DriftHalf * u > g.Left + (TimingW + 24) * u && cx + DriftHalf * u < g.Right - (2 * MapRadius + 24) * u;
+        var fits = cx - DriftHalf * u > g.Left + (TimingW + 24) * u;
         DriftPanel(o, new Vector2(cx, fits ? g.Top : g.Top + (timingH + 24) * u), u);
         Banners(o, width, height, u, time);
     }
@@ -112,7 +105,6 @@ public sealed class Hud
         var x = at.X + 22 * u;
         var right = at.X + 290 * u;
         Style.Label(o, "TIME", new Vector2(x, at.Y + 28 * u), 17 * u, Style.Amber, 0, 0, 0.3f * u);
-        Style.Label(o, $"SECTOR {Math.Min(t.Sector + 1, LapTimer.Sectors)}/{LapTimer.Sectors}", new Vector2(right, at.Y + 28 * u), 17 * u, Style.Text, 1);
         var finished = t.Phase == LapTimer.State.Finished;
         var col = t.Phase == LapTimer.State.Ready ? Style.Dim : finished && MathF.Sin(time * 8) > 0 ? Style.Amber : Style.Text;
         Style.Label(o, Style.Time(t.Time), new Vector2(x - 2 * u, at.Y + 80 * u), 54 * u, col, 0, Style.Slant, 0.4f * u);
@@ -222,103 +214,6 @@ public sealed class Hud
             var w = MathF.Max(o.Font!.Measure(key, 17 * u) + 12 * u, 26 * u) + 8 * u + o.Font.Measure(action, 17 * u);
             Style.Slanted(o, new Vector2(cx - w / 2 - 30 * u, y - 22 * u), new Vector2(cx + w / 2 + 30 * u, y + 22 * u), Style.Fade(Style.Panel, a), 0.2f);
             Style.KeyHint(o, key, action, new Vector2(cx - w / 2, y), u, a);
-        }
-    }
-
-    private void Map(Overlay o, Vector2 c, float u, Vector2 car, Vector2 heading)
-    {
-        var r = MapRadius * u;
-        heading = heading.LengthSquared() > 1e-6f ? Vector2.Normalize(heading) : new Vector2(0, -1);
-        // screen up = f, screen right = (-f.y, f.x) on XZ (top-down, not mirrored: X right, −Z up when north up)
-        var f = Mode == MapMode.Rotating ? heading : new Vector2(0, -1);
-        var right = new Vector2(-f.Y, f.X);
-        var overview = Mode == MapMode.Overview;
-        var k = overview ? r * 0.9f / _extent : r / ZoomMetres; // pixels per metre
-        // zoomed: the view centre sits ahead of the car so more of the road ahead is visible
-        var origin = overview ? _centre : car + heading * (ZoomMetres * 0.3f);
-        Vector2 ToScreen(Vector2 p)
-        {
-            var d = p - origin;
-            return c + new Vector2(Vector2.Dot(d, right), -Vector2.Dot(d, f)) * k;
-        }
-
-        o.Disc(c, r, Style.Panel);
-        o.Clip(c, r - 1.5f * u);
-        var stride = overview ? 4 : 2; // ROAD points are ~2 m apart
-        var reach = ZoomMetres * 1.1f + 2 * stride;
-        for (var pass = 0; pass < 2; pass++)
-        {
-            var col = pass == 0 ? RoadEdge : Road;
-            var w = (pass == 0 ? 9 : 5f) * (overview ? 0.6f : 1) * u;
-            for (var i = stride; i < _road.Length; i += stride)
-            {
-                var (a, b) = (_road[i - stride], _road[Math.Min(i, _road.Length - 1)]);
-                if (!overview && Vector2.Distance(a, origin) > reach) continue;
-                o.Line(ToScreen(a), ToScreen(b), w, col);
-            }
-        }
-        Marker(o, ToScreen(_start), _startDir, f, right, u, false);
-        Marker(o, ToScreen(_goal), _goalDir, f, right, u, true);
-
-        // car arrow with a soft glow
-        var p = ToScreen(car);
-        for (var g = 3; g >= 1; g--) o.Disc(p, (6 + 5 * g) * u, Overlay.Rgba(1, 0.72f, 0.1f, 0.09f));
-        var dir = Vector2.Normalize(new Vector2(Vector2.Dot(heading, right), -Vector2.Dot(heading, f)));
-        var n = new Vector2(-dir.Y, dir.X);
-        Vector2 tip = p + dir * 11 * u, l = p - dir * 7 * u + n * 7.5f * u, rr = p - dir * 7 * u - n * 7.5f * u, notch = p - dir * 3 * u;
-        o.Triangle(tip, l, notch, Style.Amber);
-        o.Triangle(tip, notch, rr, Style.Amber);
-        var edge = 2 * u;
-        o.Line(tip, l, edge, RoadEdge);
-        o.Line(l, notch, edge, RoadEdge);
-        o.Line(notch, rr, edge, RoadEdge);
-        o.Line(rr, tip, edge, RoadEdge);
-
-        o.Clip(Vector2.Zero);
-        o.Ring(c, r, 2 * u, Frame, 96);
-        if (Mode == MapMode.Rotating)
-        {
-            // north marker on the rim
-            var north = new Vector2(-right.Y, f.Y); // screen direction of world −Z: (dot(−Z, right), −dot(−Z, f))
-            var at = c + north * r;
-            o.Disc(at, 11 * u, RoadEdge);
-            o.Text("N", new Vector2(at.X, at.Y + o.Font!.CapHeight * 15 * u / 2), 15 * u, Style.Text, 0.5f, 0.3f * u);
-        }
-
-        // progress bar with sector ticks + percent
-        var y = c.Y + r + 14 * u;
-        Vector2 min = Vector2.Round(new Vector2(c.X - r, y)), max = Vector2.Round(new Vector2(c.X + r, y + 6 * u));
-        o.Rect(min - new Vector2(u), max + new Vector2(u), Style.Panel);
-        o.Rect(min, max, Style.Faint);
-        o.Rect(min, new Vector2(MathF.Round(min.X + (max.X - min.X) * _progress), max.Y), Style.Amber);
-        for (var i = 1; i < LapTimer.Sectors; i++)
-        {
-            var x = MathF.Round(min.X + (max.X - min.X) * i / LapTimer.Sectors);
-            o.Rect(new Vector2(x - u, min.Y - 3 * u), new Vector2(x + u, max.Y + 3 * u), Style.Text);
-        }
-        Style.Label(o, $"{(int)(_progress * 100)}%", new Vector2(c.X, max.Y + 24 * u), 18 * u, Style.Text, 0.5f, 0, 0.2f * u);
-    }
-
-    /// <summary>Bar across the road at <paramref name="at"/> (screen), road direction <paramref name="dir"/> (world XZ): green start, checkered goal.</summary>
-    private static void Marker(Overlay o, Vector2 at, Vector2 dir, Vector2 f, Vector2 right, float u, bool goal)
-    {
-        var d = new Vector2(Vector2.Dot(dir, right), -Vector2.Dot(dir, f));
-        var across = new Vector2(-d.Y, d.X) * 10 * u;
-        o.Line(at - across, at + across, 7 * u, RoadEdge);
-        if (!goal)
-        {
-            o.Line(at - across, at + across, 4 * u, StartColor);
-            return;
-        }
-        // 4 × 2 checkers
-        for (var i = 0; i < 4; i++)
-        for (var j = 0; j < 2; j++)
-        {
-            var a = at - across + across * (i / 2f);
-            var b = at - across + across * ((i + 1) / 2f);
-            var off = d * ((j - 0.5f) * 2.2f * u);
-            var white = (i + j) % 2 == 0;
-            o.Line(a + off, b + off, 2.2f * u, white ? Road : RoadEdge);
         }
     }
 }

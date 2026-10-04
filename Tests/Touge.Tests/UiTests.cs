@@ -118,4 +118,22 @@ public class UiTests
         var slack = margin / dist;
         return a <= s.Span + slack || a >= MathF.Tau - slack;
     }
+
+    /// <summary>Map road points take the along fraction of their own hairpin leg, also against the line and on two-lap circuits.</summary>
+    [Fact]
+    public void MapAlong_FollowsHairpinLegs()
+    {
+        // line: 100 m east, then 100 m back west 15 m further south; road reversed and 2 m off the line
+        var line = Enumerable.Range(0, 51).Select(i => new System.Numerics.Vector2(i * 2, 0))
+            .Concat(Enumerable.Range(0, 51).Select(i => new System.Numerics.Vector2(100 - i * 2, 15))).ToArray();
+        var road = line.Reverse().Select(p => p + new System.Numerics.Vector2(0, 2)).ToArray();
+        var along = MapWidget.Along(road, line);
+        Assert.Equal(1, along[0], 0.02f);
+        Assert.Equal(0, along[^1], 0.02f);
+        for (var i = 1; i < along.Length; i++) Assert.True(along[i] <= along[i - 1], $"{i}");
+        Assert.InRange(along[25], 0.7f, 0.8f); // road point 25 lies on the return leg, 3/4 along the line
+        // circuit: the line runs the loop twice, the road once → fractions of the first lap
+        var twice = MapWidget.Along(road, line.Concat(line[1..]).ToArray(), 2);
+        for (var i = 0; i < along.Length; i++) Assert.Equal(along[i], twice[i], 0.04f); // the 15 m jump back to the start counts in each lap
+    }
 }

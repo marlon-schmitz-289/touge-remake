@@ -48,7 +48,9 @@ Einstellungen, letzte Wahl und Bestzeiten liegen als JSON im App-Data-Ordner (ma
 Windows `%APPDATA%\InitialDRemake`), nicht im Repo; Starts mit Kurs oder Test-Flags lesen/schreiben sie nicht.
 HUD: F4 an/aus, N Minimap mitdrehend → nordausgerichtet → ganze Strecke (`--hud north|overview|off` beim Start). Oben links Zeit, Bestzeit
 und 4 Sektoren (je 25 % der Strecke, Delta zur Bestzeit grün/rot; Zeit läuft ab der Startlinie, stoppt im Ziel), oben Mitte Drift-Kombo
-(Punkte aus Winkel × Tempo, Multiplikator, Wandkontakt löscht), oben rechts Minimap (Start grün, Ziel kariert) mit Fortschritt,
+(Punkte aus Winkel × Tempo, Multiplikator, Wandkontakt löscht), unten links die Streckenuhr (`Ui/MapWidget`: rundes Instrument im Stil des
+Kombiinstruments mit Minimap – vorausliegende Straße hell, gefahrene gedimmt, Zoom nach Tempo, nachts in der Instrumentenfarbe des Autos –,
+Fortschritt als Bogen auf dem Rand in Sektorfarben und Restdistanz im Fenster unten),
 unten rechts das Kombiinstrument des jeweiligen Autos (`Ui/Cluster`: je Auto eigene Instrumentenliste mit Position – Tacho links/rechts,
 Zusatzinstrumente wie Ladedruck, Öldruck, Tank/Temperatur-Kombi, R32-Konsolentrio, R34-Multifunktionsdisplay, FD-Zusatzinstrumente, alle innerhalb
 des Gehäuses; Gehäuse Hutze/Nissan-Keil/Einzelrohre/LCD, Strich-/Block-/Ring-/Uhrenskala, Altezza-Chronograph, S2000-LCD-Balken;
