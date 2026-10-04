@@ -112,15 +112,15 @@ schreibt die Zeile fertig, dann weiter) → Liste aller 32 Autos unter Herstelle
 kg/PS, Fahrer in Initial D). ↑/↓ Auto, ←/→ Lackfarbe, Entscheiden = Iketani spricht (Original-Ansage `IKETANI.AFS` `INTRO_<AUTO>.ADX`,
 japanisch, 34–66 s; Liste fährt weg, Auto in die Mitte, Text tippt im Tempo der Ansage mit, Fortschrittsbalken, Musik leiser), Entscheiden/Zurück bricht ab,
 Zurück → Hauptmenü (gespeichertes Auto kommt zurück). `--menu guide` (Dialog), `guide-list`, `guide-talk` mit `--car`/`--paint` für Bilder (ohne Hauptmenü schließt Zurück das Fenster).
-LEGEND OF THE STREETS (`Ui/LegendScreen`, `Race/Legend`, wie das Original 公道最速伝説): Kurswahl im 3 × 4-Raster mit Punkten je Rivale
+LEGEND OF THE STREETS (`Ui/LegendScreen`, `Race/Legend`, wie das Original 公道最速伝説): Kurswahl im Raster (11 Kurse) mit Punkten je Rivale
 (gold = besiegt, goldener Rand = Kurs geschafft) → Rivalenleiter des Kurses (Name, Team, Auto, Status WIN / CHALLENGE / NEW! / LOCKED, rotes Kreuz
 über besiegten wie das Original; rechts Datenblatt: Auto, Route, Tageszeit, Wetter, Stufe 1–5, Bilanz, bester Abstand) → VS-Karte über dem
-3D-Auto des Rivalen (seine Lackierung, sein Thema aus `MG_BGM.AFS`) → Herstellerwahl/Auto/Getriebe wie Time Attack → Laden → Telop „VS …“ →
-Battle (Regel des Originals: wer zuerst im Ziel ist, dazu Sieg ab 8 s Vorsprung) → YOU WIN/LOSE und Battle-Blatt → RETRY / RIVAL SELECT /
+3D-Auto des Rivalen auf seinem Kurs bei seiner Tageszeit/seinem Wetter (seine Lackierung, sein Thema aus `MG_BGM.AFS`; der Kurs lädt hinter der Blende) → Herstellerwahl/Auto/Getriebe wie Time Attack → Laden → Telop „VS …“ →
+Battle (Regel des Originals: wer zuerst im Ziel ist, dazu Sieg ab 8 s Vorsprung) → YOU WIN/LOSE und Battle-Blatt (Musik `R_WIN01`/`R_LOSE` aus `MG_BGM.AFS`) → RETRY / RIVAL SELECT /
 CAR SELECT / EXIT. Rivalen und Bedingungen aus dem Original (34 Rivalen auf 11 Kursen, Richtung/Tageszeit/Wetter je Rivale, siehe FORMATS.md);
 je Kurs eine Leiter (der nächste Rivale nach einem Sieg über den vorigen), die fünf Zusatzkurse (MYOGI+ … SHIONA) ab 3 geschafften Hauptkursen,
 Bunta (Akina) nach allen 24 Rivalen der Hauptkurse, Takumi von Project D (Irohazaka) nach allen anderen außer Bunta; ein Sieg über Bunta schaltet
-sein Impreza (IMP3) in jeder Autowahl frei (bis dahin „?????“). Revanche gegen einen besiegten Rivalen im Regen (wie das Original). Die ersten drei
+sein Impreza (IMP3) für Legend-Battles frei (dort bis dahin „?????“; Time Attack hat es immer). Revanche gegen einen besiegten Rivalen im Regen (wie das Original). Die ersten drei
 Rivalen eines Hauptkurses fahren mit 80/88/95 % Motormoment (eigene Abstimmung, damit der Trueno am Anfang mithalten kann).
 Nach einem Battle steht der Cursor auf dem nächsten Rivalen, Neues (Rivalen, Kurse, Auto) läuft unten als rotes Band ein. Fortschritt in
 `legend.json` neben `settings.json` (Siege, Niederlagen, bester Abstand je Rivale; `Race/Legend.Progress`). Pause-Exit und Zurück aus der

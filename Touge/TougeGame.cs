@@ -1043,7 +1043,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             _flowT = 0;
             return default;
         }
-        if ((_flowT += dt) < s.Wait) return default;
+        if ((_flowT += MathF.Min(dt, 1 / 20f)) < s.Wait) return default; // clamped like the menus: a loading frame must not eat the wait
         if (s.Shot != null && !_flowShotTaken)
         {
             (_shotState, _flowShot, _flowShotTaken) = (1, s.Shot, true);

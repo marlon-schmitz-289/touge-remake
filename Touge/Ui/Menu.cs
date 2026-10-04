@@ -108,9 +108,12 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     {
         Screen.Course or Screen.Route or Screen.Time or Screen.Weather => "TOKYO.adx",
         Screen.Maker or Screen.Car or Screen.Gearbox or Screen.Records => "WORRY.adx",
-        Screen.Loading => null, Screen.Finish => Battle is { Outcome: Race.BattleOutcome.Lose } ? "LOSE.adx" : "WIN.adx", Screen.Result => "JOY.adx", Screen.Options or Screen.Controls => playing,
+        Screen.Loading => null, Screen.Finish => Battle is { Outcome: Race.BattleOutcome.Lose } ? "LOSE.adx" : "WIN.adx", Screen.Result => Legend ? LegendResultMusic : "JOY.adx", Screen.Options or Screen.Controls => playing,
         _ => RaceMusic,
     };
+
+    /// <summary>Legend result: the mode's own tracks from MG_BGM.AFS (R_WIN01 / R_LOSE), a draw keeps JOY.</summary>
+    private string LegendResultMusic => Battle?.Outcome switch { Race.BattleOutcome.Win => "R_WIN01.adx", Race.BattleOutcome.Lose => "R_LOSE.adx", _ => "JOY.adx" };
 
     /// <summary>Opens <paramref name="s"/> with the selection at the given course/direction/car/paint; backing out of it leaves to the main menu.</summary>
     public void Open(Screen s, string courseTime, bool reverse, string car, int paint, bool manual = false, bool fog = false)

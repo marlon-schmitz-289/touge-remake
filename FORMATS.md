@@ -198,7 +198,7 @@ Aus dem Recomp (ELF-Adresse = Dateioffset + 0xFFF80; Kursauswahl-Modul 0x1DB1B0 
   `r_selpeke` (`0x1DE960`), die Anzeige unterscheidet Zählerwert 0 / 1 / > 1 (`0x1DD380`).
 - **Musik**: `MANGA/MG_BGM.AFS` hat je Figur ein Thema (ITSUKI, TAKUMI01–03, SHINGO, NAKAZATO, DEBU = die zwei aus Tokio, NOBUHIKO, MAKO,
   SAKAMOTO, KYOUKO, KENTA, KEISUKE01/02, RYOSUKE, KENJI, IKETANI, WATARU, BUNTA, SUETSUGU, DAIKI, SAKAI, TACHI, SEIJI, KYOICHI, KAI,
-  ATSUO = Kawai) sowie R_WIN01/02, R_LOSE (Namensliste im ELF ab Dateioffset 0x1D3150, 0x44 B je Name).
+  ATSUO = Kawai) sowie R_WIN01/02, R_LOSE (39–55 s mit Loop-Punkt, also Ergebnis-BGM, keine Jingles; Namensliste im ELF ab Dateioffset 0x1D3150, 0x44 B je Name).
 - Nicht gefunden: Belohnungen (welche Autos/Lacke ein Sieg freischaltet – der Car Guide kennt „?????“-Einträge), KI-Stärke je Rivale
   (vermutlich Tabelle `0x2C7930`, Höchstgeschwindigkeit je Kurs/Richtung/Slot + Stufe), Tageszeit/Wetter bei „nass + Nacht“ (Sakamoto; die
   Disc hat Regen nur am Tag). Remake: Leiter je Kurs, Zusatzkurse ab 3 Hauptkursen, Impreza nach Bunta, Leistung der ersten drei Rivalen

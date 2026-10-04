@@ -172,6 +172,13 @@ public class LegendTests
 
         l.Open(LegendScreen.Step.Course);
         Assert.Equal("TOKYO.adx", l.Music);
+        Run(0.1f, (0, -1, false, false)); // up from MYOGI → MOMIJI LINE (slot 9)
+        Run(0.1f, (1, 0, false, false)); // → SHIONA (10)
+        Run(0.1f, (1, 0, false, false)); // the grid's 12th cell is empty: wraps to MYOGI (0)
+        Run(0.1f, ok);
+        Assert.Equal((LegendScreen.Step.Rivals, "MYOUGI0"), (l.Current, l.Selected.CourseId));
+        Run(0.1f, back);
+        sounds.Clear();
         Run(0.1f, (0, 2, false, false)); // MYOGI+: locked
         Run(0.1f, ok);
         Assert.Equal(["SYS005", "BEEP001"], sounds);
@@ -185,13 +192,13 @@ public class LegendTests
         Assert.Equal("BEEP001", sounds[^1]);
         Run(0.1f, (0, -1, false, false));
         actions.Clear();
-        Run(0.1f, ok);
-        Assert.Equal(LegendScreen.Action.PreviewRival, actions[0]);
+        Run(LegendScreen.Fade + 0.1f, ok); // the rival's course loads behind the fade
+        Assert.Equal([LegendScreen.Action.PreviewRival], actions.Where(a => a != LegendScreen.Action.None));
         Assert.Equal((LegendScreen.Step.Card, "KENJI.adx"), (l.Current, l.Music));
         Assert.True(l.ShowsCar);
         Run(0.4f, back);
         Assert.Equal(LegendScreen.Step.Rivals, l.Current);
-        Run(0.1f, ok);
+        Run(LegendScreen.Fade + 0.1f, ok);
         Run(0.4f); // the card takes a moment before deciding counts
         actions.Clear();
         Run(LegendScreen.Fade + 0.1f, ok);
@@ -202,6 +209,9 @@ public class LegendTests
         l.Progress.Add("AKINA/kenji", BattleOutcome.Win, 2);
         l.Open(LegendScreen.Step.Rivals, "AKINA/kenji");
         Assert.Equal("AKINA/iketani", l.Selected.Key);
+        l.Open(LegendScreen.Step.Card, "AKINA/kenji"); // the card shows exactly the rival asked for, beaten or not
+        Assert.Equal(("AKINA/kenji", "KENJI.adx"), (l.Selected.Key, l.Music));
+        l.Open(LegendScreen.Step.Rivals, "AKINA/kenji");
         Run(0.1f, back);
         Assert.Equal(LegendScreen.Step.Course, l.Current);
         actions.Clear();

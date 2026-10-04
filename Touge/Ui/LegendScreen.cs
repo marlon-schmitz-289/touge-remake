@@ -17,7 +17,7 @@ public sealed class LegendScreen(Catalog catalog, Legend.Progress progress)
 {
     public enum Step { Course, Rivals, Card }
 
-    /// <summary>PreviewRival: load <see cref="Selected"/>'s car for the card; Challenge: on to the car select; Exit: main menu.</summary>
+    /// <summary>PreviewRival: load <see cref="Selected"/>'s course and car for the card (behind the fade); Challenge: on to the car select; Exit: main menu.</summary>
     public enum Action { None, PreviewRival, Challenge, Exit }
 
     public const float Fade = 30 / 60f, NewsHold = 5;
@@ -49,7 +49,7 @@ public sealed class LegendScreen(Catalog catalog, Legend.Progress progress)
 
     /// <summary>
     ///     Opens on <paramref name="step"/>; <paramref name="key"/> puts the cursor on that rival (the ladder after a battle:
-    ///     on the next one to beat). Anything unlocked since the ladder was last shown is listed as news.
+    ///     on the next one to beat; the card: exactly that rival). Anything unlocked since the ladder was last shown is listed as news.
     /// </summary>
     public void Open(Step step, string? key = null)
     {
@@ -60,7 +60,7 @@ public sealed class LegendScreen(Catalog catalog, Legend.Progress progress)
         if (key != null && step != Step.Course)
         {
             var at = Array.FindIndex(_rivals, r => r.Key == key);
-            _row = at >= 0 && Progress.Beaten(key) ? NextOpen(at) : Math.Max(0, at);
+            _row = at >= 0 && step == Step.Rivals && Progress.Beaten(key) ? NextOpen(at) : Math.Max(0, at);
         }
         Snapshot(news: _seen.Count > 0 || _seenCourses > 0 || !_seenCar);
     }
@@ -123,6 +123,7 @@ public sealed class LegendScreen(Catalog catalog, Legend.Progress progress)
             _leave = -1;
             if (_then is Action.Exit or Action.Challenge) Active = false;
             else Enter(_next);
+            _fadeIn = _then == Action.PreviewRival; // the card fades in once the rival's course is loaded behind the black
             return _then;
         }
         switch (Current)
@@ -130,7 +131,8 @@ public sealed class LegendScreen(Catalog catalog, Legend.Progress progress)
             case Step.Course:
                 if (k.X != 0 || k.Y != 0)
                 {
-                    _slot = (_slot + k.X + 3 * k.Y + Slots) % Slots;
+                    do _slot = (_slot + k.X + 3 * k.Y + Slots) % Slots; // the grid's last cell stays empty
+                    while (_slot >= Legend.CourseIds.Length);
                     Sound?.Invoke("SYS005");
                 }
                 else if (k.Ok && !SlotOpen(_slot)) Sound?.Invoke("BEEP001");
@@ -155,8 +157,7 @@ public sealed class LegendScreen(Catalog catalog, Legend.Progress progress)
                 else if (k.Ok)
                 {
                     Sound?.Invoke("SYS006");
-                    Enter(Step.Card);
-                    return Action.PreviewRival;
+                    Leave(Step.Card, Action.PreviewRival);
                 }
                 else if (k.Back)
                 {
@@ -221,16 +222,16 @@ public sealed class LegendScreen(Catalog catalog, Legend.Progress progress)
         c.Carbon(16, 72, 250, 306);
         if (course != null && open) Menu.MapLine(c, course, false, 34, 90, 232, 288);
         else c.Text("LOCKED", 133, 196, 22, Grey, 0.5f, 0.2f);
-        for (var i = 0; i < Slots; i++)
+        for (var i = 0; i < Legend.CourseIds.Length; i++)
         {
             float x = 266 + i % 3 * 76, y = 74 + i / 3 * 38;
             var on = SlotOpen(i);
             Vector2 min = Vector2.Round(c.P(x, y)), max = Vector2.Round(c.P(x + 70, y + 30));
-            var cleared = on && i < Legend.CourseIds.Length && Legend.Cleared(i, Progress);
+            var cleared = on && Legend.Cleared(i, Progress);
             o.Rect(min, max, cleared ? Overlay.Rgba(0.85f, 0.65f, 0.15f) : Overlay.Rgba(0.55f, 0.56f, 0.58f));
             o.RectGradient(min + new Vector2(1.5f, 1.5f) * c.S, max - new Vector2(1.5f, 1.5f) * c.S, Overlay.Rgba(0.2f, 0.21f, 0.22f), Overlay.Rgba(0.08f, 0.08f, 0.09f));
-            c.Fit(i < Legend.CourseIds.Length ? CourseName(i) : "FOUR PASSES", x + 35, y + 17, 60, 0.5f, on ? Canvas.White : Locked, 0.12f, 0.05f, 12);
-            if (!on || i >= Legend.CourseIds.Length) continue;
+            c.Fit(CourseName(i), x + 35, y + 17, 60, 0.5f, on ? Canvas.White : Locked, 0.12f, 0.05f, 12);
+            if (!on) continue;
             // one pip per rival: gold = beaten
             var rivals = Legend.Of(i).Where(e => Legend.Visible(e, Progress)).ToArray();
             for (var r = 0; r < rivals.Length; r++)
@@ -242,19 +243,18 @@ public sealed class LegendScreen(Catalog catalog, Legend.Progress progress)
         float sx = 266 + _slot % 3 * 76, sy = 74 + _slot / 3 * 38;
         c.Glow(sx - 3, sy - 3, sx + 73, sy + 33, Canvas.Pulse(Theta));
         c.Carbon(262, 232, 496, 306, 1, false);
-        if (course != null && _slot < Legend.CourseIds.Length)
+        if (course != null)
         {
             var all = Legend.Of(_slot).Where(e => Legend.Visible(e, Progress)).ToArray();
             Stat(c, "RIVALS", $"{all.Count(e => Progress.Beaten(e.Key))} / {all.Length}", 274);
             Stat(c, "LENGTH", FormattableString.Invariant($"{course.LengthM / 1000:0.0} km"), 352);
             Stat(c, "STATUS", !open ? "LOCKED" : Legend.Cleared(_slot, Progress) ? "CLEARED" : "OPEN", 418);
         }
-        var label = _slot < Legend.CourseIds.Length ? CourseName(_slot) : "FOUR PASSES";
+        var label = CourseName(_slot);
         c.Lettering(label, 256, 372, MathF.Min(54, 380 * c.Kx / c.O.Font!.Measure(label, c.Ky)), Overlay.Rgba(0.35f, 0.45f, 1), Canvas.BrushBlue, 0.5f, 0.12f, true);
         c.Arrow(40, 340, 40, 370, 24, 355);
         c.Arrow(472, 340, 472, 370, 488, 355);
-        var sub = _slot >= Legend.CourseIds.Length ? "Not available in this remake"
-            : !open ? $"Clear {Legend.ExtraUnlock} of the first six courses to race here ({Legend.ClearedMain(Progress)} / {Legend.ExtraUnlock})"
+        var sub = !open ? $"Clear {Legend.ExtraUnlock} of the first six courses to race here ({Legend.ClearedMain(Progress)} / {Legend.ExtraUnlock})"
             : $"Beat every rival of the course, one after another";
         c.Text(sub, 256, 404, 12, Canvas.White, 0.5f, 0.15f, 0.08f);
         Menu.Hint(c, "ARROWS: Select course    DECIDE: Rivals    BACK: Main menu");

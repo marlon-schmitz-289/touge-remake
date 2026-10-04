@@ -28,7 +28,7 @@ public sealed partial class TougeGame
     {
         _progress = LegendProgressPath != null || _persist ? Legend.Progress.Load(LegendProgressPath) : new();
         _legend = new LegendScreen(_catalog!, _progress) { Sound = n => _menuAudio?.Play(n) };
-        _menu!.CarLocked = id => Legend.CarLocked(id, _progress);
+        _menu!.CarLocked = id => _menu.Legend && Legend.CarLocked(id, _progress); // the reward car only in Legend; time attack keeps every car
     }
 
     /// <summary>--menu legend[-rivals|-card][:COURSE/rival]: opens that Legend step (screenshots).</summary>
@@ -37,12 +37,8 @@ public sealed partial class TougeGame
         var (step, key) = arg.Split(':') is [var s, var k] ? (s, k) : (arg, null);
         var at = step switch { "legend-rivals" => LegendScreen.Step.Rivals, "legend-card" => LegendScreen.Step.Card, _ => LegendScreen.Step.Course };
         if (key != null && Legend.Find(key) == null) throw new ArgumentException($"--menu {arg}: Rivale unbekannt, z. B. AKINA/takumi");
-        _legend!.Open(at == LegendScreen.Step.Card ? LegendScreen.Step.Rivals : at, key);
-        if (at == LegendScreen.Step.Card)
-        {
-            _legend.Update((0, 0, true, false), 0);
-            SetUpLegendBattle(_legend.Selected);
-        }
+        _legend!.Open(at, key);
+        if (at == LegendScreen.Step.Card) SetUpLegendBattle(_legend.Selected);
         if (shotPath != null) _legend.Settle();
     }
 
@@ -79,16 +75,23 @@ public sealed partial class TougeGame
     }
 
     /// <summary>
-    ///     Battle against <paramref name="e"/> from now on: its car model (with the character's livery and paint) and sound,
-    ///     a fresh session on the loaded course's grid — the VS card shows that car; the car select's Load brings the
-    ///     rival's course (LoadCourse sets up the battle again there).
+    ///     Battle against <paramref name="e"/> from now on: his course at his time/weather/direction (loaded unless already
+    ///     there), his car model (with the character's livery and paint) and sound, a fresh session on the grid — the VS card
+    ///     shows that car on his own course; the car select then only swaps the player's car.
     /// </summary>
     private void SetUpLegendBattle(Legend.Entry e)
     {
-        if (_legendRival == e && _race != null) return;
+        var course = _catalog!.Courses.First(c => c.Id == e.CourseId);
+        var (courseTime, _) = Legend.Conditions(e, course.Times, _progress);
+        if (_legendRival == e && _race != null && _courseTime == courseTime) return;
         _legendRival = e;
         Battle = Legend.Setup(e);
         using var iso = new Iso9660(isoPath);
+        if (courseTime != _courseTime || e.Reverse != _drive.Reverse || _fog)
+        {
+            LoadCourse(iso, courseTime, e.Reverse, _carName, _paint); // sets up the battle too
+            return;
+        }
         Device.WaitIdle(); // the last frame may still draw the previous rival
         DisposeRival();
         LoadBattle(iso);
