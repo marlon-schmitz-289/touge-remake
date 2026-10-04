@@ -9,9 +9,10 @@ namespace Touge;
 ///     character's car: stickers, rival livery, tuning parts; <see cref="CarParts.Body"/>) plus number plates
 ///     (NUM_TEX.PAC composed like the game) as one mesh, one wheel mesh (tire of the setup + brake disk; calipers left
 ///     out) and the four wheel transforms in car space (fr_l, fr_r, re_l, re_r). <see cref="Paints"/> = number of
-///     CAR_ENV colours of the car.
+///     CAR_ENV colours of the car. Its textures are the renderer's last ones (from <see cref="FirstTexture"/>), freed with the model.
 /// </summary>
-public sealed record CarModel(StaticMesh Body, StaticMesh Decals, StaticMesh Wheel, Matrix4x4[] Wheels, float WheelRadius, int Paints) : IDisposable
+public sealed record CarModel(StaticMesh Body, StaticMesh Decals, StaticMesh Wheel, Matrix4x4[] Wheels, float WheelRadius, int Paints,
+    WorldRenderer Renderer, int FirstTexture) : IDisposable
 {
     public static CarModel Load(Iso9660 iso, string car, int paint, WorldRenderer renderer, Livery livery = Livery.Rival)
     {
@@ -21,6 +22,7 @@ public sealed record CarModel(StaticMesh Body, StaticMesh Decals, StaticMesh Whe
         paint = Math.Clamp(paint, 0, colours.Length - 1);
         var entries = Pac.Entries(pac);
 
+        var firstTexture = renderer.TextureCount;
         var textures = new Dictionary<string, int> { [""] = renderer.AddTexture(1, 1, [255, 255, 255, 255], "white") };
         foreach (var e in entries.Where(e => e.Type == 1))
         {
@@ -42,7 +44,7 @@ public sealed record CarModel(StaticMesh Body, StaticMesh Decals, StaticMesh Whe
         var radius = tire.Materials.SelectMany(m => m.Triangles).Max(v => v.Position.Y);
         var (body, decals) = Build(renderer.Device, CarParts.Body(car, parts, livery, paint, textures.ContainsKey("plate") ? "plate" : null), textures, true);
         return new CarModel(body, decals!, Build(renderer.Device, [("tire", tire), ("Bdisk00", parts["Bdisk00"])], textures, false).Opaque,
-            CarParts.Wheels(parts["body00"]), radius, colours.Length);
+            CarParts.Wheels(parts["body00"]), radius, colours.Length, renderer, firstTexture);
     }
 
     /// <summary>
@@ -96,5 +98,6 @@ public sealed record CarModel(StaticMesh Body, StaticMesh Decals, StaticMesh Whe
         Body.Dispose();
         Decals.Dispose();
         Wheel.Dispose();
+        Renderer.ReleaseTextures(FirstTexture);
     }
 }

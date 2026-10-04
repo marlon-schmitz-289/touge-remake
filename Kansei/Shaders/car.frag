@@ -9,7 +9,7 @@
 // a sharp highlight of the sun/lamps and the bright upper environment refracted through the bent surface, over a
 // very faint wet spot. Antialiased by derivatives: soft drop edges over ~1 px, and drops fade out (to nothing,
 // not to an average) once a cell gets smaller than ~3 px, so distant cars do not sparkle with rounding.
-// Fog + light glow last (fog.glsl).
+// Fog last (fog.glsl; the light glow follows per pixel in glow.frag).
 
 layout(location = 0) in vec3 vPos;
 layout(location = 1) in vec3 vNormal;

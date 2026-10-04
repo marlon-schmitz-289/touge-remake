@@ -146,6 +146,12 @@ public interface IPenelopeDevice : IDisposable
     /// <summary>GPU timestamp tick period in nanoseconds — multiply raw timestamps by this.</summary>
     double TimestampPeriodNs { get; }
 
+    /// <summary>
+    ///     Frames without a swapchain image (Metal; others ignore it): nothing is presented, so frames are not paced by the
+    ///     display and the frame time of a GPU-bound loop is its GPU time. Render into own targets instead.
+    /// </summary>
+    bool Offscreen { get => false; set { } }
+
     // ---- Frame lifecycle ----
 
     /// <summary>

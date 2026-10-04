@@ -82,6 +82,7 @@ public static class KanseiApp
             if (input.Keyboard.IsKeyPressed(Key.F11)) window.ToggleFullscreen();
             if (window.WasResized) device.ResizeSwapchain(window.DrawableWidth, window.DrawableHeight);
 
+            var cpu0 = sdl.GetPerformanceCounter();
             while (acc >= step)
             {
                 game.Tick((float)step);
@@ -90,13 +91,16 @@ public static class KanseiApp
 
             var time = new GameTime { DeltaTime = (float)dt, TotalTime = (now - start) / freq, FrameCount = ++frame };
             game.Update(time);
+            var cpu1 = sdl.GetPerformanceCounter();
 
             if (!device.BeginFrame()) continue;
+            var cpu2 = sdl.GetPerformanceCounter();
             var encoder = device.BeginCommands("frame");
             game.Render(new FrameContext(device, encoder,
                 new Viewport(0, 0, window.DrawableWidth, window.DrawableHeight), time, (float)(acc / step)));
             device.Submit(encoder);
             device.EndFrame();
+            game.CpuMs = (cpu1 - cpu0 + sdl.GetPerformanceCounter() - cpu2) * 1000 / freq;
         }
     }
 

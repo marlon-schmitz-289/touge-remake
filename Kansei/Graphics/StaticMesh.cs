@@ -42,9 +42,9 @@ public struct CarVertex(Vector3 position, Vector3 normal, Vector2 uv, Vector4 co
 /// <summary>
 ///     One draw range of a <see cref="StaticMesh"/>, sharing a texture. <see cref="Layer"/> &gt; 0: overlay drawn over
 ///     coplanar earlier geometry, pulled <see cref="WorldRenderer.LayerOffset"/> per layer towards the camera.
-///     Batches are sorted by layer.
+///     Batches are sorted by layer. <see cref="Opaque"/>: texture and vertex alpha are 1 everywhere (world: drawn without alpha test).
 /// </summary>
-public readonly record struct MeshBatch(int Texture, int FirstIndex, int IndexCount, int Layer = 0);
+public readonly record struct MeshBatch(int Texture, int FirstIndex, int IndexCount, int Layer = 0, bool Opaque = false);
 
 /// <summary>Immutable GPU vertex (<see cref="WorldVertex"/> or <see cref="CarVertex"/>) + index buffer (uint32 indices) split into per-texture batches.</summary>
 public sealed class StaticMesh : IDisposable
@@ -53,9 +53,12 @@ public sealed class StaticMesh : IDisposable
     public BufferHandle Vertices { get; }
     public BufferHandle Indices { get; }
     public IReadOnlyList<MeshBatch> Batches { get; }
+    /// <summary>World-space box per batch (null: never culled), for <see cref="Frustum"/> culling of course chunks.</summary>
+    public (Vector3 Min, Vector3 Max)[]? Bounds { get; }
 
-    public StaticMesh(IPenelopeDevice device, ReadOnlySpan<WorldVertex> vertices, ReadOnlySpan<uint> indices, IReadOnlyList<MeshBatch> batches)
-        : this(device, MemoryMarshal.AsBytes(vertices), indices, batches) { }
+    public StaticMesh(IPenelopeDevice device, ReadOnlySpan<WorldVertex> vertices, ReadOnlySpan<uint> indices, IReadOnlyList<MeshBatch> batches,
+        (Vector3 Min, Vector3 Max)[]? bounds = null)
+        : this(device, MemoryMarshal.AsBytes(vertices), indices, batches) => Bounds = bounds;
 
     public StaticMesh(IPenelopeDevice device, ReadOnlySpan<CarVertex> vertices, ReadOnlySpan<uint> indices, IReadOnlyList<MeshBatch> batches)
         : this(device, MemoryMarshal.AsBytes(vertices), indices, batches) { }
