@@ -233,7 +233,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         var key = Settings.BestKey(_courseTime[.._courseTime.LastIndexOf('_')], _drive.Reverse);
         var hud = new Hud(_course.Road, _drive.Line, _drive.Pilot, _settings.Best.GetValueOrDefault(key))
         {
-            Visible = _settings.HudOn, Mode = _settings.MapMode,
+            Visible = _settings.HudOn, Mode = _settings.MapMode, Night = _courseTime.EndsWith("_NIT"),
         };
         hud.Timer.Record += best =>
         {
@@ -485,7 +485,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         var name = _catalog!.Courses.FirstOrDefault(c => _courseTime.StartsWith(c.Id + "_"));
         var time = _courseTime[(_courseTime.LastIndexOf('_') + 1)..];
         _menu!.Open(screen, _courseTime, _drive.Reverse, _carName, _paint);
-        _menu.Run = ($"{name?.Name}  {Catalog.TimeName(time)}  {(name == null ? "" : Catalog.DirectionName(name, _drive.Reverse))}",
+        _menu.Run = ($"{name?.Name} / {Catalog.TimeName(time)} / {(name == null ? "" : Catalog.DirectionName(name, _drive.Reverse))}",
             _catalog.Cars.First(c => c.Id == _carName).Name.ToUpperInvariant(),
             _hud.Timer.Phase == Ui.LapTimer.State.Ready ? null : _hud.Timer.Time, _hud.Timer.Best?[^1]);
         if (_audioDevice != null) _audioDevice.Sfx = 0; // engine/tyre loops pause with the game
@@ -901,7 +901,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         var (w, h) = shot != null ? (shot.Width, shot.Height) : (Device.SwapchainWidth, Device.SwapchainHeight);
         if (_menu is { Current: not Menu.Screen.None }) _menu.Build(_overlay, w, h, _menuTime);
         else if (_hud.Visible)
-            _hud.Build(_overlay, w, h, _carPose.Translation, Vector3.TransformNormal(Vector3.UnitZ, _carPose), _drive.Car, _menuTime);
+            _hud.Build(_overlay, w, h, _carPose.Translation, Vector3.TransformNormal(Vector3.UnitZ, _carPose), _drive.Car, _carName, _menuTime);
         else _overlay.Clear();
         var target = shot?.View ?? Device.CurrentSwapchainView;
         _overlayRenderer.Draw(ctx.Encoder, _overlay, target, w, h);

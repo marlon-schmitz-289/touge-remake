@@ -65,6 +65,8 @@ public sealed class Vehicle
     public Vector3 AngularVelocity { get; private set; }
     public float Rpm { get; private set; }
     public int Gear { get; private set; } // −1 R, 0 N, 1..n
+    /// <summary>Throttle of the last step (0..1, after the automatic's reverse swap).</summary>
+    public float Throttle { get; private set; }
     /// <summary>Body slip angle β in rad; + = travelling to the right of the nose. 0 when not moving forward.</summary>
     public float SlipAngle { get; private set; }
     public float SpeedKmh => Velocity.Length() * 3.6f;
@@ -109,6 +111,7 @@ public sealed class Vehicle
             }
             if (Gear == -1) (throttle, brake) = (brake, throttle);
         }
+        Throttle = throttle;
         UpdateGear(input.Shift, dt, input.Handbrake);
         UpdateSteer(Math.Clamp(input.Steer, -1, 1), dt);
         UpdateDriftGrip(Math.Abs(input.Steer), throttle, input.Handbrake);

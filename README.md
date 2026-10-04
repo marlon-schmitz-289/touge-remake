@@ -49,7 +49,9 @@ Windows `%APPDATA%\InitialDRemake`), nicht im Repo; Starts mit Kurs oder Test-Fl
 HUD: F4 an/aus, N Minimap mitdrehend → nordausgerichtet → ganze Strecke (`--hud north|overview|off` beim Start). Oben links Zeit, Bestzeit
 und 4 Sektoren (je 25 % der Strecke, Delta zur Bestzeit grün/rot; Zeit läuft ab der Startlinie, stoppt im Ziel), oben Mitte Drift-Kombo
 (Punkte aus Winkel × Tempo, Multiplikator, Wandkontakt löscht), oben rechts Minimap (Start grün, Ziel kariert) mit Fortschritt,
-unten rechts Drehzahlmesser mit Schaltblitz, km/h, Gang und AT/MT. Falschfahrt-Warnung, Hinweis „R“ zum Zurücksetzen, wenn das Auto feststeckt.
+unten rechts das Kombiinstrument des jeweiligen Autos (`Ui/Cluster`: Hutze mit Mitteldrehzahlmesser, Nissan-Doppelrund, Roadster-Einzelrohre,
+Altezza-Chronograph, S2000-LCD-Balken; Skala/roter Bereich/Farben/Nachtbeleuchtung/Ladedruckanzeige je Auto; km/h im Kilometerzähler-Fenster,
+Gang + AT/MT unter dem Drehzahlmesser). Alles in einem gemeinsamen Sicherheitsrahmen (`Style.Safe`: 44/900 Rand, ab 2:1 mittig begrenzt). Falschfahrt-Warnung, Hinweis „R“ zum Zurücksetzen, wenn das Auto feststeckt.
 Schrift: Rajdhani Bold (SIL Open Font License, `Touge/Assets/Fonts/OFL.txt`), zur Laufzeit als Distanzfeld-Atlas.
 Ton: M nächster Eurobeat-Titel, F3 Musik an/aus (Startstück fest je Kurs).
 Auto (nur im Stand, < 3 km/h): 1/2 voriges/nächstes Auto, 3 nächste Lackfarbe. Autos (`--car`, Index in Klammern):

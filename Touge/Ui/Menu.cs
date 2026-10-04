@@ -25,6 +25,9 @@ public sealed class Menu(Catalog catalog, Settings settings)
     private float _t; // seconds since the screen opened (entrance animation)
     private readonly MenuKeys _keys = new();
 
+    /// <summary>Layout grid (units): left text column, top of lists and detail panels, list row height.</summary>
+    private const float ColX = 24, ContentTop = 120, RowH = 50;
+
     private Catalog.Course SelectedCourse => catalog.Courses[_course];
     private (string Time, bool Reverse) Variant => Variants(SelectedCourse)[_variant];
     public string CourseTime => $"{SelectedCourse.Id}_{Variant.Time}";
@@ -135,55 +138,59 @@ public sealed class Menu(Catalog catalog, Settings settings)
     {
         o.Clear();
         if (Current == Screen.None) return;
-        var u = height / 900f;
-        var m = 56 * u;
+        var g = Style.Safe(width, height);
+        var u = g.U;
         if (Current == Screen.Loading)
         {
             o.Rect(Vector2.Zero, new Vector2(width, height), Overlay.Rgba(0.01f, 0.012f, 0.02f, 0.85f));
             Style.Label(o, "LOADING", new Vector2(width / 2f, height / 2f), 64 * u, Style.Text, 0.5f, Style.Slant, 0.5f * u);
-            Style.Label(o, $"{SelectedCourse.Name}  {Catalog.TimeName(Variant.Time)}  {Catalog.DirectionName(SelectedCourse, Variant.Reverse)}",
+            Style.Label(o, $"{SelectedCourse.Name} / {Catalog.TimeName(Variant.Time)} / {Catalog.DirectionName(SelectedCourse, Variant.Reverse)}",
                 new Vector2(width / 2f, height / 2f + 44 * u), 22 * u, Style.Amber, 0.5f);
             return;
         }
-        // darken the left side for the lists, the whole frame when paused
-        o.RectGradient(Vector2.Zero, new Vector2(width * 0.62f, height), Overlay.Rgba(0.01f, 0.012f, 0.02f, 0.82f), Overlay.Rgba(0.01f, 0.012f, 0.02f, 0));
+        // darken the left half of the safe frame for the lists, the whole frame when paused
+        o.RectGradient(Vector2.Zero, new Vector2((g.Left + g.Right) / 2, height), Overlay.Rgba(0.01f, 0.012f, 0.02f, 0.82f), Overlay.Rgba(0.01f, 0.012f, 0.02f, 0));
         if (Current is Screen.Pause or Screen.Settings) o.Rect(Vector2.Zero, new Vector2(width, height), Overlay.Rgba(0, 0, 0, 0.35f));
         switch (Current)
         {
-            case Screen.Title: Title(o, width, height, u, m, time); break;
-            case Screen.Course: CourseScreen(o, width, height, u, m); break;
-            case Screen.Car: CarScreen(o, width, height, u, m); break;
-            case Screen.Pause: PauseScreen(o, width, height, u, m); break;
-            case Screen.Settings: SettingsScreen(o, height, u, m); break;
+            case Screen.Title: Title(o, g, height, time); break;
+            case Screen.Course: CourseScreen(o, g); break;
+            case Screen.Car: CarScreen(o, g); break;
+            case Screen.Pause: PauseScreen(o, g); break;
+            case Screen.Settings: SettingsScreen(o, g); break;
         }
     }
 
     /// <summary>Entrance of element <paramref name="i"/>: 0 → 1 with a small stagger.</summary>
     private float In(int i) => Style.Ease((_t - i * 0.035f) * 5);
 
-    private void Header(Overlay o, string kicker, string title, float u, float m)
+    /// <summary>Kicker and title on the text column, the amber slash in front of the title.</summary>
+    private void Header(Overlay o, string kicker, string title, Style.Grid g)
     {
+        var (u, m) = (g.U, g.Top);
         var a = In(0);
-        var x = m - (1 - a) * 30 * u;
-        Style.Label(o, kicker, new Vector2(x + 4 * u, m + 18 * u), 17 * u, Style.Fade(Style.Amber, a), 0, 0, 0.3f * u);
-        o.Quad(new Vector2(x + 10 * u, m + 30 * u), new Vector2(x + 20 * u, m + 30 * u), new Vector2(x + 6 * u, m + 76 * u), new Vector2(x - 4 * u, m + 76 * u), Style.Fade(Style.Amber, a));
-        Style.Label(o, title, new Vector2(x + 30 * u, m + 74 * u), 52 * u, Style.Fade(Style.Text, a), 0, Style.Slant, 0.4f * u);
+        var x = g.Left + ColX * u - (1 - a) * 30 * u;
+        Style.Label(o, kicker, new Vector2(x, m + 18 * u), 17 * u, Style.Fade(Style.Amber, a), 0, 0, 0.3f * u);
+        o.Quad(new Vector2(x - 18 * u, m + 30 * u), new Vector2(x - 8 * u, m + 30 * u), new Vector2(x - 22 * u, m + 76 * u), new Vector2(x - 32 * u, m + 76 * u), Style.Fade(Style.Amber, a));
+        Style.Label(o, title, new Vector2(x, m + 74 * u), 52 * u, Style.Fade(Style.Text, a), 0, Style.Slant, 0.4f * u);
     }
 
-    private static void Footer(Overlay o, float height, float u, float m, params (string Key, string Action)[] hints)
+    /// <summary>Key hints along the bottom, first cap flush with the list's selection accent.</summary>
+    private static void Footer(Overlay o, Style.Grid g, params (string Key, string Action)[] hints)
     {
-        var x = m;
-        foreach (var (key, action) in hints) x = Style.KeyHint(o, key, action, new Vector2(x, height - m + 4 * u), u);
+        var x = g.Left + (ColX - 22) * g.U;
+        foreach (var (key, action) in hints) x = Style.KeyHint(o, key, action, new Vector2(x, g.Bottom - 12 * g.U), g.U);
     }
 
-    /// <summary>Vertical list; the selected row gets the amber slanted bar. Returns the y below the list.</summary>
-    private float List(Overlay o, IReadOnlyList<string> rows, int selected, Vector2 at, float u, float width = 400, float rowH = 50, float size = 28, int first = 0)
+    /// <summary>Vertical list on the text column; the selected row gets the amber slanted bar. Returns the y below the list.</summary>
+    private float List(Overlay o, IReadOnlyList<string> rows, int selected, Style.Grid g, float y0, float width = 400, float rowH = RowH, float size = 28, int first = 0)
     {
+        var u = g.U;
         for (var i = 0; i < rows.Count; i++)
         {
             var a = In(i + 1);
-            var y = at.Y + i * rowH * u;
-            var x = at.X - (1 - a) * 40 * u;
+            var y = y0 + i * rowH * u;
+            var x = g.Left + ColX * u - (1 - a) * 40 * u;
             var sel = i + first == selected;
             if (sel)
             {
@@ -194,34 +201,35 @@ public sealed class Menu(Catalog catalog, Settings settings)
             if (sel) o.Text(rows[i], new Vector2(x, baseY), size * u, Style.Fade(Style.Ink, a), 0, 0.5f * u, 0, Style.Slant);
             else Style.Label(o, rows[i], new Vector2(x, baseY), size * u, Style.Fade(Style.Dim, a), 0, Style.Slant);
         }
-        return at.Y + rows.Count * rowH * u;
+        return y0 + rows.Count * rowH * u;
     }
 
-    private void Title(Overlay o, int width, int height, float u, float m, float time)
+    private void Title(Overlay o, Style.Grid g, int height, float time)
     {
+        var u = g.U;
         var a = In(0);
-        var x = m + 10 * u - (1 - a) * 60 * u;
+        var x = g.Left + (ColX - 6) * u - (1 - a) * 60 * u; // italic overhang: the wordmark's stems line up with the list
         var y = height * 0.44f;
         Style.Label(o, "TOUGE", new Vector2(x, y), 210 * u, Style.Fade(Style.Text, a), 0, 0.2f, 1.2f * u);
-        o.Rect(Vector2.Round(new Vector2(x + 8 * u, y + 18 * u)), Vector2.Round(new Vector2(x + 470 * u, y + 24 * u)), Style.Fade(Style.Amber, a));
-        Style.Label(o, "SPECIAL STAGE REMAKE", new Vector2(x + 8 * u, y + 58 * u), 24 * u, Style.Fade(Style.Amber, a), 0, Style.Slant, 0.3f * u);
-        List(o, TitleRows, _row, new Vector2(m + 24 * u, y + 110 * u), u, 300);
-        var blink = 0.55f + 0.45f * MathF.Sin(time * 3);
-        Style.Label(o, "PRESS ENTER", new Vector2(width - m, height - m), 20 * u, Style.Fade(Style.Text, a * blink), 1, Style.Slant, 0.3f * u);
-        Footer(o, height, u, m, ("UP/DN", "SELECT"), ("ENTER", "OK"));
+        o.Rect(Vector2.Round(new Vector2(x, y + 18 * u)), Vector2.Round(new Vector2(x + 462 * u, y + 24 * u)), Style.Fade(Style.Amber, a));
+        Style.Label(o, "SPECIAL STAGE REMAKE", new Vector2(x, y + 58 * u), 24 * u, Style.Fade(Style.Amber, a), 0, Style.Slant, 0.3f * u);
+        List(o, TitleRows, _row, g, y + 110 * u, 300);
+        Footer(o, g, ("UP/DN", "SELECT"), ("ENTER", "OK"));
     }
 
-    private void CourseScreen(Overlay o, int width, int height, float u, float m)
+    private void CourseScreen(Overlay o, Style.Grid g)
     {
-        Header(o, "TOUGE", "SELECT COURSE", u, m);
-        List(o, [.. catalog.Courses.Select(c => c.Name)], _course, new Vector2(m + 24 * u, m + 120 * u), u, 360, 52, 27);
-        // detail panel on the right
+        var u = g.U;
+        Header(o, "TOUGE", "SELECT COURSE", g);
+        List(o, [.. catalog.Courses.Select(c => c.Name)], _course, g, g.Top + ContentTop * u, 360, 52, 27);
+        // detail panel on the right, top flush with the first row
         var c = SelectedCourse;
         var a = In(2);
-        Vector2 min = new(MathF.Max(width * 0.5f, m + 480 * u), m + 110 * u), max = new(width - m, height - m - 50 * u);
+        Vector2 min = new(MathF.Max((g.Left + g.Right) / 2, g.Left + 480 * u), g.Top + ContentTop * u), max = new(g.Right, g.Bottom - 50 * u);
+        max.X = MathF.Min(max.X, min.X + 900 * u);
         min.X += (1 - a) * 40 * u;
-        Style.Slanted(o, min, max, Style.Fade(Style.Panel, a), -0.06f);
-        var x = min.X + 50 * u;
+        Style.Slanted(o, min, max, Style.Fade(Style.Panel, a), Style.PanelSlant);
+        var x = min.X + (max.Y - min.Y) * -Style.PanelSlant + 30 * u; // clear of the slanted edge at the top
         Style.Label(o, c.Name, new Vector2(x, min.Y + 56 * u), 44 * u, Style.Fade(Style.Text, a), 0, Style.Slant, 0.4f * u);
         // time-of-day and direction chips
         var cx = x;
@@ -230,16 +238,15 @@ public sealed class Menu(Catalog catalog, Settings settings)
         cx += 18 * u;
         foreach (var rev in new[] { false, true })
             cx = Chip(o, Catalog.DirectionName(c, rev), new Vector2(cx, min.Y + 84 * u), u, true, rev == Variant.Reverse, a);
-        Style.Label(o, "< >  CHANGE", new Vector2(cx + 10 * u, min.Y + 104 * u), 15 * u, Style.Fade(Style.Dim, a));
         // stats
         var best = settings.Best.GetValueOrDefault(Settings.BestKey(c.Id, Variant.Reverse));
         var sy = min.Y + 160 * u;
         Stat(o, "LENGTH", FormattableString.Invariant($"{c.LengthM / 1000:0.0} km"), new Vector2(x, sy), u, a);
         Stat(o, "ELEVATION", $"{c.ClimbM:0} m", new Vector2(x + 170 * u, sy), u, a);
-        Stat(o, "BEST", Style.Time(best?[^1]), new Vector2(x + 340 * u, sy), u, a);
+        Stat(o, "BEST", Style.Time(best?[^1]), new Vector2(x + 340 * u, sy), u, a, best == null);
         // line preview, north up, fitted into the rest of the panel
         LinePreview(o, c, Variant.Reverse, new Vector2(x, sy + 30 * u), new Vector2(max.X - 40 * u, max.Y - 30 * u), u, a);
-        Footer(o, height, u, m, ("UP/DN", "COURSE"), ("< >", "TIME / DIRECTION"), ("ENTER", "OK"), ("ESC", "BACK"));
+        Footer(o, g, ("UP/DN", "COURSE"), ("< >", "TIME / DIRECTION"), ("ENTER", "OK"), ("ESC", "BACK"));
     }
 
     private float Chip(Overlay o, string text, Vector2 at, float u, bool available, bool selected, float a)
@@ -254,10 +261,11 @@ public sealed class Menu(Catalog catalog, Settings settings)
         return max.X + 8 * u;
     }
 
-    private static void Stat(Overlay o, string label, string value, Vector2 at, float u, float a)
+    /// <summary>Label over a value; <paramref name="none"/> = placeholder value, dimmed.</summary>
+    private static void Stat(Overlay o, string label, string value, Vector2 at, float u, float a, bool none = false)
     {
-        Style.Label(o, label, at, 14 * u, Style.Fade(Style.Dim, a), 0, 0, 0.2f * u);
-        Style.Label(o, value, at + new Vector2(0, 30 * u), 28 * u, Style.Fade(Style.Text, a), 0, Style.Slant, 0.3f * u);
+        Style.Label(o, label, at, 15 * u, Style.Fade(Style.Dim, a), 0, 0, 0.2f * u);
+        Style.Label(o, value, at + new Vector2(0, 30 * u), 28 * u, Style.Fade(none ? Style.Dim : Style.Text, a), 0, Style.Slant, 0.3f * u);
     }
 
     private static void LinePreview(Overlay o, Catalog.Course c, bool reverse, Vector2 min, Vector2 max, float u, float a)
@@ -283,26 +291,34 @@ public sealed class Menu(Catalog catalog, Settings settings)
         Style.Label(o, "START", S(start) + new Vector2(14 * u, 6 * u), 15 * u, Style.Fade(Style.Text, a));
     }
 
-    private void CarScreen(Overlay o, int width, int height, float u, float m)
+    private void CarScreen(Overlay o, Style.Grid g)
     {
-        Header(o, "TOUGE", "SELECT CAR", u, m);
-        // scrolling list: 11 rows around the selection
+        var u = g.U;
+        Header(o, "TOUGE", "SELECT CAR", g);
+        // scrolling list: 11 rows around the selection, scroll track left of the selection accent
         const int visible = 11;
+        const float rowH = 48;
         var first = Math.Clamp(_car - visible / 2, 0, catalog.Cars.Count - visible);
         var rows = catalog.Cars.Skip(first).Take(visible).Select(c => c.Name.ToUpperInvariant()).ToList();
-        List(o, rows, _car, new Vector2(m + 24 * u, m + 120 * u), u, 430, 48, 22, first);
-        if (first > 0) Style.Label(o, "...", new Vector2(m + 24 * u, m + 112 * u), 20 * u, Style.Dim);
-        if (first + visible < catalog.Cars.Count) Style.Label(o, "...", new Vector2(m + 24 * u, m + 120 * u + visible * 48 * u), 20 * u, Style.Dim);
+        var top = g.Top + ContentTop * u;
+        List(o, rows, _car, g, top, 430, rowH, 22, first);
+        var tx = g.Left + (ColX - 32) * u;
+        var span = (visible * rowH - 8) * u;
+        o.Rect(Vector2.Round(new Vector2(tx, top)), Vector2.Round(new Vector2(tx + 3 * u, top + span)), Style.Fade(Style.Faint, In(1)));
+        o.Rect(Vector2.Round(new Vector2(tx, top + span * first / catalog.Cars.Count)),
+            Vector2.Round(new Vector2(tx + 3 * u, top + span * (first + visible) / catalog.Cars.Count)), Style.Fade(Style.Amber, In(1)));
 
         var car = catalog.Cars[_car];
         var a = In(2);
-        Vector2 min = new(width - m - 560 * u + (1 - a) * 40 * u, height - m - 300 * u), max = new(width - m, height - m - 50 * u);
-        Style.Slanted(o, min, max, Style.Fade(Style.Panel, a), -0.12f);
+        Vector2 min = new(g.Right - 560 * u + (1 - a) * 40 * u, g.Bottom - 300 * u), max = new(g.Right, g.Bottom - 50 * u);
+        Style.Slanted(o, min, max, Style.Fade(Style.Panel, a), Style.PanelSlant);
         var x = min.X + 50 * u;
-        Style.Label(o, $"{_car + 1:D2} / {catalog.Cars.Count}   {car.Id}", new Vector2(x, min.Y + 30 * u), 15 * u, Style.Fade(Style.Amber, a), 0, 0, 0.2f * u);
-        var nameSize = MathF.Min(36 * u, 460 * u / MathF.Max(o.Font!.Measure(car.Name, 1), 1));
-        Style.Label(o, car.Name, new Vector2(x, min.Y + 70 * u), nameSize, Style.Fade(Style.Text, a), 0, Style.Slant, 0.3f * u);
-        var sy = min.Y + 110 * u;
+        var y = min.Y + 10 * u; // ~30u padding top and bottom
+        Style.Label(o, $"{_car + 1:D2} / {catalog.Cars.Count}   {car.Id}", new Vector2(x, y + 30 * u), 15 * u, Style.Fade(Style.Amber, a), 0, 0, 0.2f * u);
+        var name = car.Name.ToUpperInvariant();
+        var nameSize = MathF.Min(36 * u, 460 * u / MathF.Max(o.Font!.Measure(name, 1), 1));
+        Style.Label(o, name, new Vector2(x, y + 70 * u), nameSize, Style.Fade(Style.Text, a), 0, Style.Slant, 0.3f * u);
+        var sy = y + 110 * u;
         Stat(o, "DRIVE", car.Drive, new Vector2(x, sy), u, a);
         Stat(o, "POWER", $"{car.Ps} PS", new Vector2(x + 110 * u, sy), u, a);
         Stat(o, "WEIGHT", $"{car.Kg} kg", new Vector2(x + 240 * u, sy), u, a);
@@ -313,7 +329,7 @@ public sealed class Menu(Catalog catalog, Settings settings)
         o.Rect(Vector2.Round(new Vector2(x, by)), Vector2.Round(new Vector2(x + 440 * u, by + 5 * u)), Style.Fade(Style.Faint, a));
         o.Rect(Vector2.Round(new Vector2(x, by)), Vector2.Round(new Vector2(x + 440 * u * car.Ps / maxPs, by + 5 * u)), Style.Fade(Style.Amber, a));
         // paint swatches
-        Style.Label(o, "PAINT", new Vector2(x, by + 44 * u), 14 * u, Style.Fade(Style.Dim, a), 0, 0, 0.2f * u);
+        Style.Label(o, "PAINT", new Vector2(x, by + 44 * u), 15 * u, Style.Fade(Style.Dim, a), 0, 0, 0.2f * u);
         for (var i = 0; i < car.Paints.Length; i++)
         {
             var c = new Vector2(x + 80 * u + i * 40 * u, by + 39 * u);
@@ -321,30 +337,32 @@ public sealed class Menu(Catalog catalog, Settings settings)
             o.Disc(c, 12 * u, Style.Fade(Overlay.Rgba(0, 0, 0, 0.9f), a));
             o.Disc(c, 10.5f * u, Style.Fade(Catalog.Swatch(car.Paints[i]), a));
         }
-        Footer(o, height, u, m, ("UP/DN", "CAR"), ("< >", "PAINT"), ("ENTER", "DRIVE"), ("ESC", "BACK"));
+        Footer(o, g, ("UP/DN", "CAR"), ("< >", "PAINT"), ("ENTER", "DRIVE"), ("ESC", "BACK"));
     }
 
-    private void PauseScreen(Overlay o, int width, int height, float u, float m)
+    private void PauseScreen(Overlay o, Style.Grid g)
     {
-        Header(o, "TOUGE", "PAUSE", u, m);
-        List(o, PauseRows, _row, new Vector2(m + 24 * u, m + 130 * u), u, 340);
+        var u = g.U;
+        Header(o, "TOUGE", "PAUSE", g);
+        List(o, PauseRows, _row, g, g.Top + ContentTop * u, 340);
         var a = In(2);
         var (course, car, time, best) = Run;
-        Vector2 min = new(width - m - 460 * u + (1 - a) * 40 * u, m + 110 * u), max = new(width - m, m + 330 * u);
-        Style.Slanted(o, min, max, Style.Fade(Style.Panel, a), -0.1f);
-        var x = min.X + 50 * u;
-        Style.Label(o, course, new Vector2(x, min.Y + 44 * u), 26 * u, Style.Fade(Style.Text, a), 0, Style.Slant, 0.3f * u);
+        Vector2 min = new(g.Right - 420 * u + (1 - a) * 40 * u, g.Top + ContentTop * u), max = new(g.Right, g.Top + (ContentTop + 200) * u);
+        Style.Slanted(o, min, max, Style.Fade(Overlay.Rgba(0.02f, 0.03f, 0.05f, 0.85f), a), Style.PanelSlant);
+        var x = min.X + 40 * u;
+        Style.Label(o, course, new Vector2(x, min.Y + 44 * u), 24 * u, Style.Fade(Style.Text, a), 0, Style.Slant, 0.3f * u);
         Style.Label(o, car, new Vector2(x, min.Y + 74 * u), 18 * u, Style.Fade(Style.Amber, a));
-        Stat(o, "TIME", Style.Time(time), new Vector2(x, min.Y + 130 * u), u, a);
-        Stat(o, "BEST", Style.Time(best), new Vector2(x + 190 * u, min.Y + 130 * u), u, a);
-        Footer(o, height, u, m, ("UP/DN", "SELECT"), ("ENTER", "OK"), ("ESC", "RESUME"));
+        Stat(o, "TIME", Style.Time(time), new Vector2(x, min.Y + 130 * u), u, a, time == null);
+        Stat(o, "BEST", Style.Time(best), new Vector2(x + 170 * u, min.Y + 130 * u), u, a, best == null);
+        Footer(o, g, ("UP/DN", "SELECT"), ("ENTER", "OK"), ("ESC", "RESUME"));
     }
 
-    private void SettingsScreen(Overlay o, int height, float u, float m)
+    private void SettingsScreen(Overlay o, Style.Grid g)
     {
-        Header(o, "TOUGE", "SETTINGS", u, m);
-        var at = new Vector2(m + 24 * u, m + 130 * u);
-        List(o, SettingRows, _row, at, u, 620);
+        var u = g.U;
+        Header(o, "TOUGE", "SETTINGS", g);
+        var top = g.Top + ContentTop * u;
+        List(o, SettingRows, _row, g, top, 620);
         string[] values =
         [
             settings.HighQuality ? "HIGH" : "LOW", settings.MusicOn ? "ON" : "OFF", "", settings.HudOn ? "ON" : "OFF",
@@ -354,10 +372,10 @@ public sealed class Menu(Catalog catalog, Settings settings)
         for (var i = 0; i < values.Length; i++)
         {
             var a = In(i + 1);
-            var y = at.Y + i * 50 * u + 21 * u;
+            var y = top + i * RowH * u + (RowH - 8) * u / 2;
             var sel = i == _row;
             var col = Style.Fade(sel ? Style.Ink : Style.Text, a);
-            var right = at.X + 560 * u - (1 - a) * 40 * u;
+            var right = g.Left + (ColX + 540) * u - (1 - a) * 40 * u;
             if (i == 2)
             {
                 // volume: 10 slanted segments
@@ -373,11 +391,17 @@ public sealed class Menu(Catalog catalog, Settings settings)
             if (values[i] == "") continue;
             var size = 22 * u;
             var baseY = y + o.Font!.CapHeight * size / 2;
-            if (sel) o.Text($"<  {values[i]}  >", new Vector2(right, baseY), size, col, 1, 0.4f * u, 0, Style.Slant);
-            else Style.Label(o, values[i], new Vector2(right, baseY), size, col, 1, Style.Slant);
+            // the value stays put; arrows appear around it when selected
+            if (!sel)
+            {
+                Style.Label(o, values[i], new Vector2(right, baseY), size, col, 1, Style.Slant);
+                continue;
+            }
+            var w = o.Text(values[i], new Vector2(right, baseY), size, col, 1, 0.4f * u, 0, Style.Slant);
+            o.Text("<", new Vector2(right - w - 14 * u, baseY), size, col, 1, 0.4f * u);
+            o.Text(">", new Vector2(right + 12 * u, baseY), size, col, 0, 0.4f * u);
         }
-        Style.Label(o, "Saved to " + Settings.FilePath, new Vector2(m, height - m - 40 * u), 14 * u, Style.Faint);
-        Footer(o, height, u, m, ("UP/DN", "SELECT"), ("< >", "CHANGE"), ("ESC", "BACK"));
+        Footer(o, g, ("UP/DN", "SELECT"), ("< >", "CHANGE"), ("ESC", "BACK"));
     }
 
     /// <summary>Menu navigation from keyboard (arrows with key repeat, Enter/Space, Esc/Backspace) and pad (D-pad, stick edges, A/Start, B).</summary>

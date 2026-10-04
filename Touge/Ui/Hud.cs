@@ -10,15 +10,15 @@ namespace Touge.Ui;
 ///     Top left: run time, best, four sector chips (green/red against the best run) and the split delta (<see cref="LapTimer"/>).
 ///     Top centre: drift combo with slip-angle bar (<see cref="DriftMeter"/>). Top right: round minimap from the CRS_ROAD
 ///     centre line (road band with outline, start bar, checkered goal, car arrow with glow; N cycles rotating → north up →
-///     whole course; CRS_NAVI is this same line scaled, FORMATS.md) and progress with sector ticks. Bottom right:
-///     tachometer (segmented arc, redline, needle, shift light at the limiter), speed, gear with A/M.
-///     Centre: wrong-way banner, finish banner, reset hint when stuck. State advances per physics tick (<see cref="Tick"/>).
+///     whole course; CRS_NAVI is this same line scaled, FORMATS.md) and progress with sector ticks. Bottom right: the
+///     car's own instrument cluster (<see cref="Cluster"/>). Centre: wrong-way banner, finish banner with sector deltas,
+///     reset hint when stuck. Everything sits in <see cref="Style.Safe"/>. State advances per physics tick (<see cref="Tick"/>).
 /// </summary>
 public sealed class Hud
 {
     public enum MapMode { Rotating, NorthUp, Overview }
 
-    private const float Margin = 28, MapRadius = 112, ZoomMetres = 220, TachRadius = 118;
+    private const float MapRadius = 112, ZoomMetres = 220, TimingW = 340, DriftHalf = 170;
     private static readonly uint RoadEdge = Overlay.Rgba(0.05f, 0.06f, 0.08f, 0.95f), Road = Overlay.Rgba(0.93f, 0.94f, 0.96f),
         StartColor = Overlay.Rgba(0.2f, 0.95f, 0.35f), Frame = Overlay.Rgba(1, 1, 1, 0.5f);
 
@@ -27,9 +27,11 @@ public sealed class Hud
     private readonly LinePilot _pilot;
     private readonly Vector2 _start, _startDir, _goal, _goalDir, _centre;
     private readonly float _extent;
-    private float _progress, _wrongFor, _stuckFor, _wrongA, _driftA, _hintA;
+    private float _progress, _wrongFor, _stuckFor, _wrongA, _driftA, _hintA, _boost = -0.6f;
 
     public bool Visible = true;
+    /// <summary>Night course: cluster illumination on.</summary>
+    public bool Night;
     public MapMode Mode = MapMode.Rotating;
     public LapTimer Timer { get; }
     public DriftMeter Drift { get; } = new();
@@ -73,56 +75,71 @@ public sealed class Hud
         _wrongA = Style.Approach(_wrongA, _wrongFor > 1 ? 1 : 0, 4, dt);
         _driftA = Style.Approach(_driftA, Drift.Drifting || Drift.Score > 0 || Drift.Last.Age < 1.5f ? 1 : 0, 5, dt);
         _hintA = Style.Approach(_hintA, _stuckFor > 2.5f || _wrongFor > 3 ? 1 : 0, 3, dt);
+        // boost gauge: vacuum off throttle, spools up with rpm (no turbo model in the physics, display only)
+        var spool = Math.Clamp((car.Rpm - 2500) / 2500, 0, 1);
+        var boost = car.Throttle > 0.2f ? -0.3f + 1.1f * spool * car.Throttle : -0.6f;
+        _boost = Style.Approach(_boost, boost, boost > _boost ? 1.2f : 3, dt);
     }
 
     /// <summary>
     ///     HUD for a <paramref name="width"/>×<paramref name="height"/> target into <paramref name="o"/> (cleared first): car drawn
-    ///     at <paramref name="carPos"/> heading <paramref name="carForward"/> (interpolated pose), <paramref name="time"/> s for pulses.
+    ///     at <paramref name="carPos"/> heading <paramref name="carForward"/> (interpolated pose), cluster of <paramref name="carName"/>
+    ///     (<see cref="Cluster.Cars"/>), <paramref name="time"/> s for pulses.
     /// </summary>
-    public void Build(Overlay o, int width, int height, Vector3 carPos, Vector3 carForward, Vehicle car, float time)
+    public void Build(Overlay o, int width, int height, Vector3 carPos, Vector3 carForward, Vehicle car, string carName, float time)
     {
         o.Clear();
-        var u = height / 900f;
-        var m = Margin * u;
-        Map(o, new Vector2(width - m - MapRadius * u, m + MapRadius * u), u, Xz(carPos), Xz(carForward));
-        Tach(o, new Vector2(width - m - (TachRadius + 10) * u, height - m - (TachRadius + 10) * u), u, car, time);
-        Timing(o, new Vector2(m, m), u, time);
-        DriftPanel(o, new Vector2(width / 2f, m), u);
+        var g = Style.Safe(width, height);
+        var u = g.U;
+        Map(o, new Vector2(g.Right - MapRadius * u, g.Top + MapRadius * u), u, Xz(carPos), Xz(carForward));
+        // narrower than 16:9 the cluster shrinks (to 80 % at 4:3) so it stays clear of the car
+        Cluster.Draw(o, Cluster.Cars[carName], new Vector2(g.Right, g.Bottom), u * Math.Clamp(g.Units / 1400, 0.8f, 1),
+            new Cluster.Reading(car.Rpm, car.SpeedKmh, car.Gear, car.AutomaticGearbox, _boost, Night, time));
+        var timingH = Drift.Total > 0 ? 186 : 150;
+        Timing(o, new Vector2(g.Left, g.Top), timingH, u, time);
+        // drift combo top centre; when it would crowd the timing panel or the map (4:3, 5:4) it moves below the top row
+        var cx = width / 2f;
+        var fits = cx - DriftHalf * u > g.Left + (TimingW + 24) * u && cx + DriftHalf * u < g.Right - (2 * MapRadius + 24) * u;
+        DriftPanel(o, new Vector2(cx, fits ? g.Top : g.Top + (timingH + 24) * u), u);
         Banners(o, width, height, u, time);
     }
 
-    private void Timing(Overlay o, Vector2 at, float u, float time)
+    private void Timing(Overlay o, Vector2 at, float h, float u, float time)
     {
         var t = Timer;
-        Style.Slanted(o, at, at + new Vector2(340, 150) * u, Style.Panel, 0.22f);
-        o.Rect(Vector2.Round(at), Vector2.Round(at + new Vector2(5, 150) * u), Style.Amber);
+        Style.Slanted(o, at, at + new Vector2(TimingW, h) * u, Style.Panel, 0.22f * 150 / h);
+        o.Rect(Vector2.Round(at), Vector2.Round(at + new Vector2(5, h) * u), Style.Amber);
         var x = at.X + 22 * u;
-        Style.Label(o, "TIME", new Vector2(x, at.Y + 28 * u), 16 * u, Style.Amber, 0, 0, 0.3f * u);
-        Style.Label(o, $"SECTOR {Math.Min(t.Sector + 1, LapTimer.Sectors)}/{LapTimer.Sectors}", new Vector2(at.X + 290 * u, at.Y + 28 * u), 15 * u, Style.Dim, 1);
+        var right = at.X + 290 * u;
+        Style.Label(o, "TIME", new Vector2(x, at.Y + 28 * u), 17 * u, Style.Amber, 0, 0, 0.3f * u);
+        Style.Label(o, $"SECTOR {Math.Min(t.Sector + 1, LapTimer.Sectors)}/{LapTimer.Sectors}", new Vector2(right, at.Y + 28 * u), 17 * u, Style.Text, 1);
         var finished = t.Phase == LapTimer.State.Finished;
         var col = t.Phase == LapTimer.State.Ready ? Style.Dim : finished && MathF.Sin(time * 8) > 0 ? Style.Amber : Style.Text;
         Style.Label(o, Style.Time(t.Time), new Vector2(x - 2 * u, at.Y + 80 * u), 54 * u, col, 0, Style.Slant, 0.4f * u);
-        var w = Style.Label(o, "BEST ", new Vector2(x, at.Y + 108 * u), 16 * u, Style.Dim);
-        Style.Label(o, Style.Time(t.Best?[^1]), new Vector2(x + w, at.Y + 108 * u), 20 * u, Style.Text);
+        if (t.Best != null)
+        {
+            var w = Style.Label(o, "BEST ", new Vector2(x, at.Y + 108 * u), 17 * u, Style.Dim);
+            Style.Label(o, Style.Time(t.Best[^1]), new Vector2(x + w, at.Y + 108 * u), 20 * u, Style.Text);
+        }
         // split delta pop-up, fades after 3 s
         if (t.SinceSplit < 3 && t.Sector > 0 && t.Delta(t.Sector - 1) is { } d)
-            Style.Label(o, Style.Delta(d), new Vector2(at.X + 290 * u, at.Y + 108 * u), 24 * u,
+            Style.Label(o, Style.Delta(d), new Vector2(right, at.Y + 108 * u), 24 * u,
                 Style.Fade(d <= 0 ? Style.Green : Style.Red, Style.Ease((3 - t.SinceSplit) * 2)), 1, Style.Slant, 0.3f * u);
         for (var i = 0; i < LapTimer.Sectors; i++)
         {
-            Vector2 min = Vector2.Round(new Vector2(x + i * 68 * u, at.Y + 120 * u)), max = Vector2.Round(min + new Vector2(62, 20) * u);
+            Vector2 min = Vector2.Round(new Vector2(x + i * 68 * u, at.Y + 118 * u)), max = Vector2.Round(min + new Vector2(62, 22) * u);
             var done = i < t.Sector;
             var delta = t.Delta(i);
             var fill = done ? delta is { } dd ? Style.Fade(dd <= 0 ? Style.Green : Style.Red, 0.85f) : Overlay.Rgba(1, 1, 1, 0.75f) : Style.Faint;
             Style.Slanted(o, min, max, fill, 0.3f);
             if (i == t.Sector && t.Phase == LapTimer.State.Running) o.Rect(new Vector2(min.X, max.Y - 3 * u), new Vector2(max.X - 6 * u, max.Y), Style.Amber);
             var label = done ? delta is { } d2 ? Style.Delta(d2)[..^1] : Style.Time(t.Splits[i])[2..^2] : $"S{i + 1}";
-            o.Text(label, new Vector2((min.X + max.X) / 2 - 2 * u, max.Y - 5 * u), 14 * u, done ? Style.Ink : Style.Dim, 0.5f, 0.2f * u);
+            o.Text(label, new Vector2((min.X + max.X) / 2 - 2 * u, max.Y - 5 * u), 17 * u, done ? Style.Ink : Style.Text, 0.5f, 0.2f * u);
         }
         if (Drift.Total > 0)
         {
-            var dw = Style.Label(o, "DRIFT ", new Vector2(x, at.Y + 176 * u), 16 * u, Style.Dim);
-            Style.Label(o, Points(Drift.Total), new Vector2(x + dw, at.Y + 176 * u), 20 * u, Style.Amber, 0, Style.Slant);
+            var dw = Style.Label(o, "DRIFT ", new Vector2(x, at.Y + 170 * u), 17 * u, Style.Dim);
+            Style.Label(o, Points(Drift.Total), new Vector2(x + dw, at.Y + 170 * u), 22 * u, Style.Amber, 0, Style.Slant);
         }
     }
 
@@ -133,22 +150,29 @@ public sealed class Hud
         var a = Style.Ease(_driftA);
         if (a <= 0) return;
         var d = Drift;
-        Style.Slanted(o, top + new Vector2(-190, 0) * u, top + new Vector2(190, 100) * u, Style.Fade(Style.Panel, a), 0.18f);
-        Style.Label(o, "DRIFT", new Vector2(top.X, top.Y + 22 * u), 15 * u, Style.Fade(Style.Dim, a), 0.5f, 0, 0.3f * u);
+        // centred plate, both sides slanted in
+        var panel = Style.Fade(Style.Panel, a);
+        float hw = DriftHalf * u, bw = hw - 18 * u, h = 100 * u;
+        Vector2 tl = Vector2.Round(top - new Vector2(hw, 0)), tr = Vector2.Round(top + new Vector2(hw, 0)),
+            br = Vector2.Round(top + new Vector2(bw, h)), bl = Vector2.Round(top + new Vector2(-bw, h));
+        o.Quad(tl, tr, br, bl, panel);
+        o.Line(tl + new Vector2(0.5f, 0), bl + new Vector2(0.5f, 0), 1, panel);
+        o.Line(tr - new Vector2(0.5f, 0), br - new Vector2(0.5f, 0), 1, panel);
+        Style.Label(o, "DRIFT", new Vector2(top.X, top.Y + 22 * u), 17 * u, Style.Fade(Style.Dim, a), 0.5f, 0, 0.3f * u);
         var shown = d.Score > 0 || d.Drifting ? d.Score : d.Last.Points;
         var w = o.Font!.Measure(Points(shown), 44 * u);
         Style.Label(o, Points(shown), new Vector2(top.X, top.Y + 64 * u), 44 * u, Style.Fade(Style.Amber, a), 0.5f, Style.Slant, 0.4f * u);
         if (d.Multiplier > 1 && d.Drifting)
             Style.Label(o, $"x{d.Multiplier}", new Vector2(top.X + w / 2 + 10 * u, top.Y + 64 * u), 24 * u, Style.Fade(Style.Text, a), 0, Style.Slant);
         // slip-angle bar from the centre, red beyond 30°
-        var half = 130 * u;
+        var half = 110 * u;
         var y = top.Y + 78 * u;
         o.Rect(Vector2.Round(new Vector2(top.X - half, y)), Vector2.Round(new Vector2(top.X + half, y + 7 * u)), Style.Fade(Style.Faint, a));
         var k = Math.Clamp(d.Angle / 45, -1, 1);
         var fillCol = Style.Fade(MathF.Abs(d.Angle) > 30 ? Style.Red : Style.Amber, a);
         o.Rect(Vector2.Round(new Vector2(top.X + MathF.Min(0, k) * half, y)), Vector2.Round(new Vector2(top.X + MathF.Max(0, k) * half, y + 7 * u)), fillCol);
         o.Rect(Vector2.Round(new Vector2(top.X - u, y - 3 * u)), Vector2.Round(new Vector2(top.X + u, y + 10 * u)), Style.Fade(Style.Text, a));
-        Style.Label(o, $"{MathF.Abs(d.Angle):0}°", new Vector2(top.X + half + 8 * u, y + 9 * u), 16 * u, Style.Fade(Style.Text, a));
+        Style.Label(o, $"{MathF.Abs(d.Angle):0}°", new Vector2(top.X + half + 8 * u, y + 9 * u), 17 * u, Style.Fade(Style.Text, a));
         // last combo: banked points rise and fade, a wall hit says so
         if (d.Last.Age < 1.5f)
         {
@@ -173,63 +197,32 @@ public sealed class Hud
         {
             var a = Style.Ease(Timer.SinceSplit * 3) * Style.Ease((6 - Timer.SinceSplit) * 2);
             var y = height * 0.3f;
+            Style.Slanted(o, new Vector2(cx - 260 * u, y - 76 * u), new Vector2(cx + 260 * u, y + 128 * u), Style.Fade(Overlay.Rgba(0.02f, 0.03f, 0.05f, 0.8f), a), 0.12f);
             Style.Label(o, "FINISH", new Vector2(cx, y), 72 * u, Style.Fade(Style.Amber, a), 0.5f, Style.Slant, 0.6f * u);
-            Style.Label(o, Style.Time(Timer.Time), new Vector2(cx, y + 48 * u), 36 * u, Style.Fade(Style.Text, a), 0.5f, Style.Slant);
-            if (Timer.NewRecord) Style.Label(o, "NEW RECORD", new Vector2(cx, y + 82 * u), 24 * u, Style.Fade(Style.Green, a), 0.5f, Style.Slant, 0.3f * u);
+            Style.Label(o, Style.Time(Timer.Time), new Vector2(cx, y + 46 * u), 36 * u, Style.Fade(Style.Text, a), 0.5f, Style.Slant);
+            // sector deltas against the best run this one was compared with
+            if (Timer.Delta(0) != null)
+                for (var i = 0; i < LapTimer.Sectors; i++)
+                {
+                    var d = Timer.Delta(i)!.Value;
+                    Vector2 min = Vector2.Round(new Vector2(cx - 206 * u + i * 104 * u, y + 62 * u)), max = Vector2.Round(min + new Vector2(96, 26) * u);
+                    Style.Slanted(o, min, max, Style.Fade(d <= 0 ? Style.Green : Style.Red, 0.85f * a), 0.3f);
+                    o.Text($"S{i + 1} {Style.Delta(d)[..^1]}", new Vector2((min.X + max.X) / 2 - 2 * u, max.Y - 7 * u), 17 * u, Style.Fade(Style.Ink, a), 0.5f, 0.2f * u);
+                }
+            if (Timer.NewRecord) Style.Label(o, "NEW RECORD", new Vector2(cx - 206 * u, y + 116 * u), 22 * u, Style.Fade(Style.Green, a), 0, Style.Slant, 0.3f * u);
+            if (Drift.Total > 0)
+                Style.Label(o, $"DRIFT {Points(Drift.Total)}", new Vector2(cx + 206 * u, y + 116 * u), 22 * u, Style.Fade(Style.Amber, a), 1, Style.Slant, 0.3f * u);
         }
         if (_hintA > 0)
         {
-            var y = height - Margin * u - 22 * u;
+            // under the wrong-way banner, clear of the cluster on narrow screens
+            var y = height * 0.34f + 74 * u;
             var a = Style.Ease(_hintA);
-            Style.Slanted(o, new Vector2(cx - 150 * u, y - 22 * u), new Vector2(cx + 150 * u, y + 22 * u), Style.Fade(Style.Panel, a), 0.2f);
-            Style.KeyHint(o, "R", "RESET TO ROAD", new Vector2(cx - 112 * u, y), u, a);
+            const string key = "R", action = "RESET TO ROAD";
+            var w = MathF.Max(o.Font!.Measure(key, 17 * u) + 12 * u, 26 * u) + 8 * u + o.Font.Measure(action, 17 * u);
+            Style.Slanted(o, new Vector2(cx - w / 2 - 30 * u, y - 22 * u), new Vector2(cx + w / 2 + 30 * u, y + 22 * u), Style.Fade(Style.Panel, a), 0.2f);
+            Style.KeyHint(o, key, action, new Vector2(cx - w / 2, y), u, a);
         }
-    }
-
-    private void Tach(Overlay o, Vector2 c, float u, Vehicle car, float time)
-    {
-        var spec = car.Spec;
-        var r = TachRadius * u;
-        var top = MathF.Ceiling((spec.RevLimit + 400) / 1000) * 1000;
-        var red = spec.RevLimit - 600;
-        const float a0 = 0.75f * MathF.PI, sweep = 1.5f * MathF.PI;
-        float Angle(float rpm) => a0 + sweep * Math.Clamp(rpm / top, 0, 1);
-        Vector2 Dir(float a) => new(MathF.Cos(a), MathF.Sin(a));
-        var shift = car.Rpm > spec.RevLimit - 250 && car.Gear > 0 && MathF.Sin(time * MathF.Tau * 9) > 0;
-
-        o.Disc(c, r + 10 * u, Style.Panel);
-        o.Ring(c, r + 10 * u, (shift ? 3 : 1.5f) * u, shift ? Style.Red : Frame, 96);
-        // segments every 250 rpm, lit up to the current rpm
-        var segR = r - 8 * u;
-        for (var rpm = 0f; rpm < top; rpm += 250)
-        {
-            var lit = rpm + 125 < car.Rpm;
-            var col = rpm >= red ? lit ? Style.Red : Overlay.Rgba(1, 0.24f, 0.2f, 0.35f) : lit ? rpm > red - 1500 ? Style.Amber : Style.Text : Style.Faint;
-            o.Arc(c, segR, 12 * u, col, Angle(rpm) + 0.012f, Angle(rpm + 250) - 0.012f, 2);
-        }
-        // major ticks and numbers (×1000 rpm)
-        for (var k = 0; k <= top / 1000; k++)
-        {
-            var d = Dir(Angle(k * 1000));
-            o.Line(c + d * (r - 18 * u), c + d * (r - 26 * u), 2 * u, k * 1000 >= red ? Style.Red : Style.Dim);
-            var p = c + d * (r - 40 * u);
-            var size = 15 * u;
-            o.Text(k.ToString(), new Vector2(p.X, p.Y + o.Font!.CapHeight * size / 2), size, k * 1000 >= red ? Style.Red : Style.Dim, 0.5f, 0.2f * u);
-        }
-        // needle with glow
-        var nd = Dir(Angle(car.Rpm));
-        o.Line(c + nd * (r * 0.66f), c + nd * (r - 2 * u), 9 * u, Overlay.Rgba(1, 0.3f, 0.15f, 0.25f));
-        o.Line(c + nd * (r * 0.66f), c + nd * (r - 2 * u), 3.5f * u, Overlay.Rgba(1, 0.35f, 0.2f));
-        // speed
-        var kmh = ((int)MathF.Round(car.SpeedKmh)).ToString();
-        Style.Label(o, kmh, new Vector2(c.X, c.Y + 18 * u), 66 * u, Style.Text, 0.5f, Style.Slant, 0.5f * u);
-        Style.Label(o, "km/h", new Vector2(c.X, c.Y + 40 * u), 15 * u, Style.Dim, 0.5f);
-        // gear box in the arc's gap
-        var gear = car.Gear < 0 ? "R" : car.Gear == 0 ? "N" : car.Gear.ToString();
-        Vector2 gc = new(c.X, c.Y + r * 0.74f), half = new Vector2(26, 22) * u;
-        o.Rect(Vector2.Round(gc - half), Vector2.Round(gc + half), shift ? Style.Red : Overlay.Rgba(1, 1, 1, 0.92f));
-        o.Text(gear, new Vector2(gc.X, gc.Y + 0.7f * 36 * u / 2), 36 * u, Style.Ink, 0.5f, 0.6f * u, 0, Style.Slant);
-        Style.Label(o, car.AutomaticGearbox ? "AT" : "MT", new Vector2(gc.X + half.X + 6 * u, gc.Y + 6 * u), 15 * u, car.AutomaticGearbox ? Style.Dim : Style.Amber);
     }
 
     private void Map(Overlay o, Vector2 c, float u, Vector2 car, Vector2 heading)

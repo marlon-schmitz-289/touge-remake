@@ -18,6 +18,32 @@ public static class Style
     /// <summary>Italic slant of headings and numbers (x per y).</summary>
     public const float Slant = 0.14f;
 
+    /// <summary>Margin to the screen edges (units), shared by HUD and menus (~5 % of the height: TV title-safe).</summary>
+    public const float SafeMargin = 44;
+
+    /// <summary>Slant of the right-hand detail panels in the menus.</summary>
+    public const float PanelSlant = -0.08f;
+
+    /// <summary>
+    ///     Layout grid of a <paramref name="width"/>×<paramref name="height"/> target: <see cref="Grid.U"/> = pixels per
+    ///     unit (1/900 of the height), safe rectangle <see cref="Grid.Left"/>..<see cref="Grid.Right"/> × <see cref="Grid.Top"/>..<see cref="Grid.Bottom"/>
+    ///     inside <see cref="SafeMargin"/>. Wider than 2:1 (21:9) the frame is centred at 2:1, so corner elements stay near the car.
+    /// </summary>
+    public static Grid Safe(int width, int height)
+    {
+        var u = height / 900f;
+        var w = MathF.Min(width, height * 2f);
+        var x0 = (width - w) / 2;
+        var m = SafeMargin * u;
+        return new Grid(u, x0 + m, x0 + w - m, m, height - m);
+    }
+
+    public readonly record struct Grid(float U, float Left, float Right, float Top, float Bottom)
+    {
+        /// <summary>Width of the safe rectangle in units.</summary>
+        public float Units => (Right - Left) / U;
+    }
+
     /// <summary><paramref name="color"/> with its alpha multiplied by <paramref name="a"/>.</summary>
     public static uint Fade(uint color, float a) => color & 0xFFFFFF | (uint)((color >> 24) * Math.Clamp(a, 0, 1) + 0.5f) << 24;
 
@@ -61,10 +87,10 @@ public static class Style
         return max.X + 8 * u + tw + 20 * u;
     }
 
-    /// <summary>Time as m'ss.mmm (or "-'--.---" when none).</summary>
+    /// <summary>Time as m'ss.mmm (or "NO TIME" when none).</summary>
     public static string Time(float? seconds)
     {
-        if (seconds is not { } t || !float.IsFinite(t)) return "-'--.---";
+        if (seconds is not { } t || !float.IsFinite(t)) return "NO TIME";
         var ms = (int)MathF.Round(t * 1000);
         return $"{ms / 60000}'{ms / 1000 % 60:D2}.{ms % 1000:D3}";
     }

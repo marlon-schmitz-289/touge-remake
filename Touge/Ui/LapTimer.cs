@@ -25,6 +25,7 @@ public sealed class LapTimer(float length, float[]? best)
     public bool NewRecord { get; private set; }
     public event Action<float[]>? Record;
     private float _prev = float.MaxValue;
+    private float[]? _ref = best; // the best run this run is compared with (Best may become this run at the finish)
 
     /// <summary>Car at <paramref name="along"/> metres along the line, <paramref name="dt"/> seconds after the last update.</summary>
     public void Update(float along, float dt)
@@ -33,7 +34,7 @@ public sealed class LapTimer(float length, float[]? best)
         switch (Phase)
         {
             case State.Ready when _prev <= Gate && along > Gate && along < length / Sectors:
-                (Phase, Time, Sector, NewRecord) = (State.Running, 0, 0, false);
+                (Phase, Time, Sector, NewRecord, _ref) = (State.Running, 0, 0, false, Best);
                 break;
             case State.Running:
                 Time += dt;
@@ -59,9 +60,9 @@ public sealed class LapTimer(float length, float[]? best)
         _prev = along;
     }
 
-    /// <summary>Split of sector <paramref name="i"/> minus the best run's (null without a best run or before that split).</summary>
-    public float? Delta(int i) => Best != null && i < Sector ? Splits[i] - Best[i] : null;
+    /// <summary>Split of sector <paramref name="i"/> minus the best run's at the start of this run (null without one or before that split).</summary>
+    public float? Delta(int i) => _ref != null && i < Sector ? Splits[i] - _ref[i] : null;
 
     /// <summary>Back to armed (car reset to the start).</summary>
-    public void Restart() => (Phase, Time, Sector, SinceSplit, _prev) = (State.Ready, 0, 0, float.MaxValue, 0);
+    public void Restart() => (Phase, Time, Sector, SinceSplit, _prev, _ref) = (State.Ready, 0, 0, float.MaxValue, 0, Best);
 }
