@@ -20,13 +20,14 @@ Assets kommen zur Laufzeit aus der eigenen ISO (SLPM-65268), nie ins Repo.
 ```sh
 dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso"   # Front-End (Hinweis, Karten, Titel, Hauptmenü) → Kurs, Auto, Rennen, Ergebnis, Rekorde, Optionen
 dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso" [AKINA_DAY|AKINA_NIT|USUI_NIT|…]   # direkt fahren, ohne Menü
-dotnet run --project Touge -- "<iso>" AKINA_NIT --menu boot|logo|disclaimer|title|mode|course|route|time|weather|maker|car|gearbox|intro|pause|records|options --shot out/proof/ui_car.png [--shot-size 3200x1800]   # Menü-Bild
+dotnet run --project Touge -- "<iso>" AKINA_NIT --menu boot|logo|disclaimer|title|mode|quit|course|route|time|weather|maker|car|gearbox|intro|pause|records|options --shot out/proof/ui_car.png [--shot-size 3200x1800]   # Menü-Bild
 dotnet run --project Touge -- "<iso>" --flow out/proof   # ganzer Ablauf per Skript im Fenster (Titel → Auswahl → Laden → Countdown → Rennen mit Pilot in 16× → Pause → Ziel → Ergebnis → Rekorde → Optionen), PNG je Schritt
 dotnet run --project Touge -- "<iso>" --frontend-capture out/proof/fe.wav   # ganzer Menüablauf per Skript offline: Original-SE/BGM als WAV + Log aller Auslöser
 dotnet run --project Touge -- "<iso>" --shot out/akina.png   # ein Frame als PNG, dann Ende
 dotnet run --project Touge -- "<iso>" --ground out/g.png [--at 300]   # Kollision: Raycast-Timing + Draufsicht mit Wänden
 dotnet run --project Touge -- "<iso>" --shot out/ae86.png --orbit 35   # Kamera ums Auto (0 vorne, 90 links, 180 hinten)
 dotnet run --project Touge -- "<iso>" --autodrive 60 [--shot out/ad.png]   # Pilot fährt 60 s die Fahrlinie ab, Log pro Sekunde
+dotnet run --project Touge -- "<iso>" AKINA_DAY --at 710 --autodrive 40 [--ram] [--reverse]   # hinter dem Ziel: Auslauf bis vor die Endsperre bzw. mit --ram Vollgas in die Sperre; Zusammenfassung (Weg hinter dem Ziel, Abstand zur Sperre, Wandkontakt, Höhe)
 dotnet run --project Touge -- "<iso>" AKINA_DAY --reverse [--autodrive 60|--shot …|--ground …]   # Gegenrichtung (bergauf): CRS_COLI_<KURS>_1 + CRS_DRV_<KURS>_O, Start am anderen Ende
 dotnet run --project Touge -- "<iso>" --hud overview --shot out/map.png   # Minimap-Modus beim Start (north|overview|off)
 dotnet run --project Touge -- "<iso>" --bench 30 [--quality off]   # Pilot fährt 30 s in Echtzeit (Fenster), dann Frametime avg/p99/max (mit Ton)
@@ -48,14 +49,16 @@ Original-Menütexturen; Ablauf/Zeiten/Bewegung aus dem Originalcode, siehe FORMA
 Hinweis „Fiktion“ → Titel (Akina bei Nacht im Hintergrund abgeflogen, Logo, blinkendes PRESS START BUTTON; nach 10 s ohne Eingabe zurück zu
 den Karten) → Hauptmenü (Trommel mit den 7 Modi des Originals, Chromplatten, pulsierender gelber Rahmen; nach 30 s ohne Eingabe zurück zum
 Titel). Gebaut sind davon TIME ATTACK, REPLAY & RECORD (→ Rekorde) und OPTIONS; die anderen Modi piepen (BEEP001) wie gesperrte Einträge
-im Original. Esc im Hauptmenü zurück zum Titel, im Titel beenden. Danach alle Bildschirme ebenfalls im Originalstil (`Ui/Menu` + `Ui/Canvas`:
+im Original. Als letzter Eintrag QUIT GAME (nur Windows/Linux/macOS): Abfrage „QUIT THE GAME?“ YES/NO (NO vorgewählt, ←/→ wählen,
+Enter/A entscheiden, Esc/B = NO), YES speichert die Einstellungen und schließt das Fenster. Esc im Hauptmenü zurück zum Titel, im Titel beenden. Danach alle Bildschirme ebenfalls im Originalstil (`Ui/Menu` + `Ui/Canvas`:
 graue Logo-Kachelwand, roter/blauer Laufschrift-Kopf, Chromplatten, Karbonpaneele, gelber Pulsrahmen, Verlaufswörter rot/blau, alles Englisch):
 TIME ATTACK = Kurswahl (3 × 4 Raster wie im Original, Streckenlinie im Karbon-„Monitor“ statt Foto, Länge/Höhe/Bestzeit; das 12. Feld „FOUR
 PASSES“ ist gesperrt) → Route (DOWNHILL/UPHILL bzw. CLOCKWISE/COUNTER-CLOCKWISE aus dem Drehsinn der Linie) → Tageszeit (DAY/NIGHT) → Wetter
 (DRY/WET) – Schritte mit nur einer Möglichkeit entfallen – → Hersteller (7 Chromplatten, Modellliste im Karbonpaneel) → Auto (3D-Auto dreht
 sich, ←/→ Modell, ↑/↓ Lackfarbe, Antrieb FF/MR/FR/4WD) → Getriebe (AT/MT) → Laden (weiß, „Now Loading...“) → Streckentelop + 3-2-1-GO
-(CAR010/CAR011, Auto steht bis GO) → Rennen. Esc (Pad: Start) pausiert (alarm_02): Continue/Retry/Exit. Im Ziel „FINISH!!“ bzw. „NEW
-RECORD!!“ (Pilot fährt weiter, WIN-Jingle) → Ergebnis (Gesamt-/Sektorzeiten mit Delta, Bestzeit, Differenz, Driftpunkte, Zeilen zählen mit
+(CAR010/CAR011, Auto steht bis GO) → Rennen. Esc (Pad: Start) pausiert (alarm_02): Continue/Retry/Exit/Quit Game (Quit Game wie im Hauptmenü mit Abfrage, nur Desktop). Im Ziel (Zielbogen, nicht das Ende der
+Fahrlinie) „FINISH!!“ bzw. „NEW RECORD!!“ (das Spiel übernimmt das Auto wie ein Arcade-Racer: rollt aus und bremst gleichmäßig bis
+4,5 m vor die Absperrung, `Drive.Coast`; WIN-Jingle) → Ergebnis (Gesamt-/Sektorzeiten mit Delta, Bestzeit, Differenz, Driftpunkte, Zeilen zählen mit
 NAME001, BGM „JOY“) → Retry / Course Select / Car Select / Exit. Rekorde: Bestzeit je Kurs und Route. Optionen: Grafik, Musik an/aus,
 Musik-/SE-Lautstärke, HUD, Navi-Karte, Kamera, Aufkleber (ANIME/STOCK/NONE), Steuerung (Tastatur/Pad-Belegung). Zurück geht die besuchten
 Schritte rückwärts. Zwischen Modulen 30-Frame-Schwarzblenden. Ton: Original-SE aus SYSSE (SYS005 Cursor, SYS006 Bestätigen, BEEP001
@@ -101,6 +104,9 @@ Vulkan-Diagnose: `PENELOPE_VALIDATION=1` schaltet `VK_LAYER_KHRONOS_validation` 
 `PENELOPE_VK_DEVICE=<n>` erzwingt Gerät n aus `vulkaninfo --summary` (auf dem Mac z. B. 1 = Mesa KosmicKrisp statt MoltenVK).
 Push-Konstanten bleiben überall ≤ 128 B (Vulkan-Minimum); die großen Blöcke (Szene 720 B, Himmel, SSR) liegen als
 Uniform-Slices pro Draw in einem Ring (`PostProcess.Upload`, dynamischer Offset).
+
+Streckenenden: Ziel ist der Zielbogen; die „Straße gesperrt“-Böcke 13–63 m dahinter und die Straße 5 m hinter dem Start sind feste
+Wände (`Touge/CourseEnd`, Herleitung in FORMATS.md „Kursenden“), auch beim freien Fahren. Rundkurse haben keine.
 
 Strecke: alle Abschnitte `crsNN` + `mnt00`/`gate*` als ein Mesh, dazu die Bäume (`TREE_*`-Platzierung wie im Original, Vorlagen
 `treeMid/Lrg_*` zur Straße gedreht, eingebacken); `crslod*`/`shd*` werden nicht gezeichnet.

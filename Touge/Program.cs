@@ -7,6 +7,7 @@ using Touge;
 // --shot rendert einen Frame als PNG und beendet sich; --at <n> startet bei Punkt n der Fahrlinie;
 // --orbit <grad> Kamera ums geparkte Auto (0 vorne, 90 links, 180 hinten).
 // --autodrive <s>: Pilot fährt die Fahrlinie ab, Log pro Sekunde; ohne --shot ohne Fenster, mit --shot Verfolgerbild am Ende.
+//   Hinter dem Ziel: Auslauf bis vor die Endsperre (Drive.Coast), mit --ram Vollgas weiter in die Sperre; Zusammenfassung danach.
 // --audio-capture <wav> <s> (mit --autodrive): Spielton offline (OpenAL-Loopback) als WAV + Auswertung, ohne Fenster; --no-music ohne BGM.
 // --audio-capture <wav> 0 --sweep: nur Motor, Drehzahlrampe Leerlauf → Begrenzer (Vollgas, 3. Gang) und zurück (Schub), WAV + CSV je Tick.
 // --ground <png>: Kollision des Kurses laden, Raycasts timen, Draufsicht mit Wandsegmenten schreiben (ohne Fenster).
@@ -20,7 +21,7 @@ using Touge;
 // --cars <png>: Kontaktbogen aller 32 Autos (Orbit 35°, 4 × 8 Kacheln in CarPaint.Cars-Reihenfolge), dann Ende; mit --hud off.
 // --sun: freie Kamera am Startpunkt schaut zur Sonne (Blendung prüfen).
 // Ohne Kurs und ohne Test-Flags (außer --backend) startet das Spiel im Front-End (Ui/FrontEnd: Hinweis, Karten, Titel, Hauptmenü) mit den gespeicherten Einstellungen (Ui/Settings).
-// --menu boot|logo|disclaimer|title|mode (Front-End) bzw. course|route|time|weather|maker|car|gearbox|intro|pause|records|options: diesen Schritt/dieses Menü beim Start öffnen (auch mit Test-Flags, z. B. --menu mode --shot out/m.png).
+// --menu boot|logo|disclaimer|title|mode|quit (Front-End; quit = QUIT GAME mit offener Abfrage) bzw. course|route|time|weather|maker|car|gearbox|intro|pause|records|options: diesen Schritt/dieses Menü beim Start öffnen (auch mit Test-Flags, z. B. --menu mode --shot out/m.png).
 // --flow <dir>: ganzer Ablauf per Skript im Fenster (Titel → Auswahl → Laden → Countdown → Rennen (Pilot, 16×) → Pause → Ziel → Ergebnis → Rekorde → Optionen), PNG je Schritt nach <dir>, Einstellungen bleiben unberührt.
 // --frontend-capture <wav>: ganzer Menüablauf per Skript offline (Titel → Auswahl → Countdown → Ergebnis mit erfundener Fahrt) mit Original-SE/BGM als WAV, Log aller Auslöser.
 // --shot-size WxH: Größe des --shot-Bildes (Standard 1280x720), z. B. 3200x1800 für die HUD-Skalierung.
@@ -84,7 +85,7 @@ if (autodrive is { } seconds && shot == null)
     using var isoFile = new Touge.Formats.Iso9660(iso);
     var drive = new Drive(isoFile, course.ToUpperInvariant(), args.Contains("--reverse"), Kansei.Physics.CarSpecs.All[car]);
     drive.ResetTo(at);
-    drive.ForceDrift = args.Contains("--drift");
+    (drive.ForceDrift, drive.Ram) = (args.Contains("--drift"), args.Contains("--ram"));
     return drive.AutoDrive(seconds) ? 0 : 2;
 }
 if (args.Contains("--zfight"))

@@ -24,9 +24,10 @@ public sealed class Menu(Catalog catalog, Settings settings)
 
     /// <summary>
     ///     Load: load <see cref="CourseTime"/>/<see cref="CarId"/>… (the menu goes on into the telop); Restart: car back to the
-    ///     start (the telop follows); Exit: back to the main menu; PreviewCar: show <see cref="CarId"/>/<see cref="Paint"/>.
+    ///     start (the telop follows); Exit: back to the main menu; PreviewCar: show <see cref="CarId"/>/<see cref="Paint"/>;
+    ///     Quit: close the game (confirmed in the pause menu).
     /// </summary>
-    public enum Action { None, Load, Resume, Restart, Exit, PreviewCar, SettingsChanged }
+    public enum Action { None, Load, Resume, Restart, Exit, PreviewCar, SettingsChanged, Quit }
 
     /// <summary>A finished run for the result sheet.</summary>
     /// <param name="Deltas">Per sector against the best run it was compared with (null without one).</param>
@@ -46,8 +47,11 @@ public sealed class Menu(Catalog catalog, Settings settings)
     private const int ResultRows = 8;
     public static float ButtonsAt => RowFirst + RowStep * ResultRows + 0.2f;
 
-    public static readonly string[] PauseButtons = ["Continue", "Retry", "Exit"], ResultButtons = ["RETRY", "COURSE SELECT", "CAR SELECT", "EXIT"];
-    private static readonly string[] PauseCaptions = ["Return to the race.", "Restart the race from the beginning.", "Quit this race."];
+    /// <summary>Pause buttons; "Quit Game" only on desktop builds (<see cref="QuitPrompt"/>).</summary>
+    public static readonly string[] PauseButtons = ["Continue", "Retry", "Exit", .. QuitPrompt.Available ? new[] { "Quit Game" } : []],
+        ResultButtons = ["RETRY", "COURSE SELECT", "CAR SELECT", "EXIT"];
+    private static readonly string[] PauseCaptions = ["Return to the race.", "Restart the race from the beginning.", "Quit this race.", "Close the game."];
+    private readonly QuitPrompt _quit = new();
 
     public Screen Current { get; private set; }
     /// <summary>Original UI sound by SYSSE name.</summary>
@@ -316,7 +320,11 @@ public sealed class Menu(Catalog catalog, Settings settings)
                 if (_t >= IntroEnd) Current = Screen.None;
                 break;
             case Screen.Pause:
-                if (k.X != 0)
+                if (_quit.Open)
+                {
+                    if (_quit.Update(k, Sound)) return Action.Quit;
+                }
+                else if (k.X != 0)
                 {
                     var n = Math.Clamp(_row + k.X, 0, PauseButtons.Length - 1);
                     if (n != _row) Sound?.Invoke("SYS005");
@@ -332,8 +340,11 @@ public sealed class Menu(Catalog catalog, Settings settings)
                         case 1:
                             Enter(Screen.Intro, false);
                             return Action.Restart;
-                        default:
+                        case 2:
                             Leave(Screen.None, Action.Exit);
+                            break;
+                        default:
+                            _quit.Show();
                             break;
                     }
                 }
@@ -736,19 +747,21 @@ public sealed class Menu(Catalog catalog, Settings settings)
         c.Fill(Overlay.Rgba(0, 0, 0, 0.5f));
         c.O.FadeText(0.5f); // the HUD's text lies above every shape: dim it too
         c.Lettering("PAUSE", 256, 128, 44, Overlay.Rgba(1, 0.25f, 0.2f), Overlay.Rgba(0.75f, 0, 0), 0.5f, 0.2f, true);
-        // caption bar, then the strip with the "Pause" tab and three chrome buttons
-        c.Carbon(116, 328, 396, 352, 1, false);
+        // caption bar, then the strip with the "Pause" tab and the chrome buttons (centred: 3 or 4)
+        var x0 = 256 - (PauseButtons.Length * 86 - 10) / 2f;
+        c.Carbon(x0 - 16, 328, 512 - x0 + 16, 352, 1, false);
         c.Text(PauseCaptions[_row], 256, 345, 12, Canvas.White, 0.5f, 0.12f);
-        c.Carbon(116, 358, 396, 412, 1, false);
-        c.Text("Pause", 126, 372, 11, Canvas.White, 0, 0.2f);
+        c.Carbon(x0 - 16, 358, 512 - x0 + 16, 412, 1, false);
+        c.Text("Pause", x0 - 6, 372, 11, Canvas.White, 0, 0.2f);
         for (var i = 0; i < PauseButtons.Length; i++)
         {
-            var x = 132 + i * 86;
+            var x = x0 + i * 86;
             c.Plate(x, 380, 76, 22, 1);
             c.Text(PauseButtons[i], x + 38, 396, 12, Canvas.Shade(0.08f, 0.08f, 0.08f, 1), 0.5f, 0.18f);
         }
-        var sx = 132 + _row * 86;
+        var sx = x0 + _row * 86;
         c.Glow(sx - 4, 376, sx + 80, 406, Canvas.Pulse(Theta));
+        _quit.Draw(c, Theta);
     }
 
     private void FinishBanner(Canvas c)

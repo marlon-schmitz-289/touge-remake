@@ -18,12 +18,19 @@ public sealed class FrontEnd
     public enum Step { Boot, Logo, Disclaimer, Title, Modes }
     public enum Result { None, TimeAttack, Records, Options, Quit }
 
-    /// <summary>Main menu in the original's drum order (sub_1F0E00, wraps 0 ↔ 6), English labels.</summary>
+    /// <summary>
+    ///     Main menu in the original's drum order (sub_1F0E00, wraps 0 ↔ 6), English labels; on desktop builds the remake's
+    ///     QUIT GAME last (<see cref="QuitPrompt"/>).
+    /// </summary>
     public static readonly string[] Modes =
-        ["LEGEND OF THE STREETS", "TIME ATTACK", "STORY", "REPLAY & RECORD", "IKETANI'S CAR GUIDE", "SAVE & LOAD", "OPTIONS"];
+    [
+        "LEGEND OF THE STREETS", "TIME ATTACK", "STORY", "REPLAY & RECORD", "IKETANI'S CAR GUIDE", "SAVE & LOAD", "OPTIONS",
+        .. QuitPrompt.Available ? new[] { "QUIT GAME" } : [],
+    ];
 
-    /// <summary>What each mode leads to in this build (None: not rebuilt yet, deciding it beeps).</summary>
-    private static readonly Result[] ModeResults = [Result.None, Result.TimeAttack, Result.None, Result.Records, Result.None, Result.None, Result.Options];
+    /// <summary>What each mode leads to in this build (None: not rebuilt yet, deciding it beeps; Quit asks first).</summary>
+    private static readonly Result[] ModeResults =
+        [Result.None, Result.TimeAttack, Result.None, Result.Records, Result.None, Result.None, Result.Options, Result.Quit];
 
     public const float Fade = 30 / 60f, CardHold = 181 / 60f, BootHold = 2.5f, TitleIdle = 601 / 60f, ModesIdle = 1801 / 60f;
     private const float RollFade = 7 / 60f, RollSlide = 48 / 9f / 60, Roll = 2 * RollFade + RollSlide;
@@ -48,11 +55,19 @@ public sealed class FrontEnd
     private bool _fast;
     private Step _next;
     private Result _result;
+    private readonly QuitPrompt _quit = new();
 
     public void Open(Step step)
     {
         Active = true;
         Enter(step);
+    }
+
+    /// <summary>QUIT GAME selected with its question open (--menu quit, screenshots).</summary>
+    public void AskQuit()
+    {
+        Index = Modes.Length - 1;
+        _quit.Show();
     }
 
     /// <summary>Skips the fade-in (screenshots).</summary>
@@ -97,16 +112,26 @@ public sealed class FrontEnd
                     _fast = true;
                     Leave(Step.Modes);
                 }
-                else if (k.Back) Leave(Step.Title, Result.Quit);
+                else if (k.Back && QuitPrompt.Available) Leave(Step.Title, Result.Quit);
                 else if (_idle >= TitleIdle) Leave(Step.Logo);
                 break;
             case Step.Modes:
                 if (_roll >= 0) break;
-                if (k.Y != 0)
+                if (_quit.Open)
+                {
+                    _idle = 0;
+                    if (_quit.Update(k, Sound)) Leave(Step.Modes, Result.Quit);
+                }
+                else if (k.Y != 0)
                 {
                     Index = (Index + k.Y + Modes.Length) % Modes.Length;
                     (_rollDir, _roll) = (k.Y, 0);
                     Sound?.Invoke("SYS005");
+                }
+                else if (k.Ok && ModeResults[Index] == Result.Quit)
+                {
+                    Sound?.Invoke("SYS006");
+                    _quit.Show();
                 }
                 else if (k.Ok && ModeResults[Index] is var r and not Result.None)
                 {
@@ -168,6 +193,7 @@ public sealed class FrontEnd
                 Logo(c, 1);
                 Drum(c);
                 Copyright(c);
+                _quit.Draw(c, _theta);
                 break;
         }
         // 30-frame black fades in and out of every step

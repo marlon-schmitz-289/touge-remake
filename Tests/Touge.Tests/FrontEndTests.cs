@@ -62,4 +62,36 @@ public class FrontEndTests
         Run(FrontEnd.ModesIdle + FrontEnd.Fade + 0.1f);
         Assert.Equal(FrontEnd.Step.Title, f.Current);
     }
+
+    /// <summary>QUIT GAME (desktop): last on the drum, asks first with NO selected; NO/back stay, YES quits after the fade.</summary>
+    [Fact]
+    public void QuitGame_AsksFirst()
+    {
+        Assert.True(QuitPrompt.Available);
+        Assert.Equal("QUIT GAME", FrontEnd.Modes[^1]);
+        var sounds = new List<string>();
+        var f = new FrontEnd { Sound = sounds.Add };
+        var r = FrontEnd.Result.None;
+        void Run(float seconds, (int, int, bool, bool) k = default)
+        {
+            r = f.Update(k, 1 / 60f);
+            for (var t = 1 / 60f; t < seconds; t += 1 / 60f)
+                if (f.Update(default, 1 / 60f) is var x and not FrontEnd.Result.None) r = x;
+        }
+        (int, int, bool, bool) ok = (0, 0, true, false), back = (0, 0, false, true);
+
+        f.Open(FrontEnd.Step.Modes);
+        Run(FrontEnd.Fade + 0.1f);
+        Run(0.5f, (0, -1, false, false)); // up from the first mode wraps to QUIT GAME
+        Assert.Equal(FrontEnd.Modes.Length - 1, f.Index);
+        Run(0.1f, ok);
+        Run(0.1f, ok); // NO is preselected
+        Run(0.1f, ok);
+        Run(0.1f, back); // back = NO
+        Run(0.1f, ok);
+        Run(0.1f, (-1, 0, false, false)); // YES
+        Run(FrontEnd.Fade + 0.1f, ok);
+        Assert.Equal(FrontEnd.Result.Quit, r);
+        Assert.Equal(["SYS005", "SYS006", "SYS006", "SYS006", "BEEP001", "SYS006", "SYS005", "SYS006"], sounds);
+    }
 }

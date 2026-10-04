@@ -110,13 +110,19 @@ public static class CourseLoader
         ];
     }
 
-    /// <summary>CRS_DRV_&lt;course&gt;_I.BIN (_O with <paramref name="reverse"/>), valid points only.</summary>
-    public static Vector3[] ReadDrivingLine(Iso9660 iso, string course, bool reverse = false)
+    /// <summary>
+    ///     CRS_DRV_&lt;course&gt;_I.BIN (_O with <paramref name="reverse"/>), valid points only; with <paramref name="runOut"/> also
+    ///     the points behind them up to the first jump over 50 m (or NaN), where the file's leftover memory starts.
+    /// </summary>
+    public static Vector3[] ReadDrivingLine(Iso9660 iso, string course, bool reverse = false, bool runOut = false)
     {
-        var data = Afs.FromBytes(iso.ReadFile("CDVD/DATA/COURSE/CRS_DATA.AFS"), iso.ReadFile("CDVD/DATA/COURSE/CRS_DATA.TBL"));
+        var data = iso.OpenAfs("CDVD/DATA/COURSE/CRS_DATA.AFS");
         var name = $"CRS_DRV_{course}_{(reverse ? 'O' : 'I')}.BIN";
-        var drv = data.Find(name) ?? throw new FileNotFoundException(name);
-        return DrivingLine.Read(data.Read(drv), DrivingLine.PointCount(course));
+        var bytes = data.Read(data.Find(name) ?? throw new FileNotFoundException(name));
+        var all = DrivingLine.Read(bytes, bytes.Length / 12);
+        var n = DrivingLine.PointCount(course);
+        while (runOut && n < all.Length && Vector3.Distance(all[n], all[n - 1]) < 50) n++;
+        return all[..n];
     }
 
     /// <summary>

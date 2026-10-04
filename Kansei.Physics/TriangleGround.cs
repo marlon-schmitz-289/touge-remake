@@ -19,9 +19,12 @@ public sealed class TriangleGround : IGround
 
     private readonly Vector3[] _a, _e1, _e2, _n; // per drivable triangle: corner, edges, unit normal
     private readonly int[] _surface;
-    private readonly Grid _tris, _walls;
+    private readonly Grid _tris;
+    private Grid _walls;
+    private readonly Vector2 _min, _max;
+    private readonly float _cell;
 
-    public WallSegment[] Walls { get; }
+    public WallSegment[] Walls { get; private set; }
 
     public TriangleGround(ReadOnlySpan<Vector3> positions, ReadOnlySpan<int> indices, ReadOnlySpan<int> surfaces,
         ReadOnlySpan<bool> isWall, float cellSize = 4f)
@@ -78,9 +81,19 @@ public sealed class TriangleGround : IGround
 
         Vector2 min = new(float.MaxValue), max = new(float.MinValue);
         foreach (var p in positions) (min, max) = (Vector2.Min(min, Xz(p)), Vector2.Max(max, Xz(p)));
+        (_min, _max, _cell) = (min, max, cellSize);
         _tris = new Grid(min, max, cellSize, triBoxes);
-        _walls = new Grid(min, max, cellSize, Array.ConvertAll(Walls, w => (Vector2.Min(Xz(w.A), Xz(w.B)), Vector2.Max(Xz(w.A), Xz(w.B)))));
+        _walls = WallGrid();
     }
+
+    /// <summary>Adds barriers that are no edge of the surface, e.g. across the road at a course end (same rules as edge walls).</summary>
+    public void AddWalls(params ReadOnlySpan<WallSegment> extra)
+    {
+        Walls = [.. Walls, .. extra];
+        _walls = WallGrid();
+    }
+
+    private Grid WallGrid() => new(_min, _max, _cell, Array.ConvertAll(Walls, w => (Vector2.Min(Xz(w.A), Xz(w.B)), Vector2.Max(Xz(w.A), Xz(w.B)))));
 
     public bool Raycast(Vector3 origin, Vector3 direction, float maxDistance, out GroundHit hit)
     {

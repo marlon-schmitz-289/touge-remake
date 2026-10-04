@@ -152,12 +152,13 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             FrontEnd.Step? step = Flow != null ? FrontEnd.Step.Boot : StartMenu switch
             {
                 null => UseMenus ? FrontEnd.Step.Boot : null, "boot" => FrontEnd.Step.Boot, "logo" => FrontEnd.Step.Logo,
-                "disclaimer" => FrontEnd.Step.Disclaimer, "title" => FrontEnd.Step.Title, "mode" or "modes" => FrontEnd.Step.Modes, _ => null,
+                "disclaimer" => FrontEnd.Step.Disclaimer, "title" => FrontEnd.Step.Title, "mode" or "modes" or "quit" => FrontEnd.Step.Modes, _ => null,
             };
             if (step is { } first)
             {
                 _front = new FrontEnd { SaveFound = File.Exists(Settings.FilePath), Sound = n => _menuAudio?.Play(n) };
                 _front.Open(first);
+                if (StartMenu == "quit") _front.AskQuit();
                 if (shotPath != null) _front.Settle();
             }
         }
@@ -360,8 +361,10 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         if (_probe != null || Frozen) return; // frozen scene / menus pause the game
         var car = _drive.Car;
         (_prevPos, _prevRot) = (car.Position, car.Orientation);
-        // the pilot drives for --autodrive/--bench/--flow and on past the finish line (as the original's auto-run after the goal)
-        var input = autodrive != null || bench != null || Flow != null || _menu?.Current == Menu.Screen.Finish ? _drive.PilotInput(_simTime)
+        // past the finish of a front-end run the game takes the car (auto-run to a stop before the end barrier);
+        // the pilot drives for --autodrive/--bench/--flow
+        var input = _front != null && _hud.Timer.Phase == LapTimer.State.Finished ? _drive.Coast()
+            : autodrive != null || bench != null || Flow != null ? _drive.PilotInput(_simTime)
             : _fly ? new VehicleInput(0, 0, 0, true)
             : new VehicleInput(_throttle, _brake, _steer, _handbrake, _pendingShift);
         _pendingShift = 0;
@@ -565,7 +568,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         switch (_front!.Update(keys, dt))
         {
             case FrontEnd.Result.Quit:
-                Window.ShouldClose = true;
+                Quit();
                 break;
             case FrontEnd.Result.TimeAttack:
                 OpenMenu(Menu.Screen.Course, fromFrontEnd: true);
@@ -635,7 +638,17 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             case Menu.Action.SettingsChanged:
                 ApplySettings();
                 break;
+            case Menu.Action.Quit:
+                Quit();
+                break;
         }
+    }
+
+    /// <summary>QUIT GAME (main or pause menu, confirmed): settings saved, window closed.</summary>
+    private void Quit()
+    {
+        if (_persist) _settings.Save();
+        Window.ShouldClose = true;
     }
 
     /// <summary>Car back at the start of the line (gearbox as chosen in the menus), fresh timing and drift score, race camera behind it.</summary>

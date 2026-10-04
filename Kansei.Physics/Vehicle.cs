@@ -73,6 +73,13 @@ public sealed class Vehicle
     /// <summary>Body slip angle β in rad; + = travelling to the right of the nose. 0 when not moving forward.</summary>
     public float SlipAngle { get; private set; }
     public float SpeedKmh => Velocity.Length() * 3.6f;
+
+    /// <summary>Scripted control (the game's auto-run after the finish): caps the body speed at <paramref name="max"/> m/s, direction kept.</summary>
+    public void LimitSpeed(float max)
+    {
+        var v = Velocity.Length();
+        if (v > max) Velocity *= max / v;
+    }
     /// <summary>Wall contacts summed over the substeps of the last <see cref="Step" />.</summary>
     public int WallContacts { get; private set; }
     /// <summary>Point and normal of the last wall contact (valid while <see cref="WallContacts" /> &gt; 0).</summary>

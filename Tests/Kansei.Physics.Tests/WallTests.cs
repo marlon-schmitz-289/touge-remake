@@ -83,6 +83,30 @@ public class WallTests(ITestOutputHelper log)
         Assert.InRange(car.Position.X - x0, -4, 4 - CarSpec.AE86.Width / 2 + 0.05f);
     }
 
+    /// <summary>Course-end barrier (<see cref="TriangleGround.AddWalls" />) across open road: hit head-on at 150 km/h, it holds.</summary>
+    [Fact]
+    public void Added_end_barrier_stops_the_car_at_150()
+    {
+        var car = At150();
+        var (x0, z0) = (car.Position.X, car.Position.Z);
+        var ground = Grid([x0 - 6, x0 + 6], [z0 - 100, z0 + 1000], (_, _) => false);
+        var barZ = z0 + 30;
+        ground.AddWalls(new TriangleGround.WallSegment(new Vector3(x0 - 6.5f, 0, barZ), new Vector3(x0 + 6.5f, 0, barZ), -Vector3.UnitZ));
+        var maxZ = float.MinValue;
+        var contacts = 0;
+        for (var t = 0f; t < 3; t += Dt)
+        {
+            car.Step(new VehicleInput(1, 0, 0), ground, Dt);
+            maxZ = MathF.Max(maxZ, car.Position.Z);
+            contacts += car.WallContacts;
+        }
+        var nose = maxZ + CarSpec.AE86.Length / 2;
+        log.WriteLine($"barrier: nose max {nose - barZ:F2} m past it, {contacts} contacts, now {car.SpeedKmh:F1} km/h");
+        Assert.True(contacts > 0);
+        Assert.InRange(nose, 0, barZ + Vehicle.ProbeRadius);
+        Assert.InRange(car.Position.Z, z0, barZ);
+    }
+
     [Fact]
     public void Wall_contact_ticks_do_not_allocate()
     {

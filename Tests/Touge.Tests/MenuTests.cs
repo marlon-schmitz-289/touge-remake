@@ -82,7 +82,7 @@ public class MenuTests
 
         sounds.Clear();
         m.Finish(new Menu.Run(200, [50, 100, 150, 200], [null, null, null, null], null, true, 0));
-        Assert.False(m.Freezes); // the pilot drives on behind the banner
+        Assert.False(m.Freezes); // the car coasts to its stop behind the banner
         Assert.Equal("WIN.adx", m.Music(null));
         Run(Menu.FinishHold + Menu.Fade + 0.1f);
         Assert.Equal(Menu.Screen.Result, m.Current);
@@ -94,5 +94,17 @@ public class MenuTests
         Run(Menu.Fade + 0.1f, ok);
         Assert.Contains(Menu.Action.Exit, actions);
         Assert.Equal(Menu.Screen.None, m.Current);
+
+        // pause: Quit Game (desktop) asks first; NO keeps the pause, YES quits
+        m.Open(Menu.Screen.Pause, "AKINA_DAY", false, "AE86T", 0);
+        for (var i = 0; i < 3; i++) Run(0.1f, (1, 0, false, false));
+        actions.Clear();
+        Run(0.1f, ok);
+        Run(0.1f, ok);
+        Assert.Equal(Menu.Screen.Pause, m.Current);
+        Run(0.1f, ok);
+        Run(0.1f, (-1, 0, false, false));
+        Run(0.1f, ok);
+        Assert.Equal([Menu.Action.Quit], actions.Where(a => a != Menu.Action.None));
     }
 }
