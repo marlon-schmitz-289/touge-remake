@@ -25,7 +25,7 @@ namespace Touge;
 ///     Sound: engine, tyres, walls, wind, race BGM (M next track, F3 music on/off); none for --shot.
 ///     <paramref name="flicker"/>: no game loop, renders the <see cref="FlickerProbe"/> views and quits.
 /// </summary>
-public sealed class TougeGame(string isoPath, string courseTime, string? shotPath = null, int startPoint = 0, float? orbit = null, float? autodrive = null,
+public sealed partial class TougeGame(string isoPath, string courseTime, string? shotPath = null, int startPoint = 0, float? orbit = null, float? autodrive = null,
     float? bench = null, bool highQuality = true, bool drift = false, string? flicker = null)
     : KanseiGame
 {
@@ -178,7 +178,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         var title = _front != null && (_persist || Flow != null);
         LoadCourse(iso, title ? "AKINA_NIT" : _persist ? _settings.Course : _courseTime, _settings.Reverse, _settings.Car, _settings.Paint, startPoint, !title && _settings.Fog);
         _drive.ForceDrift = drift;
-        if (autodrive is { } seconds)
+        if (autodrive is { } battleSeconds && _race != null) BattleAutoDrive(battleSeconds);
+        else if (autodrive is { } seconds)
         {
             _drive.AutoDrive(seconds, () =>
             {
@@ -213,6 +214,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             if (shotPath != null) _menu.Settle();
         }
         else _inRace = true;
+        if (_race != null && _front == null && _menu != null && StartMenu == null && shotPath == null && autodrive == null && bench == null && Flow == null)
+            OpenMenu(Menu.Screen.Intro); // --battle: telop with the rival, countdown
         if (Flow != null)
         {
             Directory.CreateDirectory(Flow);
@@ -253,6 +256,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             _audio?.Dispose();
             _course.World.Dispose();
             _course.Sky.Dispose();
+            DisposeRival(); // its textures came after the player's car's (ReleaseTextures frees from an index on)
             _car.Dispose();
             _carRenderer.Dispose();
             _fxRenderer.Dispose();
@@ -277,11 +281,13 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _hud = NewHud();
         SyncPose();
         if (_audioDevice != null) StartAudio(iso);
+        LoadBattle(iso);
     }
 
     private void StartAudio(Iso9660 iso)
     {
         _audio = new GameAudio(iso, _courseTime, _audioDevice!, _carName);
+        StartRivalAudio(iso);
         if (_persist) _audioDevice!.Music = _settings.MusicVolume; // GameAudio sets its own default
         _music = ""; // SyncMusic starts the race or menu music
     }
@@ -310,10 +316,15 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     private void LoadCarModel(Iso9660 iso)
     {
         (_car, _carLivery) = (CarModel.Load(iso, _carName, _paint, _renderer, _settings.Livery), _settings.Livery);
-        var spec = _drive.Car.Spec;
+        _modelToBody = ModelToBody(_car, _drive.Car.Spec);
+    }
+
+    /// <summary>Model space → physics body space (origin CoG): the model's wheel centres onto the physics wheel centres at rest.</summary>
+    private static Matrix4x4 ModelToBody(CarModel model, CarSpec spec)
+    {
         var modelWheels = Vector3.Zero;
-        foreach (var w in _car.Wheels) modelWheels += w.Translation / 4;
-        _modelToBody = Matrix4x4.CreateTranslation(new Vector3(0, spec.WheelRadius - spec.CogHeight, spec.Wheelbase * (0.5f - spec.FrontWeight)) - modelWheels);
+        foreach (var w in model.Wheels) modelWheels += w.Translation / 4;
+        return Matrix4x4.CreateTranslation(new Vector3(0, spec.WheelRadius - spec.CogHeight, spec.Wheelbase * (0.5f - spec.FrontWeight)) - modelWheels);
     }
 
     /// <summary>
@@ -325,6 +336,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         var name = CarPaint.Cars[(car % CarPaint.Cars.Length + CarPaint.Cars.Length) % CarPaint.Cars.Length];
         using var iso = new Iso9660(isoPath);
         Device.WaitIdle(); // the last frame may still read the old meshes
+        DisposeRival(); // loaded after the player's car: its textures go with it, reloaded below
         _car.Dispose();
         if (name != _carName)
         {
@@ -334,6 +346,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         }
         (_carName, _paint) = (name, paint);
         LoadCarModel(iso);
+        LoadRivalModel(iso);
         Console.WriteLine($"\n[Touge] Auto {_carName} (Lack {_paint + 1}/{_car.Paints}), {_drive.Car.Spec.Mass:F0} kg, Antrieb vorn {_drive.Car.Spec.DriveFront:P0}, Motor {GameAudio.Engines[Array.IndexOf(CarPaint.Cars, _carName)]}");
     }
 
@@ -380,13 +393,14 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         (_prevPos, _prevRot) = (car.Position, car.Orientation);
         // past the finish of a front-end run the game takes the car (auto-run to a stop before the end barrier);
         // the pilot drives for --autodrive/--bench/--flow
-        var input = _front != null && _hud.Timer.Phase == LapTimer.State.Finished ? _drive.Coast()
+        var input = _race == null && _front != null && _hud.Timer.Phase == LapTimer.State.Finished ? _drive.Coast()
             : autodrive != null || bench != null || Flow != null ? _drive.PilotInput(_simTime)
             : _fly ? new VehicleInput(0, 0, 0, true)
             : new VehicleInput(_throttle, _brake, _steer, _handbrake, _pendingShift);
         _pendingShift = 0;
+        if (_race != null) input = BattleStep(input, dt); // the session steps every car, the player's included
+        else car.Step(input, _drive.Ground, dt);
         _brakeLight = input.Brake;
-        car.Step(input, _drive.Ground, dt);
         _simTime += dt;
         _lights.Tick(dt);
         TickEffects(dt);
@@ -401,6 +415,21 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     private void TickEffects(float dt)
     {
         var car = _drive.Car;
+        WheelEffects(car, _smokeDebt, _sprayDebt, 0, dt);
+        var impact = (car.Velocity - _prevVelocity).Length();
+        _prevVelocity = car.Velocity;
+        if (car.WallContacts > 0)
+        {
+            _shake = MathF.Max(_shake, Math.Clamp((impact - 0.5f) / 4, 0, 1));
+            WallSparks(car);
+        }
+        BattleEffects(dt);
+        _fx.Update(dt);
+    }
+
+    /// <summary>Smoke, skid marks (strips <paramref name="track0"/>…+3) and rain spray of one car's wheels.</summary>
+    private void WheelEffects(Vehicle car, float[] smokeDebt, float[] sprayDebt, int track0, float dt)
+    {
         var spec = car.Spec;
         var pose = car.Pose;
         var up = Vector3.TransformNormal(Vector3.UnitY, pose);
@@ -416,39 +445,37 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             var slide = w.Contact ? speed * MathF.Sqrt(w.SlipRatio * w.SlipRatio + tan * tan) : 0; // m/s
             var load = Math.Clamp(w.Load / spec.NominalLoad, 0, 1.5f);
             // wet tyres barely mark the road or smoke
-            _fx.Skid(i, contact, side, up, Math.Clamp((slide - 2f) / 3, 0, 1) * Math.Clamp(load * 4, 0, 1) * (1 - 0.7f * wet));
+            _fx.Skid(track0 + i, contact, side, up, Math.Clamp((slide - 2f) / 3, 0, 1) * Math.Clamp(load * 4, 0, 1) * (1 - 0.7f * wet));
             var smoke = Math.Clamp((slide - 4.5f) / 7, 0, 1) * load * (1 - 0.8f * wet);
-            _smokeDebt[i] += smoke * 45 * dt; // puffs per second per wheel at full slide
-            for (; _smokeDebt[i] >= 1; _smokeDebt[i]--)
+            smokeDebt[i] += smoke * 45 * dt; // puffs per second per wheel at full slide
+            for (; smokeDebt[i] >= 1; smokeDebt[i]--)
             {
                 var jitter = new Vector3(_rng.NextSingle() - 0.5f, _rng.NextSingle() * 0.5f, _rng.NextSingle() - 0.5f);
                 _fx.EmitSmoke(contact + up * 0.2f + jitter * 0.3f, car.Velocity * 0.12f + jitter * 1.5f + up * 0.5f, 0.3f, 0.12f + 0.25f * smoke);
             }
             if (!w.Contact || i < 2) continue; // rear wheels: the fronts spray into the rears
-            _sprayDebt[i] += spray * 30 * dt;
-            for (; _sprayDebt[i] >= 1; _sprayDebt[i]--)
+            sprayDebt[i] += spray * 30 * dt;
+            for (; sprayDebt[i] >= 1; sprayDebt[i]--)
             {
                 // thrown up and back off the tread (the car's velocity carried partly), then arcs down (Effects.EmitSpray)
                 var jitter = new Vector3(_rng.NextSingle() - 0.5f, _rng.NextSingle(), _rng.NextSingle() - 0.5f);
                 _fx.EmitSpray(contact + up * 0.15f + jitter * 0.2f, car.Velocity * 0.45f + up * (1.2f + 2f * jitter.Y) + jitter * 1.5f, 0.22f, 0.2f * spray);
             }
         }
+    }
 
-        var impact = (car.Velocity - _prevVelocity).Length();
-        _prevVelocity = car.Velocity;
-        if (car.WallContacts > 0)
+    /// <summary>Sparks where <paramref name="car"/> scrapes a wall.</summary>
+    private void WallSparks(Vehicle car)
+    {
+        var up = Vector3.TransformNormal(Vector3.UnitY, car.Pose);
+        var scrape = car.Velocity - car.WallNormal * Vector3.Dot(car.Velocity, car.WallNormal);
+        var sparks = (int)MathF.Min(scrape.Length() / 3, 6);
+        for (var i = 0; i < sparks; i++)
         {
-            _shake = MathF.Max(_shake, Math.Clamp((impact - 0.5f) / 4, 0, 1));
-            var scrape = car.Velocity - car.WallNormal * Vector3.Dot(car.Velocity, car.WallNormal);
-            var sparks = (int)MathF.Min(scrape.Length() / 3, 6);
-            for (var i = 0; i < sparks; i++)
-            {
-                var r = new Vector3(_rng.NextSingle() - 0.5f, _rng.NextSingle(), _rng.NextSingle() - 0.5f);
-                _fx.EmitSpark(car.WallPoint + car.WallNormal * 0.05f - up * 0.2f,
-                    scrape * (0.3f + 0.5f * _rng.NextSingle()) + car.WallNormal * (1 + 2 * r.Y) + r * 4);
-            }
+            var r = new Vector3(_rng.NextSingle() - 0.5f, _rng.NextSingle(), _rng.NextSingle() - 0.5f);
+            _fx.EmitSpark(car.WallPoint + car.WallNormal * 0.05f - up * 0.2f,
+                scrape * (0.3f + 0.5f * _rng.NextSingle()) + car.WallNormal * (1 + 2 * r.Y) + r * 4);
         }
-        _fx.Update(dt);
     }
 
     private void JumpToLine(int i)
@@ -511,7 +538,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             if (_menu.Current != Menu.Screen.Intro || _menu.Freezes) return; // after GO the intro only draws
         }
         if (bench is { } benchSeconds && Bench(time, benchSeconds)) return;
-        if (_front != null && !_finished && _hud.Timer.Phase == LapTimer.State.Finished)
+        if (BattleFinished()) return;
+        if (_race == null && _front != null && !_finished && _hud.Timer.Phase == LapTimer.State.Finished)
         {
             // the run is over: finish banner, then the result sheet (only in the front-end flow)
             _finished = true;
@@ -673,6 +701,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     private void ResetRun()
     {
         _drive.ResetTo(0);
+        NewBattle();
         if (_front != null) _drive.Car.AutomaticGearbox = !_settings.Manual;
         _hud = NewHud();
         _fx = new Effects();
@@ -1009,7 +1038,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             _drive.ResetNearest();
             SyncPose();
         }
-        if (k.IsKeyPressed(Key.B))
+        if (k.IsKeyPressed(Key.B) && _race == null)
         {
             using (var iso = new Iso9660(isoPath)) _drive.SetDirection(iso, !_drive.Reverse);
             _drive.ResetNearest();
@@ -1078,20 +1107,28 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     /// <summary>Body and wheel world matrices from the physics state, body pose interpolated between the last two ticks.</summary>
     private void UpdateCarMatrices(float alpha)
     {
-        var car = _drive.Car;
-        _carPose = Matrix4x4.CreateFromQuaternion(Quaternion.Slerp(_prevRot, car.Orientation, alpha))
-                   * Matrix4x4.CreateTranslation(Vector3.Lerp(_prevPos, car.Position, alpha));
-        _carBody = _modelToBody * _carPose;
+        (_carPose, _carBody) = PoseCar(_drive.Car, _car, _modelToBody, _prevPos, _prevRot, alpha, _carWheels);
+        UpdateRivalMatrices(alpha);
+    }
+
+    /// <summary>Pose (physics body → world) and model matrix of <paramref name="car"/> interpolated by <paramref name="alpha"/>, its wheel matrices into <paramref name="wheels"/>.</summary>
+    private static (Matrix4x4 Pose, Matrix4x4 Body) PoseCar(Vehicle car, CarModel model, in Matrix4x4 modelToBody, Vector3 prevPos, Quaternion prevRot, float alpha,
+        Span<Matrix4x4> wheels)
+    {
+        var pose = Matrix4x4.CreateFromQuaternion(Quaternion.Slerp(prevRot, car.Orientation, alpha))
+                   * Matrix4x4.CreateTranslation(Vector3.Lerp(prevPos, car.Position, alpha));
+        var body = modelToBody * pose;
         var restY = car.Spec.WheelRadius - car.Spec.CogHeight;
         for (var i = 0; i < 4; i++)
         {
             // CarParts node order fr_l, fr_r, re_l, re_r = physics FL, FR, RL, RR; model node X/Z, physics suspension travel
             var w = car.Wheels[i];
-            var node = _car.Wheels[i];
+            var node = model.Wheels[i];
             var spinSteer = Matrix4x4.CreateRotationX(w.SpinAngle) * Matrix4x4.CreateRotationY(-w.SteerAngle);
             var flip = node with { M41 = 0, M42 = 0, M43 = 0 };
-            _carWheels[i] = flip * spinSteer * Matrix4x4.CreateTranslation(node.Translation + new Vector3(0, w.LocalCenter.Y - restY, 0)) * _carBody;
+            wheels[i] = flip * spinSteer * Matrix4x4.CreateTranslation(node.Translation + new Vector3(0, w.LocalCenter.Y - restY, 0)) * body;
         }
+        return (pose, body);
     }
 
     /// <summary>Chase camera (spring towards a point behind/above the car, looks a bit ahead) or bumper camera.</summary>
@@ -1148,8 +1185,9 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         Span<(StaticMesh, Matrix4x4)> casters =
         [
             (shell.Body, _carBody), (_car.Wheel, _carWheels[0]), (_car.Wheel, _carWheels[1]), (_car.Wheel, _carWheels[2]), (_car.Wheel, _carWheels[3]),
+            default, default, default, default, default,
         ];
-        _renderer.RenderShadows(ctx.Encoder, _pos, Vector3.Normalize(_camLook - _pos), _fov, aspect, _course.World, casters);
+        _renderer.RenderShadows(ctx.Encoder, _pos, Vector3.Normalize(_camLook - _pos), _fov, aspect, _course.World, casters[..(5 + RivalCasters(casters[5..]))]);
         var pass = _renderer.BeginScene(ctx.Encoder, skyView, proj, frame);
         _renderer.Time = _simTime;
         _renderer.DrawSky(pass, _course.Sky, Matrix4x4.CreateTranslation(_pos with { Y = 0 }) * view * proj, _pos); // follows the camera
@@ -1159,6 +1197,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         {
             _carRenderer.Draw(pass, shell.Body, shell.Decals, _car.Wheel, _carBody, _carWheels, view * proj, _pos);
             if (shell.PopUp is { } popUp) _carRenderer.DrawPart(pass, popUp, _car.Lamp.PopUpAt(_lights.Open) * _carBody, view * proj, _pos);
+            DrawRival(pass, view * proj);
         }
         _fxRenderer.Draw(pass, _fx, view, view * proj, _pos);
         // camera velocity stretches the rain streaks; a shot has no previous frame, the chase camera moves with the car
@@ -1175,7 +1214,9 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         else if (_hud.Visible && (!menuShown || _menu!.OverRace)) // telop/countdown and pause lie over the HUD
         {
             _hud.Lights = _lights.State;
+            _hud.Rival = _race is { } race ? (_rivalPose.Translation, race.Cars[1].Along) : null;
             _hud.Build(_overlay, w, h, _carPose.Translation, Vector3.TransformNormal(Vector3.UnitZ, _carPose), _drive.Car, _carName, _menuTime);
+            BuildBattleHud(w, h);
         }
         else _overlay.Clear();
         if (_front is not { Active: true } && menuShown) _menu!.Build(_overlay, w, h);
@@ -1192,10 +1233,12 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     public override void Dispose()
     {
         _audio?.Dispose();
+        _rivalAudio?.Dispose();
         _menuAudio?.Dispose();
         _audioDevice?.Dispose();
         _course.World.Dispose();
         _course.Sky.Dispose();
+        DisposeRival();
         _car.Dispose();
         _carRenderer.Dispose();
         _fxRenderer.Dispose();

@@ -31,6 +31,10 @@ public sealed class MapWidget
     private readonly int _laps;
     private float _zoom = 170;
 
+    /// <summary>Battle: the rival's XZ position and progress 0..1 (red dot like the original's rview_enemy, red tick on the ring); null = none.</summary>
+    public (Vector2 Position, float Progress)? Rival;
+    private static readonly uint RivalColor = Overlay.Rgba(1, 0.16f, 0.12f);
+
     public MapWidget(Vector3[] road, Vector3[] line)
     {
         _road = Array.ConvertAll(road, Xz);
@@ -100,6 +104,12 @@ public sealed class MapWidget
 
         Map(o, c, s, mode, car, heading, progress, timer, night ? gauge.Night : Road);
         Ring(o, c, s, progress, timer);
+        if (Rival is { } rival)
+        {
+            // rival on the ring: a red tick across it
+            var d = Dir(rival.Progress);
+            o.Line(c + d * (Radius - 17) * s, c + d * (Radius - 3) * s, 3 * s, RivalColor);
+        }
 
         // remaining distance in the free bottom of the arc, like the cluster's speed window
         var wc = c + new Vector2(0, (Radius - 30) * s);
@@ -205,6 +215,13 @@ public sealed class MapWidget
         if (timer.Phase == LapTimer.State.Ready) Marker(o, ToScreen(_start), _startDir, f, right, s, 1, 1);
         Marker(o, ToScreen(_goal), _goalDir, f, right, s, 2, overview ? 1.5f : 1);
 
+        // rival: red dot with an ink rim (under the player's arrow)
+        if (Rival is { } r)
+        {
+            var rp = ToScreen(r.Position);
+            o.Disc(rp, 6.5f * s, Style.Ink);
+            o.Disc(rp, 5 * s, RivalColor);
+        }
         // car arrow: white with ink outline and an amber glow, distinct from a lit road at night
         var p0 = ToScreen(car);
         for (var g = 3; g >= 1; g--) o.Disc(p0, (5 + 4 * g) * s, Overlay.Rgba(1, 0.72f, 0.1f, 0.1f));
