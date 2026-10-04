@@ -11,7 +11,7 @@ namespace Touge;
 ///     (<see cref="Zones"/>), neighbouring zones crossfaded with equal power (<see cref="ZoneWeights"/>); tyres <c>SRIP_A</c> (road; <c>RAIN_SRIP</c> on _RIN courses) /
 ///     <c>RAIN_SRIP</c> (grass, stand-in); rain ambience SYSSE <c>rain</c> looped on _RIN courses;
 ///     walls <c>cr001/cr002</c> (one-shot by impact speed, cr002's middle looped as scrape); <c>zbackfire002a–h</c> on
-///     high-rpm upshifts/lift-off; race BGM (RACEBGM.AFS) streamed with its loop points.
+///     high-rpm upshifts/lift-off. Race music is the course-independent <see cref="Jukebox"/>.
 ///     <see cref="Update"/> once per physics tick, allocation-free.
 /// </summary>
 public sealed class GameAudio : IDisposable
@@ -75,12 +75,6 @@ public sealed class GameAudio : IDisposable
     private int _prevGear = 1, _backfireNext; // Vehicle.Reset puts the car in 1st
     private bool _prevHandbrake, _crashToggle;
 
-    // music
-    private readonly Afs _bgm;
-    private readonly Afs.Entry[] _tracks;
-    private int _track, _musicRequest;
-    private bool _musicOn = true;
-
     /// <summary>For logs/analysis: gain-weighted playback rate of the engine layers, total engine gain, squeal gain, max normalised wheel slip.</summary>
     public float EnginePitch { get; private set; }
     /// <summary>Position between the on-throttle zones (0 = idle … 3 = top; 1.5 = halfway through the 1→2 crossfade).</summary>
@@ -90,7 +84,6 @@ public sealed class GameAudio : IDisposable
     public float ScrapeGain => _scrapeGain;
     public int Crashes { get; private set; }
     public float Slip { get; private set; }
-    public string Track => Path.GetFileNameWithoutExtension(_tracks[_track].Name);
 
     public GameAudio(Iso9660 iso, string courseTime, AudioDevice dev, string car = "AE86T")
     {
@@ -119,10 +112,6 @@ public sealed class GameAudio : IDisposable
         _road = Loop(Clip(new Vag.Sound(Noise(22050 * 2, 0.06f, 1), 22050, null)));
         _wind = Loop(Clip(new Vag.Sound(Noise(22050 * 2, 0.35f, 2), 22050, null)));
 
-        _bgm = iso.OpenAfs("CDVD/DATA/SOUND/RACEBGM.AFS");
-        _tracks = [.. _bgm.Entries.Where(e => e.Name.EndsWith(".ADX", StringComparison.OrdinalIgnoreCase))];
-        var course = courseTime[..courseTime.LastIndexOf('_')];
-        _track = course.Sum(c => c) % _tracks.Length; // fixed pick per course, M cycles
         (dev.Music, dev.Sfx) = (0.6f, 0.35f);
     }
 
@@ -347,44 +336,8 @@ public sealed class GameAudio : IDisposable
         _backfireCooldown = 0.8f;
     }
 
-    public bool MusicOn
-    {
-        get => _musicOn;
-        set
-        {
-            _musicOn = value;
-            if (value) PlayTrack(background: true);
-            else { _musicRequest++; _dev.StopMusic(); }
-        }
-    }
-
-    public void NextTrack()
-    {
-        _track = (_track + 1) % _tracks.Length;
-        _musicOn = true;
-        PlayTrack(background: true);
-    }
-
-    /// <summary>Starts the current track (ADX read + decoder set-up off the main thread when <paramref name="background"/>).</summary>
-    public void PlayTrack(bool background)
-    {
-        var request = ++_musicRequest;
-        var entry = _tracks[_track];
-        void Start()
-        {
-            var adx = new Adx(_bgm.Read(entry));
-            if (request != _musicRequest) return; // superseded (next track / music off) while loading
-            _dev.PlayMusic(adx.Open(loop: true).Read, adx.Channels, adx.SampleRate);
-            Console.WriteLine($"\n[Audio] Musik: {Track}");
-        }
-        if (background) Task.Run(Start);
-        else Start();
-    }
-
     public void Dispose()
     {
-        _musicRequest++;
-        _dev.StopMusic();
         foreach (var v in _engine) v.Dispose();
         foreach (var v in new[] { _squeal, _squealHigh, _dirt, _scrape, _road, _wind }) v.Dispose();
         _rain?.Dispose();

@@ -18,9 +18,9 @@ namespace Touge.Ui;
 ///     UI sounds by SYSSE name through <see cref="Sound"/> (SYS005 move, SYS006 decide, BEEP001 back/locked); the
 ///     game reads <see cref="Music"/>, reacts to the returned <see cref="Action"/> and reads the selection.
 /// </summary>
-public sealed class Menu(Catalog catalog, Settings settings)
+public sealed partial class Menu(Catalog catalog, Settings settings)
 {
-    public enum Screen { None, Course, Route, Time, Weather, Maker, Car, Gearbox, Loading, Intro, Pause, Finish, Result, Records, Options }
+    public enum Screen { None, Course, Route, Time, Weather, Maker, Car, Gearbox, Loading, Intro, Pause, Finish, Result, Records, Options, Playlist }
 
     /// <summary>
     ///     Load: load <see cref="CourseTime"/>/<see cref="CarId"/>… (the menu goes on into the telop); Restart: car back to the
@@ -90,7 +90,7 @@ public sealed class Menu(Catalog catalog, Settings settings)
     {
         Screen.Course or Screen.Route or Screen.Time or Screen.Weather => "TOKYO.adx",
         Screen.Maker or Screen.Car or Screen.Gearbox or Screen.Records => "WORRY.adx",
-        Screen.Loading => null, Screen.Finish => "WIN.adx", Screen.Result => "JOY.adx", Screen.Options => playing,
+        Screen.Loading => null, Screen.Finish => "WIN.adx", Screen.Result => "JOY.adx", Screen.Options or Screen.Playlist => playing,
         _ => RaceMusic,
     };
 
@@ -135,7 +135,7 @@ public sealed class Menu(Catalog catalog, Settings settings)
     /// <summary>Screens of one module switch in place, between modules the screen fades through black.</summary>
     private static int Module(Screen s) => s switch
     {
-        Screen.Course or Screen.Route or Screen.Time or Screen.Weather => 1, Screen.Car or Screen.Gearbox => 2, _ => 10 + (int)s,
+        Screen.Course or Screen.Route or Screen.Time or Screen.Weather => 1, Screen.Car or Screen.Gearbox => 2, Screen.Options or Screen.Playlist => 3, _ => 10 + (int)s,
     };
 
     private void Go(Screen s, bool remember = true)
@@ -407,12 +407,20 @@ public sealed class Menu(Catalog catalog, Settings settings)
                     Sound?.Invoke("SYS005");
                 }
                 else if (k.Back) Back();
+                else if (k.Ok && _row == PlaylistRow)
+                {
+                    Sound?.Invoke("SYS006");
+                    Go(Screen.Playlist);
+                }
+                else if (_row == PlaylistRow) { }
                 else if ((k.X != 0 || k.Ok) && ChangeOption(k.X != 0 ? k.X : 1))
                 {
                     Sound?.Invoke("SYS005");
                     return Action.SettingsChanged;
                 }
                 break;
+            case Screen.Playlist:
+                return UpdatePlaylist(k);
         }
         return Action.None;
     }
@@ -425,12 +433,12 @@ public sealed class Menu(Catalog catalog, Settings settings)
 
     // ---------------------------------------------------------------- options
 
-    private static readonly string[] OptionRows = ["GRAPHICS", "MUSIC", "MUSIC VOLUME", "SE VOLUME", "HUD", "NAVI MAP", "CAMERA", "STICKERS", "CONTROLS"];
+    private static readonly string[] OptionRows = ["GRAPHICS", "MUSIC", "MUSIC VOLUME", "SE VOLUME", "HUD", "NAVI MAP", "CAMERA", "STICKERS", "CONTROLS", "PLAYLIST"];
 
     private static readonly string[][] OptionValues =
     [
         ["HIGH", "LOW"], ["ON", "OFF"], [], [], ["ON", "OFF"], ["ROTATING", "NORTH UP", "WHOLE"], ["CHASE", "BUMPER"], ["ANIME", "STOCK", "NONE"],
-        ["KEYBOARD", "PAD"],
+        ["KEYBOARD", "PAD"], [],
     ];
 
     private static readonly string[][] OptionHelp =
@@ -439,14 +447,15 @@ public sealed class Menu(Catalog catalog, Settings settings)
         ["Menu music and the Eurobeat in the race."], ["Volume of the music."], ["Volume of engine, tyres and menu sounds."],
         ["Times, drift meter, course dial and the car's own gauges."],
         ["Course dial: turns with the car, north up,", "or shows the whole course."], ["Chase camera behind the car, or the bumper view."],
-        ["ANIME: the character's car with its stickers.", "STOCK: the game's stock car.  NONE: no stickers or plates."],
+        ["ANIME: the character's car with its stickers.", "STOCK: the game's stock car.  NONE: no stickers or plates."], [],
+        ["Race music: every song once in random order, then a new round.", "Switch songs on or off.  M (pad: D-pad right) skips in the race."],
     ];
 
     private static readonly string[] KeyboardHelp =
-        ["W/S or UP/DOWN throttle and brake, A/D or LEFT/RIGHT steer, SPACE handbrake,", "SHIFT/CTRL gear up/down (MT), T AT/MT, R back to the road, C camera,", "L lights, H high beam, F2 graphics, F3 music, F4 HUD, N map, ESC pause."];
+        ["W/S or UP/DOWN throttle and brake, A/D or LEFT/RIGHT steer, SPACE handbrake,", "SHIFT/CTRL gear up/down (MT), T AT/MT, R back to the road, C camera,", "L lights, H high beam, F2 graphics, F3 music, M next song, F4 HUD, N map, ESC pause."];
 
     private static readonly string[] PadHelp =
-        ["Left stick steer, right/left trigger throttle and brake, A handbrake,", "bumpers gear up/down (MT), Y back to the road, START pause.", "D-pad up/down lights/high beam. Menus: D-pad or stick, A decide, B back."];
+        ["Left stick steer, right/left trigger throttle and brake, A handbrake,", "bumpers gear up/down (MT), Y back to the road, START pause.", "D-pad up/down lights/high beam, right next song. Menus: D-pad/stick, A, B."];
 
     /// <summary>Selected value of option row <paramref name="row"/>.</summary>
     private int OptionValue(int row) => row switch
@@ -543,6 +552,11 @@ public sealed class Menu(Catalog catalog, Settings settings)
                 c.Backdrop(_clock);
                 OptionsScreen(c);
                 c.Marquee("OPTIONS", true, _clock);
+                break;
+            case Screen.Playlist:
+                c.Backdrop(_clock);
+                PlaylistScreen(c);
+                c.Marquee("PLAYLIST", true, _clock);
                 break;
         }
         c.Fade(_leave >= 0 ? Math.Clamp(_leave / Fade, 0, 1) : _fadeIn ? 1 - Math.Clamp(_t / Fade, 0, 1) : 0);
@@ -860,7 +874,7 @@ public sealed class Menu(Catalog catalog, Settings settings)
     {
         for (var i = 0; i < OptionRows.Length; i++)
         {
-            var y = 70 + i * 30;
+            var y = OptionY(i);
             // dark-steel label tab
             Vector2 min = Vector2.Round(c.P(36, y)), max = Vector2.Round(c.P(196, y + 26));
             c.O.Rect(min, max, Overlay.Rgba(0.5f, 0.51f, 0.53f));
@@ -869,6 +883,11 @@ public sealed class Menu(Catalog catalog, Settings settings)
             // chrome value plate with engraved choices, the active one lit
             c.Plate(204, y, 276, 26, 1);
             var values = OptionValues[i];
+            if (i == PlaylistRow)
+            {
+                PlaylistValue(c, y);
+                continue;
+            }
             if (i is 2 or 3)
             {
                 var v = MathF.Round((i == 2 ? settings.MusicVolume : settings.SoundVolume) * 10);
@@ -887,11 +906,11 @@ public sealed class Menu(Catalog catalog, Settings settings)
                 c.Text(values[j], x, y + 18, 13, on ? Overlay.Rgba(0.05f, 0.3f, 0.1f) : Overlay.Rgba(0.35f, 0.42f, 0.38f, 0.55f), 0.5f, 0, 0, on ? 0.6f : 0);
             }
         }
-        var gy = 70 + _row * 30;
+        var gy = OptionY(_row);
         c.Glow(200, gy - 4, 484, gy + 30, Canvas.Pulse(Theta));
-        c.Carbon(36, 344, 480, 426, 1, false);
+        c.Carbon(36, 356, 480, 426, 1, false);
         var help = _row == 8 ? _padHelp ? PadHelp : KeyboardHelp : OptionHelp[_row];
-        for (var i = 0; i < help.Length; i++) c.Text(help[i], 50, 366 + i * 20, 11.5f, Canvas.White, 0, 0.12f);
+        for (var i = 0; i < help.Length; i++) c.Text(help[i], 50, 375 + i * 18, 11.5f, Canvas.White, 0, 0.12f);
         Hint(c, "UP/DOWN: Select    LEFT/RIGHT: Change    BACK: Main menu");
     }
 }

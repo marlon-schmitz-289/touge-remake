@@ -20,7 +20,8 @@ internal static class AudioCapture
         var drive = new Drive(iso, courseTime, spec: CarSpecs.All[carName]);
         drive.ResetTo(at);
         using var audio = new GameAudio(iso, courseTime, dev, carName);
-        if (music) audio.PlayTrack(background: false);
+        var jukebox = new Jukebox(iso, dev, new Ui.Settings(), seed: 1);
+        if (music) jukebox.Play(background: false);
 
         var ticks = (int)(seconds * 120) / TicksPerBlock * TicksPerBlock;
         var pcm = new short[ticks * FramesPerTick * 2];
@@ -81,7 +82,7 @@ internal static class AudioCapture
         }
         var eng = b.Where(x => x.Rpm > 1200).ToArray();
         var full = eng.Where(x => x.Gas > 0.9).ToArray();
-        Console.WriteLine($"[Audio] {wavPath}: {seconds:F0} s, Musik {(music ? audio.Track : "aus")}, RMS {Db(Math.Sqrt(total / pcm.Length)):F1} dBFS, Spitze {Db(peak):F2} dBFS, Samples an ±32767: {clipped}");
+        Console.WriteLine($"[Audio] {wavPath}: {seconds:F0} s, Musik {(music ? jukebox.Current?.Title : "aus")}, RMS {Db(Math.Sqrt(total / pcm.Length)):F1} dBFS, Spitze {Db(peak):F2} dBFS, Samples an ±32767: {clipped}");
         Console.WriteLine($"[Audio] Korrelation Drehzahl ↔ Motor-Pitch (gesetzt) r = {Pearson(eng.Select(x => x.Rpm), eng.Select(x => x.Pitch)):F3}, ↔ spektraler Schwerpunkt des Mix r = {Pearson(eng.Select(x => x.Rpm), eng.Select(x => x.Centroid)):F3}, Pitch ↔ Schwerpunkt r = {Pearson(eng.Select(x => x.Pitch), eng.Select(x => x.Centroid)):F3} ({eng.Length} Blöcke > 1200 U/min)");
         Console.WriteLine($"[Audio] nur Vollgas (nur _U-Schichten, {full.Length} Blöcke): Drehzahl ↔ Motor-Pitch r = {Pearson(full.Select(x => x.Rpm), full.Select(x => x.Pitch)):F3}, ↔ Schwerpunkt r = {Pearson(full.Select(x => x.Rpm), full.Select(x => x.Centroid)):F3}");
         // zones, pitch steps (off the limiter, whose fuel cut drops the pitch 4 %) and set pitch off vs on throttle per 500-rpm bin
@@ -246,5 +247,39 @@ internal static class AudioCapture
         Console.WriteLine($"[Menu] -> {wavPath} ({pcm.Count / 2 / (float)Rate:0.0} s, {step}/{script.Length} steps)");
         return step == script.Length;
     }
-}
 
+    /// <summary>
+    ///     <c>--jukebox &lt;s&gt;</c>: the race <see cref="Touge.Jukebox"/> offline (loopback, 60 updates/s) for that long with
+    ///     two songs switched off: M at 10 s, a menu break (stop/resume) at 30–40 s, then songs play out and the next follows.
+    ///     Logs every start/end with its time, then two full shuffle rounds of the pure <see cref="Touge.Jukebox.Shuffle"/>.
+    /// </summary>
+    public static bool Jukebox(Iso9660 iso, float seconds)
+    {
+        const int perFrame = Rate / 60;
+        using var dev = new AudioDevice(Rate);
+        if (!dev.Enabled) return false;
+        var t = 0f;
+        var settings = new Ui.Settings { MusicOff = ["SPACEBOY", "NIGHT_OF_FIRE"] };
+        var box = new Touge.Jukebox(iso, dev, settings, seed: 7) { Clock = () => t };
+        Console.WriteLine($"[Music] off: {string.Join(", ", settings.MusicOff)}");
+        box.Play(background: false);
+        var frame = new short[perFrame * 2];
+        for (var n = 0; n < seconds * 60; n++, t = n / 60f)
+        {
+            if (n == 10 * 60) { Console.WriteLine($"[Music] {t:0.00} s M (next)"); box.Next(background: false); }
+            if (n == 30 * 60) { Console.WriteLine($"[Music] {t:0.00} s menu music (stop)"); box.Stop(); }
+            if (n == 40 * 60) { Console.WriteLine($"[Music] {t:0.00} s back to the race (play)"); box.Play(background: false); }
+            box.Update(1 / 60f, background: false);
+            dev.Render(frame);
+        }
+        var shuffle = new Touge.Jukebox.Shuffle(Touge.Jukebox.Songs.Length, new Random(7));
+        var enabled = (int i) => !settings.MusicOff.Contains(Touge.Jukebox.Songs[i].File);
+        var count = Touge.Jukebox.Songs.Count(s => enabled(Array.IndexOf(Touge.Jukebox.Songs, s)));
+        for (var round = 0; round < 2; round++)
+        {
+            var picks = Enumerable.Range(0, count).Select(_ => shuffle.Next(enabled)).ToArray();
+            Console.WriteLine($"[Shuffle] round {round + 1}: {picks.Distinct().Count()}/{count} distinct: {string.Join(" ", picks)}");
+        }
+        return true;
+    }
+}

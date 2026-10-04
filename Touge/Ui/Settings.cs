@@ -11,6 +11,8 @@ public sealed class Settings
     public bool HighQuality { get; set; } = true;
     public bool MusicOn { get; set; } = true;
     public float MusicVolume { get; set; } = 0.8f;
+    /// <summary>Race songs switched off in Options → PLAYLIST (<see cref="Jukebox.Song.File"/>); all off = silence in races.</summary>
+    public HashSet<string> MusicOff { get; set; } = [];
     /// <summary>Menu and game sound effects 0..1.</summary>
     public float SoundVolume { get; set; } = 1;
     public bool HudOn { get; set; } = true;
