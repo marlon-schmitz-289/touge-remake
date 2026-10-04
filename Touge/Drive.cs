@@ -29,6 +29,8 @@ public sealed class Drive
     public Vehicle Car { get; private set; }
     /// <summary>Wall across the road at the end of the run-out behind the goal (<see cref="CourseEnd"/>), null on circuits.</summary>
     public TriangleGround.WallSegment? EndBarrier { get; private set; }
+    /// <summary>Line from the goal to the end barrier (empty on circuits): where a finished car coasts to a stop.</summary>
+    public Vector3[] RunOutLine { get; private set; } = [];
 
     public Drive(Iso9660 iso, string courseTime, bool reverse = false, CarSpec? spec = null)
     {
@@ -50,6 +52,7 @@ public sealed class Drive
         _rough = Array.ConvertAll(collision.Materials, Rough);
         Pilot = new LinePilot(Line);
         _runOut = ends.RunOut.Length > 1 ? new LinePilot(ends.RunOut) : null;
+        RunOutLine = ends.RunOut.Length > 1 ? ends.RunOut : [];
     }
 
     /// <summary>Swaps in a car with <paramref name="spec"/>, at rest on the driving line where the old one was.</summary>

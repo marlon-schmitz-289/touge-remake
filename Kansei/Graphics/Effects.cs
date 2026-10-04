@@ -12,7 +12,7 @@ namespace Kansei.Graphics;
 /// </summary>
 public sealed class Effects
 {
-    public const int MaxSmoke = 400, MaxSparks = 256, MaxSkids = 4096, SkidTracks = 4;
+    public const int MaxSmoke = 400, MaxSparks = 256, MaxSkids = 4096, SkidTracks = 8; // one per wheel, two cars (battle)
     /// <summary>Skid marks stay this long at full strength, then fade out over <see cref="SkidFade"/> (seconds).</summary>
     public const float SkidHold = 25, SkidFade = 10;
     private const float SkidStep = 0.25f; // metres between strip points

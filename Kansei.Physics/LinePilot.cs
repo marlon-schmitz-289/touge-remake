@@ -19,6 +19,13 @@ public sealed class LinePilot
     public float BrakeDecel = 0.6f * G; // planned below the tyres' limit: braking into a corner shares the friction circle
     public float TopSpeed = 160 / 3.6f;
 
+    /// <summary>Lateral offset (m, + = left of the line) the pursuit point is moved by: overtaking/blocking lines (<see cref="RivalPilot"/>).</summary>
+    public float Offset;
+    /// <summary>Upper bound on the target speed (m/s), e.g. following a slower car; ∞ = none.</summary>
+    public float SpeedCap = float.PositiveInfinity;
+    /// <summary>Body slip angle (rad) from which the traction aid starts easing off (fully off 0.1 rad later); drift-style drivers allow more.</summary>
+    public float SlipTolerance = 0.05f;
+
     /// <summary>Speed the last <see cref="Drive" /> call aimed for (m/s).</summary>
     public float TargetSpeed { get; private set; }
 
@@ -28,6 +35,7 @@ public sealed class LinePilot
         _along = new float[line.Length];
         for (var i = 1; i < line.Length; i++) _along[i] = _along[i - 1] + Xz(line[i] - line[i - 1]).Length();
         _curvature = new float[line.Length];
+        _bend = new float[line.Length];
         _wide = new Vector3[line.Length];
         for (var i = 0; i < line.Length; i++)
         {
@@ -36,6 +44,7 @@ public sealed class LinePilot
             var den = Vector2.Distance(a, b) * Vector2.Distance(b, c) * Vector2.Distance(a, c);
             var cross = Cross(b - a, c - a);
             _curvature[i] = den < 1e-6f ? 0 : 2 * MathF.Abs(cross) / den;
+            _bend[i] = -MathF.Sign(cross) * _curvature[i]; // a left turn (towards +X when heading +Z) has cross < 0
             // outward = left of the travel direction for a right turn (cross > 0), right for a left turn
             var dir = c - a;
             if (dir.LengthSquared() > 1e-6f)
@@ -47,6 +56,29 @@ public sealed class LinePilot
     // the pursuit point is moved outward by up to 2 m in tight corners (r 6 m → 2 m, r 100 m → 0.12 m).
     const float WideMax = 3.5f, WidePerCurvature = 20f;
     readonly Vector3[] _wide;
+    readonly float[] _bend; // signed curvature, + = left turn
+
+    /// <summary>
+    ///     Sharpest bend (signed curvature 1/m, + = left) between <paramref name="from"/> and <paramref name="from"/> + <paramref name="distance"/>
+    ///     metres along the line, and how far ahead it is.
+    /// </summary>
+    public (float Curvature, float At) BendAhead(float from, float distance)
+    {
+        var i = _seg;
+        while (i > 0 && _along[i] > from) i--;
+        (float Curvature, float At) best = (0, 0);
+        for (; i < _line.Length && _along[i] < from + distance; i++)
+            if (_along[i] >= from && MathF.Abs(_bend[i]) > MathF.Abs(best.Curvature)) best = (_bend[i], _along[i] - from);
+        return best;
+    }
+
+    /// <summary>Unit vector to the left of the line (XZ) at <paramref name="s"/> m along it.</summary>
+    public Vector3 LeftAt(float s)
+    {
+        var d = PointAt(s + 2) - PointAt(s - 2);
+        var v = new Vector3(d.Z, 0, -d.X);
+        return v.LengthSquared() > 1e-8f ? Vector3.Normalize(v) : Vector3.UnitX;
+    }
 
     public float Length => _along[^1];
 
@@ -132,7 +164,8 @@ public sealed class LinePilot
 
         // pure pursuit: arc through the look-ahead point, steer angle = atan(wheelbase · curvature)
         var look = Math.Clamp(5 + 0.5f * v, 8, 30);
-        var local = Vector3.Transform(PointAt(s + look) + At(_wide, s + look) - car.Position, Quaternion.Conjugate(car.Orientation));
+        var aim = PointAt(s + look) + At(_wide, s + look) + (Offset != 0 ? LeftAt(s + look) * Offset : Vector3.Zero);
+        var local = Vector3.Transform(aim - car.Position, Quaternion.Conjugate(car.Orientation));
         var d2 = MathF.Max(local.X * local.X + local.Z * local.Z, 1);
         var delta = MathF.Atan(car.Spec.Wheelbase * 2 * local.X / d2); // + = left (+X)
         // Vehicle scales the input lock down with speed and adds counter-steer from body slip; undo both
@@ -140,7 +173,7 @@ public sealed class LinePilot
         var steer = Math.Clamp((-delta - assist) * (1 + MathF.Abs(v) * car.Spec.SteerSpeedFactor) / car.Spec.MaxSteer, -1, 1);
 
         // target speed: every point within braking distance must be reachable at its corner speed
-        var target = TopSpeed;
+        var target = MathF.Min(TopSpeed, SpeedCap);
         var reach = v * v / (2 * BrakeDecel) + 20;
         for (var i = _seg; i < _line.Length && _along[i] - s < reach; i++)
         {
@@ -153,7 +186,7 @@ public sealed class LinePilot
         var err = target - v;
         // traction/stability aid: ease off throttle and brake when the body starts to slide (β 3° … 9°);
         // not at crawling speed, where β is noise and cutting throttle leaves the car parked against a wall
-        var calm = v < 8 ? 1 : Math.Clamp(1 - (MathF.Abs(car.SlipAngle) - 0.05f) / 0.1f, 0, 1);
+        var calm = v < 8 ? 1 : Math.Clamp(1 - (MathF.Abs(car.SlipAngle) - SlipTolerance) / 0.1f, 0, 1);
         return new VehicleInput(Math.Clamp(err * 0.25f, 0, 1) * calm, Math.Clamp(-err * 0.5f, 0, 1) * calm, steer);
     }
 

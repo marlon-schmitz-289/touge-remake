@@ -59,6 +59,12 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     /// <summary>Options → CONTROLLER (needs the live input; without it the page shows the default layout as text).</summary>
     public ControlsScreen? Controls { get; set; }
     private const string ControllerPage = "CONTROLLER";
+
+    // ---- battle (Touge/Race): set by the game for a battle run, null in time attack
+    /// <summary>The decided battle: finish banner YOU WIN/LOSE (WIN.adx/LOSE.adx) and the battle result sheet.</summary>
+    public BattleReport? Battle { get; set; }
+    /// <summary>Rival shown in the telop ("VS …").</summary>
+    public string? Versus { get; set; }
     /// <summary>Original UI sound by SYSSE name.</summary>
     public Action<string>? Sound { get; set; }
 
@@ -88,14 +94,14 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
 
     /// <summary>
     ///     Music for this screen as the original: course flow TOKYO ("LIVE IN TOKYO"), car flow and records WORRY, loading
-    ///     silent, finish WIN (jingle), result JOY, intro/pause the race's Eurobeat (<see cref="RaceMusic"/>); options keep
+    ///     silent, finish WIN (jingle; a lost battle LOSE), result JOY, intro/pause the race's Eurobeat (<see cref="RaceMusic"/>); options keep
     ///     <paramref name="playing"/>.
     /// </summary>
     public string? Music(string? playing) => Current switch
     {
         Screen.Course or Screen.Route or Screen.Time or Screen.Weather => "TOKYO.adx",
         Screen.Maker or Screen.Car or Screen.Gearbox or Screen.Records => "WORRY.adx",
-        Screen.Loading => null, Screen.Finish => "WIN.adx", Screen.Result => "JOY.adx", Screen.Options or Screen.Controls => playing,
+        Screen.Loading => null, Screen.Finish => Battle is { Outcome: Race.BattleOutcome.Lose } ? "LOSE.adx" : "WIN.adx", Screen.Result => "JOY.adx", Screen.Options or Screen.Controls => playing,
         _ => RaceMusic,
     };
 
@@ -122,7 +128,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     }
 
     /// <summary>Skips the fade-in and entrance (screenshots).</summary>
-    public void Settle() => (_t, _fadeIn) = (MathF.Max(_t, 1), false);
+    public void Settle(float at = 1) => (_t, _fadeIn) = (MathF.Max(_t, at), false);
 
     public void Close() => Current = Screen.None;
 
@@ -703,6 +709,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
         c.Lettering(course.Name, 490 + shift, 200, MathF.Min(46, 330 * c.Kx / c.O.Font!.Measure(course.Name, c.Ky)), Overlay.Rgba(0.35f, 0.45f, 1), Canvas.BrushBlue, 1, 0.12f, true);
         var tags = $"{(_night ? "NIGHT" : "DAY")}    [{Catalog.DirectionName(course, _reverse)}]    [{(_wet ? "WET" : "DRY")}]";
         c.Text(tags, 490 + shift, 234, 13, Canvas.White, 1, 0.12f, 0.08f);
+        if (Versus != null) c.Text($"VS  {Versus}", 490 + shift, 258, 17, Canvas.WordRed, 1, 0.15f, 0.08f, 0.3f);
     }
 
     /// <summary>3, 2, 1 in big red, GO! in the racing orange; each pops in from 1.5× and fades at its end.</summary>
@@ -742,6 +749,11 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
 
     private void FinishBanner(Canvas c)
     {
+        if (Battle is { } battle)
+        {
+            BattleScreens.Banner(c, battle, _t);
+            return;
+        }
         var run = _run!;
         var pop = Style.Ease(_t / 0.25f);
         var text = run.NewRecord ? "NEW RECORD!!" : "FINISH!!";
@@ -752,6 +764,12 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
 
     private void ResultScreen(Canvas c)
     {
+        if (Battle is { } battle)
+        {
+            BattleScreens.Sheet(c, battle, i => Style.Ease((_t - (RowFirst + RowStep * i)) / 0.15f));
+            ResultChoice(c);
+            return;
+        }
         var run = _run!;
         c.Fill(Overlay.Rgba(0, 0, 0, 0.25f));
         float Row(int i) => Style.Ease((_t - (RowFirst + RowStep * i)) / 0.15f);
@@ -784,7 +802,12 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
             var s = Row(ResultRows - 1);
             c.Lettering("NEW RECORD!!", 377, 300, 26 * (1.6f - 0.6f * s), Overlay.Rgba(1, 0.85f, 0.3f), Overlay.Rgba(1, 0.38f, 0), 0.5f, 0.2f, false, true, s);
         }
-        // action choice
+        ResultChoice(c);
+    }
+
+    /// <summary>The result screen's action buttons (ACTCHOICE).</summary>
+    private void ResultChoice(Canvas c)
+    {
         var b = Style.Ease((_t - ButtonsAt) / 0.2f);
         if (b <= 0) return;
         for (var i = 0; i < ResultButtons.Length; i++)

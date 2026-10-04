@@ -464,6 +464,16 @@ public sealed class Vehicle
         Position += moved;
     }
 
+    // ---- contact with other bodies (CarCollision): impulses at a world point, positional correction
+    /// <summary>Velocity of the body at world <paramref name="point"/>.</summary>
+    public Vector3 VelocityAt(Vector3 point) => PointVelocity(point);
+    /// <summary>Impulse (N·s) at world <paramref name="point"/>: changes linear and angular velocity.</summary>
+    public void ApplyImpulseAt(Vector3 point, Vector3 impulse) => ApplyImpulse(point - Position, impulse);
+    /// <summary>1 / effective mass at world <paramref name="point"/> along unit <paramref name="dir"/> (rotation included).</summary>
+    public float InverseMassAt(Vector3 point, Vector3 dir) => InvMass(point - Position, dir);
+    /// <summary>Moves the body without changing its velocity (overlap correction).</summary>
+    public void Translate(Vector3 offset) => Position += offset;
+
     Vector3 PointVelocity(Vector3 point) => Velocity + Vector3.Cross(AngularVelocity, point - Position);
 
     void ApplyImpulse(Vector3 arm, Vector3 impulse)

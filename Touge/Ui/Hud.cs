@@ -47,6 +47,8 @@ public sealed class Hud
 
     /// <summary>Half width (units) kept free around the screen centre for the car.</summary>
     public const float CarClear = 180;
+    /// <summary>Battle: the rival's position and metres along the line (red dot on the map, red tick on the progress ring); null = alone.</summary>
+    public (Vector3 Position, float Along)? Rival;
     public LapTimer Timer { get; }
     public DriftMeter Drift { get; } = new();
 
@@ -105,6 +107,7 @@ public sealed class Hud
         var k = Dash(g, Scale);
         // course dial bottom left, same height as the cluster box (Cluster.Box.Y), so the two read as one dash row
         var s = g.U * k * Cluster.Box.Y / (2 * MapWidget.Radius);
+        _map.Rival = Rival is { } r ? (Xz(r.Position), Math.Clamp((r.Along - _start) / (_pilot.Length - LapTimer.Gate - _start), 0, 1)) : null;
         _map.Draw(o, new Vector2(g.Left + MapWidget.Radius * s, g.Bottom - MapWidget.Radius * s), s, Mode, Xz(carPos), Xz(carForward),
             _progress, (_pilot.Length - LapTimer.Gate - _start) * (1 - _progress), Timer, Cluster.Cars[carName], Night);
         var gauge = Cluster.Cars[carName];

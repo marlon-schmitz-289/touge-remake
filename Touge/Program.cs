@@ -36,6 +36,8 @@ using Touge;
 // --render-scale <prozent>: 3D-Auflösung in % des Fensters (50–150, Optionen SCREEN), z. B. mit --bench für GPU-Kosten.
 // --input-debug: Eingabe-Overlay (Geräte, Rohachsen/-tasten, Lenkung/Pedale wie das Spiel sie liest, Force-Feedback-Anteile); auch beim normalen Start.
 // --sim-wheel: virtuelles Lenkrad (Lenkung pendelt, Pedale pumpen) für Bilder/Tests ohne Hardware; --menu controls:keyboard|pad|wheel öffnet die Steuerungsseite.
+// --battle <rivale|auto> [--rule race|chase] [--lead player|rival]: Schnellbattle gegen die KI (Telop, Countdown, Battle-HUD, Ergebnis);
+//   mit --autodrive <s> ohne Fenster: Autopilot gegen die KI, Log je Sekunde (Abstand, Führung, Kontakte) + Zusammenfassung.
 // --drift: Pilot reißt alle 7 s (ab 4,5 s) einen 2,5-s-Handbremsdrift (Reifenrauch/Bremsspuren testen), z. B. --autodrive 6.3 --drift --shot.
 var iso = args.FirstOrDefault(a => a.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
           ?? Environment.GetEnvironmentVariable("INITIALD_ISO");
@@ -44,7 +46,7 @@ if (iso == null || !File.Exists(iso))
     Console.Error.WriteLine("usage: touge <Initial D Special Stage (SLPM-65268).iso> [KURS_ZEIT, z. B. AKINA_DAY]  (oder INITIALD_ISO setzen)");
     return 1;
 }
-string[] valueFlags = ["--flow", "--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--hud-scale", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture", "--lights", "--render-scale", "--jukebox"];
+string[] valueFlags = ["--battle", "--rule", "--lead", "--flow", "--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--hud-scale", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture", "--lights", "--render-scale", "--jukebox"];
 string? Arg(string flag) { var i = Array.IndexOf(args, flag); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
 // --car: HCAR name (AE86T, FD3S, R32, EVO3, …) or index 0–31 in that list (Touge.Formats.CarPaint.Cars)
 var carArg = Arg("--car") ?? "AE86T";
@@ -102,6 +104,27 @@ if (Arg("--audio-capture") is { } wav)
     return AudioCapture.Run(isoFile, course.ToUpperInvariant(), at, autodrive.Value, wav, float.Parse(args[capIndex + 2], CultureInfo.InvariantCulture),
         !args.Contains("--no-music"), car) ? 0 : 2;
 }
+// --battle <rival|car> [--rule race|chase] [--lead player|rival]: quick battle against the AI (Touge/Race)
+Touge.Race.BattleSetup? battle = null;
+if (Arg("--battle") is { } rivalArg)
+{
+    try
+    {
+        battle = new Touge.Race.BattleSetup(Touge.Race.Rivals.Find(rivalArg), Arg("--rule") is "chase" or "leadchase" ? Touge.Race.BattleRule.LeadChase : Touge.Race.BattleRule.Race,
+            Arg("--lead") == "player" ? 0 : 1);
+    }
+    catch (ArgumentException e)
+    {
+        Console.Error.WriteLine(e.Message);
+        return 1;
+    }
+}
+if (autodrive is { } battleSeconds && shot == null && battle != null)
+{
+    using var isoFile = new Touge.Formats.Iso9660(iso);
+    var drive = new Drive(isoFile, course.ToUpperInvariant(), args.Contains("--reverse"), Kansei.Physics.CarSpecs.All[car]);
+    return Touge.Race.BattleRun.Headless(drive, battle, battleSeconds, car) ? 0 : 2;
+}
 if (autodrive is { } seconds && shot == null)
 {
     using var isoFile = new Touge.Formats.Iso9660(iso);
@@ -131,7 +154,7 @@ var plain = args.Where((a, i) => a != iso && a != "--backend" && (i == 0 || args
 var saved = plain ? Touge.Ui.Settings.Load() : new Touge.Ui.Settings();
 KanseiApp.Run(new TougeGame(iso, course.ToUpperInvariant(), shot, at, orbit, autodrive, bench, Arg("--quality") != "off", args.Contains("--drift"), Arg("--flicker"))
     { HudMode = Arg("--hud"), HudScale = Arg("--hud-scale") is { } hs ? float.Parse(hs, CultureInfo.InvariantCulture) / 100 : 1, Reverse = args.Contains("--reverse"), Fog = args.Contains("--fog"), Car = car, Paint = paint, Livery = livery, ContactSheet = Arg("--cars"), LookAtSun = args.Contains("--sun"), OrbitDistance = orbitDistance,
-      Lights = Arg("--lights") is { } lights ? Enum.Parse<Headlights.Mode>(lights, true) : null,
+      Battle = battle, ShotBattleResult = args.Contains("--battle-result"), Lights = Arg("--lights") is { } lights ? Enum.Parse<Headlights.Mode>(lights, true) : null,
       RenderScale = Arg("--render-scale") is { } rs ? int.Parse(rs) : 100,
       InputDebug = args.Contains("--input-debug"), SimWheel = args.Contains("--sim-wheel"),
       UseMenus = plain, StartMenu = Arg("--menu"), Flow = Arg("--flow"), Offscreen = args.Contains("--offscreen"),

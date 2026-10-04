@@ -16,7 +16,7 @@ public static class NowPlaying
     public static float Visible(float since, bool hold) =>
         hold ? 1 : Style.Ease(since / In) * Style.Ease((In + Hold + Out - since) / Out);
 
-    public static void Draw(Overlay o, int width, int height, Jukebox.Song song, float since, bool hold)
+    public static void Draw(Overlay o, int width, int height, Jukebox.Song song, float since, bool hold, float below = 0)
     {
         var a = Visible(since, hold);
         if (a <= 0) return;
@@ -26,7 +26,8 @@ public static class NowPlaying
         var h = 92 * u;
         // slides in from beyond the right edge
         var right = g.Right + (1 - a) * (w + (width - g.Right));
-        Vector2 min = new(right - w, g.Top), max = new(right, g.Top + h);
+        var top = g.Top + below * u; // below another top-right panel (battle)
+        Vector2 min = new(right - w, top), max = new(right, top + h);
         Style.Slanted(o, min, max, Style.Panel, -0.22f);
         o.Rect(Vector2.Round(new Vector2(max.X - 5 * u, min.Y)), Vector2.Round(max), Style.Amber);
         var x = max.X - 22 * u;

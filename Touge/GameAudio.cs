@@ -87,9 +87,13 @@ public sealed class GameAudio : IDisposable
     /// <summary>Engine loudness 0..1 on top of the SFX volume (Options: ENGINE).</summary>
     public float EngineLevel { get; set; } = 1;
 
-    public GameAudio(Iso9660 iso, string courseTime, AudioDevice dev, string car = "AE86T")
+    /// <summary>
+    ///     <paramref name="other"/>: another car's sound (a rival): engine, tyres and walls only — no rain, wind, road
+    ///     noise or music of its own; heard through <see cref="Spatial"/>.
+    /// </summary>
+    public GameAudio(Iso9660 iso, string courseTime, AudioDevice dev, string car = "AE86T", bool other = false)
     {
-        _dev = dev;
+        (_dev, _other) = (dev, other);
         var carse = _carse = iso.OpenAfs("CDVD/DATA/SOUND/CARSE.AFS");
         SetCar(car);
         var wet = courseTime.EndsWith("_RIN");
@@ -105,7 +109,7 @@ public sealed class GameAudio : IDisposable
         // cr002 stays loud from ~0.3 to ~1.9 s: its middle loops as wall scrape (no scrape sample on the disc)
         _scrape = Loop(Clip(cr2 with { Loop = (cr2.Rate * 6 / 10, cr2.Rate * 18 / 10) }));
         _backfire = [.. "abcdefgh".Select(c => Clip(sys($"zbackfire002{c}.vag")))];
-        if (wet)
+        if (wet && !other)
         {
             _rain = Loop(Clip(Seamless(sys("rain.vag"), 0.4f)));
             _rain.Gain = 0.5f;
@@ -114,7 +118,31 @@ public sealed class GameAudio : IDisposable
         _road = Loop(Clip(new Vag.Sound(Noise(22050 * 2, 0.06f, 1), 22050, null)));
         _wind = Loop(Clip(new Vag.Sound(Noise(22050 * 2, 0.35f, 2), 22050, null)));
 
-        (dev.Music, dev.Sfx) = (0.6f, 0.35f);
+        if (!other) (dev.Music, dev.Sfx) = (0.6f, 0.35f);
+    }
+
+    private readonly bool _other;
+    private float _gain = 1, _pitch = 1;
+
+    /// <summary>
+    ///     Where another car is heard from: every voice × <paramref name="gain"/> (distance), pitch × <paramref name="doppler"/>,
+    ///     panned towards <paramref name="direction"/> (listener space: +x right, −z ahead; unit length, so OpenAL only pans
+    ///     and does not attenuate again). Takes effect with the next <see cref="Update"/>.
+    /// </summary>
+    public void Spatial(float gain, float doppler, System.Numerics.Vector3 direction)
+    {
+        (_gain, _pitch) = (gain, doppler);
+        foreach (var v in _engine) v.Position = direction;
+        foreach (var v in new[] { _squeal, _squealHigh, _dirt, _scrape }) v.Position = direction;
+    }
+
+    /// <summary>Car-to-car contact heard on this car: a crash one-shot by closing speed (m/s), same cooldown as walls.</summary>
+    public void Bump(float impactSpeed)
+    {
+        if (impactSpeed < 1 || _crashCooldown > 0) return;
+        _dev.PlaySfx((_crashToggle = !_crashToggle) ? _crashA : _crashB, Math.Clamp(impactSpeed / 10, 0.15f, 1) * _gain);
+        _crashCooldown = 0.3f;
+        Crashes++;
     }
 
     /// <summary>Decoder for the SYSSE.BIN bank by name ("cr001.vag"; names from SYSSE.TBL, case-insensitive).</summary>
@@ -248,33 +276,33 @@ public sealed class GameAudio : IDisposable
         Slip = maxSlip;
         var rolling = Math.Clamp(speed / 6, 0, 1);
         _squealGain = Smooth(_squealGain, MathF.Pow(road, 0.6f) * rolling * 0.7f, 30, 10, dt);
-        _squeal.Gain = _squealGain;
-        _squeal.Pitch = 0.92f + 0.2f * road;
-        _squealHigh.Gain = _squealGain * road * 0.6f;
-        _squealHigh.Pitch = 1 + 0.15f * road;
+        _squeal.Gain = _squealGain * _gain;
+        _squeal.Pitch = (0.92f + 0.2f * road) * _pitch;
+        _squealHigh.Gain = _squealGain * road * 0.6f * _gain;
+        _squealHigh.Pitch = (1 + 0.15f * road) * _pitch;
         _dirtGain = Smooth(_dirtGain, MathF.Sqrt(dirt) * rolling * 0.5f, 20, 8, dt);
-        _dirt.Gain = _dirtGain;
-        _dirt.Pitch = 0.8f + 0.3f * Math.Clamp(speed / 30, 0, 1);
-        if (handbrake && !_prevHandbrake && speed > 8) _dev.PlaySfx(_skid, 0.5f);
+        _dirt.Gain = _dirtGain * _gain;
+        _dirt.Pitch = (0.8f + 0.3f * Math.Clamp(speed / 30, 0, 1)) * _pitch;
+        if (handbrake && !_prevHandbrake && speed > 8) _dev.PlaySfx(_skid, 0.5f * _gain);
         _prevHandbrake = handbrake;
 
         // Walls
         _crashCooldown -= dt;
         if (car.WallImpactSpeed > 1.5f && _crashCooldown <= 0)
         {
-            _dev.PlaySfx((_crashToggle = !_crashToggle) ? _crashA : _crashB, Math.Clamp(car.WallImpactSpeed / 10, 0.15f, 1));
+            _dev.PlaySfx((_crashToggle = !_crashToggle) ? _crashA : _crashB, Math.Clamp(car.WallImpactSpeed / 10, 0.15f, 1) * _gain);
             _crashCooldown = 0.3f;
             Crashes++;
         }
         _scrapeGain = Smooth(_scrapeGain, car.WallContacts > 0 ? Math.Clamp(speed / 25, 0.1f, 1) * 0.5f : 0, 20, 8, dt);
-        _scrape.Gain = _scrapeGain;
+        _scrape.Gain = _scrapeGain * _gain;
 
         // Road rumble and wind by speed
         var anyContact = car.Wheels[0].Contact || car.Wheels[1].Contact || car.Wheels[2].Contact || car.Wheels[3].Contact;
-        _road.Gain = anyContact ? Math.Clamp(speed / 35, 0, 1) * 0.25f : 0;
+        _road.Gain = anyContact && !_other ? Math.Clamp(speed / 35, 0, 1) * 0.25f : 0;
         _road.Pitch = 0.7f + 0.6f * Math.Clamp(speed / 40, 0, 1);
         var v = Math.Clamp(speed / 45, 0, 1);
-        _wind.Gain = v * v * 0.3f;
+        _wind.Gain = _other ? 0 : v * v * 0.3f;
         _wind.Pitch = 0.8f + 0.4f * v;
     }
 
@@ -317,8 +345,8 @@ public sealed class GameAudio : IDisposable
             var zone = i / 8 * 4 + i % 4; // voices k and k + 4 of a bank = zone k
             var gain = _level[i] * _weight[zone] * (i < 8 ? loadGain : overrunGain) * cut * _dip;
             var pitch = LayerRate(_x, _native[zone]) * pitchMul;
-            _engine[i].Gain = gain * EngineLevel;
-            _engine[i].Pitch = pitch;
+            _engine[i].Gain = gain * EngineLevel * _gain;
+            _engine[i].Pitch = pitch * _pitch;
             (sumGain, sumPitch) = (sumGain + gain, sumPitch + gain * pitch);
         }
         (EngineGain, EnginePitch) = (sumGain, sumGain > 0 ? sumPitch / sumGain : 1);
@@ -334,7 +362,7 @@ public sealed class GameAudio : IDisposable
     private void Backfire(float gain)
     {
         if (_backfireCooldown > 0) return;
-        _dev.PlaySfx(_backfire[_backfireNext++ % _backfire.Length], gain);
+        _dev.PlaySfx(_backfire[_backfireNext++ % _backfire.Length], gain * _gain);
         _backfireCooldown = 0.8f;
     }
 
