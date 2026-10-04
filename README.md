@@ -42,9 +42,11 @@ dotnet run --project Touge -- "<iso>" --zfight [AKINA]   # Z-Fighting-Kandidaten
 dotnet run --project Touge -- "<iso>" USUI0_RIN --flicker out/proof/fl [--at n]   # Flackern messen: 8 Fahrlinienpunkte, 8 Winkel ums Auto, 8 Fundstellen, je 3× mit anderer Rundung (Schwelle nach Bildhelligkeit); dazu „motion“: dieselben Punkte/Winkel mit Auto, Kamera 3× je 1 cm vor, je mit/ohne SSR – zählt Pixel, deren Spiegelungsanteil nicht gleichmäßig mitläuft
 dotnet run --project Touge -- "<iso>" --sun --shot out/sun.png   # freie Kamera hinter dem Auto, Blick zur Sonne (Blendung prüfen)
 dotnet run --project Touge -- "<iso>" AKINA_NIT --fog [--autodrive 25 --shot out/fog.png]   # Wetter FOG: dichter Nebel (Sicht ~60 m) über dem Tag- oder Nachtkurs
+dotnet run --project Touge -- "<iso>" [--input-debug] [--sim-wheel]   # Eingabe-Overlay (Geräte, Rohachsen/-tasten, gelesene Lenkung/Pedale, FFB-Anteile); virtuelles Lenkrad ohne Hardware (beide auch beim normalen Start mit Menüs)
+dotnet run --project Touge -- "<iso>" AKINA_DAY --menu controls:keyboard|pad|wheel [--sim-wheel] --shot out/proof/input_controls_wheel.png   # Steuerungsseite als Bild
 ```
 
-Fahren (Standard): W/S oder ↑/↓ Gas/Bremse, A/D oder ←/→ lenken, Leertaste Handbremse, S im Stand halten = Rückwärts (Automatik), T Automatik/Manuell,
+Fahren (Standard, alles außer F-Tasten/M/N/B/T/1–3 unter Optionen → CONTROLS umbelegbar): W/S oder ↑/↓ Gas/Bremse, A/D oder ←/→ lenken, Leertaste Handbremse, S im Stand halten = Rückwärts (Automatik), T Automatik/Manuell,
 Shift/Strg hoch-/runterschalten (manuell, auch in R), R (Pad: Y) zurück auf die Fahrlinie (nächster freier Punkt, Blick in Fahrtrichtung), B Richtung wechseln (bergab ↔ bergauf, setzt auf die Fahrlinie der Gegenrichtung; Minimap/Fortschritt folgen), C Verfolger-/Stoßstangenkamera,
 L Licht an/aus, H Fernlicht an/aus (Umschalter, schaltet das Licht auch ein; Pad: D-Pad hoch/runter),
 F2 Grafikqualität hoch/niedrig (4× MSAA, Bloom und Sonnenschatten an/aus; `--quality off` startet niedrig).
@@ -65,7 +67,7 @@ Streckenenden: bergab endet, wo bergauf startet, und umgekehrt (Auto steht 5 m h
 „FINISH!!“ bzw. „NEW RECORD!!“ (das Spiel übernimmt das Auto wie ein Arcade-Racer: rollt aus und bremst gleichmäßig bis
 4,5 m vor die Endsperre, vor Kurven des Auslaufs auch stärker, `Drive.Coast`; WIN-Jingle) → Ergebnis (Gesamt-/Sektorzeiten mit Delta, Bestzeit, Differenz, Driftpunkte, Zeilen zählen mit
 NAME001, BGM „JOY“) → Retry / Course Select / Car Select / Exit. Rekorde: Bestzeit je Kurs und Route. Optionen: Grafik, Musik an/aus,
-Musik-/SE-Lautstärke, HUD, Navi-Karte, Kamera, Aufkleber (ANIME/STOCK/NONE), Steuerung (Tastatur/Pad-Belegung). Zurück geht die besuchten
+Musik-/SE-Lautstärke, HUD, Navi-Karte, Kamera, Aufkleber (ANIME/STOCK/NONE), CONTROLS (siehe unten). Zurück geht die besuchten
 Schritte rückwärts. Zwischen Modulen 30-Frame-Schwarzblenden. Ton: Original-SE aus SYSSE (SYS005 Cursor, SYS006 Bestätigen, BEEP001
 Zurück/gesperrt, sys002 START, alarm_02 Pause, CAR010/011 Countdown, NAME001 Ergebniszeilen) und Menü-BGM aus BGM.AFS mit Loop-Punkten:
 Titel/Hauptmenü „GAMBLE RUMBLE“ (eigene Wahl, das Original ist dort still bzw. spielt den Vorspannfilm), Kurswahl „LIVE IN TOKYO“,
@@ -92,7 +94,33 @@ AE86T (0), AE86L, AE85, MR2, MRS, ALTEZ, GT-4, R32, R34, ER34, S13 (10), S14Q, S
 EVO3 (20), EVO4, EVO7, FD3S, FD3SA, FC3S, NA6C, NB8C, IMP, IMP2, IMP3 (30), CAPPU. Physik je Auto: Spur/Radstand/Radradius und
 Gangzahl aus dem Spiel, Masse, Leistung, Übersetzungen, Antrieb aus realen Daten (`Kansei.Physics/CarSpecs.cs`); Motorsound je
 Auto aus der Original-Zuordnung (FORMATS.md, AE86T/AE86L mit der voll getunten `AE86`-Bank).
-Pad: linker Stick lenken, Trigger Gas/Bremse, A Handbremse, Schultertasten schalten, D-Pad hoch Licht, runter Fernlicht.
+Pad: linker Stick lenken, Trigger Gas/Bremse, A Handbremse, Schultertasten schalten, Y zurück auf die Straße, BACK Kamera, D-Pad hoch Licht, runter Fernlicht, START Pause.
+Q Kupplung (Tastatur).
+
+Steuerung, Lenkrad, Force Feedback (Optionen → CONTROLS, `Ui/ControlsScreen`, gespeichert als `Settings.Controls`): drei Seiten
+KEYBOARD / GAMEPAD / WHEEL (←/→ in der Reiterzeile). Jede Aktion (Lenken links/rechts, Gas, Bremse, Kupplung, Handbremse, Hoch-/Runterschalten,
+Gang 1–6/R für die H-Schaltung, Zurück auf die Straße, Kamera, Licht, Fernlicht, Pause; am Lenkrad dazu Menü OK/Zurück) hat zwei Plätze je
+Gerät: DECIDE und dann die Taste/den Knopf/den Hat drücken oder eine Achse über die halbe Strecke bewegen (die Startstellung wird ihre Ruhelage:
+Logitech-Pedale ruhen bei +1, Lenkachse in der Mitte, kombinierte Pedale = zwei Hälften einer Achse); ENTF bzw. Pad X leert einen Platz, ESC oder
+6 s ohne Eingabe bricht ab, dieselbe Eingabe wird anderen Aktionen des Geräts weggenommen. Pad: Stick-Totzone, Kurve, Rumble. Lenkrad: Gerät
+(jeder Joystick; Standard der erste, den SDL als Lenkrad meldet, sonst der erste, der kein Pad ist), CALIBRATE (1. Mitte/Pedale los → Ruhelagen,
+2. Anschlag zu Anschlag und alle Pedale durchtreten → Endwerte), ROTATION (Lenkwinkel des Rads laut Treiber, 180–1080°), SENSITIVITY (voller
+Einschlag bei 540°/Empfindlichkeit, höchstens beim Anschlag; im Live-Panel angezeigt), Totzone/Kurve Lenkung, Pedal-Totzone, Achsen umkehren,
+FORCE FEEDBACK (Stärke, DECIDE = Test rechts→links) und FFB DIRECTION. Rechts ein Live-Panel (Lenkrad im echten Winkel, Pedalbalken,
+Rohachsen, Knöpfe, Kraft). Standardbelegung Lenkrad nach Logitech G29/G920 unter Windows (Achse 1 Lenkung, 2 Gas, 3 Bremse, 4 Kupplung, Wippen
+Knopf 5/6, Schaltkulisse 13–19, OPTIONS = Pause), andere Räder (Thrustmaster T300/T150/TMX, Fanatec …) per Drücken belegen. Menüs am Lenkrad: Hat =
+Pfeile, Wippen = links/rechts, MENU DECIDE/BACK.
+Lenkung: vom zuletzt gelenkten Gerät (`DriverInput`): Lenkrad 1:1 und ungeglättet (`VehicleInput.DirectSteer`: Radeinschlag = Eingabe ×
+`MaxSteer`, ohne die Pad/Tastatur-Hilfen Tempo-Lenkreduktion, Gegenlenkhilfe, Schräglaufgrenze, Lenkrate), Pad-Stick wie bisher, Tasten mit
+Rampe. Pedale: das am weitesten getretene aller Geräte; Kupplungspedal begrenzt die Kupplung (`VehicleInput.Clutch`). H-Schaltung (nur MT): ein
+Gang gehalten = dieser Gang, keiner = Leerlauf, Wippe/Schalttaste = zurück zu sequenziell.
+Force Feedback (`ForceFeedback`, pro Physik-Tick, als eine Constant-Force über SDL2-Haptic auf der Lenkachse, `SDL_HAPTIC_STEERING_AXIS`,
+Autocenter aus): Rückstellmoment der Vorderreifen aus Last × x·e^((1−x²)/2), x = Schräglauf/Spitzenschräglauf (wächst mit der Seitenkraft, wird
+hinter der Haftgrenze leicht, zieht im Drift in Richtung Gegenlenken), Rumpeln auf Curbs/Rinnen/Gras (Rechteck mit Streifenfrequenz Tempo/1,2 m,
+höchstens 25 Hz), Stoß bei Wandkontakt (aus der Aufprallgeschwindigkeit, ~0,15 s), Soft-Lock jenseits des Spiel-Einschlags. Pads bekommen Stöße
+und Curbs als Rumble. Auf Akina mit dem Piloten (90 s, erzwungene Drifts): mittlere Kraft 0,19 bei 70 %, 0,1 % der Ticks am Anschlag, in 99 %
+der Drift-Ticks zieht das Rad Richtung Gegenlenken. Nicht mit echter Hardware geprüft (kein Lenkrad am Testrechner); Vorzeichen der Kraft je
+Treiber verschieden → FFB DIRECTION.
 F1 Freiflug: WASD fliegen, Q/E runter/hoch, rechte Maustaste oder Pfeiltasten umschauen, Shift schnell,
 Leertaste ~400 m weiter auf der Fahrlinie. F11 Vollbild, Esc Pause-Menü.
 Backend: Metal (macOS) bzw. Vulkan, umschaltbar mit `--backend metal|vulkan|opengl` (oder `PENELOPE_BACKEND`).

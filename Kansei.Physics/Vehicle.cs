@@ -2,8 +2,14 @@ using System.Numerics;
 
 namespace Kansei.Physics;
 
-/// <summary>Driver input. Steer −1 = full left, +1 = full right. <see cref="Shift"/> is one-shot: +1 up, −1 down.</summary>
-public readonly record struct VehicleInput(float Throttle, float Brake, float Steer, bool Handbrake = false, int Shift = 0);
+/// <summary>
+///     Driver input. Steer −1 = full left, +1 = full right. <see cref="Shift"/> is one-shot: gears up (+) or down (−), ±1 for
+///     sequential shifting, the difference to the wanted gear for an H-shifter. <see cref="Clutch"/>: pedal 0 (released) … 1
+///     (pressed), limits the automatic clutch. <see cref="DirectSteer"/>: a steering wheel – the road wheels follow the input
+///     1:1 (lock = <see cref="CarSpec.MaxSteer"/>), without the pad/keyboard helpers (speed-sensitive lock, counter-steer,
+///     slip limit, steering rate).
+/// </summary>
+public readonly record struct VehicleInput(float Throttle, float Brake, float Steer, bool Handbrake = false, int Shift = 0, float Clutch = 0, bool DirectSteer = false);
 
 /// <summary>Per-wheel state for rendering/audio. Wheel order: FL, FR, RL, RR.</summary>
 public struct WheelState
@@ -35,7 +41,7 @@ public sealed class Vehicle
     readonly Vector3[] _mounts = new Vector3[4]; // body space, wheel centre at full droop + Travel
     readonly Vector3 _inertia;                   // body-space principal moments
     readonly float _clutchCapacity;              // Nm, fully engaged
-    float _steer, _shiftTimer, _rearGrip = 1, _prevBeta, _clutch, _gearRpm;
+    float _steer, _clutchPedal, _shiftTimer, _rearGrip = 1, _prevBeta, _clutch, _gearRpm;
     bool _drifting, _locked, _shifting, _shiftDown;
 
     public Vehicle(CarSpec spec)
@@ -125,8 +131,10 @@ public sealed class Vehicle
             if (Gear == -1) (throttle, brake) = (brake, throttle);
         }
         Throttle = throttle;
+        _clutchPedal = Math.Clamp(input.Clutch, 0, 1);
         UpdateGear(input.Shift, dt, input.Handbrake);
-        UpdateSteer(Math.Clamp(input.Steer, -1, 1), dt);
+        if (input.DirectSteer) _steer = Math.Clamp(input.Steer, -1, 1) * Spec.MaxSteer;
+        else UpdateSteer(Math.Clamp(input.Steer, -1, 1), dt);
         UpdateDriftGrip(Math.Abs(input.Steer), throttle, input.Handbrake);
         WallContacts = 0;
         WallImpactSpeed = 0;
@@ -185,7 +193,7 @@ public sealed class Vehicle
         _shiftTimer = MathF.Max(_shiftTimer - dt, -1); // < 0: time since the shift finished
         var target = Gear;
         if (shift != 0)
-            target = Math.Clamp(Gear + Math.Sign(shift), -1, Spec.Gears.Length);
+            target = Math.Clamp(Gear + shift, -1, Spec.Gears.Length);
         else if (AutomaticGearbox && Gear >= 1 && _clutch >= 1 && !clutchOpen) // shifts on gearbox speed: free revs are no reason to shift
         {
             if (_gearRpm > Spec.AutoUpRpm && Gear < Spec.Gears.Length) target++;
@@ -235,7 +243,7 @@ public sealed class Vehicle
         // Clutch: open while shifting (ShiftTime) or on the handbrake, then engages over ClutchTime. Fully engaged and at
         // equal speed it locks: engine inertia joins the wheels and torque goes straight through (the tuned handling).
         // Otherwise the engine is its own flywheel and the clutch passes friction torque up to its (ramped) capacity.
-        _clutch = ratio == 0 || handbrake || _shiftTimer > 0 ? 0 : MathF.Min(1, _clutch + h / s.ClutchTime);
+        _clutch = ratio == 0 || handbrake || _shiftTimer > 0 ? 0 : MathF.Min(1 - _clutchPedal, _clutch + h / s.ClutchTime);
         var driven = (1 - df) * (_wheels[2].AngularVelocity + _wheels[3].AngularVelocity) * 0.5f + df * (_wheels[0].AngularVelocity + _wheels[1].AngularVelocity) * 0.5f;
         var gearRpm = _gearRpm = MathF.Abs(driven * ratio) * (30 / MathF.PI);
         var slipRpm = Gear is 1 or -1 ? s.IdleRpm + throttle * (s.LaunchRpm - s.IdleRpm) : s.IdleRpm; // launch / anti-stall

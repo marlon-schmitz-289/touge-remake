@@ -26,6 +26,8 @@ public sealed class Settings
     public bool Manual { get; set; }
     /// <summary>Stickers and plates of the car (Options).</summary>
     public Touge.Formats.Livery Livery { get; set; } = Touge.Formats.Livery.Rival;
+    /// <summary>Bindings, wheel/pad tuning and force feedback (Options → Controls).</summary>
+    public ControlSettings Controls { get; set; } = new();
     /// <summary>Best run per course and direction (<see cref="BestKey"/>): cumulative sector splits, last = total.</summary>
     public Dictionary<string, float[]> Best { get; set; } = [];
 

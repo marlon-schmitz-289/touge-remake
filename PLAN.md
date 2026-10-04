@@ -123,6 +123,14 @@ Jede Phase endet mit etwas Sichtbarem/Fahrbarem.
 - FFB per **SDL2 Haptic** (`SDL_HapticOpenFromJoystick`, Constant-Force + Spring/Damper): Rückstellmoment aus Physik (Self-Aligning-Torque der Vorderräder), Rumble bei Curbs/Kollision
 - Kalibrier-Menü (Lenkwinkel, Deadzones, FFB-Stärke)
 - **Fertig:** G29/G923 mit spürbarem Gegenlenkmoment im Drift (Windows; Mac als Bonus).
+- Stand Lenkrad/Steuerung: alle Joysticks roh über SDL2 (`Kansei/Input/JoystickState`: Achsen, Knöpfe, Hats, Haptic-Constant-Force + Rumble;
+  virtuelle Geräte für Tests/`--sim-wheel`), Aktionen mit je zwei umbelegbaren Plätzen pro Gerät (`Touge/Controls`, in `Settings.Controls`),
+  `DriverInput` (Lenkrad direkt 1:1, Rotation/Empfindlichkeit/Totzone/Kurve/Umkehren, getrennte oder kombinierte Pedale, Kupplung, H-Schaltung,
+  Menüs am Lenkrad), `ForceFeedback` (Rückstellmoment, Curbs, Wandstöße, Soft-Lock; Pad-Rumble), Optionen → CONTROLS (`Ui/ControlsScreen`:
+  Drücken zum Belegen, Kalibrieren, Live-Panel, FFB-Test), `--input-debug`. Physik: `VehicleInput.Clutch`/`DirectSteer`, Shift um mehrere Gänge.
+  Tests `ControlsTests` (simuliertes G29), `WheelInputTests`. Belege `out/proof/input_controls_{keyboard,pad,wheel}.png`, `input_options.png`,
+  `input_debug_race.png`. Offen: mit echtem Lenkrad prüfen (Achsenreihenfolge der Standardbelegung je OS, FFB-Vorzeichen und -Stärke,
+  Haptic unter macOS), Spring/Damper-Effekte im Stand fehlen (nur Constant-Force), Belegung der festen Tasten (F1–F4, M, N, B, T, 1–3) nicht änderbar.
 
 ### Phase 4 – Multiplayer
 - Steam-Lobby + Freunde einladen (Muster aus `SteamLobbyManager`), Fallback Direkt-IP
