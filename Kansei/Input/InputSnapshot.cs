@@ -45,7 +45,16 @@ public sealed unsafe class InputSnapshot
 
     public KeyboardState Keyboard { get; } = new();
     public MouseState Mouse { get; } = new();
+    /// <summary>Every pad merged (menus, single player): any pad's buttons and sticks.</summary>
     public GamepadState Gamepad { get; } = new();
+
+    private readonly Dictionary<int, GamepadState> _padById = new();
+    private readonly List<GamepadState> _pads = [];
+
+    /// <summary>Each connected pad on its own, in the order they were connected (split screen: one per player).</summary>
+    public IReadOnlyList<GamepadState> Pads => _pads;
+
+    private GamepadState? Pad(int instanceId) => _padById.GetValueOrDefault(instanceId);
 
     /// <summary>Every connected joystick as a raw device (wheels, pedals, shifters, pads), plus virtual ones (<see cref="AddVirtual"/>).</summary>
     public IReadOnlyList<JoystickState> Joysticks => _joysticks;
@@ -83,6 +92,7 @@ public sealed unsafe class InputSnapshot
         Keyboard.BeginFrame();
         Mouse.BeginFrame();
         Gamepad.BeginFrame();
+        foreach (var p in _pads) p.BeginFrame();
         foreach (var j in _joysticks) j.BeginFrame();
         TypedText = "";
     }
@@ -151,14 +161,17 @@ public sealed unsafe class InputSnapshot
                 break;
             case EventType.Controllerbuttondown:
                 Gamepad.OnButtonDown((GameControllerButton)evt.Cbutton.Button);
+                Pad(evt.Cbutton.Which)?.OnButtonDown((GameControllerButton)evt.Cbutton.Button);
                 LastInputDevice = InputDevice.Gamepad;
                 break;
             case EventType.Controllerbuttonup:
                 Gamepad.OnButtonUp((GameControllerButton)evt.Cbutton.Button);
+                Pad(evt.Cbutton.Which)?.OnButtonUp((GameControllerButton)evt.Cbutton.Button);
                 break;
             case EventType.Controlleraxismotion:
                 var axisValue = evt.Caxis.Value / 32767f;
                 Gamepad.OnAxis((GameControllerAxis)evt.Caxis.Axis, evt.Caxis.Value);
+                Pad(evt.Caxis.Which)?.OnAxis((GameControllerAxis)evt.Caxis.Axis, evt.Caxis.Value);
                 if (MathF.Abs(axisValue) > StickDeadZone)
                     LastInputDevice = InputDevice.Gamepad;
                 break;
@@ -227,6 +240,12 @@ public sealed unsafe class InputSnapshot
             _sdl.GameControllerClose((GameController*)handle);
             _open.Remove(instanceId);
         }
+        if (_padById.Remove(instanceId, out var pad))
+        {
+            pad.IsConnected = false;
+            pad.Reset();
+            _pads.Remove(pad);
+        }
 
         if (instanceId != _activeInstanceId) return;
 
@@ -253,6 +272,9 @@ public sealed unsafe class InputSnapshot
         }
 
         _open[instanceId] = (nint)controller;
+        var state = new GamepadState { IsConnected = true };
+        _padById[instanceId] = state;
+        _pads.Add(state);
         return instanceId;
     }
 

@@ -19,6 +19,11 @@ public sealed class DriverInput(ControlSettings cfg)
     private float _wheelAnchor = float.NaN;
 
     public ControlSettings Settings => cfg;
+    /// <summary>
+    ///     The pad this driver reads (split screen: each player their own, <see cref="InputSnapshot.Pads"/>); null = every pad
+    ///     merged (<see cref="InputSnapshot.Gamepad"/>). A function returning null: no pad.
+    /// </summary>
+    public Func<InputSnapshot, GamepadState?>? PadOf { get; init; }
     public DeviceKind Active { get; private set; } = DeviceKind.Keyboard;
     public float Steer { get; private set; }
     /// <summary>Wheel steering before the clamp: beyond ±1 the wheel is past the game's lock (force feedback pushes back).</summary>
@@ -41,12 +46,12 @@ public sealed class DriverInput(ControlSettings cfg)
         input.Joysticks.FirstOrDefault(j => j.Name == name) ?? input.Joysticks.FirstOrDefault(j => j.IsWheel)
         ?? input.Joysticks.FirstOrDefault(j => !j.IsGameController);
 
-    /// <summary>0..1 of one binding.</summary>
-    public static float Value(Bind b, InputSnapshot input, JoystickState? wheel) => b.Source switch
+    /// <summary>0..1 of one binding (pad bindings on <paramref name="pad"/>, none without one).</summary>
+    public static float Value(Bind b, InputSnapshot input, JoystickState? wheel, GamepadState? pad) => b.Source switch
     {
         Source.Key => input.Keyboard.IsKeyDown((Key)b.Code) ? 1 : 0,
-        Source.PadButton => input.Gamepad.IsButtonDown((GamepadButton)b.Code) ? 1 : 0,
-        Source.PadAxis => b.AxisValue(input.Gamepad.RawAxis((GamepadAxis)b.Code)),
+        Source.PadButton => pad?.IsButtonDown((GamepadButton)b.Code) == true ? 1 : 0,
+        Source.PadAxis => pad == null ? 0 : b.AxisValue(pad.RawAxis((GamepadAxis)b.Code)),
         Source.JoyButton => wheel?.Button(b.Code) == true ? 1 : 0,
         Source.JoyAxis => wheel == null ? 0 : b.AxisValue(wheel.Axis(b.Code)),
         Source.JoyHat => wheel != null && (wheel.Hat(b.Code) & b.Dir) != 0 ? 1 : 0,
@@ -69,7 +74,8 @@ public sealed class DriverInput(ControlSettings cfg)
     public float Analog(InputSnapshot input, DeviceKind d, Control c)
     {
         var b = cfg.Get(d, c);
-        return MathF.Max(Value(b[0], input, Wheel), Value(b[1], input, Wheel));
+        var pad = PadOf != null ? PadOf(input) : input.Gamepad;
+        return MathF.Max(Value(b[0], input, Wheel, pad), Value(b[1], input, Wheel, pad));
     }
 
     private bool AnyAxis(DeviceKind d, Control c) => cfg.Get(d, c) is var b && (b[0].IsAxis || b[1].IsAxis);

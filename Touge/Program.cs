@@ -44,6 +44,12 @@ using Touge;
 // --menu story[:n[:scene[:teil[:zeile]]|:race|:end]]: STORY-Kapitelwahl, eine Szene, der Rennstart von Kapitel n oder THE END; --progress <n>: Kapitel 0…n−1 gelten
 //   als geschafft (nur Testläufe); --flow <dir> --story: Ablauf durch STORY (Wahl, Szene, Battle, Ergebnis, Szene danach, ein verlorenes Kapitel).
 // --story-check [n]: Kapiteltabelle und Szenen der Disc gegen die Übersetzung prüfen, dann jedes Kapitel (oder nur n) mit dem Autopiloten fahren (ohne Fenster).
+// --headless [--host | --join <ip[:port]>] [--bot] [--port n] [--name X] [--players n] [--races n] [--seconds s] [--net-sim ms[:verlust[:jitter]]] [--net-rule battle|race]:
+//   Mehrspieler-Teilnehmer ohne Fenster (Touge/Net/Headless): Host oder Client einer echten UDP-Sitzung, Auto per Autopilot (--bot), Log je Sekunde + Zusammenfassung.
+// --flow <dir> --versus flow: Versus-Ablauf (geteilter Bildschirm) per Skript statt des Time-Attack-Ablaufs.
+// --versus split|host|join[:ip[:port]]|online [--bot] [--split vertical] [--car2 X] [--players n] [--net-rule battle|race]: Versus direkt (Testläufe/Bilder):
+//   geteilter Bildschirm bzw. Online-Host/-Client im Fenster; --bot: Autopilot fährt, Lobby läuft von selbst (Host startet bei --players Spielern).
+// --shot-after <s>: --shot erst nach so vielen Sekunden (statt sofort), das Spiel läuft bis dahin normal.
 // --drift: Pilot reißt alle 7 s (ab 4,5 s) einen 2,5-s-Handbremsdrift (Reifenrauch/Bremsspuren testen), z. B. --autodrive 6.3 --drift --shot.
 var iso = args.FirstOrDefault(a => a.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
           ?? Environment.GetEnvironmentVariable("INITIALD_ISO");
@@ -52,7 +58,8 @@ if (iso == null || !File.Exists(iso))
     Console.Error.WriteLine("usage: touge <Initial D Special Stage (SLPM-65268).iso> [KURS_ZEIT, z. B. AKINA_DAY]  (oder INITIALD_ISO setzen)");
     return 1;
 }
-string[] valueFlags = ["--story-check", "--progress", "--battle", "--rule", "--lead", "--flow", "--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--hud-scale", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture", "--lights", "--render-scale", "--jukebox", "--legend-progress"];
+string[] valueFlags = ["--story-check", "--progress", "--battle", "--rule", "--lead", "--flow", "--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--hud-scale", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture", "--lights", "--render-scale", "--jukebox", "--legend-progress",
+    "--join", "--port", "--name", "--net-sim", "--players", "--races", "--seconds", "--net-rule", "--versus", "--split", "--car2", "--shot-after"];
 string? Arg(string flag) { var i = Array.IndexOf(args, flag); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
 // --car: HCAR name (AE86T, FD3S, R32, EVO3, …) or index 0–31 in that list (Touge.Formats.CarPaint.Cars)
 var carArg = Arg("--car") ?? "AE86T";
@@ -121,6 +128,26 @@ if (Arg("--audio-capture") is { } wav)
     return AudioCapture.Run(isoFile, course.ToUpperInvariant(), at, autodrive.Value, wav, float.Parse(args[capIndex + 2], CultureInfo.InvariantCulture),
         !args.Contains("--no-music"), car) ? 0 : 2;
 }
+if (args.Contains("--headless"))
+{
+    var port = int.Parse(Arg("--port") ?? Touge.Net.NetSession.DefaultPort.ToString());
+    System.Net.IPEndPoint? join = null;
+    if (Arg("--join") is { } joinArg && (join = Touge.Net.NetLink.Resolve(joinArg, port)) == null)
+    {
+        Console.Error.WriteLine($"--join {joinArg}: Adresse unbekannt");
+        return 1;
+    }
+    if (join == null && !args.Contains("--host"))
+    {
+        Console.Error.WriteLine("--headless braucht --host oder --join <ip[:port]>");
+        return 1;
+    }
+    var config = new Touge.Net.RaceConfig(course.ToUpperInvariant(), args.Contains("--reverse"), args.Contains("--fog"),
+        Arg("--net-rule") == "race" ? Touge.Net.NetRule.Race : Touge.Net.NetRule.Battle);
+    return Touge.Net.Headless.Run(new Touge.Net.Headless.Options(iso, join, port, args.Contains("--bot"), Arg("--name") ?? (join == null ? "HOST" : "BOT"), car, paint, config,
+        int.Parse(Arg("--players") ?? "2"), float.Parse(Arg("--seconds") ?? "600", CultureInfo.InvariantCulture),
+        Arg("--net-sim") is { } sim ? Touge.Net.NetSim.Parse(sim) : null, int.Parse(Arg("--races") ?? "1")));
+}
 // --battle <rival|car> [--rule race|chase] [--lead player|rival]: quick battle against the AI (Touge/Race)
 Touge.Race.BattleSetup? battle = null;
 if (Arg("--battle") is { } rivalArg)
@@ -177,6 +204,10 @@ var plain = args.Where((a, i) => a != iso && a != "--backend" && (i == 0 || args
 var saved = plain ? Touge.Ui.Settings.Load() : new Touge.Ui.Settings();
 KanseiApp.Run(new TougeGame(iso, course.ToUpperInvariant(), shot, at, orbit, autodrive, bench, Arg("--quality") != "off", args.Contains("--drift"), Arg("--flicker"))
     { HudMode = Arg("--hud"), HudScale = Arg("--hud-scale") is { } hs ? float.Parse(hs, CultureInfo.InvariantCulture) / 100 : 1, Reverse = args.Contains("--reverse"), Fog = args.Contains("--fog"), Car = car, Paint = paint, Livery = livery, ContactSheet = Arg("--cars"), LookAtSun = args.Contains("--sun"), OrbitDistance = orbitDistance,
+      VersusStart = Arg("--versus"), VersusBot = args.Contains("--bot"), VersusVertical = Arg("--split") == "vertical", Car2 = Arg("--car2"),
+      VersusPlayers = int.Parse(Arg("--players") ?? "2"), NetSim = Arg("--net-sim") is { } vsSim ? Touge.Net.NetSim.Parse(vsSim) : null,
+      NetPort = Arg("--port") is { } vsPort ? int.Parse(vsPort) : null, PlayerName = Arg("--name"), VersusRule = Arg("--net-rule") == "race" ? Touge.Net.NetRule.Race : Touge.Net.NetRule.Battle,
+      ShotAfter = Arg("--shot-after") is { } after ? float.Parse(after, CultureInfo.InvariantCulture) : 0,
       Battle = battle, LegendProgressPath = Arg("--legend-progress"), LegendFlow = args.Contains("--legend"), ShotBattleResult = args.Contains("--battle-result"), Lights = Arg("--lights") is { } lights ? Enum.Parse<Headlights.Mode>(lights, true) : null,
       RenderScale = Arg("--render-scale") is { } rs ? int.Parse(rs) : 100,
       InputDebug = args.Contains("--input-debug"), SimWheel = args.Contains("--sim-wheel"),

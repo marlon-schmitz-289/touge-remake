@@ -66,4 +66,18 @@ public class OverlayTests
         o.Clear();
         Assert.Equal(0, o.GlyphCount);
     }
+
+    /// <summary>Split screen: a HUD built for a view at the origin moves into its half, clip circles with it.</summary>
+    [Fact]
+    public void Shift_MovesShapesAndClips()
+    {
+        var o = new Overlay();
+        o.Rect(new Vector2(0, 0), new Vector2(10, 10), 0);
+        o.Clip(new Vector2(5, 5), 3);
+        o.Disc(new Vector2(5, 5), 2, 0);
+        o.Shift(new Vector2(100, 360));
+        Assert.Equal(new Vector2(100, 360), o.Vertices[0].Position);
+        Assert.Equal(new Vector3(105, 365, 3), o.Batches[1].Clip);
+        Assert.Equal(float.MaxValue, o.Batches[0].Clip.Z); // no clip stays no clip
+    }
 }

@@ -16,6 +16,12 @@ public interface ICarDriver
     void Reset() { }
 }
 
+/// <summary>
+///     A car simulated elsewhere (network peer, <see cref="Touge.Net.RemoteDriver"/>): <see cref="ICarDriver.Drive"/> sets the
+///     vehicle's state itself, the session runs no physics, auto-run or respawn for it (contacts still push the local cars).
+/// </summary>
+public interface IPuppet : ICarDriver;
+
 /// <summary>Input set from outside every tick (keyboard/pad, or the autopilot of a test run).</summary>
 public sealed class ManualDriver : ICarDriver
 {
@@ -131,8 +137,10 @@ public sealed class RaceSession
     public int ContactTicks { get; private set; }
     public float MaxImpact { get; private set; }
     public CarContact? LastContact { get; private set; }
-    /// <summary>The battle is decided (or, without one, everybody finished).</summary>
-    public bool Over => Battle is { Outcome: not BattleOutcome.None } || (Cars.Count > 0 && _finished == Cars.Count);
+    /// <summary>Decided from outside (a multiplayer referee): every car coasts to a stop.</summary>
+    public bool Ended { get; set; }
+    /// <summary>The battle is decided (or, without one, everybody finished), or <see cref="Ended"/>.</summary>
+    public bool Over => Ended || Battle is { Outcome: not BattleOutcome.None } || (Cars.Count > 0 && _finished == Cars.Count);
 
     public RaceCar Add(string name, Vehicle vehicle, ICarDriver driver)
     {
@@ -231,6 +239,11 @@ public sealed class RaceSession
         {
             var v = car.Vehicle;
             (car.PrevPosition, car.PrevOrientation) = (v.Position, v.Orientation);
+            if (car.Driver is IPuppet)
+            {
+                car.Input = car.Driver.Drive(this, car, dt);
+                continue;
+            }
             if (car.Coast == null && (car.FinishedAt != null || Over)) car.Coast = MakeCoast(car);
             var input = car.Coast?.Drive(v) ?? car.Driver.Drive(this, car, dt);
             car.Input = input;

@@ -210,6 +210,26 @@ Aus dem Recomp (ELF-Adresse = Dateioffset + 0xFFF80); gelesen von `Touge.Formats
 - **Ziel** (22-B-Satz): +0x0E Code, +0x10 u16 Parameter. Code als Bitfeld gelesen (eigene Deutung, mit den Szenen abgeglichen): 1 Ziel erreichen, 2 Position zählt, 4 Zeitgrenze (Parameter in s), 8 Sonderlauf. Vorkommen: 1 Rennen (13 Kapitel), 2 vorne bleiben (16, 19, 23, 26 – „schaffst du es ins Ziel, ohne dass ich überhole, hast du gewonnen“), 3/9 hinterher und überholen (10, 24 / 12), 4 mit 100 dranbleiben (13 Kyoichis „Seminar“, 15, 29), 5 allein mit Zeitgrenze (1, 5, 14, 18: 220/210/220/190 s), 6 überholen in 120 s (2, Geist von Akina), 7 allein ohne Grenze (0, bergauf), 8 allein mit 100 (4, Mitfahrer), 13 (20, Parameter 1323 – keine Zeit). +0x00 = 1 mit zwei u16 bei +2/+4 (Kapitel 0–3, 12, 16, 19, 23, 26, 27, 30) passt zu den Dateien `BINARY/STORY.AFS` `STORY_REP_nn.BIN` (Replays) – vermutlich Start/Ende einer Teilstrecke oder eines vorgespielten Stücks, nicht nachgebaut; `STORY_DRV_nn.BIN` (02, 05, 10, 17, 20–22) = 1000 × xyz wie `CRS_DRV` (eigene Fahrlinien).
 - **Szenen** `MANGA/MG_OBJ.AFS` `STRnn.BIN` (nn = Kapitel 02–30; `RVL00–33.BIN` = Legend of the Streets): „ROBJ“, u32 bei 0x18 → 12-B-Block, danach NUL-getrennte Shift-JIS-Token bis zum Schriftnamen `KSTnn`/`KNJnn` (dahinter der Zeichenvorrat der Seite, gerendert aus `MG_KNJ.AFS` `MGKNJFONT`). Befehle: `P_` Bild, `C_` Panel, `A_` Bildzeit, `W_`/`WF_` warten, `N` neue Seite, `K_` Seitenstil, `Q_`/`U_` Effekte, `F_<Name>` Sprecher der nächsten Blase (nur manchmal gesetzt), `E_60` Blende = Ende eines Teils. Text-Token sind Blasen (`\n` = Zeilenumbruch); bis zur nächsten Wartezeit/Seite/Sprecher eine Äußerung. Jede Szene: Teil vor und Teil nach dem Rennen (Kapitel 30 dazu ein Epilog), zusammen 585 Äußerungen; Kapitel 0/1 ohne Datei. Die Manga-Panels (`MG_KOMAF`/`MG_BGP`/`MG_KOMAM`) und die Sprachspuren `MANGAV/MG_KOMAS` (01_00 … 31_03, Stereo) werden im Remake nicht verwendet.
 - **Musik**: `SOUND/ST_BGM_N.AFS` (= `MANGA/ST_BGM.AFS`) `STORY_ST01–31` (ohne 13, 19 in zwei Hälften) + `STORY_MONO01–05`, `WIN02–04`; Zuordnung zu den Kapiteln nicht verfolgt (Remake: Kapitel n → `STORY_ST{n+1}`).
+## Netzprotokoll (Versus online) – eigenes Format des Remakes
+Das Original hat keinen Mehrspielermodus (Hauptmenü-Trommel ohne VS-Eintrag, s. o.); VERSUS ist eine Ergänzung (`Touge/Net/Protocol.cs`).
+UDP, Standardport 47860, höchstens 1200 Byte je Paket, little-endian. Kopf: `'I' 'D'`, Version (u8, derzeit 2), Typ (u8). Strings: Länge (u8) +
+UTF-8, beim Lesen auf 32 druckbare Zeichen gekürzt; Listen höchstens 4 Einträge; Spieler-IDs 0–3 (0 = Host). Ungültiges (falscher Kopf/Version,
+zu kurz, Restbytes, NaN/∞, ID/Liste/Phase außerhalb, Orientierung nicht ~normiert) wird verworfen.
+
+| Typ | Richtung | Inhalt |
+|---|---|---|
+| 1 Discover | Broadcast → Port | leer |
+| 2 Announce | Host → Fragender | Hostname, Spieler (u8), max (u8), Kurs (`AKINA_NIT`), Phase (u8) |
+| 3 Hello | Client → Host, 5/s | Token (u32, erkennt Wiedereintritt/NAT-Portwechsel), Name, Auto (HCAR-Name), Lack (u8), bereit (u8), geladenes Rennen (i32) |
+| 4 Lobby | Host → jeden Client, 5/s | deine ID (u8), Phase (0 Lobby, 1 Laden, 2 Countdown, 3 Rennen, 4 Ergebnis), Rennnummer (i32), Kurs, Flags (1 rückwärts, 2 Nebel), Regel (0 Battle, 1 Race), Spieler [ID, Name, Auto, Lack, bereit, Ping ms (u16), geladenes Rennen], Sekunden bis GO (f32), Folgenummer (u32, steigt je Paket; ältere verwirft der Client) |
+| 5 Ping / 6 Pong | beide | Sendezeit (f64), Pong spiegelt sie |
+| 7 State | Besitzer → Host → andere, 30/s | Rennnummer (i32), ID, Folgenummer (u32), Rennzeit seit GO (f32), Position (3 × f32), Orientierung (Quaternion 4 × f32), Geschwindigkeit, Drehgeschwindigkeit (je 3 × f32), Lenkung, Gas, Bremse, Drehzahl (f32), Gang (s8), Flags (1 Handbremse, 2 Abblend-, 4 Fernlicht, 8 Wandkontakt, 16 im Ziel), Federweg je Rad (4 × u8, 0–255 = 0–Federweg), Rutschgeschwindigkeit je Rad (4 × u8 à 0,25 m/s), Weg auf der Fahrlinie (f32), eigene Zielzeit (f32, −1 = noch nicht) – 103 Byte |
+| 8 Result | Host → alle, 5/s bis zum nächsten Rennen | Rennnummer, Grund (`GOAL`, `BREAKAWAY`, `TIME UP`, `OPPONENTS LEFT`), Einträge [ID, Platz, Zielzeit (−1 = keine), Weg] |
+| 9 Bye | beide, 3× | ID, Grund (Host an Gast: `HOST LEFT`, `SESSION FULL`, `RACE IN PROGRESS`) |
+
+Zeit: jeder Rechner zählt die Rennzeit ab seinem GO; der Gast setzt GO = Empfang + „Sekunden bis GO“ − ½ kleinster Ping der letzten 16
+(Median über alle Countdown-Pakete). Gemessen auf Loopback mit 80 ms ± 20 ms je Richtung (`out/proof/mp_headless_*.log`): Alter des neuesten
+fremden Zustands im Mittel 107 ms beim Host, 94 ms beim Gast (je ≈ 80 ms Laufzeit + halber Sendeabstand), die beiden Rennuhren liegen also ~6 ms auseinander.
 
 ## Offen
 - INFO: 0x150…0x1DF (Ambient je Slot?), 0x2A0…0x2BF, Abschnitts-Flag; LOD-Abstand `gp−0x7C14`; zweites u32 im ROAD-Header

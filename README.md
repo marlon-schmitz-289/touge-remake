@@ -56,6 +56,11 @@ dotnet run --project Touge -- "<iso>" IROHA_DAY --battle itsuki --autodrive 110 
 dotnet run --project Touge -- "<iso>" --menu story[:n[:scene[:teil[:zeile]]|:race|:end]] [--progress 12] --shot out/proof/s.png   # STORY: Kapitelwahl, Szene, Rennstart von Kapitel n oder THE END (--progress: Kapitel 0…n−1 geschafft, nur Testlauf; mit gespeichertem Fortschritt ignoriert)
 dotnet run --project Touge -- "<iso>" --flow out/proof/story --story --progress 5   # STORY-Ablauf im Fenster: Wahl → Szene → Battle (Pilot) → Ergebnis → Szene danach; verlorenes Kapitel mit RETRY
 dotnet run --project Touge -- "<iso>" --story-check [n|calibrate]   # ohne Fenster: Kapiteltabelle + Szenen der Disc gegen die Übersetzung, dann jedes Kapitel mit dem Autopiloten (Durchlauf-Log); calibrate = Rivalenstärke/Zeitgrenzen messen
+dotnet run --project Touge -- "<iso>" AKINA_NIT --versus split [--bot] [--split vertical] [--car FD3S --car2 AE86T] [--net-rule battle|race] [--autodrive 25 --shot out/proof/s.png]   # geteilter Bildschirm direkt (Lobby; --bot: beide Autopiloten, Rennen startet sofort)
+dotnet run --project Touge -- "<iso>" AKINA_DAY --versus host|join:<ip[:port]>|online|menu [--bot] [--port 47860] [--name TAKUMI] [--players 2] [--net-sim 80:5%:20] [--menu pause] [--shot-after 40 --shot out/proof/o.png]   # online im Fenster (--bot: Lobby läuft von selbst, Autopilot fährt; --menu pause: Pause über dem laufenden Rennen fürs Bild)
+dotnet run --project Touge -- "<iso>" AKINA_NIT --flow out/proof/vs --versus flow   # Versus-Ablauf per Skript: Hauptmenü → VERSUS → SPLIT → Lobby (START gesperrt bis READY) → Rennen → Pause → RETRY → EXIT → Lobby → Hauptmenü, PNG je Schritt
+dotnet run --project Touge -- "<iso>" IROHA_DAY --headless --host [--bot] [--port 47860] [--players 2] [--races 2] [--net-rule race] [--seconds 600]   # Host ohne Fenster
+dotnet run --project Touge -- "<iso>" --headless --join 127.0.0.1[:47860] --bot [--car FD3S] [--net-sim 80:5%:20]   # Bot-Client ohne Fenster (wartet, bis der Host da ist), Log je Sekunde + Zusammenfassung je Rennen
 ```
 
 Battle (`Touge/Race`, Grundlage für Legend of the Streets, Story und Multiplayer): `RaceSession` mit N Autos, jedes mit einem Fahrer
@@ -75,6 +80,42 @@ Vorsprungsgrenze, OVERTAKE!/OVERTAKEN; roter Punkt auf der Streckenuhr. Ton des 
 und Stereo. Ende: YOU WIN!!/YOU LOSE/DRAW mit WIN.adx/LOSE.adx (DRAW: WIN.adx wie das Zieljingle), Ergebnisblatt (Rivale, Auto, entschieden durch, Abstand, Zeiten, Führungswechsel,
 Kontakte – eine Berührung zählt neu erst nach 0,25 s Abstand) → Retry / Course Select / Car Select / Exit. Steuerung wie beim Fahren (Tastatur und Pad); B (Richtung wechseln) ist im Battle aus.
 
+VERSUS (`Ui/Versus`, `TougeGame.Versus`, `Touge/Net`; im Original gibt es keinen Mehrspielermodus, Menüs im Stil der anderen:
+Logo-Kachelwand, roter Laufschrift-Kopf, Chromplatten, Karbonpaneele, Original-SE, BGM „LIVE IN TOKYO“ in den Lobbys, „JOY“ beim
+Ergebnis, WIN/LOSE-Jingle beim Entscheid): SPLIT SCREEN oder ONLINE.
+- **Geteilter Bildschirm** (2 Spieler): Lobby links das Rennen (Kurs, Route, Bedingungen DAY/NIGHT/WET/DAY FOG/NIGHT FOG, Regel
+  BATTLE = Battle des Originals mit 8-s-Vorsprungssieg bzw. RACE = beide bis ins Ziel, Bildschirm oben/unten oder links/rechts, Gerät von
+  Spieler 2), rechts je Spieler Auto und Lackfarbe; Spieler 2 hat einen eigenen (blauen) Cursor auf seiner Karte und muss READY drücken,
+  dann START. Geräte: Spieler 2 nimmt ein Pad (nur die Pad-Belegung aus CONTROLLER) oder – ohne Pad – die Pfeil-Hälfte der Tastatur
+  (Pfeile fahren, R-CTRL Handbremse, R-SHIFT/R-ALT Gang hoch/runter, BACKSPACE zurück auf die Straße, ENTER Kamera; in den Menüs Pfeile +
+  ENTER); Spieler 1 behält alles andere (Lenkrad, die übrigen Pads, Tastatur – mit Spieler 2 auf der Tastatur ohne Pfeil-Hälfte, Menüs
+  WASD + LEERTASTE). Zwei Ansichten mit je eigener Kamera (C bzw. Kamerataste je Spieler), eigenem HUD (Zeit, Karte mit rotem Punkt für den
+  Gegner, Kombiinstrument des eigenen Autos, Platz 1ST/2ND mit Abstand) und eigenem Licht (die Scheinwerfer der jeweiligen Ansicht
+  beleuchten die Straße, das andere Auto glüht), Trennfuge mit roter Linie; Pause durch beide (START am Pad von Spieler 2), RETRY, EXIT →
+  Lobby. Die Zeit im HUD läuft für alle ab GO (wie die Zeiten im Ergebnis); der Hinweis „zurück auf die Straße“ nennt die Taste des
+  jeweiligen Spielers. 60 fps bei 3200×1800 ohne Abstriche (GPU 8,4 statt 7,3 ms je Bild, `--offscreen`).
+- **Online** (2–4 Spieler): HOST A GAME, JOIN BY ADDRESS (IP oder Name,
+  optional `:port`, getippt), YOUR NAME, UDP PORT (getippt, 1024–65535, Standard 47860, gespeichert als `NetPort`, `--port` für einen Lauf), darunter die Spiele im LAN (UDP-Broadcast, Liste aktualisiert sich). Lobby: der Host wählt das
+  Rennen, jeder sein Auto, Gäste melden READY, Ping je Spieler, der Host startet, wenn alle bereit sind. Laden (wartet auf alle, höchstens
+  30 s), gemeinsamer Countdown (GO auf allen Rechnern zur selben Zeit: Host-Sekunden bis GO minus halbe Paketlaufzeit), Rennen, Ergebnis
+  (Plätze, Zeiten, „m BEHIND“ bei vorzeitigem Battle-Sieg, DNF) → Host REMATCH/LOBBY/LEAVE, Gäste folgen. Pause hält online nicht an (das
+  Auto bremst, RETRY ist ausgegraut), EXIT des Hosts bringt alle in die Lobby, ein Gast verlässt die Sitzung. Verbindungsverlust (5 s still) → Meldung, zurück
+  zu ONLINE; ein Gast, der geht, ist DNF (sein Auto verschwindet), bleibt nur einer übrig, gewinnt er.
+- Netz (`Touge/Net`, Protokoll in FORMATS.md): UDP ohne Threads, einmal je Bild abgefragt; Stern um den Host (er leitet Zustände weiter).
+  Jedes Auto rechnet nur sein eigener Rechner (keine Eingabeverzögerung), 30 Zustände/s (Lage, Bewegung, Eingabe, Federweg und Rutschen
+  je Rad für Rauch/Spuren, Licht, Fortschritt, eigene Zielzeit). Fremde Autos: Hermite-Interpolation zwischen Zuständen bzw. Extrapolation
+  bis 0,5 s auf die eigene Rennuhr (nebeneinander sieht nebeneinander aus), Korrekturen gleiten in 0,1 s ein, darüber hinaus hält das Auto an.
+  Kontakt Auto gegen Auto: jeder Rechner löst ihn für sein eigenes Auto (das fremde gibt erst nach, wenn dessen Rechner es sagt). Host
+  entscheidet: Countdown, Zielreihenfolge nach den Zielzeiten der Fahrer selbst (erst wenn sicher ist, dass keine frühere mehr kommen kann),
+  Battle-Vorsprung, DNF 30 s nach dem Ersten. Zuverlässigkeit durch Wiederholen ganzer Zustände (Lobby 5/s, Ergebnis bis zum nächsten
+  Rennen) statt Quittungen; alte Pakete eines früheren Rennens werden verworfen.
+- **NAT / Portweiterleitung**: Im selben LAN reicht HOST bzw. die LAN-Liste. Übers Internet muss der Host im Router den UDP-Port (47860)
+  an seinen Rechner weiterleiten (Port Forwarding, oft unter „Freigaben“), die Gäste geben die öffentliche IP des Hosts ein
+  (`<ip>:47860`); die Firewall des Hosts muss eingehendes UDP für das Spiel erlauben (macOS fragt beim ersten Hosten). Ohne Weiterleitung
+  (CGNAT, Mobilfunk) geht es nur über ein VPN wie Tailscale/ZeroTier/Hamachi (dann deren Adresse eingeben). Gäste brauchen nichts.
+- Testen ohne zweites Fenster: `--headless` (Host oder Bot-Client ohne Fenster, Autopilot, `--net-sim` Latenz/Verlust/Jitter je
+  Richtung), z. B. Host im Fenster `--versus host --bot` und Bot ohne Fenster `--headless --join 127.0.0.1 --bot`.
+
 Fahren (Standard, alles außer F-Tasten/M/N/B/T/1–3 unter Optionen → CONTROLLER umbelegbar): W/S oder ↑/↓ Gas/Bremse, A/D oder ←/→ lenken, Leertaste Handbremse, S im Stand halten = Rückwärts (Automatik), T Automatik/Manuell,
 Shift/Strg hoch-/runterschalten (manuell, auch in R), R (Pad: Y) zurück auf die Fahrlinie (nächster freier Punkt, Blick in Fahrtrichtung), B Richtung wechseln (bergab ↔ bergauf, setzt auf die Fahrlinie der Gegenrichtung; Minimap/Fortschritt folgen), C Verfolger-/Stoßstangenkamera,
 L Licht an/aus, H Fernlicht an/aus (Umschalter, schaltet das Licht auch ein; Pad: D-Pad hoch/runter),
@@ -83,7 +124,7 @@ Menüs: Ohne Kurs/Test-Flags startet das Spiel im Front-End im Stil des Original
 Original-Menütexturen; Ablauf/Zeiten/Bewegung aus dem Originalcode, siehe FORMATS.md): Hinweis zu den Speicherdaten → Karte „Based on …“ →
 Hinweis „Fiktion“ → Titel (Akina bei Nacht im Hintergrund abgeflogen, Logo, blinkendes PRESS START BUTTON; nach 10 s ohne Eingabe zurück zu
 den Karten) → Hauptmenü (Trommel mit den 7 Modi des Originals, Chromplatten, pulsierender gelber Rahmen; nach 30 s ohne Eingabe zurück zum
-Titel). Gebaut sind davon LEGEND OF THE STREETS, TIME ATTACK, STORY, REPLAY & RECORD (→ Rekorde), IKETANI'S CAR GUIDE und OPTIONS; die anderen Modi piepen (BEEP001) wie gesperrte Einträge
+Titel). Gebaut sind davon LEGEND OF THE STREETS, TIME ATTACK, VERSUS (eigene Ergänzung nach TIME ATTACK, siehe unten), STORY, REPLAY & RECORD (→ Rekorde), IKETANI'S CAR GUIDE und OPTIONS; die anderen Modi piepen (BEEP001) wie gesperrte Einträge
 im Original. Als letzter Eintrag QUIT GAME (nur Windows/Linux/macOS): Abfrage „QUIT THE GAME?“ YES/NO (NO vorgewählt, ←/→ wählen,
 Enter/A entscheiden, Esc/B = NO), YES speichert die Einstellungen und schließt das Fenster. Esc im Hauptmenü zurück zum Titel, im Titel beenden. Danach alle Bildschirme ebenfalls im Originalstil (`Ui/Menu` + `Ui/Canvas`:
 graue Logo-Kachelwand, roter/blauer Laufschrift-Kopf, Chromplatten, Karbonpaneele, gelber Pulsrahmen, Verlaufswörter rot/blau, alles Englisch):

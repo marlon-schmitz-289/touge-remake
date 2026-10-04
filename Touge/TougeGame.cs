@@ -66,7 +66,8 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     /// <summary>What the music stream plays: null silence, <see cref="Menu.RaceMusic"/>, or a BGM.AFS track of the menus ("" = decide again).</summary>
     private string? _music = "";
     /// <summary>Front end or a menu holds the game (no physics); the intro lets go at GO, the finish banner lets the pilot drive on.</summary>
-    private bool Frozen => _front is { Active: true } || _guide is { Active: true } || _legend is { Active: true } || _menu is { Freezes: true } || _story is { Freezes: true };
+    private bool Frozen => _front is { Active: true } || _guide is { Active: true } || _legend is { Active: true } || _versusUi is { Active: true } || _story is { Freezes: true }
+                           || _menu is { Freezes: true } && !(_netRace != null && _menu.Current == Menu.Screen.Pause);
     /// <summary>The run's finish was handed to the menus (once per run).</summary>
     private bool _finished;
     private float _flyS, _menuTime;
@@ -212,8 +213,9 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         var title = _front != null && (_persist || Flow != null);
         LoadCourse(iso, title ? "AKINA_NIT" : _persist ? _settings.Course : _courseTime, _settings.Reverse, _settings.Car, _settings.Paint, startPoint, !title && _settings.Fog);
         _drive.ForceDrift = drift;
-        if (autodrive is { } battleSeconds && _race != null) BattleAutoDrive(battleSeconds);
-        else if (autodrive is { } seconds)
+        // --versus: StartVersusCli below, once sound and menus are up
+        if (VersusStart == null && autodrive is { } battleSeconds && _race != null) BattleAutoDrive(battleSeconds);
+        else if (VersusStart == null && autodrive is { } seconds)
         {
             _drive.AutoDrive(seconds, () =>
             {
@@ -285,7 +287,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             Device.Offscreen = true;
             _offscreen = new FrameCapture(Device, Device.SwapchainWidth, Device.SwapchainHeight);
         }
-        if (shotPath != null) (_capture, _shotState) = (new FrameCapture(Device, ShotSize.W, ShotSize.H), 1);
+        if (shotPath != null) (_capture, _shotState) = (new FrameCapture(Device, ShotSize.W, ShotSize.H), ShotAfter > 0 ? 0 : 1);
         else if (ContactSheet != null) (_capture, _sheet, _fly) = (new FrameCapture(Device, 1280, 720), new byte[SheetW * SheetH * 4], true);
         else if (flicker != null)
         {
@@ -302,6 +304,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             if (_guide != null) _guideVoice = new GuideVoice(iso, _audioDevice);
             StartAudio(iso);
         }
+        StartVersusCli();
     }
 
     /// <summary>
@@ -317,6 +320,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             _audio?.Dispose();
             _course.World.Dispose();
             _course.Sky.Dispose();
+            DisposeVersusCars();
             DisposeRival(); // its textures came after the player's car's (ReleaseTextures frees from an index on)
             _car.Dispose();
             _carRenderer.Dispose();
@@ -344,6 +348,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         SyncPose();
         if (_audioDevice != null) StartAudio(iso);
         LoadBattle(iso);
+        LoadVersusCars(iso);
     }
 
     private void StartAudio(Iso9660 iso)
@@ -365,7 +370,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         };
         hud.Timer.Record += best =>
         {
-            if (_race != null || _story is { InRun: true }) return; // a battle (rival, contacts) or a story run is no time attack record
+            if (_race != null || _vsRace != null || _story is { InRun: true }) return; // a battle (rival, contacts), versus or story run is no time attack record
             _settings.Best[key] = best;
             if (_persist) _settings.Save();
         };
@@ -399,6 +404,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         var name = CarPaint.Cars[(car % CarPaint.Cars.Length + CarPaint.Cars.Length) % CarPaint.Cars.Length];
         using var iso = new Iso9660(isoPath);
         Device.WaitIdle(); // the last frame may still read the old meshes
+        DisposeVersusCars();
         DisposeRival(); // loaded after the player's car: its textures go with it, reloaded below
         _car.Dispose();
         if (name != _carName)
@@ -410,6 +416,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         (_carName, _paint) = (name, paint);
         LoadCarModel(iso);
         LoadRivalModel(iso);
+        LoadVersusCars(iso);
         Console.WriteLine($"\n[Touge] Auto {_carName} (Lack {_paint + 1}/{_car.Paints}), {_drive.Car.Spec.Mass:F0} kg, Antrieb vorn {_drive.Car.Spec.DriveFront:P0}, Motor {GameAudio.Engines[Array.IndexOf(CarPaint.Cars, _carName)]}");
     }
 
@@ -456,12 +463,13 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         (_prevPos, _prevRot) = (car.Position, car.Orientation);
         // past the finish of a front-end run the game takes the car (auto-run to a stop before the end barrier);
         // the pilot drives for --autodrive/--bench/--flow
-        var input = _race == null && _front != null && _hud.Timer.Phase == LapTimer.State.Finished ? _drive.Coast()
+        var input = _race == null && _vsRace == null && _front != null && _hud.Timer.Phase == LapTimer.State.Finished ? _drive.Coast()
             : autodrive != null || bench != null || Flow != null ? _drive.PilotInput(_simTime)
             : _fly ? new VehicleInput(0, 0, 0, true)
             : _driver.Vehicle(_pendingShift);
         _pendingShift = 0;
-        if (_race != null) input = BattleStep(input, dt); // the session steps every car, the player's included
+        if (_vsRace != null) input = VersusStep(input, dt); // versus: split screen or online (Touge/Net)
+        else if (_race != null) input = BattleStep(input, dt); // the session steps every car, the player's included
         else car.Step(input, _drive.Ground, dt);
         _brakeLight = input.Brake;
         _ffb.Update(car, _drive.Roughness, _driver.SteerBeyond, _settings.Controls.FfbStrength, dt);
@@ -489,6 +497,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             WallSparks(car);
         }
         BattleEffects(dt);
+        VersusEffects(dt);
         _fx.Update(dt);
     }
 
@@ -596,6 +605,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         _driver.Update(Input, dt);
         SendForces();
         var keys = Flow != null ? FlowKeys(dt) : _frontKeys.Read(Input, dt);
+        if (VersusUpdate(keys, dt)) return;
         if (_front is { Active: true })
         {
             UpdateFrontEnd(keys, dt);
@@ -622,8 +632,8 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             if (_menu.Current != Menu.Screen.Intro || _menu.Freezes) return; // after GO the intro only draws
         }
         if (bench is { } benchSeconds && Bench(time, benchSeconds)) return;
-        if (StoryFinished() || BattleFinished()) return;
-        if (_race == null && _front != null && !_finished && _hud.Timer.Phase == LapTimer.State.Finished)
+        if (StoryFinished() || BattleFinished() || VersusFinished()) return;
+        if (_race == null && _vsRace == null && _front != null && !_finished && _hud.Timer.Phase == LapTimer.State.Finished)
         {
             // the run is over: finish banner, then the result sheet (only in the front-end flow)
             _finished = true;
@@ -633,7 +643,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         }
         if (Flow != null && bench == null)
             for (var i = 0; i < 15; i++) Tick(Drive.Dt); // --flow: 16× time, the pilot drives the run to the finish
-        if (k.IsKeyPressed(Key.Escape) || _driver.Pressed(Control.Pause) || (Flow != null && keys.Back))
+        if (k.IsKeyPressed(Key.Escape) || _driver.Pressed(Control.Pause) || (Flow != null && keys.Back) || P2Pause())
         {
             if (_menu == null) Window.ShouldClose = true;
             else
@@ -661,7 +671,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             _jukebox.Next();
         }
         if (k.IsKeyPressed(Key.F3)) _settings.MusicOn = !_settings.MusicOn; // SyncMusic follows
-        if (_drive.Car.SpeedKmh < 3) // car/paint change only at standstill
+        if (_drive.Car.SpeedKmh < 3 && _vsRace == null) // car/paint change only at standstill
         {
             var id = Array.IndexOf(CarPaint.Cars, _carName);
             if (k.IsKeyPressed(Key.D1)) SwitchCar(id - 1, 0);
@@ -709,6 +719,9 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
                 break;
             case FrontEnd.Result.Options:
                 OpenMenu(Menu.Screen.Options, fromFrontEnd: true);
+                break;
+            case FrontEnd.Result.Versus:
+                OpenVersus();
                 break;
             case FrontEnd.Result.Guide:
                 OpenGuide(CarGuide.Step.Intro);
@@ -762,7 +775,8 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         if (_audio == null || _menuAudio == null) return;
         var front = _front is { Active: true };
         var guide = _guide is { Active: true } || _legend is { Active: true };
-        var sfx = !front && !guide && _story is not { Mutes: true } && _menu!.Current is Menu.Screen.None or Menu.Screen.Intro or Menu.Screen.Finish ? _settings.SoundVolume : 0;
+        var versus = _versusUi is { Active: true };
+        var sfx = !front && !guide && !versus && _story is not { Mutes: true } && _menu!.Current is Menu.Screen.None or Menu.Screen.Intro or Menu.Screen.Finish ? _settings.SoundVolume : 0;
         if (_audioDevice!.Sfx != sfx) _audioDevice.Sfx = sfx; // the setter touches every voice
         if (_guide?.Voice != _voice && _guideVoice != null)
         {
@@ -771,7 +785,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             _audioDevice.Music = MusicLevel;
             _guide.VoiceSeconds = _guideVoice.Play(_voice, _settings.MenuVolume);
         }
-        var want = !_settings.MusicOn ? null : front ? _front!.Music : _legend is { Active: true } ? _legend.Music : guide ? _guide!.Music : _story is { Active: true } ? _story.Music : _menu!.Music(_music);
+        var want = !_settings.MusicOn ? null : front ? _front!.Music : _legend is { Active: true } ? _legend.Music : guide ? _guide!.Music : versus ? _versusUi!.Music : _story is { Active: true } ? _story.Music : VersusMusic(_menu!.Music(_music));
         if (want == _music) return;
         if (_music == Menu.RaceMusic) _jukebox!.Stop();
         _music = want;
@@ -803,6 +817,9 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             case Menu.Action.Resume:
                 (_inRace, _camSnap, _fly) = (true, true, false);
                 break;
+            case Menu.Action.Restart when _netRace != null:
+                menu.Close(); // an online race cannot restart for one player
+                break;
             case Menu.Action.Restart:
                 ResetRun();
                 break;
@@ -812,6 +829,9 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             case Menu.Action.Exit when _story is { InRun: true }:
                 EndBattle(); // pause → Exit in a story chapter: back to the chapter select
                 OpenStory(_story.Chapter);
+                break;
+            case Menu.Action.Exit when _vsRace != null:
+                VersusExitRace();
                 break;
             case Menu.Action.Exit:
                 EndLegendBattle();
@@ -846,6 +866,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         _drive.ResetTo(0);
         NewBattle();
         if (_story is { InRun: true }) _storyJudge = _story.NewJudge();
+        if (_vsRace != null) NewVersusRace(); // RETRY of a split-screen race
         if (_front != null || _story != null) _drive.Car.AutomaticGearbox = !_settings.Manual;
         _hud = NewHud();
         _fx = new Effects();
@@ -915,7 +936,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     /// </summary>
     private bool UpdateMenuCamera(float dt)
     {
-        var front = _front is { Active: true } || _guide is { Active: true, ShowsCar: false } || _legend is { Active: true, ShowsCar: false } || _story is { Flyover: true };
+        var front = _front is { Active: true } || _guide is { Active: true, ShowsCar: false } || _legend is { Active: true, ShowsCar: false } || _story is { Flyover: true } || _versusUi is { Active: true };
         var screen = _menu?.Current ?? Menu.Screen.None;
         if (_legend is { ShowsCar: true } && _rivalModel != null)
         {
@@ -1010,7 +1031,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         ("Race", 2, "race", 0, 0, false, true), ("Pause", 0.8f, "pause", 0, 0, true, false),
         ("Finish", 1.2f, "finish", 0, 0, false, false), ("Result", 3.6f, "result", 1, 0, false, false), ("Result", 0.3f, null, 1, 0, false, false),
         ("Result", 0.3f, null, 1, 0, false, false), ("Result", 0.5f, "result_exit", 0, 0, true, false),
-        ("Modes", 1, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 0, true, false),
+        ("Modes", 1, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 0, true, false),
         ("Records", 1, "records", 0, 0, false, true),
         ("Modes", 1, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 0, true, false),
         ("Options", 1, "options", 0, 4, false, false), ("Options", 0.5f, "options_sound_section", 0, 0, true, false), ("Options", 0.5f, "options_sound", 0, 0, false, true),
@@ -1047,7 +1068,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     /// <summary>--flow: the scripted key of this frame; asks for the step's PNG first (written next frame), quits after the last step (with --bench: races on).</summary>
     private (int X, int Y, bool Ok, bool Back) FlowKeys(float dt)
     {
-        var script = bench != null ? FlowBenchScript : LegendFlow ? LegendFlowScript : StoryFlow ? StoryFlowScript : FlowScript;
+        var script = bench != null ? FlowBenchScript : LegendFlow ? LegendFlowScript : StoryFlow ? StoryFlowScript : VersusStart == "flow" ? VersusFlowScript : FlowScript;
         if (_flowStep >= script.Length)
         {
             if (bench == null) Window.ShouldClose = true;
@@ -1055,7 +1076,8 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         }
         var s = script[_flowStep];
         var at = _front is { Active: true } ? _front.Current.ToString() : _guide is { Active: true } ? "Guide" + _guide.Current : _legend is { Active: true } ? "Legend" + _legend.Current
-            : _story is { Active: true } ? "Story" + _story.Current : _menu!.Current != Menu.Screen.None ? _menu.Current.ToString() : "Race";
+            : _story is { Active: true } ? "Story" + _story.Current : _versusUi is { Active: true } ? "Vs" + _versusUi.Current
+            : _menu!.Current != Menu.Screen.None ? _menu.Current.ToString() : "Race";
         if (at != s.At)
         {
             _flowT = 0;
@@ -1138,15 +1160,15 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         l.StreetLightColor = night ? new Vector3(1f, 0.62f, 0.3f) * 50 : Vector3.Zero;
     }
 
-    /// <summary>Per frame: the car's lamps from its pose (<see cref="Headlights.Apply"/>), env maps of the road point nearest to the car.</summary>
-    private void UpdateLights()
+    /// <summary>Per view: the view's car's lamps from its pose (<see cref="Headlights.Apply"/>), env maps of the road point nearest to it.</summary>
+    private void UpdateLights(in ViewCar own)
     {
         var l = _renderer.Lights;
-        _lights.Apply(l, _car.Lamp, _carBody, _renderer.Atmosphere.LocalLightShare, _fly ? 0 : _brakeLight, !_fly && _drive.Car.Gear < 0);
-        l.Car = _carBody;
+        own.Lights.Apply(l, own.Model.Lamp, own.Body, _renderer.Atmosphere.LocalLightShare, own.Brake, own.Reverse);
+        l.Car = own.Body;
         if (_course.Env != null)
         {
-            var (a, b, mix) = _course.EnvAt(_carBody.Translation);
+            var (a, b, mix) = _course.EnvAt(own.Body.Translation);
             _renderer.SetEnvironment(a, b, mix);
         }
     }
@@ -1265,7 +1287,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             _drive.ResetNearest();
             SyncPose();
         }
-        if (k.IsKeyPressed(Key.B) && _race == null)
+        if (k.IsKeyPressed(Key.B) && _race == null && _vsRace == null)
         {
             using (var iso = new Iso9660(isoPath)) _drive.SetDirection(iso, !_drive.Reverse);
             _drive.ResetNearest();
@@ -1323,6 +1345,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         var spin = _guide is { ShowsCar: true } ? Matrix4x4.CreateRotationY(2.5f + _menuTime * 0.3f) : Matrix4x4.Identity;
         (_carPose, _carBody) = PoseCar(_drive.Car, _car, _modelToBody, _prevPos, _prevRot, alpha, _carWheels, spin);
         UpdateRivalMatrices(alpha);
+        UpdateVersusMatrices(alpha);
     }
 
     /// <summary>Pose (physics body → world) and model matrix of <paramref name="car"/> interpolated by <paramref name="alpha"/>, its wheel matrices into <paramref name="wheels"/>.</summary>
@@ -1346,14 +1369,16 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     }
 
     /// <summary>Chase camera (spring towards a point behind/above the car, looks a bit ahead) or bumper camera.</summary>
-    private void UpdateDriveCamera(float dt)
+    private void UpdateDriveCamera(float dt) => UpdateDriveCamera(dt, _drive.Car, _carPose);
+
+    /// <summary>The chase/bumper camera of <paramref name="car"/> at its interpolated <paramref name="carPose"/> (split screen: player 2's too).</summary>
+    private void UpdateDriveCamera(float dt, Vehicle car, Matrix4x4 carPose)
     {
-        var car = _drive.Car;
-        var pos = _carPose.Translation; // interpolated CoG
-        var fwd = Vector3.TransformNormal(Vector3.UnitZ, _carPose);
+        var pos = carPose.Translation; // interpolated CoG
+        var fwd = Vector3.TransformNormal(Vector3.UnitZ, carPose);
         if (_bumperCam)
         {
-            var up = Vector3.TransformNormal(Vector3.UnitY, _carPose);
+            var up = Vector3.TransformNormal(Vector3.UnitY, carPose);
             _pos = pos + up * 0.15f + fwd * (car.Spec.Length / 2 + 0.05f);
             _camLook = _pos + fwd * 10;
             _fov = _settings.Fov * MathF.PI / 180;
@@ -1373,57 +1398,35 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         _shakeOffset = new Vector3(MathF.Sin(_simTime * 53), MathF.Sin(_simTime * 47 + 1), MathF.Sin(_simTime * 61 + 2)) * (0.12f * _shake * _settings.CameraShake);
     }
 
+    /// <summary>The car a view belongs to: its lamps light the scene (the other cars only glow), the fog layer and env maps follow it.</summary>
+    private readonly record struct ViewCar(CarModel Model, Matrix4x4 Body, Matrix4x4[] Wheels, Headlights Lights, float Brake, bool Reverse, Vehicle Vehicle);
+
+    private readonly (StaticMesh, Matrix4x4)[] _casters = new (StaticMesh, Matrix4x4)[5 + 5 + 5 * MaxVersusCars];
+
+    private ViewCar PlayerView => new(_car, _carBody, _carWheels, _lights, _fly ? 0 : _brakeLight, !_fly && _drive.Car.Gear < 0, _drive.Car);
+
     public override void Render(in FrameContext ctx)
     {
         var shot = _shotState == 1 ? _capture : null;
         var frame = shot ?? _offscreen; // where the frame goes (null: the window)
-        var aspect = shot != null ? (float)shot.Width / shot.Height
-            : ctx.Viewport.Height > 0 ? (float)ctx.Viewport.Width / ctx.Viewport.Height : 16f / 9f;
+        var (w, h) = frame != null ? (frame.Width, frame.Height) : (Device.SwapchainWidth, Device.SwapchainHeight);
         UpdateCarMatrices(shot != null ? 1 : ctx.TickAlpha);
         if (!UpdateMenuCamera(ctx.Time.DeltaTime) && !_fly) UpdateDriveCamera(ctx.Time.DeltaTime);
-        // Game data is right-handed (y up). Vulkan clip space is Y-down, Metal/GL Y-up.
-        var proj = WorldRenderer.Perspective(_fov, aspect, 0.3f, Device.Backend == Penelope.BackendKind.Vulkan);
-        var shake = _fly ? Vector3.Zero : _shakeOffset; // moves the view only, not the camera spring
-        var view = Matrix4x4.CreateLookAt(_pos + shake, _camLook + shake * 0.5f, Vector3.UnitY);
-        var skyView = view; // analytic sky + sun
-        if (_probeView.Spin != 0)
+        var split = SplitViews(w, h);
+        if (split is var (first, second))
         {
-            // --flicker: camera and world turned together (same image, different depth rounding)
-            var spin = Matrix4x4.CreateRotationY(_probeView.Spin);
-            view = spin * Matrix4x4.CreateLookAt(Vector3.Transform(_pos, spin), Vector3.Transform(_camLook, spin), Vector3.UnitY);
+            // split screen: player 1's view, then player 2's with its camera, car and lamps
+            RenderView(ctx, shot, frame, first, PlayerView, 0);
+            RenderP2View(ctx, shot, frame, second);
         }
-
-        UpdateLights();
-        var shell = _lights.State != Headlights.Mode.Off ? _car.Lit : _car.Day;
-        if (_fog) _renderer.Atmosphere.HeightFogBase = _carBody.Translation.Y; // the fog layer lies where the car drives
-        Span<(StaticMesh, Matrix4x4)> casters =
-        [
-            (shell.Body, _carBody), (_car.Wheel, _carWheels[0]), (_car.Wheel, _carWheels[1]), (_car.Wheel, _carWheels[2]), (_car.Wheel, _carWheels[3]),
-            default, default, default, default, default,
-        ];
-        _renderer.RenderShadows(ctx.Encoder, _pos, Vector3.Normalize(_camLook - _pos), _fov, aspect, _course.World, casters[..(5 + RivalCasters(casters[5..]))]);
-        var pass = _renderer.BeginScene(ctx.Encoder, skyView, proj, frame);
-        _renderer.Time = _simTime;
-        _renderer.DrawSky(pass, _course.Sky, Matrix4x4.CreateTranslation(_pos with { Y = 0 }) * view * proj, _pos); // follows the camera
-        var carView = _probe != null && _probeView.Group == 1;
-        if (_probe == null || !carView) _renderer.Draw(pass, _course.World, view * proj, _pos);
-        if (_probe == null || carView || _probeView.Group == 3)
+        else
         {
-            _carRenderer.Draw(pass, shell.Body, shell.Decals, _car.Wheel, _carBody, _carWheels, view * proj, _pos);
-            if (shell.PopUp is { } popUp) _carRenderer.DrawPart(pass, popUp, _car.Lamp.PopUpAt(_lights.Open) * _carBody, view * proj, _pos);
-            DrawRival(pass, view * proj);
+            var aspect = shot != null ? (float)shot.Width / shot.Height
+                : ctx.Viewport.Height > 0 ? (float)ctx.Viewport.Width / ctx.Viewport.Height : 16f / 9f;
+            RenderView(ctx, shot, frame, null, PlayerView, 0, aspect);
         }
-        _fxRenderer.Draw(pass, _fx, view, view * proj, _pos);
-        // camera velocity stretches the rain streaks; a shot has no previous frame, the chase camera moves with the car
-        var frameDt = ctx.Time.DeltaTime;
-        _camVelocity = shot != null ? (_fly ? Vector3.Zero : _drive.Car.Velocity)
-            : frameDt > 0 ? Vector3.Lerp(_camVelocity, (_pos - _lastCamPos) / frameDt, 0.3f) : _camVelocity;
-        _lastCamPos = _pos;
-        var heightPx = shot?.Height ?? Device.SwapchainHeight;
-        _fxRenderer.DrawRain(pass, view * proj, _pos, _camVelocity, _simTime, 2 * MathF.Tan(_fov / 2) / heightPx);
-        _renderer.EndScene(ctx.Encoder, pass, frame);
-        var (w, h) = frame != null ? (frame.Width, frame.Height) : (Device.SwapchainWidth, Device.SwapchainHeight);
         var menuShown = _menu is { Current: not Menu.Screen.None };
+        var hudShown = _hud.Visible && (!menuShown || _menu!.OverRace); // telop/countdown and pause lie over the HUD
         if (_front is { Active: true }) _front.Build(_overlay, w, h);
         else if (_guide is { Active: true }) _guide.Build(_overlay, w, h);
         else if (_legend is { Active: true }) _legend.Build(_overlay, w, h);
@@ -1432,17 +1435,27 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             _overlay.Clear();
             _story.Build(_overlay, w, h);
         }
-        else if (_hud.Visible && (!menuShown || _menu!.OverRace)) // telop/countdown and pause lie over the HUD
+        else if (_versusUi is { Active: true }) _versusUi.Build(_overlay, w, h);
+        else if (hudShown)
         {
+            var (hw, hh) = split is var (v0, _) ? (v0.Width, v0.Height) : (w, h);
             _hud.Lights = _lights.State;
-            _hud.Rival = _race is { } race ? (_rivalPose.Translation, race.Cars[1].Along) : null;
-            _hud.Build(_overlay, w, h, _carPose.Translation, Vector3.TransformNormal(Vector3.UnitZ, _carPose), _drive.Car, _carName, _menuTime);
-            BuildBattleHud(w, h);
-            _story?.BuildHud(_overlay, w, h, _race?.Battle);
+            _hud.Rival = _race is { } race ? (_rivalPose.Translation, race.Cars[1].Along) : VersusRival(0);
+            _hud.Build(_overlay, hw, hh, _carPose.Translation, Vector3.TransformNormal(Vector3.UnitZ, _carPose), _drive.Car, _carName, _menuTime);
+            BuildBattleHud(hw, hh);
+            _story?.BuildHud(_overlay, hw, hh, _race?.Battle);
+            BuildVersusHud(_overlay, hw, hh, 0);
         }
         else _overlay.Clear();
+        if (_versusUi is not { Active: true } && split is var (s1, s2)) SplitSeam(s1, s2);
         var target = frame?.View ?? Device.CurrentSwapchainView;
-        if (_front is not { Active: true } && _guide is not { Active: true } && _legend is not { Active: true } && menuShown)
+        if (_versusUi is not { Active: true } && hudShown && split is var (_, p2))
+        {
+            // player 2's HUD in its own overlay, moved into its half
+            BuildP2Hud(p2);
+            DrawOverlay(ctx.Encoder, _p2Overlay, target, w, h);
+        }
+        if (_front is not { Active: true } && _guide is not { Active: true } && _legend is not { Active: true } && _versusUi is not { Active: true } && menuShown)
         {
             // HUD as its own layer first: one overlay draws all shapes before all text, so HUD text would land on the menu panels
             DrawOverlay(ctx.Encoder, target, w, h);
@@ -1455,9 +1468,10 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             _overlay.Clear();
             _story.Build(_overlay, w, h);
         }
-        if (_jukebox is { Playing: true, Current: { } song } && _music == Menu.RaceMusic && _front is not { Active: true } && _guide is not { Active: true } && _legend is not { Active: true } && _story is not { Active: true })
+        if (_jukebox is { Playing: true, Current: { } song } && _music == Menu.RaceMusic && _front is not { Active: true } && _guide is not { Active: true } && _legend is not { Active: true }
+            && _story is not { Active: true } && _versusUi is not { Active: true })
             NowPlaying.Draw(_overlay, w, h, song, _jukebox.Since, hold: _menu?.Current == Menu.Screen.Pause,
-                below: _hud.Visible ? (_race?.Battle != null ? BattleHud.H + 14 : 0) + (_story?.HudHeight(_race?.Battle) ?? 0) : 0);
+                below: _hud.Visible ? (_race?.Battle != null ? BattleHud.H + 14 : VersusHudBelow(split != null)) + (_story?.HudHeight(_race?.Battle) ?? 0) : 0);
         if (InputDebug) InputDebugView.Build(_overlay, w, h, Input, _driver, _ffb);
         DrawOverlay(ctx.Encoder, target, w, h);
         if (shot != null)
@@ -1467,24 +1481,81 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         }
     }
 
+    /// <summary>
+    ///     One 3D view: shadows, sky, course, every car, effects and rain from the current camera into <paramref name="frame"/>
+    ///     (or the window), into <paramref name="viewport"/> of it (split screen) or the whole. <paramref name="own"/> is the car
+    ///     whose lamps light the road; the others draw with their own lamps glowing (<paramref name="view"/>: whose view, 0/1).
+    /// </summary>
+    private void RenderView(in FrameContext ctx, FrameCapture? shot, FrameCapture? frame, Kansei.Core.Viewport? viewport, ViewCar own, int view, float aspect = 0)
+    {
+        if (viewport is { } vp) aspect = (float)vp.Width / Math.Max(1, vp.Height);
+        // Game data is right-handed (y up). Vulkan clip space is Y-down, Metal/GL Y-up.
+        var proj = WorldRenderer.Perspective(_fov, aspect, 0.3f, Device.Backend == Penelope.BackendKind.Vulkan);
+        var shake = _fly ? Vector3.Zero : _shakeOffset; // moves the view only, not the camera spring
+        var view3 = Matrix4x4.CreateLookAt(_pos + shake, _camLook + shake * 0.5f, Vector3.UnitY);
+        var skyView = view3; // analytic sky + sun
+        if (_probeView.Spin != 0)
+        {
+            // --flicker: camera and world turned together (same image, different depth rounding)
+            var spin = Matrix4x4.CreateRotationY(_probeView.Spin);
+            view3 = spin * Matrix4x4.CreateLookAt(Vector3.Transform(_pos, spin), Vector3.Transform(_camLook, spin), Vector3.UnitY);
+        }
+
+        UpdateLights(own);
+        var shell = own.Lights.State != Headlights.Mode.Off ? own.Model.Lit : own.Model.Day;
+        if (_fog) _renderer.Atmosphere.HeightFogBase = own.Body.Translation.Y; // the fog layer lies where the car drives
+        var p1Shell = _lights.State != Headlights.Mode.Off ? _car.Lit : _car.Day;
+        Span<(StaticMesh, Matrix4x4)> casters = _casters;
+        (casters[0], casters[1], casters[2], casters[3], casters[4]) =
+            ((p1Shell.Body, _carBody), (_car.Wheel, _carWheels[0]), (_car.Wheel, _carWheels[1]), (_car.Wheel, _carWheels[2]), (_car.Wheel, _carWheels[3]));
+        var n = 5 + RivalCasters(casters[5..]);
+        n += VersusCasters(casters[n..]);
+        _renderer.RenderShadows(ctx.Encoder, _pos, Vector3.Normalize(_camLook - _pos), _fov, aspect, _course.World, casters[..n]);
+        var pass = _renderer.BeginScene(ctx.Encoder, skyView, proj, frame, viewport);
+        _renderer.Time = _simTime;
+        _renderer.DrawSky(pass, _course.Sky, Matrix4x4.CreateTranslation(_pos with { Y = 0 }) * view3 * proj, _pos); // follows the camera
+        var carView = _probe != null && _probeView.Group == 1;
+        if (_probe == null || !carView) _renderer.Draw(pass, _course.World, view3 * proj, _pos);
+        if (_probe == null || carView || _probeView.Group == 3)
+        {
+            _carRenderer.Draw(pass, shell.Body, shell.Decals, own.Model.Wheel, own.Body, own.Wheels, view3 * proj, _pos);
+            if (shell.PopUp is { } popUp) _carRenderer.DrawPart(pass, popUp, own.Model.Lamp.PopUpAt(own.Lights.Open) * own.Body, view3 * proj, _pos);
+            DrawRival(pass, view3 * proj);
+            DrawVersusCars(pass, view3 * proj, view);
+        }
+        _fxRenderer.Draw(pass, _fx, view3, view3 * proj, _pos);
+        // camera velocity stretches the rain streaks; a shot has no previous frame, the chase camera moves with the car
+        var frameDt = ctx.Time.DeltaTime;
+        _camVelocity = shot != null ? (_fly ? Vector3.Zero : own.Vehicle.Velocity)
+            : frameDt > 0 ? Vector3.Lerp(_camVelocity, (_pos - _lastCamPos) / frameDt, 0.3f) : _camVelocity;
+        _lastCamPos = _pos;
+        var heightPx = viewport?.Height ?? shot?.Height ?? Device.SwapchainHeight;
+        _fxRenderer.DrawRain(pass, view3 * proj, _pos, _camVelocity, _simTime, 2 * MathF.Tan(_fov / 2) / heightPx);
+        _renderer.EndScene(ctx.Encoder, pass, frame, viewport);
+    }
+
     /// <summary>A pad button the player bound to a driving control (then its fixed extra, e.g. D-pad right = next song, stays off).</summary>
     private bool PadBound(GamepadButton b) => _settings.Controls.Pad.Values.Any(binds => binds.Contains(Bind.Pad(b)));
 
-    private void DrawOverlay(Penelope.ICommandEncoder encoder, Penelope.TextureViewHandle target, int w, int h)
+    private void DrawOverlay(Penelope.ICommandEncoder encoder, Penelope.TextureViewHandle target, int w, int h) => DrawOverlay(encoder, _overlay, target, w, h);
+
+    private void DrawOverlay(Penelope.ICommandEncoder encoder, Overlay overlay, Penelope.TextureViewHandle target, int w, int h)
     {
-        _overlayRenderer.Draw(encoder, _overlay, target, w, h);
-        _textRenderer.Draw(encoder, _overlay, target, w, h);
+        _overlayRenderer.Draw(encoder, overlay, target, w, h);
+        _textRenderer.Draw(encoder, overlay, target, w, h);
     }
 
     public override void Dispose()
     {
         _audio?.Dispose();
         _rivalAudio?.Dispose();
+        DisposeVersus();
         _menuAudio?.Dispose();
         _guideVoice?.Dispose();
         _audioDevice?.Dispose();
         _course.World.Dispose();
         _course.Sky.Dispose();
+        DisposeVersusCars();
         DisposeRival();
         _car.Dispose();
         _carRenderer.Dispose();

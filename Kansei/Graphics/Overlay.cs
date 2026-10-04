@@ -68,6 +68,14 @@ public sealed class Overlay
         _batches[_batchCount++] = (VertexCount, new Vector3(center, radius));
     }
 
+    /// <summary>Moves everything drawn so far by <paramref name="offset"/> pixels (a HUD built for one view of a split screen into its place).</summary>
+    public void Shift(Vector2 offset)
+    {
+        for (var i = 0; i < VertexCount; i++) _vertices[i].Position += offset;
+        for (var i = 0; i < GlyphCount; i++) _glyphs[i].Position += offset;
+        for (var b = 0; b < _batchCount; b++) _batches[b].Clip += new Vector3(offset, 0);
+    }
+
     /// <summary>sRGB colour, components 0..1.</summary>
     public static uint Rgba(float r, float g, float b, float a = 1) =>
         (uint)(r * 255 + 0.5f) | (uint)(g * 255 + 0.5f) << 8 | (uint)(b * 255 + 0.5f) << 16 | (uint)(a * 255 + 0.5f) << 24;
