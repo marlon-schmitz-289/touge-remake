@@ -433,10 +433,10 @@ public sealed class Menu(Catalog catalog, Settings settings)
     ];
 
     private static readonly string[] KeyboardHelp =
-        ["W/S or UP/DOWN throttle and brake, A/D or LEFT/RIGHT steer, SPACE handbrake,", "SHIFT/CTRL gear up/down (MT), T AT/MT, R back to the road, C camera,", "F2 graphics, F3 music, F4 HUD, N map, ESC pause."];
+        ["W/S or UP/DOWN throttle and brake, A/D or LEFT/RIGHT steer, SPACE handbrake,", "SHIFT/CTRL gear up/down (MT), T AT/MT, R back to the road, C camera,", "L lights, H high beam, F2 graphics, F3 music, F4 HUD, N map, ESC pause."];
 
     private static readonly string[] PadHelp =
-        ["Left stick steer, right/left trigger throttle and brake, A handbrake,", "bumpers gear up/down (MT), Y back to the road, START pause.", "Menus: D-pad or stick, A decide, B back."];
+        ["Left stick steer, right/left trigger throttle and brake, A handbrake,", "bumpers gear up/down (MT), Y back to the road, START pause.", "D-pad up/down lights/high beam. Menus: D-pad or stick, A decide, B back."];
 
     /// <summary>Selected value of option row <paramref name="row"/>.</summary>
     private int OptionValue(int row) => row switch

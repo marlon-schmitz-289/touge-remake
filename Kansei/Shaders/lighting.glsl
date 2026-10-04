@@ -40,37 +40,60 @@ float contactShadow(vec3 p)
     return 1.0 - pc.uShadeSky.w * smoothstep(0.85, 0.0, off) * smoothstep(0.8, 0.0, q.y) * step(-0.5, q.y);
 }
 
-// Headlight i's beam (0..1) in direction `dir` (unit, lamp → point): elliptical (wide, flat) around the axis, so the
-// road just in front of the car is not blown out while the beam still reaches far.
+// Headlight i's intensity (relative to its peak) in direction `dir` (unit, lamp → point), in tangents across (x, + = right)
+// and up (y) of the beam axis. Low beam (uSpotPos.w = 0) with the Japanese cut-off: flat 0.7° below the horizon on the
+// oncoming (right) side, rising to 0.3° above it on the kerb side; the light piles up right under the cut-off and thins out
+// towards the car (∝ 1 / depth³), so a flat road gets about evenly lit from a few metres to ~60 m instead of a blown-out
+// patch in front of the bumper. High beam (1): cut-off 1.7° above the horizon with a soft top edge, wider, 2.5× brighter.
+// A dim wide spill lights the verges.
 float beam(int i, vec3 dir)
 {
     vec3 axis = pc.uSpotDir[i].xyz;
     vec3 right = normalize(cross(axis, vec3(0.0, 1.0, 0.0)));
     vec3 up = cross(right, axis);
     float ahead = dot(dir, axis);
-    if (ahead <= 0.0) return 0.0;
-    vec2 off = vec2(dot(dir, right) / pc.uSpotPos[i].w, dot(dir, up) / pc.uSpotDir[i].w) / ahead;
-    return smoothstep(1.6, 0.25, length(off));
+    if (ahead <= 0.05) return 0.0;
+    float x = dot(dir, right) / ahead, y = dot(dir, up) / ahead;
+    float high = pc.uSpotPos[i].w;
+    float cut = mix(-0.012 + 0.017 * smoothstep(0.0, 0.08, -x), 0.03, high);
+    float soft = mix(0.005, 0.03, high);
+    float below = cut - y;
+    float vertical = smoothstep(-soft, soft, below) * pow(0.02 / (0.02 + max(below, 0.0)), 2.75);
+    float sx = mix(0.28, 0.36, high), wide = mix(0.9, 1.2, high);
+    float across = exp(-x * x / (sx * sx)) + 0.3 * exp(-x * x / (wide * wide));
+    return vertical * across * mix(1.0, 2.5, high);
+}
+
+// Irradiance cap: what the local lights throw onto a surface saturates softly towards LightCap — per light and in sum —
+// so a wall in front of the bumper, several lamps overlapping or a lamp right next to a surface never blow out (no
+// runaway before tonemapping). Applied after N·L: a grazing road keeps its full share.
+const float LightCap = 1.0;
+
+vec3 capped(vec3 e)
+{
+    float l = dot(e, vec3(0.2126, 0.7152, 0.0722));
+    return l > 1e-6 ? e * (LightCap * (1.0 - exp(-l / LightCap)) / l) : e;
 }
 
 const int Lights = 8;
 const float TailRange = 8.0;
 
-// Point light j (0–3 street lights, 4–5 rear lamps): position + radius, colour.
-vec4 pointLight(int j, out vec3 colour)
+// Point light j (0–3 street lights, 4–5 rear lamps): position + radius, colour. A rear lamp lights surfaces by the
+// night share (uTailColor.w) but stays `mirror`ed at full strength: a brake light streaks on a wet road by day too.
+vec4 pointLight(int j, bool mirror, out vec3 colour)
 {
-    colour = j < 4 ? pc.uPointColor.rgb : pc.uTailColor.rgb;
+    colour = j < 4 ? pc.uPointColor.rgb : pc.uTailColor.rgb * (mirror ? 1.0 : pc.uTailColor.w);
     return j < 4 ? pc.uPointPos[j] : vec4(pc.uTailPos[j - 4].xyz, TailRange);
 }
 
-// Light i (0–1 headlights, 2–7 point lights) arriving at p: irradiance (inverse square windowed to the range, beam
-// shape) and the unit direction l towards the lamp. Zero when off or out of range.
-vec3 lightIn(int i, vec3 p, out vec3 l)
+// Light i (0–1 headlights, 2–7 point lights) arriving at p: irradiance on a surface facing the lamp (inverse square
+// windowed to the range, beam shape; not capped yet) and the unit direction l towards the lamp. Zero when off or out of range.
+vec3 lightIn(int i, vec3 p, bool mirror, out vec3 l)
 {
     l = vec3(0.0, 1.0, 0.0);
     bool spot = i < 2;
     vec3 colour = pc.uSpotColor.rgb;
-    vec4 lp = spot ? pc.uSpotPos[i] : pointLight(i - 2, colour);
+    vec4 lp = spot ? pc.uSpotPos[i] : pointLight(i - 2, mirror, colour);
     float range = spot ? pc.uSpotColor.w : lp.w;
     if (range <= 0.0 || dot(colour, colour) == 0.0) return vec3(0.0);
     vec3 d = lp.xyz - p;
@@ -83,28 +106,30 @@ vec3 lightIn(int i, vec3 p, out vec3 l)
     return colour * att;
 }
 
-// Diffuse irradiance of all dynamic lights; adds an energy-normalised Blinn-Phong highlight (exponent `shininess`) to `spec`.
+// Diffuse irradiance of all dynamic lights (capped in sum); adds an energy-normalised Blinn-Phong highlight (exponent
+// `shininess`) to `spec`.
 vec3 dynamicLight(vec3 p, vec3 n, vec3 v, float shininess, inout vec3 spec)
 {
-    vec3 sum = vec3(0.0);
+    vec3 sum = vec3(0.0), hl = vec3(0.0);
     float norm = (shininess + 8.0) / 25.13;
     for (int i = 0; i < Lights; i++)
     {
         vec3 l;
-        vec3 e = lightIn(i, p, l);
-        float ndl = max(dot(n, l), 0.0);
-        sum += e * ndl;
-        spec += e * (ndl * norm * pow(max(dot(n, normalize(l + v)), 0.0), shininess));
+        vec3 e = capped(lightIn(i, p, false, l) * max(dot(n, l), 0.0));
+        sum += e;
+        hl += e * (norm * pow(max(dot(n, normalize(l + v)), 0.0), shininess));
     }
-    return sum;
+    vec3 total = capped(sum);
+    spec += hl * (dot(total, vec3(1.0)) / max(dot(sum, vec3(1.0)), 1e-6));
+    return total;
 }
 
 // Irradiance from all dynamic lights regardless of orientation (rain drops, spray).
 vec3 lightAt(vec3 p)
 {
     vec3 sum = vec3(0.0), l;
-    for (int i = 0; i < Lights; i++) sum += lightIn(i, p, l);
-    return sum;
+    for (int i = 0; i < Lights; i++) sum += capped(lightIn(i, p, false, l));
+    return capped(sum);
 }
 
 // Lamps mirrored in a wet surface: a lobe around the mirror direction r, `across` wide sideways and `along` wide in
@@ -120,7 +145,7 @@ vec3 wetLights(vec3 p, vec3 n, vec3 v, float across, float along)
     for (int i = 0; i < Lights; i++)
     {
         vec3 l;
-        vec3 e = lightIn(i, p, l);
+        vec3 e = capped(lightIn(i, p, true, l));
         if (dot(l, r) <= 0.0) continue;
         float x = dot(l, side) / across, y = dot(l, up) / along;
         sum += e * exp(-(x * x + y * y));
@@ -129,9 +154,9 @@ vec3 wetLights(vec3 p, vec3 n, vec3 v, float across, float along)
     return sum * (fresnel / (3.14159 * across * along));
 }
 
-// Light scattered towards the camera by the fog between the eye and p (light glow, headlight beams in rain/mist).
-// Street lights: point sources, ∫ I / (h² + t²) dt along the ray solved exactly (rear lamps are left to the bloom).
-// Headlights: cones, 8 samples at the midpoints of the first 60 m of the ray (a per-pixel jitter showed as dots without TAA).
+// Light scattered towards the camera by the fog between the eye and p: the street lights' glow, point sources,
+// ∫ I / (h² + t²) dt along the ray solved exactly. Headlights and rear lamps are left to the bloom on their lenses — their
+// beams in the fog read as solid cones.
 vec3 lightGlow(vec3 p)
 {
     if (pc.uFog.a <= 0.0) return vec3(0.0);
@@ -143,26 +168,12 @@ vec3 lightGlow(vec3 p)
     for (int j = 0; j < 4; j++)
     {
         vec3 colour;
-        vec4 lp = pointLight(j, colour);
+        vec4 lp = pointLight(j, false, colour);
         if (lp.w <= 0.0 || dot(colour, colour) == 0.0) continue;
         vec3 ol = lp.xyz - o;
         float tc = dot(ol, rd);
         float h = sqrt(max(dot(ol, ol) - tc * tc, 0.0)) + 0.1;
         sum += colour * ((atan((len - tc) / h) + atan(tc / h)) / h);
-    }
-    if (dot(pc.uSpotColor.rgb, pc.uSpotColor.rgb) > 0.0)
-    {
-        float reach = min(len, 60.0), step = reach / 8.0;
-        for (int k = 0; k < 8; k++)
-        {
-            vec3 q = o + rd * ((float(k) + 0.5) * step);
-            for (int i = 0; i < 2; i++)
-            {
-                vec3 dl = q - pc.uSpotPos[i].xyz;
-                float d2 = dot(dl, dl);
-                sum += pc.uSpotColor.rgb * (beam(i, dl * inversesqrt(max(d2, 1e-4))) * step / (d2 + 1.0));
-            }
-        }
     }
     return sum * pc.uFog.a;
 }

@@ -5,7 +5,7 @@ namespace Kansei.Graphics;
 
 /// <summary>
 ///     Lit car meshes (<see cref="CarVertex"/>, car.frag): diffuse with sun shadows and dynamic lights, clear coat with
-///     Fresnel env-map reflections on paint and glass, glowing rear lamps. Light comes from the renderer's
+///     Fresnel env-map reflections on paint and glass, glowing lamps. Light comes from the renderer's
 ///     <see cref="Atmosphere"/>/<see cref="SceneLights"/>. Draws into an open <see cref="WorldRenderer.BeginScene"/>
 ///     pass (same depth buffer, reversed-Z) and uses its textures. Models must be rigid (normals use the model rotation).
 /// </summary>
@@ -41,6 +41,13 @@ public sealed class CarRenderer : IDisposable
         if (decalMesh.Batches.Count == 0) return;
         pass.SetPipeline(_blend[_world.Quality]);
         DrawMesh(pass, decalMesh, body, viewProj, eye);
+    }
+
+    /// <summary>A rigid part on its own matrix (pop-up headlamps), opaque, after <see cref="Draw"/>.</summary>
+    public void DrawPart(IRenderPassEncoder pass, StaticMesh mesh, in Matrix4x4 model, in Matrix4x4 viewProj, Vector3 eye)
+    {
+        pass.SetPipeline(_pipeline[_world.Quality]);
+        DrawMesh(pass, mesh, model, viewProj, eye);
     }
 
     private void DrawMesh(IRenderPassEncoder pass, StaticMesh mesh, in Matrix4x4 model, in Matrix4x4 viewProj, Vector3 eye)

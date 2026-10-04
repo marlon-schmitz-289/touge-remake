@@ -29,6 +29,8 @@ public sealed class WorldRenderer : IDisposable
     private const int LayerPush = 572; // uPointColor.w
     private const int SkyPushBytes = 192;
     private const float AlphaCutoff = 0.3f; // world.frag
+    /// <summary>Headlight reach (m, lighting.glsl windows the beam to it): low beam cut-off hits the road at ~60 m.</summary>
+    private const float LowBeamRange = 75, HighBeamRange = 160;
     private const TextureFormat DepthFormat = PostProcess.DepthFormat;
     internal static readonly TextureFormat ShadowFormat = TextureFormat.Depth32Float;
 
@@ -187,19 +189,19 @@ public sealed class WorldRenderer : IDisposable
         MemoryMarshal.Write(push[192..], new Vector4(_shadowsThisFrame ? 1 : 0, a.Wetness, a.EnvStrength, l.Brake));
         MemoryMarshal.Write(push[208..], new Vector4(_shadow.TexelWorld[0], _shadow.TexelWorld[1], _shadow.TexelWorld[2], 1f / ShadowMap.TileSize));
         for (var c = 0; c < ShadowMap.Cascades; c++) MemoryMarshal.Write(push[(224 + c * 64)..], in _shadow.Lookup[c]);
-        float tanH = MathF.Tan(l.HeadlightSpreadDegrees * MathF.PI / 180), tanV = MathF.Tan(l.HeadlightSpreadVerticalDegrees * MathF.PI / 180);
+        var share = a.LocalLightShare;
         for (var i = 0; i < 2; i++)
         {
-            MemoryMarshal.Write(push[(416 + i * 16)..], new Vector4(l.HeadlightPosition[i], tanH));
-            MemoryMarshal.Write(push[(448 + i * 16)..], new Vector4(l.HeadlightDirection[i], tanV));
+            MemoryMarshal.Write(push[(416 + i * 16)..], new Vector4(l.HeadlightPosition[i], l.HighBeam));
+            MemoryMarshal.Write(push[(448 + i * 16)..], new Vector4(l.HeadlightDirection[i], i == 0 ? l.LampGlow : l.Reverse));
         }
-        MemoryMarshal.Write(push[480..], new Vector4(l.HeadlightColor, l.HeadlightRange));
+        MemoryMarshal.Write(push[480..], new Vector4(l.HeadlightColor * share, float.Lerp(LowBeamRange, HighBeamRange, l.HighBeam)));
         for (var i = 0; i < 4; i++) MemoryMarshal.Write(push[(496 + i * 16)..], _points[i]);
-        MemoryMarshal.Write(push[560..], new Vector4(l.StreetLightColor, 0));
+        MemoryMarshal.Write(push[560..], new Vector4(l.StreetLightColor * share, 0));
         WriteFog(push[576..]);
         MemoryMarshal.Write(push[608..], new Vector4(a.Zenith, Time));
         for (var i = 0; i < 2; i++) MemoryMarshal.Write(push[(624 + i * 16)..], new Vector4(l.TailLightPosition[i], 0));
-        MemoryMarshal.Write(push[656..], new Vector4(l.TailLightColor, 0));
+        MemoryMarshal.Write(push[656..], new Vector4(l.TailLightColor, share));
         MemoryMarshal.Write(push[672..], new Vector4(a.SunColor, a.Specular));
         MemoryMarshal.Write(push[688..], new Vector4(a.ShadeSky, a.ContactShadow));
         MemoryMarshal.Write(push[704..], new Vector4(a.ShadeGround, _envMix));
