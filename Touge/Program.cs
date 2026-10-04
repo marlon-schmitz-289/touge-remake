@@ -40,6 +40,7 @@ using Touge;
 //   mit --autodrive <s> ohne Fenster: Autopilot gegen die KI, Log je Sekunde (Abstand, Führung, Kontakte) + Zusammenfassung.
 // --headless [--host | --join <ip[:port]>] [--bot] [--port n] [--name X] [--players n] [--races n] [--seconds s] [--net-sim ms[:verlust[:jitter]]] [--net-rule battle|race]:
 //   Mehrspieler-Teilnehmer ohne Fenster (Touge/Net/Headless): Host oder Client einer echten UDP-Sitzung, Auto per Autopilot (--bot), Log je Sekunde + Zusammenfassung.
+// --flow <dir> --versus flow: Versus-Ablauf (geteilter Bildschirm) per Skript statt des Time-Attack-Ablaufs.
 // --versus split|host|join[:ip[:port]]|online [--bot] [--split vertical] [--car2 X] [--players n] [--net-rule battle|race]: Versus direkt (Testläufe/Bilder):
 //   geteilter Bildschirm bzw. Online-Host/-Client im Fenster; --bot: Autopilot fährt, Lobby läuft von selbst (Host startet bei --players Spielern).
 // --shot-after <s>: --shot erst nach so vielen Sekunden (statt sofort), das Spiel läuft bis dahin normal.

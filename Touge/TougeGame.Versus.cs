@@ -109,7 +109,7 @@ public sealed partial class TougeGame
     /// <summary>--versus …: straight into split screen, hosting or joining (and with --bot through the lobby on its own).</summary>
     private void StartVersusCli()
     {
-        if (VersusStart == null || _catalog == null) return;
+        if (VersusStart is null or "flow" || _catalog == null) return; // flow: through the main menu like a player
         OpenVersus();
         var ui = _versusUi!;
         ui.Name = MyName;
@@ -234,10 +234,12 @@ public sealed partial class TougeGame
             LoadVersusRace();
         }
         if (!ui.Active) return false;
+        // from here the frame's keys are the versus screens' (a BACK that leaves them must not also act on the main menu)
         var split = ui.Split && ui.Current == Versus.Screen.Lobby;
         var p2Pad = ui.P2Device < Input.Pads.Count ? Input.Pads[ui.P2Device] : null;
         var k1 = split ? _k1.Read(Input, dt, p2Pad == null ? SeatKeys.Wasd : SeatKeys.All, [.. Input.Pads.Where(p => p != p2Pad)]) : keys;
         var k2 = split ? _k2.Read(Input, dt, p2Pad == null ? SeatKeys.Arrows : SeatKeys.None, p2Pad == null ? [] : [p2Pad]) : default;
+        if (Flow != null) (k1, k2) = (keys, split ? keys : default); // --flow --versus flow: the script plays both
         var k = Input.Keyboard;
         var text = new Versus.TextKeys(Input.TypedText, k.IsKeyRepeating(Key.Backspace, dt), k.IsKeyPressed(Key.Enter), k.IsKeyPressed(Key.Escape));
         if (VersusBot && ui.Current == Versus.Screen.Lobby && _net != null)
@@ -296,7 +298,7 @@ public sealed partial class TougeGame
                 else _front.Open(FrontEnd.Step.Modes);
                 break;
         }
-        return ui.Active;
+        return true;
     }
 
     /// <summary>What the menus remember of a versus choice: name, address, split layout, player 1's car.</summary>
@@ -642,6 +644,26 @@ public sealed partial class TougeGame
         for (var t = 0f; t < seconds; t += Drive.Dt) Tick(Drive.Dt);
         _cam2.Snap = _camSnap = true;
     }
+
+    /// <summary>
+    ///     --flow &lt;dir&gt; --versus flow: the main menu → VERSUS → SPLIT SCREEN → lobby (next course, both down to START/READY: START
+    ///     beeps while player 2 is not ready, player 2 gets ready, START) → telop, countdown → race (16×) → pause → RETRY → race →
+    ///     pause → EXIT (back in the lobby) → back to the main menu, a PNG per step (both players get the script's keys).
+    /// </summary>
+    private static readonly (string At, float Wait, string? Shot, int X, int Y, bool Ok, bool Back)[] VersusFlowScript =
+    [
+        ("Boot", 1.2f, null, 0, 0, true, false), ("Logo", 1, null, 0, 0, true, false), ("Title", 1.5f, null, 0, 0, true, false),
+        ("Modes", 1, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.6f, "vs_main_menu", 0, 0, true, false),
+        ("VsMode", 1, "vs_mode", 0, 0, true, false),
+        ("VsLobby", 1, "vs_lobby", 1, 0, false, false),
+        .. Enumerable.Repeat(("VsLobby", 0.25f, (string?)null, 0, 1, false, false), 8),
+        ("VsLobby", 0.5f, "vs_lobby_start", 0, 0, true, false), ("VsLobby", 0.6f, "vs_lobby_ready", 0, 0, true, false),
+        ("Intro", 1, "vs_telop", 0, 0, false, false), ("Intro", 2.5f, "vs_countdown", 0, 0, false, false),
+        ("Race", 1.5f, "vs_race", 0, 0, false, true), ("Pause", 0.8f, "vs_pause", 1, 0, false, false), ("Pause", 0.4f, null, 0, 0, true, false),
+        ("Race", 1.5f, "vs_race_retry", 0, 0, false, true), ("Pause", 0.8f, null, 1, 0, false, false), ("Pause", 0.4f, null, 1, 0, false, false),
+        ("Pause", 0.4f, "vs_pause_exit", 0, 0, true, false),
+        ("VsLobby", 1.2f, "vs_lobby_back", 0, 0, false, true), ("VsMode", 0.8f, null, 0, 0, false, true), ("Modes", 1, "vs_modes_back", 0, 0, false, false),
+    ];
 
     /// <summary>--bot online: one log line a second like the headless peer (place, speed, how each remote car is sampled, ping, losses).</summary>
     private void LogNetRace()

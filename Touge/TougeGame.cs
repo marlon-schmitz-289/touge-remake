@@ -1028,14 +1028,15 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     /// <summary>--flow: the scripted key of this frame; asks for the step's PNG first (written next frame), quits after the last step (with --bench: races on).</summary>
     private (int X, int Y, bool Ok, bool Back) FlowKeys(float dt)
     {
-        var script = bench != null ? FlowBenchScript : FlowScript;
+        var script = bench != null ? FlowBenchScript : VersusStart == "flow" ? VersusFlowScript : FlowScript;
         if (_flowStep >= script.Length)
         {
             if (bench == null) Window.ShouldClose = true;
             return default;
         }
         var s = script[_flowStep];
-        var at = _front is { Active: true } ? _front.Current.ToString() : _guide is { Active: true } ? "Guide" + _guide.Current : _menu!.Current != Menu.Screen.None ? _menu.Current.ToString() : "Race";
+        var at = _front is { Active: true } ? _front.Current.ToString() : _guide is { Active: true } ? "Guide" + _guide.Current
+            : _versusUi is { Active: true } ? "Vs" + _versusUi.Current : _menu!.Current != Menu.Screen.None ? _menu.Current.ToString() : "Race";
         if (at != s.At)
         {
             _flowT = 0;
