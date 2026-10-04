@@ -49,13 +49,26 @@ Auto aus der Original-Zuordnung (FORMATS.md, AE86T/AE86L mit der voll getunten `
 Pad: linker Stick lenken, Trigger Gas/Bremse, A Handbremse, Schultertasten schalten.
 F1 Freiflug: WASD fliegen, Q/E runter/hoch, rechte Maustaste oder Pfeiltasten umschauen, Shift schnell,
 Leertaste ~400 m weiter auf der Fahrlinie. F11 Vollbild, Esc Ende.
-Backend: Metal (macOS) bzw. Vulkan, umschaltbar mit `--backend metal|vulkan|opengl`.
+Backend: Metal (macOS) bzw. Vulkan, umschaltbar mit `--backend metal|vulkan|opengl` (oder `PENELOPE_BACKEND`).
+
+| OS | Backend | Einrichtung |
+|---|---|---|
+| macOS | Metal (Standard) | nichts |
+| macOS | Vulkan über MoltenVK | [LunarG Vulkan SDK](https://vulkan.lunarg.com/sdk/home#mac) installieren (Loader nach `/usr/local/lib`, MoltenVK, Validation-Layer, `vulkaninfo`) oder `brew install molten-vk vulkan-loader vulkan-validationlayers vulkan-tools` (`/opt/homebrew/lib`). Penelope sucht den Loader dort selbst (`VulkanDevice.LoaderPath`, oder `SDL_VULKAN_LIBRARY=<pfad>/libvulkan.1.dylib`) und schaltet Portability-Enumeration/-Subset ein, wenn vorhanden. Test: `vulkaninfo --summary` |
+| macOS | OpenGL | nicht unterstützt: der GL-Backend braucht 4.5 core, macOS kann nur 4.1 (klare Fehlermeldung beim Start) |
+| Windows | Vulkan (Standard) | aktueller GPU-Treiber (Vulkan 1.3); Validation optional mit dem LunarG SDK |
+| Windows/Linux | OpenGL | ungetestet; der GL-Backend kann noch keine Bind-Group-Sets > 0 und keinen Tiefen-Resolve, die Spielszene läuft dort derzeit nicht |
+
+Vulkan-Diagnose: `PENELOPE_VALIDATION=1` schaltet `VK_LAYER_KHRONOS_validation` ein (Meldungen auf stdout),
+`PENELOPE_VK_DEVICE=<n>` erzwingt Gerät n aus `vulkaninfo --summary` (auf dem Mac z. B. 1 = Mesa KosmicKrisp statt MoltenVK).
+Push-Konstanten bleiben überall ≤ 128 B (Vulkan-Minimum); die großen Blöcke (Szene 720 B, Himmel, SSR) liegen als
+Uniform-Slices pro Draw in einem Ring (`PostProcess.Upload`, dynamischer Offset).
 
 Strecke: alle Abschnitte `crsNN` + `mnt00`/`gate*` als ein Mesh, dazu die Bäume (`TREE_*`-Platzierung wie im Original, Vorlagen
 `treeMid/Lrg_*` zur Straße gedreht, eingebacken); `crslod*`/`shd*` werden nicht gezeichnet.
 
 Grafik: Szene in HDR (RGBA16F, 4× MSAA mit Resolve, Alpha-to-Coverage für Laub) plus G-Puffer (RGBA8: Ambient-Anteil,
-Spiegelgewicht, Streifen) und Tiefe, beide mit aufgelöst (Metal-Depth-Resolve, Sample 0). Danach in halber Auflösung
+Spiegelgewicht, Streifen) und Tiefe, beide mit aufgelöst (Depth-Resolve Sample 0: Metal, Vulkan `SAMPLE_ZERO`). Danach in halber Auflösung
 Ambient Occlusion (ao.frag: 12 Taps im 1,2-m-Radius aus der Tiefe, 4×4-Bayer-Drehung + 4×4-Bilateral-Blur, kein
 zeitliches Rauschen) und im Regen Bildschirmraum-Spiegelungen auf nassem Boden (ssr.frag, Rückfall Himmel), Bloom,
 im Tonemapping AO nur auf den Ambient-Anteil (Sonne/Lampen bleiben), SSR, ACES, Belichtung, Farbstimmung, Vignette je

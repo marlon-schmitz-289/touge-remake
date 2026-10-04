@@ -8,7 +8,7 @@ namespace Kansei.Graphics;
 ///     Draws <see cref="Effects"/> into an open <see cref="WorldRenderer.BeginScene"/> pass after the opaque geometry:
 ///     skid marks and smoke alpha-blended, sparks additive (HDR, so they bloom); depth tested, not written. One
 ///     per-frame vertex ring (<see cref="TransientBufferRing"/>) per effect type, quads are written straight into it.
-///     Shading in effect.frag (mode in the shared push block's uEye.w): smoke/skids lit by sun (shadowed), ambient
+///     Shading in effect.frag (mode in the shared per-draw block's uEye.w): smoke/skids lit by sun (shadowed), ambient
 ///     and the dynamic lights, fogged like the world. <see cref="DrawRain"/>: falling rain as camera-relative streaks
 ///     generated in rain.vert (no buffer).
 /// </summary>
@@ -38,13 +38,13 @@ public sealed class EffectsRenderer : IDisposable
         {
             for (var q = 0; q < 2; q++)
                 _pipeline[k, q] = world.ScenePipeline(_shader, WorldVertex.Layout, MultisampleState.Disabled with { SampleCount = WorldRenderer.Samples(q) },
-                    true, WorldRenderer.PushBytes, $"effect-{(Kind)k}", blend[k]);
+                    true, $"effect-{(Kind)k}", blend[k]);
             _rings[k] = new TransientBufferRing(device, capacity[k] * 6 * WorldVertex.Size, BufferUsage.Vertex, $"effect-{(Kind)k}");
         }
         _rainShader = device.CreateShader(ShaderLoader.LoadGraphics(typeof(EffectsRenderer).Assembly, "rain", "rain", "rain"));
         for (var q = 0; q < 2; q++)
             _rain[q] = world.ScenePipeline(_rainShader, new VertexLayout(), MultisampleState.Disabled with { SampleCount = WorldRenderer.Samples(q) },
-                true, WorldRenderer.PushBytes, "rain", BlendState.AlphaBlend);
+                true, "rain", BlendState.AlphaBlend);
     }
 
     /// <summary>
@@ -58,7 +58,6 @@ public sealed class EffectsRenderer : IDisposable
         var drops = (int)(MaxRainDrops * wet);
         if (drops == 0) return;
         pass.SetPipeline(_rain[_world.Quality]);
-        _world.BindScene(pass);
         var rain = new Matrix4x4(
             RainVelocity.X, RainVelocity.Y, RainVelocity.Z, time % 3600,
             cameraVelocity.X, cameraVelocity.Y, cameraVelocity.Z, 1 / 50f,
@@ -66,7 +65,7 @@ public sealed class EffectsRenderer : IDisposable
             0.5f, 0, 0, 0);
         Span<byte> push = stackalloc byte[WorldRenderer.PushBytes];
         _world.WritePush(push, viewProj, rain, eye, false, true);
-        pass.SetPushConstants(ShaderStage.Vertex | ShaderStage.Fragment, 0, push);
+        _world.SetScene(pass, push);
         pass.Draw(drops * 6);
     }
 
@@ -100,11 +99,10 @@ public sealed class EffectsRenderer : IDisposable
     {
         if (vertices == 0) return;
         pass.SetPipeline(_pipeline[(int)kind, _world.Quality]);
-        _world.BindScene(pass);
         Span<byte> push = stackalloc byte[WorldRenderer.PushBytes];
         _world.WritePush(push, viewProj, Matrix4x4.Identity, eye, false, true);
         MemoryMarshal.Write(push[156..], (float)kind); // uEye.w = effect mode
-        pass.SetPushConstants(ShaderStage.Vertex | ShaderStage.Fragment, 0, push);
+        _world.SetScene(pass, push);
         pass.SetVertexBuffer(0, _rings[(int)kind].Buffer, offset);
         pass.Draw(vertices);
     }

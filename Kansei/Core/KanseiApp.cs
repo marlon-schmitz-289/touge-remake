@@ -33,6 +33,9 @@ public static class KanseiApp
 
     public static unsafe void Run(KanseiGame game, WindowSettings settings)
     {
+        // Penelope's GL backend needs 4.5 core (glClipControl, DSA, GLSL 450); macOS stops at 4.1.
+        if (settings.Backend == GraphicsBackend.OpenGL && OperatingSystem.IsMacOS())
+            throw new PlatformNotSupportedException("OpenGL needs a 4.5 core context, macOS only offers 4.1: use --backend metal or vulkan (MoltenVK).");
         var sdl = Sdl.GetApi();
         if (sdl.Init(Sdl.InitVideo | Sdl.InitGamecontroller | Sdl.InitHaptic) < 0)
             throw new Exception($"SDL init failed: {sdl.GetErrorS()}");
@@ -99,7 +102,7 @@ public static class KanseiApp
 
     private static unsafe IPenelopeDevice CreateDevice(Sdl sdl, GameWindow window, WindowSettings settings)
     {
-        var deviceDesc = new DeviceDesc(AdapterPreference.HighPerformance, EnableValidation: false, DebugName: "Kansei");
+        var deviceDesc = new DeviceDesc(AdapterPreference.HighPerformance, EnableValidation: Environment.GetEnvironmentVariable("PENELOPE_VALIDATION") == "1", DebugName: "Kansei");
         var swapDesc = new SwapchainDesc(window.PixelWidth, window.PixelHeight, TextureFormat.Bgra8Unorm,
             settings.VSync ? PresentMode.Mailbox : PresentMode.Immediate);
         switch (settings.Backend)

@@ -12,7 +12,8 @@ layout(set = 0, binding = 0) uniform sampler2D uScene;
 layout(set = 0, binding = 1) uniform sampler2D uDist; // ao.frag output: g = view distance (m) of the half-res pixel
 layout(set = 0, binding = 2) uniform sampler2D uGbuf;
 
-layout(push_constant) uniform Push {
+// uniform buffer slice (PostProcess.Upload): 144 bytes > Vulkan's guaranteed 128 of push constants
+layout(set = 0, binding = 3, std140) uniform Push {
     mat4 uViewProj;    // view rotation (no translation) × projection
     mat4 uInvViewProj;
     vec4 uParams;      // x = near plane, y = clip y per uv y (+1 Vulkan/GL, -1 Metal), zw = 1 / full-res size

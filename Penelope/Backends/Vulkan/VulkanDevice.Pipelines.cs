@@ -306,6 +306,10 @@ public sealed unsafe partial class VulkanDevice
     private PipelineLayout CreatePipelineLayout(
         BindGroupLayoutHandle[] bindGroupLayouts, PushConstantRange[] pushConstants)
     {
+        foreach (var r in pushConstants)
+            if (r.OffsetBytes + r.SizeBytes > _deviceProps.Limits.MaxPushConstantsSize)
+                throw new NotSupportedException($"Push constants {r.OffsetBytes}+{r.SizeBytes} B exceed this GPU's " +
+                    $"{_deviceProps.Limits.MaxPushConstantsSize} B (Vulkan guarantees 128): use a uniform buffer.");
         var setLayouts = new DescriptorSetLayout[bindGroupLayouts.Length];
         for (var i = 0; i < bindGroupLayouts.Length; i++)
             setLayouts[i] = _bindGroupLayouts[bindGroupLayouts[i].Id].Layout;

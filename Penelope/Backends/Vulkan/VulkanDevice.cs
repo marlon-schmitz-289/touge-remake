@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Silk.NET.Core.Contexts;
 using Silk.NET.Core.Native;
 using Silk.NET.Vulkan;
 using Silk.NET.Vulkan.Extensions.EXT;
@@ -60,6 +61,7 @@ public sealed unsafe partial class VulkanDevice : IPenelopeDevice
     private int _frameIndex;
     private bool _frameActive;
     private bool _submittedThisFrame; // first-submit-of-frame tracking (waits ImageAvailable once)
+    private bool _presentSignaled;    // a submit this frame signaled the present-wait semaphore
     private bool _needsRecreate;      // set on OutOfDate/Suboptimal acquire or present; recreate at next BeginFrame
 
     public BackendKind Backend => BackendKind.Vulkan;
@@ -172,7 +174,7 @@ public sealed unsafe partial class VulkanDevice : IPenelopeDevice
         in SwapchainDesc swapchainDesc,
         IEnumerable<string>? extraInstanceExtensions = null)
     {
-        var vk = Vk.GetApi();
+        var vk = LoaderPath() is { } loader ? new Vk(new DefaultNativeContext(loader)) : Vk.GetApi();
 
         // Instance
         var appName = SilkMarshal.StringToPtr("Penelope");
@@ -192,8 +194,9 @@ public sealed unsafe partial class VulkanDevice : IPenelopeDevice
             KhrSurface.ExtensionName,
         };
         if (extraInstanceExtensions != null) instExts.AddRange(extraInstanceExtensions);
-        var isMac = RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
-        if (isMac) instExts.Add("VK_KHR_portability_enumeration");
+        // MoltenVK/KosmicKrisp are portability drivers: the loader hides them unless we opt in.
+        var portability = InstanceExtensionAvailable(vk, "VK_KHR_portability_enumeration");
+        if (portability) instExts.Add("VK_KHR_portability_enumeration");
 
         // VK_EXT_debug_utils is optional — request it only if the loader actually exposes it, so a
         // host without it (older loader / headless) still creates an instance. When present it lets
@@ -233,7 +236,7 @@ public sealed unsafe partial class VulkanDevice : IPenelopeDevice
             PpEnabledExtensionNames = pExts,
             EnabledLayerCount = (uint)layers.Count,
             PpEnabledLayerNames = pLayers,
-            Flags = isMac ? InstanceCreateFlags.EnumeratePortabilityBitKhr : 0,
+            Flags = portability ? InstanceCreateFlags.EnumeratePortabilityBitKhr : 0,
         };
 
         vk.CreateInstance(&instInfo, null, out var instance).ThrowIfError();
@@ -267,7 +270,17 @@ public sealed unsafe partial class VulkanDevice : IPenelopeDevice
         {
             KhrSwapchain.ExtensionName,
         };
-        if (isMac) deviceExts.Add("VK_KHR_portability_subset");
+        // Spec: must be enabled whenever the device advertises it, together with the subset features it supports
+        // (e.g. mutableComparisonSamplers for the shadow sampler on MoltenVK).
+        var portabilitySubset = DeviceExtensionAvailable(vk, phys, "VK_KHR_portability_subset");
+        if (portabilitySubset) deviceExts.Add("VK_KHR_portability_subset");
+        var portabilityFeatures = new PhysicalDevicePortabilitySubsetFeaturesKHR { SType = StructureType.PhysicalDevicePortabilitySubsetFeaturesKhr };
+        if (portabilitySubset)
+        {
+            var query = new PhysicalDeviceFeatures2 { SType = StructureType.PhysicalDeviceFeatures2, PNext = &portabilityFeatures };
+            vk.GetPhysicalDeviceFeatures2(phys, &query);
+            portabilityFeatures.PNext = null;
+        }
         var pDeviceExts = (byte**)SilkMarshal.StringArrayToPtr(deviceExts);
 
         // Enable Vulkan 1.3 features: dynamic rendering + sync2
@@ -279,6 +292,7 @@ public sealed unsafe partial class VulkanDevice : IPenelopeDevice
             // Needed for shaders that compile `discard` / `demote` to SPIR-V
             // OpDemoteToHelperInvocation (default with recent glslc).
             ShaderDemoteToHelperInvocation = true,
+            PNext = portabilitySubset ? &portabilityFeatures : null,
         };
         var features12 = new PhysicalDeviceVulkan12Features
         {
@@ -293,6 +307,7 @@ public sealed unsafe partial class VulkanDevice : IPenelopeDevice
             SamplerAnisotropy = true,
             FillModeNonSolid = availableFeatures.FillModeNonSolid,
             WideLines = availableFeatures.WideLines,
+            DepthBiasClamp = availableFeatures.DepthBiasClamp,
             MultiDrawIndirect = availableFeatures.MultiDrawIndirect,
         };
 
@@ -325,6 +340,36 @@ public sealed unsafe partial class VulkanDevice : IPenelopeDevice
         return dev;
     }
 
+    /// <summary>
+    ///     Path of the Vulkan loader on macOS, where neither SDL nor Silk.NET look in /usr/local/lib
+    ///     (LunarG SDK) or /opt/homebrew/lib (brew vulkan-loader). Without it Silk.NET binds
+    ///     libMoltenVK directly: no layers, no portability enumeration. Null elsewhere / not found.
+    /// </summary>
+    public static string? LoaderPath()
+    {
+        if (!OperatingSystem.IsMacOS()) return null;
+        string?[] candidates = [Environment.GetEnvironmentVariable("SDL_VULKAN_LIBRARY"), "libvulkan.1.dylib",
+            "/usr/local/lib/libvulkan.1.dylib", "/opt/homebrew/lib/libvulkan.1.dylib"];
+        foreach (var c in candidates)
+            if (c != null && NativeLibrary.TryLoad(c, out _)) return c;
+        return null;
+    }
+
+    private static bool DeviceExtensionAvailable(Vk vk, PhysicalDevice phys, string name)
+    {
+        uint count = 0;
+        vk.EnumerateDeviceExtensionProperties(phys, (byte*)null, &count, null);
+        var props = new ExtensionProperties[count];
+        fixed (ExtensionProperties* p = props)
+        {
+            vk.EnumerateDeviceExtensionProperties(phys, (byte*)null, &count, p);
+            for (uint i = 0; i < count; i++)
+                if (Marshal.PtrToStringAnsi((nint)p[i].ExtensionName) == name)
+                    return true;
+        }
+        return false;
+    }
+
     /// <summary>True if the given instance extension is advertised by the Vulkan loader.</summary>
     private static bool InstanceExtensionAvailable(Vk vk, string name)
     {
@@ -354,6 +399,9 @@ public sealed unsafe partial class VulkanDevice : IPenelopeDevice
         uint bestFamily = 0;
         var bestScore = -1;
 
+        // PENELOPE_VK_DEVICE=<index>: force a device in enumeration order (vulkaninfo --summary: GPU0, GPU1, ...)
+        if (int.TryParse(Environment.GetEnvironmentVariable("PENELOPE_VK_DEVICE"), out var forced) && (uint)forced < count)
+            devices = [devices[forced]];
         foreach (var pd in devices)
         {
             vk.GetPhysicalDeviceProperties(pd, out var props);

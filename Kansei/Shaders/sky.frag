@@ -3,7 +3,8 @@
 // Analytic sky behind the course's sky mesh: horizon → zenith gradient, darker below the horizon, sun disk + glow
 // (HDR), then the horizon fog of fog.glsl so distant terrain and sky meet in the same colour.
 
-layout(push_constant) uniform Push {
+// uniform buffer slice like scene_push.glsl (192 bytes > Vulkan's guaranteed 128 of push constants)
+layout(set = 1, binding = 6, std140) uniform Push {
     mat4 uInvViewProj; // inverse of (view rotation × projection): clip → camera-centred world direction
     vec4 uZenith;      // rgb, w = 1 / target width
     vec4 uHorizon;     // rgb, w = 1 / target height

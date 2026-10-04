@@ -105,6 +105,7 @@ public sealed unsafe partial class VulkanDevice
         foreach (var enc in frame.LiveEncoders) enc.Invalidate();
         frame.LiveEncoders.Clear();
         _submittedThisFrame = false;
+        _presentSignaled = false;
 
         _frameActive = true;
         return true;
@@ -185,7 +186,9 @@ public sealed unsafe partial class VulkanDevice
             PSignalSemaphores = touchesSwapchain ? &signalSem : null,
         };
 
-        Vk.QueueSubmit(GraphicsQueue, 1, &submitInfo, frame.InFlight).ThrowIfError();
+        // No fence here: a frame may submit several times; EndFrame signals InFlight after the last one.
+        Vk.QueueSubmit(GraphicsQueue, 1, &submitInfo, default).ThrowIfError();
+        _presentSignaled |= touchesSwapchain;
         enc.Invalidate();
         _submittedThisFrame = true;
 
@@ -199,6 +202,17 @@ public sealed unsafe partial class VulkanDevice
     public void EndFrame()
     {
         if (!_frameActive) return;
+        if (!_presentSignaled)
+        {
+            // Nothing drew to the swapchain (offscreen-only frame, e.g. a FrameCapture shot): still move the
+            // image to PresentSrc and signal its semaphore, or the present below waits forever (device lost).
+            var enc = (VulkanCommandEncoder)BeginCommands("present-only");
+            enc.MarkSwapchainView(CurrentSwapchainView.Id);
+            Submit(enc);
+        }
+        // Empty batch: its fence signal waits for everything submitted before it on this queue.
+        var signalOnly = new SubmitInfo { SType = StructureType.SubmitInfo };
+        Vk.QueueSubmit(GraphicsQueue, 1, &signalOnly, _frames[_frameIndex].InFlight).ThrowIfError();
         var imageIndex = _swapchain.CurrentImageIndex;
         // Present waits on THIS image's present-wait semaphore (signaled by the swapchain-touching
         // submit above). On OutOfDate/Suboptimal, flag the swapchain for recreation next frame.

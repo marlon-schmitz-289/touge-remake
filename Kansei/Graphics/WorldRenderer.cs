@@ -10,8 +10,8 @@ namespace Kansei.Graphics;
 ///     <see cref="EndScene"/> (resolve → bloom → ACES tonemap/grade into the swapchain or a <see cref="FrameCapture"/>).
 ///     World: sRGB texture (mipmapped, trilinear + anisotropic) × baked vertex light re-lit by the sun with cascaded
 ///     shadows (<see cref="RenderShadows"/>, world.frag), + <see cref="Lights"/>, alpha test (alpha-to-coverage with
-///     MSAA), per-pixel distance + height fog (fog.glsl). World and car shaders share one push-constant block
-///     (scene_push.glsl, <see cref="WritePush"/>) and bind group 1 (shadow atlas + env maps, <see cref="SetEnvironment"/>). No backface culling (the PS2 draws foliage cards from both sides);
+///     MSAA), per-pixel distance + height fog (fog.glsl). World and car shaders share one per-draw uniform block
+///     (scene_push.glsl, <see cref="WritePush"/>, <see cref="SetScene"/>) and bind group 1 (shadow atlas + env maps, <see cref="SetEnvironment"/>). No backface culling (the PS2 draws foliage cards from both sides);
 ///     exact duplicates must be removed by the caller. Reversed-Z (use <see cref="Perspective"/>) with GreaterEqual:
 ///     overlay layers a few cm apart stay stable at distance; coplanar ones (&lt; 1 mm, decals, overlapping sections) come
 ///     as <see cref="MeshBatch.Layer"/> and are pulled <see cref="LayerOffset"/> per layer towards the camera, so the later
@@ -19,7 +19,7 @@ namespace Kansei.Graphics;
 /// </summary>
 public sealed class WorldRenderer : IDisposable
 {
-    internal const int PushBytes = 720; // scene_push.glsl
+    internal const int PushBytes = 720; // scene_push.glsl (a uniform slice per draw, SetScene)
     /// <summary>
     ///     Metres an overlay layer (<see cref="MeshBatch.Layer"/>) is pulled towards the camera per layer (world.vert,
     ///     car.vert): above the gap up to which layers are formed (1 mm, Touge.Formats.ZFight.FightGap) and far above the
@@ -75,7 +75,8 @@ public sealed class WorldRenderer : IDisposable
         _sampler = device.GetSampler(SamplerDesc.LinearWrap with { MaxAnisotropy = 8 });
         _post = new PostProcess(device);
         _sceneLayout = device.GetBindGroupLayout(new BindGroupLayoutDesc(
-            [.. Enumerable.Range(1, 5).Select(b => new BindGroupLayoutEntry(b, BindingType.CombinedImageSampler, ShaderStage.Fragment))], "scene"));
+            [.. Enumerable.Range(1, 5).Select(b => new BindGroupLayoutEntry(b, BindingType.CombinedImageSampler, ShaderStage.Fragment)),
+                PostProcess.UniformEntry(6, ShaderStage.Vertex | ShaderStage.Fragment)], "scene"));
         _shadow = new ShadowMap(device, _layout);
         _textureGroup = TextureGroup;
         var grey = AddTexture(1, 1, [118, 118, 118, 255], "env-grey"); // 18 % linear until a course sets its maps
@@ -83,9 +84,9 @@ public sealed class WorldRenderer : IDisposable
         for (var q = 0; q < 2; q++)
         {
             var ms = MultisampleState.Disabled with { SampleCount = Samples(q), AlphaToCoverageEnabled = q == 1 };
-            _pipeline[q] = ScenePipeline(_shader, WorldVertex.Layout, ms, true, PushBytes, "world");
-            _skyMesh[q] = ScenePipeline(_shader, WorldVertex.Layout, ms with { AlphaToCoverageEnabled = false }, false, PushBytes, "sky-mesh");
-            _sky[q] = PostProcess.Fullscreen(device, _skyShader, PostProcess.HdrFormat, BlendState.Opaque, null, SkyPushBytes, Samples(q), DepthFormat, true);
+            _pipeline[q] = ScenePipeline(_shader, WorldVertex.Layout, ms, true, "world");
+            _skyMesh[q] = ScenePipeline(_shader, WorldVertex.Layout, ms with { AlphaToCoverageEnabled = false }, false, "sky-mesh");
+            _sky[q] = PostProcess.Fullscreen(device, _skyShader, PostProcess.HdrFormat, BlendState.Opaque, [_layout, _sceneLayout], 0, Samples(q), DepthFormat, true);
         }
     }
 
@@ -93,13 +94,13 @@ public sealed class WorldRenderer : IDisposable
     ///     Pipeline into the HDR scene pass: no culling, reversed-Z GreaterEqual (or no depth at all for the sky).
     ///     With a <paramref name="blend"/> state it tests depth but does not write it (transparent effects).
     /// </summary>
-    internal RenderPipelineHandle ScenePipeline(ShaderHandle shader, VertexLayout layout, MultisampleState ms, bool depth, int pushBytes, string name,
+    internal RenderPipelineHandle ScenePipeline(ShaderHandle shader, VertexLayout layout, MultisampleState ms, bool depth, string name,
         BlendState? blend = null) =>
         _device.CreateRenderPipeline(new RenderPipelineDesc(
             shader, layout, PrimitiveTopology.TriangleList, RasterizerState.Default,
             depth ? DepthStencilState.DepthLessWrite with { DepthCompare = CompareFunc.GreaterEqual, DepthWriteEnabled = blend == null } : DepthStencilState.Disabled, ms,
             [new ColorTargetState(PostProcess.HdrFormat, blend ?? BlendState.Opaque), new ColorTargetState(PostProcess.GbufFormat, blend ?? BlendState.Opaque)], DepthFormat,
-            [_layout, _sceneLayout], [new PushConstantRange(ShaderStage.Vertex | ShaderStage.Fragment, 0, pushBytes)], name));
+            [_layout, _sceneLayout], [], name));
 
     /// <summary>
     ///     Right-handed, infinite far plane, reversed-Z (depth 1 at <paramref name="near"/>, 0 at infinity, range 0..1).
@@ -143,6 +144,7 @@ public sealed class WorldRenderer : IDisposable
             BindGroupEntry.CombinedImageSampler(3, _textures[bottom].View, sampler),
             BindGroupEntry.CombinedImageSampler(4, _textures[left].View, sampler),
             BindGroupEntry.CombinedImageSampler(5, _textures[right].View, sampler),
+            BindGroupEntry.UniformBuffer(6, _post.UniformBuffer, 0, PostProcess.UniformBytes),
         ], "scene"));
         _sceneGroups[(top, bottom, left, right)] = _sceneGroup;
     }
@@ -205,7 +207,8 @@ public sealed class WorldRenderer : IDisposable
         MemoryMarshal.Write(dst[16..], new Vector4(a.FogSun, a.HeightFogBase));
     }
 
-    internal void BindScene(IRenderPassEncoder pass) => pass.SetBindGroup(1, _sceneGroup);
+    /// <summary>Binds the scene group (shadows, env maps) with <paramref name="block"/> (scene_push.glsl / sky.frag) as its uniform slice.</summary>
+    internal void SetScene(IRenderPassEncoder pass, ReadOnlySpan<byte> block) => pass.SetBindGroup(1, _sceneGroup, [_post.Upload(block)]);
 
     /// <summary>The 4 street lights nearest to <paramref name="eye"/> (radius 0 = slot unused).</summary>
     private void PickStreetLights(Vector3 eye)
@@ -262,7 +265,7 @@ public sealed class WorldRenderer : IDisposable
         MemoryMarshal.Write(push[144..], new Vector4(a.FogColor, 0));
         WriteFog(push[160..]);
         pass.SetPipeline(_sky[Quality]);
-        pass.SetPushConstants(ShaderStage.Fragment, 0, push);
+        SetScene(pass, push);
         pass.Draw(3);
         return pass;
     }
@@ -288,7 +291,6 @@ public sealed class WorldRenderer : IDisposable
     private void DrawMesh(IRenderPassEncoder pass, RenderPipelineHandle pipeline, StaticMesh mesh, in Matrix4x4 viewProj, Vector3 eye, bool sky)
     {
         pass.SetPipeline(pipeline);
-        BindScene(pass);
         Span<byte> push = stackalloc byte[PushBytes];
         WritePush(push, viewProj, Lights.Car, eye, sky, false); // world.frag: uModel = the car (contact shadow)
         pass.SetVertexBuffer(0, mesh.Vertices);
@@ -309,7 +311,7 @@ public sealed class WorldRenderer : IDisposable
             {
                 layer = b.Layer;
                 MemoryMarshal.Write(push[LayerPush..], layer * LayerOffset);
-                pass.SetPushConstants(ShaderStage.Vertex | ShaderStage.Fragment, 0, push);
+                SetScene(pass, push);
             }
             pass.SetBindGroup(0, _textures[b.Texture].Group);
             pass.DrawIndexed(b.IndexCount, 1, b.FirstIndex);

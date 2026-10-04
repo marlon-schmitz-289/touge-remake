@@ -89,6 +89,10 @@ public sealed class GameWindow : IDisposable
             _sdl.GLSetAttribute(GLattr.StencilSize, 8);
         }
 
+        // SDL must use the same loader as Penelope (macOS: SDK/brew path, see VulkanDevice.LoaderPath).
+        if (Backend == GraphicsBackend.Vulkan && Penelope.Backends.Vulkan.VulkanDevice.LoaderPath() is { } loader)
+            _sdl.VulkanLoadLibrary(loader);
+
         NativeHandle = _sdl.CreateWindow(
             settings.Title,
             Sdl.WindowposCentered,

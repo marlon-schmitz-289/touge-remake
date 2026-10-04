@@ -22,7 +22,7 @@ public sealed class CarRenderer : IDisposable
         _shader = device.CreateShader(ShaderLoader.LoadGraphics(typeof(CarRenderer).Assembly, "car", "car", "car"));
         for (var q = 0; q < 2; q++)
             _pipeline[q] = world.ScenePipeline(_shader, CarVertex.Layout, MultisampleState.Disabled with { SampleCount = WorldRenderer.Samples(q) },
-                true, WorldRenderer.PushBytes, "car");
+                true, "car");
     }
 
     /// <summary>Body at <paramref name="body"/>, the wheel mesh once per entry of <paramref name="wheels"/> (world matrices).</summary>
@@ -30,7 +30,6 @@ public sealed class CarRenderer : IDisposable
         in Matrix4x4 viewProj, Vector3 eye)
     {
         pass.SetPipeline(_pipeline[_world.Quality]);
-        _world.BindScene(pass);
         DrawMesh(pass, bodyMesh, body, viewProj, eye);
         foreach (ref readonly var w in wheels) DrawMesh(pass, wheelMesh, w, viewProj, eye);
     }

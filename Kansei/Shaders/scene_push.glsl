@@ -1,6 +1,7 @@
-// Push constants shared by world.*, car.*, effect.* and rain.* (720 bytes: fine on Metal's 4 KB, Vulkan only guarantees 128).
+// Per-draw block shared by world.*, car.*, effect.* and rain.* (720 bytes). A uniform buffer slice per draw
+// (WorldRenderer.SetScene, dynamic offset), not push constants: Vulkan only guarantees 128 bytes of those.
 // Written by WorldRenderer.WritePush. Positions/directions in world space, colours linear.
-layout(push_constant) uniform Push {
+layout(set = 1, binding = 6, std140) uniform Push {
     mat4 uMvp;
     mat4 uModel;        // model → world (world meshes: the player car body for its contact shadow; rain.vert: rain parameters)
     vec4 uFog;          // rgb fog colour, a = glow of the dynamic lights in the fog (in-scattering, 0 = none)

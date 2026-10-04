@@ -39,7 +39,10 @@ internal sealed unsafe class VulkanCommandEncoder : ICommandEncoder
         Submitted = true;
     }
 
-    internal void MarkSwapchainView(ulong viewId) => _swapchainViewsUsed.Add(viewId);
+    internal void MarkSwapchainView(ulong viewId)
+    {
+        if (!_swapchainViewsUsed.Contains(viewId)) _swapchainViewsUsed.Add(viewId);
+    }
 
     public void Finish()
     {
@@ -53,7 +56,7 @@ internal sealed unsafe class VulkanCommandEncoder : ICommandEncoder
             if (!img.IsSwapchainImage) continue;
             _dev.TransitionImageLayout(
                 CommandBuffer, img.Image, img.Format,
-                img.CurrentLayout == ImageLayout.Undefined ? ImageLayout.ColorAttachmentOptimal : img.CurrentLayout,
+                img.CurrentLayout,
                 ImageLayout.PresentSrcKhr,
                 0, 1, 0, 1);
             img.CurrentLayout = ImageLayout.PresentSrcKhr;
@@ -65,47 +68,19 @@ internal sealed unsafe class VulkanCommandEncoder : ICommandEncoder
 
     public IRenderPassEncoder BeginRenderPass(in RenderPassDesc desc)
     {
-        // Transition color attachments to ColorAttachmentOptimal
+        // Attachments (and resolve targets) into attachment layout. Sampled ones go back to ShaderReadOnly at
+        // End (VulkanRenderPassEncoder), so passes can feed each other like on Metal without explicit transitions.
+        var sampled = new List<(VulkanImage, VulkanImageView)>();
         for (var i = 0; i < desc.ColorAttachments.Length; i++)
         {
             var att = desc.ColorAttachments[i];
-            var view = _dev.GetImageView(att.View);
-            var img = _dev.GetImage(view.ImageId);
-            var newLayout = ImageLayout.ColorAttachmentOptimal;
-            // When the pass clears or discards, prior contents are dead, so transition FROM Undefined
-            // rather than the tracked layout. This avoids depending on the previous layout — e.g. the
-            // swapchain image's PresentSrc->ColorAttachment each frame, which otherwise hits the
-            // AllCommands->AllCommands full-flush catch-all — and lets RADV use DCC fast-clear. The
-            // ImageAvailable semaphore (waited at ColorAttachmentOutput) already orders the write after
-            // the prior present, so dropping the layout dependency is safe.
-            var oldLayout = att.Load is LoadOp.Clear or LoadOp.DontCare
-                ? ImageLayout.Undefined
-                : img.CurrentLayout;
-            if (oldLayout != newLayout)
-            {
-                _dev.TransitionImageLayout(
-                    CommandBuffer, img.Image, img.Format,
-                    oldLayout, newLayout,
-                    view.BaseMip, view.MipCount, view.BaseLayer, view.LayerCount);
-            }
-            img.CurrentLayout = newLayout;
-            if (img.IsSwapchainImage) MarkSwapchainView(att.View.Id);
+            ToAttachment(att.View, ImageLayout.ColorAttachmentOptimal, att.Load != LoadOp.Load, sampled);
+            if (!att.ResolveTarget.IsNull) ToAttachment(att.ResolveTarget, ImageLayout.ColorAttachmentOptimal, true, sampled);
         }
-
-        if (desc.DepthStencilAttachment.HasValue)
+        if (desc.DepthStencilAttachment is { } ds)
         {
-            var att = desc.DepthStencilAttachment.Value;
-            var view = _dev.GetImageView(att.View);
-            var img = _dev.GetImage(view.ImageId);
-            var newLayout = ImageLayout.DepthStencilAttachmentOptimal;
-            if (img.CurrentLayout != newLayout)
-            {
-                _dev.TransitionImageLayout(
-                    CommandBuffer, img.Image, img.Format,
-                    img.CurrentLayout, newLayout,
-                    view.BaseMip, view.MipCount, view.BaseLayer, view.LayerCount);
-                img.CurrentLayout = newLayout;
-            }
+            ToAttachment(ds.View, ImageLayout.DepthStencilAttachmentOptimal, false, sampled);
+            if (!ds.ResolveTarget.IsNull) ToAttachment(ds.ResolveTarget, ImageLayout.DepthStencilAttachmentOptimal, true, sampled);
         }
 
         // Build VkRenderingInfo (dynamic rendering). Reuse a per-encoder scratch array instead of
@@ -160,6 +135,13 @@ internal sealed unsafe class VulkanCommandEncoder : ICommandEncoder
                     DepthStencil = new ClearDepthStencilValue(a.DepthClear, a.StencilClear),
                 },
             };
+            if (!a.ResolveTarget.IsNull)
+            {
+                // Sample 0 like Metal's depth resolve (core 1.2 / VK_KHR_depth_stencil_resolve: SAMPLE_ZERO is mandatory)
+                depthInfo.ResolveImageView = _dev.GetImageView(a.ResolveTarget).View;
+                depthInfo.ResolveImageLayout = ImageLayout.DepthStencilAttachmentOptimal;
+                depthInfo.ResolveMode = ResolveModeFlags.SampleZeroBit;
+            }
             if ((view.Aspect & ImageAspectFlags.StencilBit) != 0)
             {
                 hasStencil = true;
@@ -202,7 +184,24 @@ internal sealed unsafe class VulkanCommandEncoder : ICommandEncoder
         var scissor = new Rect2D(default, area);
         _dev.Vk.CmdSetScissor(CommandBuffer, 0, 1, &scissor);
 
-        return new VulkanRenderPassEncoder(_dev, this, CommandBuffer);
+        return new VulkanRenderPassEncoder(_dev, this, CommandBuffer, sampled);
+    }
+
+    /// <summary>
+    ///     Barrier into <paramref name="layout"/> (also attachment → same attachment layout, so consecutive passes on
+    ///     one target are ordered). Swapchain images whose contents are dead skip the dependency on the prior present.
+    /// </summary>
+    private void ToAttachment(TextureViewHandle viewHandle, ImageLayout layout, bool discard,
+        List<(VulkanImage, VulkanImageView)> sampled)
+    {
+        var view = _dev.GetImageView(viewHandle);
+        var img = _dev.GetImage(view.ImageId);
+        var old = img.IsSwapchainImage && discard ? ImageLayout.Undefined : img.CurrentLayout;
+        _dev.TransitionImageLayout(CommandBuffer, img.Image, img.Format, old, layout,
+            view.BaseMip, view.MipCount, view.BaseLayer, view.LayerCount);
+        img.CurrentLayout = layout;
+        if (img.IsSwapchainImage) MarkSwapchainView(viewHandle.Id);
+        if ((img.Usage & TextureUsage.Sampled) != 0) sampled.Add((img, view));
     }
 
     private Extent2D ComputeRenderArea(in RenderPassDesc desc)
@@ -416,17 +415,27 @@ internal sealed unsafe class VulkanRenderPassEncoder : IRenderPassEncoder
     private VulkanRenderPipeline? _currentPipeline;
     private bool _ended;
 
-    public VulkanRenderPassEncoder(VulkanDevice dev, VulkanCommandEncoder parent, CommandBuffer cb)
+    private readonly List<(VulkanImage Img, VulkanImageView View)> _sampled;
+
+    public VulkanRenderPassEncoder(VulkanDevice dev, VulkanCommandEncoder parent, CommandBuffer cb,
+        List<(VulkanImage, VulkanImageView)> sampled)
     {
         _dev = dev;
         _parent = parent;
         _cb = cb;
+        _sampled = sampled;
     }
 
     public void End()
     {
         if (_ended) return;
         _dev.Vk.CmdEndRendering(_cb);
+        foreach (var (img, view) in _sampled)
+        {
+            _dev.TransitionImageLayout(_cb, img.Image, img.Format, img.CurrentLayout, ImageLayout.ShaderReadOnlyOptimal,
+                view.BaseMip, view.MipCount, view.BaseLayer, view.LayerCount);
+            img.CurrentLayout = ImageLayout.ShaderReadOnlyOptimal;
+        }
         _ended = true;
     }
 

@@ -211,6 +211,15 @@ public sealed unsafe partial class VulkanDevice
                 bytesPerRow: desc.Width * BytesPerPixel(desc.Format),
                 rowsPerImage: desc.Height);
         }
+        else if ((desc.Usage & TextureUsage.Sampled) != 0)
+        {
+            // Render targets that may be sampled before their first pass (e.g. the SSR target when it is dry)
+            // start out sampleable, like on Metal.
+            var (mips, layers) = (info.MipLevels, info.ArrayLayers);
+            ExecuteImmediate(cb => TransitionImageLayout(cb, img, fmt, ImageLayout.Undefined, ImageLayout.ShaderReadOnlyOptimal,
+                0, mips, 0, layers));
+            wrapper.CurrentLayout = ImageLayout.ShaderReadOnlyOptimal;
+        }
 
         return new TextureHandle(id);
     }
@@ -802,6 +811,8 @@ public sealed unsafe partial class VulkanDevice
         });
     }
 
+    private const PipelineStageFlags DepthStages = PipelineStageFlags.EarlyFragmentTestsBit | PipelineStageFlags.LateFragmentTestsBit;
+
     internal void TransitionImageLayout(
         CommandBuffer cb, Image image, Format fmt,
         ImageLayout oldLayout, ImageLayout newLayout,
@@ -834,7 +845,7 @@ public sealed unsafe partial class VulkanDevice
             (ImageLayout.Undefined, ImageLayout.ColorAttachmentOptimal) =>
                 ((AccessFlags)0, AccessFlags.ColorAttachmentWriteBit, PipelineStageFlags.TopOfPipeBit, PipelineStageFlags.ColorAttachmentOutputBit),
             (ImageLayout.Undefined, ImageLayout.DepthStencilAttachmentOptimal) =>
-                ((AccessFlags)0, AccessFlags.DepthStencilAttachmentWriteBit, PipelineStageFlags.TopOfPipeBit, PipelineStageFlags.EarlyFragmentTestsBit),
+                ((AccessFlags)0, AccessFlags.DepthStencilAttachmentWriteBit, PipelineStageFlags.TopOfPipeBit, DepthStages),
             (ImageLayout.ColorAttachmentOptimal, ImageLayout.PresentSrcKhr) =>
                 (AccessFlags.ColorAttachmentWriteBit, (AccessFlags)0, PipelineStageFlags.ColorAttachmentOutputBit, PipelineStageFlags.BottomOfPipeBit),
             (ImageLayout.Undefined, ImageLayout.PresentSrcKhr) =>
@@ -856,8 +867,21 @@ public sealed unsafe partial class VulkanDevice
             // Reverse: a target sampled last pass is reused as a render target (ping-ponged bloom
             // buffers, or any offscreen RT reused across frames).
             (ImageLayout.ShaderReadOnlyOptimal, ImageLayout.ColorAttachmentOptimal) =>
-                (AccessFlags.ShaderReadBit, AccessFlags.ColorAttachmentWriteBit,
+                (AccessFlags.ShaderReadBit, AccessFlags.ColorAttachmentReadBit | AccessFlags.ColorAttachmentWriteBit,
                  PipelineStageFlags.FragmentShaderBit, PipelineStageFlags.ColorAttachmentOutputBit),
+            // Same target in consecutive passes (MSAA targets, overlay over the tonemapped frame): order the writes.
+            (ImageLayout.ColorAttachmentOptimal, ImageLayout.ColorAttachmentOptimal) =>
+                (AccessFlags.ColorAttachmentWriteBit, AccessFlags.ColorAttachmentReadBit | AccessFlags.ColorAttachmentWriteBit,
+                 PipelineStageFlags.ColorAttachmentOutputBit, PipelineStageFlags.ColorAttachmentOutputBit),
+            (ImageLayout.DepthStencilAttachmentOptimal, ImageLayout.DepthStencilAttachmentOptimal) =>
+                (AccessFlags.DepthStencilAttachmentWriteBit, AccessFlags.DepthStencilAttachmentReadBit | AccessFlags.DepthStencilAttachmentWriteBit,
+                 DepthStages, DepthStages),
+            // Shadow atlas / resolved scene depth: depth pass → sampled → next frame's depth pass.
+            (ImageLayout.DepthStencilAttachmentOptimal, ImageLayout.ShaderReadOnlyOptimal) =>
+                (AccessFlags.DepthStencilAttachmentWriteBit, AccessFlags.ShaderReadBit, DepthStages, PipelineStageFlags.FragmentShaderBit),
+            (ImageLayout.ShaderReadOnlyOptimal, ImageLayout.DepthStencilAttachmentOptimal) =>
+                (AccessFlags.ShaderReadBit, AccessFlags.DepthStencilAttachmentReadBit | AccessFlags.DepthStencilAttachmentWriteBit,
+                 PipelineStageFlags.FragmentShaderBit, DepthStages),
             _ => (AccessFlags.MemoryReadBit | AccessFlags.MemoryWriteBit,
                   AccessFlags.MemoryReadBit | AccessFlags.MemoryWriteBit,
                   PipelineStageFlags.AllCommandsBit, PipelineStageFlags.AllCommandsBit),
