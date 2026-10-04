@@ -74,6 +74,8 @@ public sealed class Battle(BattleRule rule, float goal, int startLeader = 1)
     /// <summary>Lead/chase: how long the chaser must hold the lead after a pass, and the gap a leader needs at the goal.</summary>
     public float PassHold { get; init; } = 1.5f;
     public float DrawGap { get; init; } = 1;
+    /// <summary>Lead/chase: a pass in the first seconds (the launch) does not decide; the AI chaser does not try one then.</summary>
+    public float StartGrace { get; init; } = 10;
 
     private readonly GapClock _clock = new(2, goal + 50);
     private float _rawSince, _time;
@@ -105,6 +107,7 @@ public sealed class Battle(BattleRule rule, float goal, int startLeader = 1)
     public void Update(float dt, float player, float rival)
     {
         var prev = _time;
+        if (prev == 0 && Rule == BattleRule.Race) (Leader, _raw) = player >= rival ? (0, 0) : (1, 1); // the grid: level = the player
         _time += dt;
         _clock.Mark(0, player, _time, prev);
         _clock.Mark(1, rival, _time, prev);
@@ -136,7 +139,7 @@ public sealed class Battle(BattleRule rule, float goal, int startLeader = 1)
         int lead = StartLeader, chase = 1 - StartLeader;
         float leadAlong = lead == 0 ? player : rival, chaseAlong = lead == 0 ? rival : player;
         var leadGap = lead == 0 ? Gap : -Gap; // + = leader ahead
-        if (Leader == chase && LeaderFor >= PassHold) End(chase, "OVERTAKE");
+        if (Leader == chase && MathF.Min(LeaderFor, _time - StartGrace) >= PassHold) End(chase, "OVERTAKE");
         else if (chaseAlong >= Goal && chaseAlong > leadAlong) End(chase, "OVERTAKE");
         else if (Breakaway > 0 && leadGap >= Breakaway) End(lead, "BREAKAWAY");
         else if (leadAlong >= Goal)

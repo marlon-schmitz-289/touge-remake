@@ -64,12 +64,27 @@ public class BattleTests
     [Fact]
     public void Lead_chase_chaser_wins_by_passing_and_holding_the_lead()
     {
-        // the player chases from 10 m behind and passes at 5 s; wins once the lead has held 1.5 s
+        // the player chases from 30 m behind and passes at 15 s; wins once the lead has held 1.5 s
         var b = new Battle(BattleRule.LeadChase, 10000, startLeader: 1);
-        Run(b, t => 22 * t, t => 10 + 20 * t);
+        Run(b, t => 22 * t, t => 30 + 20 * t);
         Assert.Equal(BattleOutcome.Win, b.Outcome);
         Assert.Equal("OVERTAKE", b.Reason);
-        Assert.InRange(b.DecidedAt, 6.5f - 0.05f, 6.5f + 0.05f);
+        Assert.InRange(b.DecidedAt, 16.5f - 0.05f, 16.5f + 0.05f);
+
+        // a pass off the launch (at 5 s) does not decide before the start grace (10 s) + the hold
+        var launch = new Battle(BattleRule.LeadChase, 10000, startLeader: 1);
+        Run(launch, t => 22 * t, t => 10 + 20 * t);
+        Assert.Equal("OVERTAKE", launch.Reason);
+        Assert.InRange(launch.DecidedAt, launch.StartGrace + launch.PassHold - 0.05f, launch.StartGrace + launch.PassHold + 0.05f);
+    }
+
+    [Fact]
+    public void Race_level_on_the_grid_counts_the_player_ahead()
+    {
+        var b = new Battle(BattleRule.Race, 1000);
+        b.Update(Dt, 0, 0);
+        Assert.True(b.PlayerLeads);
+        Assert.Equal(0, b.Overtakes);
     }
 
     [Fact]

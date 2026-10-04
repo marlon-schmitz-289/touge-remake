@@ -91,6 +91,24 @@ public sealed class RivalPilot
         return (Side(1), Side(-1));
     }
 
+    /// <summary>
+    ///     Lateral limits (m, + left) at <paramref name="along"/>: the road's width here and over the next 25 m (body half
+    ///     width + margin inside, <see cref="Room"/>), less in tight bends (<see cref="MaxOffset"/>).
+    /// </summary>
+    public (float Lo, float Hi) Limits(Vehicle car, IGround ground, float along)
+    {
+        float lo = -MaxOffset(along), hi = -lo;
+        foreach (var d in (ReadOnlySpan<float>)[0f, 12f, 25f])
+        {
+            var (l, r) = Room(car, ground, along + d);
+            (lo, hi) = (MathF.Max(lo, -(r - EdgeMargin)), MathF.Min(hi, l - EdgeMargin));
+        }
+        return lo > hi ? ((lo + hi) / 2, (lo + hi) / 2) : (lo, hi);
+    }
+
+    /// <summary>No passing (follow only), e.g. the chaser in the first seconds of a lead/chase.</summary>
+    public bool NoPass { get; set; }
+
     /// <summary>Input for this tick; <paramref name="others"/> = every other car on the course.</summary>
     public VehicleInput Drive(Vehicle car, IGround ground, ReadOnlySpan<Opponent> others, float dt)
     {
@@ -112,15 +130,7 @@ public sealed class RivalPilot
             else if (ds <= 0 && ds > -20 && ds > dsBehind) (behind, dsBehind) = (i, ds);
         }
 
-        // lateral limits: the road's width here and over the next 25 m (body half width + margin inside), less in tight bends
-        float lo = -MaxOffset(s), hi = -lo;
-        if (ahead >= 0 || behind >= 0 || Offset != 0)
-            foreach (var d in (ReadOnlySpan<float>)[0f, 12f, 25f])
-            {
-                var (l, r) = Room(car, ground, s + d);
-                (lo, hi) = (MathF.Max(lo, -(r - EdgeMargin)), MathF.Min(hi, l - EdgeMargin));
-            }
-        if (lo > hi) lo = hi = (lo + hi) / 2;
+        var (lo, hi) = ahead >= 0 || behind >= 0 || Offset != 0 ? Limits(car, ground, s) : (-MaxOffset(s), MaxOffset(s));
 
         float target = 0, cap = float.PositiveInfinity;
         State = Mode.Line;
@@ -129,7 +139,7 @@ public sealed class RivalPilot
         {
             var o = others[ahead];
             var closing = v - o.Speed;
-            if (_passSide == 0 && dsAhead < 20 && (closing > 1 - Style.Aggression || dsAhead < 8 + 6 * Style.Aggression))
+            if (_passSide == 0 && !NoPass && dsAhead < 20 && (closing > 1 - Style.Aggression || dsAhead < 8 + 6 * Style.Aggression))
             {
                 // the inside of the next bend (a late-braking dive), else the side the other car leaves open; a side
                 // without room for the car alongside is no option
@@ -166,11 +176,24 @@ public sealed class RivalPilot
                 State = Mode.Block;
             }
         }
-        // a car alongside (overlapping lengthwise): stay on our side of it instead of steering back onto the line through it
+        target = Math.Clamp(target, lo, hi);
+        // a car alongside (overlapping lengthwise): stay on our side of it instead of steering back onto the line through
+        // it — also where the road's room would pull us over: then hold our offset (never towards it) and, unless clearly
+        // ahead, lift to drop in behind it
         foreach (var o in others)
             if (MathF.Abs(o.Along - s) < 6 && MathF.Abs(o.Lateral - lat) < PassGap + 1)
-                target = o.Lateral > lat ? MathF.Min(target, o.Lateral - PassGap) : MathF.Max(target, o.Lateral + PassGap);
-        target = Math.Clamp(target, lo, hi);
+            {
+                var side = lat >= o.Lateral ? 1 : -1; // our side of it
+                var keep = o.Lateral + side * PassGap;
+                if ((target - keep) * side >= 0) continue;
+                var squeezed = (Math.Clamp(keep, lo, hi) - keep) * side < 0; // the road's room ends before our side does
+                target = squeezed ? side > 0 ? MathF.Max(target, MathF.Min(keep, Offset)) : MathF.Min(target, MathF.Max(keep, Offset)) : keep;
+                if (squeezed && o.Along > s - 3 && o.Speed > 3)
+                {
+                    cap = MathF.Min(cap, o.Speed - 3);
+                    State = Mode.Follow;
+                }
+            }
         // eased; faster when the road narrows under it
         var rate = (Offset < lo - 0.05f || Offset > hi + 0.05f ? 4 : State == Mode.Pass ? 2.5f : 1.2f) * dt;
         Offset += Math.Clamp(target - Offset, -rate, rate);

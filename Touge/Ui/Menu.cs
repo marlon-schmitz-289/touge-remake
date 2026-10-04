@@ -89,14 +89,14 @@ public sealed class Menu(Catalog catalog, Settings settings)
 
     /// <summary>
     ///     Music for this screen as the original: course flow TOKYO ("LIVE IN TOKYO"), car flow and records WORRY, loading
-    ///     silent, finish WIN (jingle), result JOY, intro/pause the race's Eurobeat (<see cref="RaceMusic"/>); options keep
+    ///     silent, finish WIN (jingle; a lost battle LOSE), result JOY, intro/pause the race's Eurobeat (<see cref="RaceMusic"/>); options keep
     ///     <paramref name="playing"/>.
     /// </summary>
     public string? Music(string? playing) => Current switch
     {
         Screen.Course or Screen.Route or Screen.Time or Screen.Weather => "TOKYO.adx",
         Screen.Maker or Screen.Car or Screen.Gearbox or Screen.Records => "WORRY.adx",
-        Screen.Loading => null, Screen.Finish => Battle is { Outcome: not Race.BattleOutcome.Win } ? "LOSE.adx" : "WIN.adx", Screen.Result => "JOY.adx", Screen.Options => playing,
+        Screen.Loading => null, Screen.Finish => Battle is { Outcome: Race.BattleOutcome.Lose } ? "LOSE.adx" : "WIN.adx", Screen.Result => "JOY.adx", Screen.Options => playing,
         _ => RaceMusic,
     };
 

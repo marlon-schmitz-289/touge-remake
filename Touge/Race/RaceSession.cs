@@ -35,6 +35,8 @@ public sealed class AiDriver(RivalPilot pilot) : ICarDriver
         foreach (var c in race.Cars)
             if (c != car && n < _others.Length) _others[n++] = new Opponent(c.Along, c.Lateral, c.Speed);
         pilot.RubberBand = race.RubberBand(car);
+        pilot.NoPass = race.Battle is { Rule: BattleRule.LeadChase } b && b.Time < b.StartGrace; // no pass off the launch
+
         return pilot.Drive(car.Vehicle, race.Ground, _others.AsSpan(0, n), dt);
     }
 
@@ -99,9 +101,12 @@ public sealed class RaceSession
     /// <summary>Gap between the finishers' stopping points on the run-out.</summary>
     public const float StopSpacing = 8;
 
+    /// <summary>Two cars must have been apart this long (s) before a contact counts as a new touch.</summary>
+    public const float TouchGap = 0.25f;
+
     private readonly float _goal;
     private int _finished;
-    private bool[] _touching = [];
+    private float[] _lastTouch = [];
 
     /// <param name="line">Course line from the spawn to the goal (<see cref="Drive.Line"/>).</param>
     /// <param name="runOut">Goal → end barrier (<see cref="Drive.RunOutLine"/>, empty on circuits).</param>
@@ -133,13 +138,15 @@ public sealed class RaceSession
     {
         var car = new RaceCar(name, vehicle, driver, Line);
         Cars.Add(car);
-        _touching = new bool[Cars.Count * Cars.Count];
+        _lastTouch = new float[Cars.Count * Cars.Count];
+        Array.Fill(_lastTouch, float.NegativeInfinity);
         return car;
     }
 
     /// <summary>
     ///     Puts <paramref name="car"/> at rest <paramref name="along"/> m along the line, <paramref name="lateral"/> m to its
-    ///     left, facing along it; false where there is no ground under it or the body would touch a wall.
+    ///     left, facing along it; false where there is no ground under it, the body would touch a wall, or (AI rival) it stands
+    ///     outside the road room its <see cref="RivalPilot"/> considers drivable there (<see cref="RivalPilot.Room"/>).
     /// </summary>
     public bool Place(RaceCar car, float along, float lateral)
     {
@@ -149,6 +156,11 @@ public sealed class RaceSession
         var dir = t.PointAt(along + 3) - t.PointAt(along - 3);
         if (!Ground.Raycast(p + Vector3.UnitY * 5, -Vector3.UnitY, 20, out var hit)) return false;
         var v = car.Vehicle;
+        if (lateral != 0 && car != Cars[0] && car.Driver is AiDriver ai)
+        {
+            var (l, r) = ai.Pilot.Room(v, Ground, along);
+            if (lateral < RivalPilot.EdgeMargin - r || lateral > l - RivalPilot.EdgeMargin) return false;
+        }
         v.Reset(hit.Point, MathF.Atan2(dir.X, dir.Z));
         Span<Vector3> probes = stackalloc Vector3[4];
         Span<WallContact> contacts = stackalloc WallContact[8];
@@ -176,7 +188,7 @@ public sealed class RaceSession
             return;
         }
         // the racing line may run near one edge at the start: the pair is shifted across the road until both fit
-        foreach (var half in new[] { 1.6f, 1.3f })
+        foreach (var half in new[] { 1.6f, 1.3f, RivalPilot.PassGap / 2 })
         foreach (var centre in new[] { 0f, 0.5f, -0.5f, 1f, -1f, 1.5f, -1.5f, 2f, -2f })
             if (Place(Cars[0], at, centre + half) && Place(Cars[1], at, centre - half))
             {
@@ -228,15 +240,15 @@ public sealed class RaceSession
         {
             RaceCar a = Cars[i], b = Cars[j];
             var c = CarCollision.Resolve(a.Vehicle, b.Vehicle, a.PrevPosition, a.PrevOrientation, b.PrevPosition, b.PrevOrientation);
-            ref var touching = ref _touching[i * Cars.Count + j];
             if (c is { } contact)
             {
-                if (!touching) Contacts++;
+                ref var last = ref _lastTouch[i * Cars.Count + j];
+                if (Time - last > TouchGap) Contacts++; // a rub (separate, touch again next tick) is one touch
+                last = Time;
                 ContactTicks++;
                 MaxImpact = MathF.Max(MaxImpact, contact.ImpactSpeed);
-                if (LastContact is not { } last || contact.ImpactSpeed > last.ImpactSpeed) LastContact = contact;
+                if (LastContact is not { } hardest || contact.ImpactSpeed > hardest.ImpactSpeed) LastContact = contact;
             }
-            touching = c != null;
         }
         Time += dt;
         foreach (var car in Cars)

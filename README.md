@@ -52,15 +52,17 @@ Battle (`Touge/Race`, Grundlage für Legend of the Streets, Story und Multiplaye
 Rivalen (`--battle <id>` oder ein Auto): itsuki, iketani, kenji, takeshi, shingo, mako, kai, seiji, kyoichi, keisuke, ryosuke, wataru, takumi, bunta
 (Auto mit der Lackierung der Figur, je eigener Fahrstil: Können, Aggressivität, Drift). Regeln: `race` (Standard, wie das Original: nebeneinander,
 wer zuerst im Ziel ist, gewinnt; dazu Sieg vorzeitig ab 8 s Vorsprung) und `chase` (Lead/Chase wie im Anime: der Verfolger gewinnt, wenn er
-überholt und 1,5 s vorne bleibt; der Führende mit 4 s Vorsprung oder ≥ 1 s Vorsprung im Ziel; klebt der Verfolger am Ziel dran: DRAW;
+überholt und 1,5 s vorne bleibt – erst nach 10 s, ein Überholen gleich nach dem Start zählt nicht, die KI
+versucht es dann auch nicht; der Führende mit 4 s Vorsprung oder ≥ 1 s Vorsprung im Ziel; klebt der Verfolger am Ziel dran: DRAW;
 `--lead player|rival` wer vorne startet, Standard der Rivale). KI (`Kansei.Physics/RivalPilot`): fährt die Fahrlinie des Kurses (CRS_DRV _I/_O)
 mit Bremspunkten nach Kurvenradius und Können, folgt mit Abstand, überholt innen vor Kurven oder auf der freien Seite (nur wo die Straße breit
-genug ist), verteidigt die Innenseite vor Kurven, Drift-Stil mit kurzem Handbremsimpuls in Haarnadeln; dezentes Gummiband (±5 % Tempo ab
+genug ist), verteidigt die Innenseite vor Kurven, fährt nie in ein Auto daneben (wird die Straße zu schmal: hält
+ihre Seite und lupft, um sich dahinter einzureihen), Drift-Stil mit kurzem Handbremsimpuls in Haarnadeln; dezentes Gummiband (±5 % Tempo ab
 30 m Abstand zum Spieler). Auto gegen Auto: Kastenkollision (SAT, über den Tick abgetastet – kein Durchtunneln), Impulse mit Drall, Funken,
 Kamerawackeln und Crash-Ton. HUD oben rechts: VS + Rivale, Position 1ST/2ND, LEAD/CHASE, ADVANTAGE (Zeitabstand), Abstandsbalken bis zur
 Vorsprungsgrenze, OVERTAKE!/OVERTAKEN; roter Punkt auf der Streckenuhr. Ton des Rivalen (Motor, Reifen, Wand) nach Entfernung, mit Doppler
-und Stereo. Ende: YOU WIN!!/YOU LOSE/DRAW mit WIN.adx/LOSE.adx, Ergebnisblatt (Rivale, Auto, entschieden durch, Abstand, Zeiten, Führungswechsel,
-Kontakte) → Retry / Course Select / Car Select / Exit. Steuerung wie beim Fahren (Tastatur und Pad); B (Richtung wechseln) ist im Battle aus.
+und Stereo. Ende: YOU WIN!!/YOU LOSE/DRAW mit WIN.adx/LOSE.adx (DRAW: WIN.adx wie das Zieljingle), Ergebnisblatt (Rivale, Auto, entschieden durch, Abstand, Zeiten, Führungswechsel,
+Kontakte – eine Berührung zählt neu erst nach 0,25 s Abstand) → Retry / Course Select / Car Select / Exit. Steuerung wie beim Fahren (Tastatur und Pad); B (Richtung wechseln) ist im Battle aus.
 
 Fahren (Standard): W/S oder ↑/↓ Gas/Bremse, A/D oder ←/→ lenken, Leertaste Handbremse, S im Stand halten = Rückwärts (Automatik), T Automatik/Manuell,
 Shift/Strg hoch-/runterschalten (manuell, auch in R), R (Pad: Y) zurück auf die Fahrlinie (nächster freier Punkt, Blick in Fahrtrichtung), B Richtung wechseln (bergab ↔ bergauf, setzt auf die Fahrlinie der Gegenrichtung; Minimap/Fortschritt folgen), C Verfolger-/Stoßstangenkamera,

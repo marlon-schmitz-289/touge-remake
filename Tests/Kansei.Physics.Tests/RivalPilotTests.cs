@@ -60,6 +60,34 @@ public class RivalPilotTests(ITestOutputHelper log)
     }
 
     [Fact]
+    public void Never_steers_into_a_car_alongside_where_the_road_room_ends()
+    {
+        // 6 m road (room ±1.7 m), the AI starts 2.4 m right of a car that squeezes it, staying level at its pace: the
+        // room limit pulls towards that car — it holds its side and lifts instead (MYOUGI grid, review)
+        var line = Straight();
+        var ground = Road(3);
+        var ai = new RivalPilot(line, new RivalStyle(0.8f, 0.5f, 0));
+        var car = new Vehicle(CarSpec.AE86);
+        car.Reset(new Vector3(-2.4f, 0, 20), 0);
+        ai.Pilot.Nearest(car.Position);
+        float closest = float.MaxValue, aim = float.MaxValue;
+        var lifted = false;
+        for (var t = 0f; t < 5; t += Dt)
+        {
+            var (s, lat) = ai.Pilot.Track(car.Position);
+            var v = MathF.Max(car.Velocity.Length(), 6);
+            car.Step(ai.Drive(car, ground, [new Opponent(s + 0.5f, 0, v)], Dt), ground, Dt);
+            closest = MathF.Min(closest, MathF.Abs(ai.Pilot.Track(car.Position).Lateral));
+            aim = MathF.Min(aim, -ai.Offset);
+            lifted |= ai.State == RivalPilot.Mode.Follow;
+        }
+        log.WriteLine($"closest lateral to the other car {closest:F2} m, offset {ai.Offset:F2}");
+        Assert.True(aim > RivalPilot.PassGap - 0.05f, $"never aimed towards it: {aim:F2} m");
+        Assert.True(closest > 2, $"kept its side: {closest:F2} m"); // bodies ~1.7 m wide
+        Assert.True(lifted, "lifted to drop in behind");
+    }
+
+    [Fact]
     public void Defends_the_inside_against_a_car_close_behind_before_a_bend()
     {
         // straight, then a left-hand arc (radius 60 m); attacker 8 m behind on the left (inside)
