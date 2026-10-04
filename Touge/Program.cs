@@ -27,7 +27,7 @@ using Touge;
 // --fog: dichter Nebel über dem Tag- oder Nachtkurs (Sicht ~60 m; im Menü Wetter FOG).
 // --sun: freie Kamera am Startpunkt schaut zur Sonne (Blendung prüfen).
 // Ohne Kurs und ohne Test-Flags (außer --backend) startet das Spiel im Front-End (Ui/FrontEnd: Hinweis, Karten, Titel, Hauptmenü) mit den gespeicherten Einstellungen (Ui/Settings).
-// --menu boot|logo|disclaimer|title|mode|quit (Front-End; quit = QUIT GAME mit offener Abfrage) bzw. course|route|time|weather|maker|car|gearbox|intro|pause|records|options: diesen Schritt/dieses Menü beim Start öffnen (auch mit Test-Flags, z. B. --menu mode --shot out/m.png).
+// --menu boot|logo|disclaimer|title|mode|quit (Front-End; quit = QUIT GAME mit offener Abfrage) bzw. course|route|time|weather|maker|car|gearbox|intro|pause|records|options bzw. guide|guide-list|guide-talk (Car Guide: Dialog, Liste, Iketani spricht): diesen Schritt/dieses Menü beim Start öffnen (auch mit Test-Flags, z. B. --menu mode --shot out/m.png).
 // --flow <dir>: ganzer Ablauf per Skript im Fenster (Titel → Auswahl → Laden → Countdown → Rennen (Pilot, 16×) → Pause → Ziel → Ergebnis → Rekorde → Optionen), PNG je Schritt nach <dir>, Einstellungen bleiben unberührt.
 // --frontend-capture <wav>: ganzer Menüablauf per Skript offline (Titel → Auswahl → Countdown → Ergebnis mit erfundener Fahrt) mit Original-SE/BGM als WAV, Log aller Auslöser.
 // --shot-size WxH: Größe des --shot-Bildes (Standard 1280x720), z. B. 3200x1800 für die HUD-Skalierung.

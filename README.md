@@ -20,8 +20,8 @@ Assets kommen zur Laufzeit aus der eigenen ISO (SLPM-65268), nie ins Repo.
 ```sh
 dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso"   # Front-End (Hinweis, Karten, Titel, Hauptmenü) → Kurs, Auto, Rennen, Ergebnis, Rekorde, Optionen
 dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso" [AKINA_DAY|AKINA_NIT|USUI_NIT|…]   # direkt fahren, ohne Menü
-dotnet run --project Touge -- "<iso>" AKINA_NIT --menu boot|logo|disclaimer|title|mode|quit|course|route|time|weather|maker|car|gearbox|intro|pause|records|options --shot out/proof/ui_car.png [--shot-size 3200x1800]   # Menü-Bild
-dotnet run --project Touge -- "<iso>" --flow out/proof   # ganzer Ablauf per Skript im Fenster (Titel → Auswahl → Laden → Countdown → Rennen mit Pilot in 16× → Pause → Ziel → Ergebnis → Rekorde → Optionen), PNG je Schritt
+dotnet run --project Touge -- "<iso>" AKINA_NIT --menu boot|logo|disclaimer|title|mode|quit|course|route|time|weather|maker|car|gearbox|intro|pause|records|options|guide|guide-list|guide-talk --shot out/proof/ui_car.png [--shot-size 3200x1800]   # Menü-Bild
+dotnet run --project Touge -- "<iso>" --flow out/proof   # ganzer Ablauf per Skript im Fenster (Titel → Auswahl → Laden → Countdown → Rennen mit Pilot in 16× → Pause → Ziel → Ergebnis → Rekorde → Optionen → Car Guide), PNG je Schritt
 dotnet run --project Touge -- "<iso>" --frontend-capture out/proof/fe.wav   # ganzer Menüablauf per Skript offline: Original-SE/BGM als WAV + Log aller Auslöser
 dotnet run --project Touge -- "<iso>" --shot out/akina.png   # ein Frame als PNG, dann Ende
 dotnet run --project Touge -- "<iso>" --ground out/g.png [--at 300] [--reverse]   # Kollision: Raycast-Timing + Draufsicht mit Wänden, Sperren, Fahrlinie/Auslauf; Ausschnitte _at300/_start/_goal
@@ -52,7 +52,7 @@ Menüs: Ohne Kurs/Test-Flags startet das Spiel im Front-End im Stil des Original
 Original-Menütexturen; Ablauf/Zeiten/Bewegung aus dem Originalcode, siehe FORMATS.md): Hinweis zu den Speicherdaten → Karte „Based on …“ →
 Hinweis „Fiktion“ → Titel (Akina bei Nacht im Hintergrund abgeflogen, Logo, blinkendes PRESS START BUTTON; nach 10 s ohne Eingabe zurück zu
 den Karten) → Hauptmenü (Trommel mit den 7 Modi des Originals, Chromplatten, pulsierender gelber Rahmen; nach 30 s ohne Eingabe zurück zum
-Titel). Gebaut sind davon TIME ATTACK, REPLAY & RECORD (→ Rekorde) und OPTIONS; die anderen Modi piepen (BEEP001) wie gesperrte Einträge
+Titel). Gebaut sind davon TIME ATTACK, REPLAY & RECORD (→ Rekorde), IKETANI'S CAR GUIDE und OPTIONS; die anderen Modi piepen (BEEP001) wie gesperrte Einträge
 im Original. Als letzter Eintrag QUIT GAME (nur Windows/Linux/macOS): Abfrage „QUIT THE GAME?“ YES/NO (NO vorgewählt, ←/→ wählen,
 Enter/A entscheiden, Esc/B = NO), YES speichert die Einstellungen und schließt das Fenster. Esc im Hauptmenü zurück zum Titel, im Titel beenden. Danach alle Bildschirme ebenfalls im Originalstil (`Ui/Menu` + `Ui/Canvas`:
 graue Logo-Kachelwand, roter/blauer Laufschrift-Kopf, Chromplatten, Karbonpaneele, gelber Pulsrahmen, Verlaufswörter rot/blau, alles Englisch):
@@ -70,6 +70,12 @@ Schritte rückwärts. Zwischen Modulen 30-Frame-Schwarzblenden. Ton: Original-SE
 Zurück/gesperrt, sys002 START, alarm_02 Pause, CAR010/011 Countdown, NAME001 Ergebniszeilen) und Menü-BGM aus BGM.AFS mit Loop-Punkten:
 Titel/Hauptmenü „GAMBLE RUMBLE“ (eigene Wahl, das Original ist dort still bzw. spielt den Vorspannfilm), Kurswahl „LIVE IN TOKYO“,
 Hersteller/Auto/Rekorde „WORRY“, Laden still, Countdown/Rennen/Pause Eurobeat, Ziel „WIN“ (einmal), Ergebnis „JOY“ (wie im Original).
+IKETANI'S CAR GUIDE (`Ui/CarGuide`, wie das Original 池谷先輩の車紹介, BGM „WORRY“): Itsuki/Takumi/Iketani-Dialog (Entscheiden
+schreibt die Zeile fertig, dann weiter) → Liste aller 32 Autos unter Herstellerköpfen, das Auto dreht sich in 3D rechts daneben, Iketanis Text
+(eigenes Englisch) und Datenblatt (Motor, Hubraum, Bauart, Leistung/Drehmoment mit Drehzahl aus der Momentkurve, Gewicht, Antrieb, Getriebe,
+kg/PS, Fahrer in Initial D). ↑/↓ Auto, ←/→ Lackfarbe, Entscheiden = Iketani spricht (Original-Ansage `IKETANI.AFS` `INTRO_<AUTO>.ADX`,
+japanisch, 34–66 s; Liste fährt weg, Auto in die Mitte, Text tippt mit, Fortschrittsbalken, Musik leiser), Entscheiden/Zurück bricht ab,
+Zurück → Hauptmenü (gespeichertes Auto kommt zurück). `--menu guide` (Dialog), `guide-list`, `guide-talk` mit `--car`/`--paint` für Bilder.
 Navigation Pfeile/WASD, Enter, Esc bzw. D-Pad/Stick, A, B.
 Einstellungen, letzte Wahl und Bestzeiten liegen als JSON im App-Data-Ordner (macOS `~/Library/Application Support/InitialDRemake/settings.json`,
 Windows `%APPDATA%\InitialDRemake`), nicht im Repo; Starts mit Kurs oder Test-Flags lesen/schreiben sie nicht.

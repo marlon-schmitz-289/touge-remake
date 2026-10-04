@@ -156,6 +156,8 @@ Rollen (aus Dateinamen; „?" = geraten):
 
 Stichprobe (WAV-Export + Spektrum, Python/numpy): alle Exporte nicht still (RMS −18 … −2 dBFS) und tonal statt Rauschen (spektrale Flachheit 0,000–0,39; weißes Rauschen 1,0). Musik Schwerpunkt ~1,4–1,7 kHz, Stimme ~1,1 kHz, Reifen-Quietschen Spitze bei ~1 kHz.
 
+**Iketanis Autovorstellung** (Hauptmenü 池谷先輩の車紹介): Texturen `TSDATA.AFS` `TIKETEX.PAC` (`itag_00…10`: Rahmen, Kappe/Gesichter Iketani, Itsuki, Takumi, Titelband, „STARTボタンでスキップ“, Pfeile, drei Streifen mit den 32 Autonamen + `?????`, Einleitungsdialog als Bild: Itsuki bittet Iketani, Takumi über Autos aufzuklären, Iketani fragt, welches Auto), Animation `TIKEANI.PAC`, BGM `WORRY.adx`. Die Ansage je Auto ist `SOUND/IKETANI.AFS` `INTRO_` + Auto-ID + `.ADX` (ELF-Strings `IKETANI.AFS`, `INTRO_`, `.ADX` bei 0x1CD2F0/0x1CD348), mono 24 kHz, 34–66 s, japanisch; Texte dazu gibt es auf der Disc nicht (WORDS.AFS = Renn-Sprüche `RACEWORDS_*`).
+
 ## Offen
 - INFO: 0x150…0x1DF (Ambient je Slot?), 0x2A0…0x2BF, Abschnitts-Flag; LOD-Abstand `gp−0x7C14`; zweites u32 im ROAD-Header
 - Bedeutung von VU addr 4, Material-Flags außer 0x100/0x200/0x400
