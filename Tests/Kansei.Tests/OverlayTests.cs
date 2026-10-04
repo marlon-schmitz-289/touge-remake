@@ -20,18 +20,50 @@ public class OverlayTests
         Assert.Equal(32, v.Max(x => x.Position.X), 1e-4f);
         Assert.Equal(0xFF0000FFu, v[0].Color); // RGBA8 little-endian: r in the low byte
 
-        // '1' is 10 dots in the 5×7 font, unknown characters are blanks; clip starts a batch at the current vertex
+        // clip starts a batch at the current vertex
         o.Clip(new Vector2(50, 50), 40);
-        o.Text("1?", Vector2.Zero, 2, 0);
-        Assert.Equal(6 + 10 * 6, o.VertexCount);
+        o.Disc(Vector2.Zero, 1, 0);
         Assert.Equal(2, o.Batches.Length);
         Assert.Equal((6, new Vector3(50, 50, 40)), o.Batches[1]);
-        Assert.Equal(22, Overlay.TextWidth(2, 2)); // (2 glyphs × 6 dots − trailing gap) × 2 px
 
         // full: further shapes are dropped instead of overflowing the GPU ring
         for (var i = 0; i < Overlay.MaxVertices; i++) o.Disc(Vector2.Zero, 1, 0);
         Assert.Equal(Overlay.MaxVertices, o.VertexCount);
         o.Clear();
         Assert.Equal((0, 1), (o.VertexCount, o.Batches.Length));
+    }
+
+    [Fact]
+    public void SdfFont_Atlas_Measure_TextLayout()
+    {
+        var dir = AppContext.BaseDirectory;
+        while (!File.Exists(Path.Combine(dir, "InitialDRemake.slnx"))) dir = Path.GetDirectoryName(dir)!;
+        var font = new SdfFont(File.ReadAllBytes(Path.Combine(dir, "Touge/Assets/Fonts/Rajdhani-Bold.ttf")), "HIil0123456789 %");
+        Assert.InRange(font.CapHeight, 0.5f, 0.8f);
+
+        // 'H' is a filled box: its cell centre column is outside (< 0.5) between the stems, inside on the crossbar
+        Assert.True(font.TryGet('H', out var h));
+        int X(float u) => (int)(u * font.AtlasWidth);
+        int Y(float v) => (int)(v * font.AtlasHeight);
+        int x0 = X(h.Uv.X), x1 = X(h.Uv.Z), y0 = Y(h.Uv.Y), y1 = Y(h.Uv.W);
+        Assert.Equal(0, font.Atlas[y0 * font.AtlasWidth + x0]); // padding corner: far outside
+        var column = Enumerable.Range(y0, y1 - y0).Select(y => font.Atlas[y * font.AtlasWidth + (x0 + x1) / 2]).ToArray();
+        Assert.Contains(column, b => b > 160); // crossbar
+        Assert.Contains(column, b => b < 60);  // above/below it
+
+        // digits are made tabular (one advance), widths add up, unknown characters take half an em
+        Assert.Equal(font.Measure("0", 40), font.Measure("8", 40), 1e-3f);
+        Assert.Equal(font.Measure("Hi", 30), font.Measure("H", 30) + font.Measure("i", 30), 1e-3f);
+        Assert.Equal(20, font.Measure("\u3042", 40), 1e-3f);
+
+        // layout: right-aligned text ends at the anchor, spaces emit nothing, 6 vertices per drawn glyph
+        var o = new Overlay { Font = font };
+        var w = o.Text("1 2", new Vector2(100, 50), 40, Overlay.Rgba(1, 1, 1), align: 1);
+        Assert.Equal(12, o.GlyphCount);
+        Assert.Equal(font.Measure("1 2", 40), w, 1e-3f);
+        Assert.True(o.GlyphVertices.ToArray().Max(v => v.Position.X) <= 100 + 40f * SdfFont.Spread / SdfFont.EmPx + 1);
+        Assert.True(o.GlyphVertices.ToArray().Min(v => v.Position.X) >= 100 - w - 40f * SdfFont.Spread / SdfFont.EmPx - 1);
+        o.Clear();
+        Assert.Equal(0, o.GlyphCount);
     }
 }

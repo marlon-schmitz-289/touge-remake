@@ -8,6 +8,10 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <None Include="Assets\**" CopyToOutputDirectory="PreserveNewest"/>
+    </ItemGroup>
+
+    <ItemGroup>
         <ProjectReference Include="..\Kansei\Kansei.csproj"/>
         <ProjectReference Include="..\Kansei.Physics\Kansei.Physics.csproj"/>
         <ProjectReference Include="..\Touge.Formats\Touge.Formats.csproj"/>

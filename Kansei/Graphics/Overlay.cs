@@ -30,13 +30,17 @@ public struct OverlayVertex(Vector2 position, Vector2 sdf, float radius, uint co
 ///     Screen-space 2D shapes for one frame (HUD), drawn after tonemapping by <see cref="OverlayRenderer"/>. Pixel
 ///     coordinates, top-left origin; anti-aliased lines and discs from a distance field across thickness quads, filled
 ///     triangles without AA. <see cref="Clip"/> starts a batch that is cut to a circle (minimaps). Fixed capacity, no
-///     allocations: shapes beyond <see cref="MaxVertices"/> are dropped. Text: 5×7 dot-matrix glyphs (digits, % / and
-///     a few capitals) as round dots.
+///     allocations: shapes beyond <see cref="MaxVertices"/> are dropped. Text: <see cref="SdfFont"/> glyph quads, on top of all shapes.
 /// </summary>
 public sealed class Overlay
 {
-    public const int MaxVertices = 96 * 1024, MaxBatches = 16;
+    public const int MaxVertices = 96 * 1024, MaxBatches = 16, MaxGlyphVertices = 6 * 4096;
     private readonly OverlayVertex[] _vertices = new OverlayVertex[MaxVertices];
+    private readonly GlyphVertex[] _glyphs = new GlyphVertex[MaxGlyphVertices];
+    /// <summary>Font of <see cref="Text"/> (no font: text is skipped).</summary>
+    public SdfFont? Font { get; set; }
+    public int GlyphCount { get; private set; }
+    public ReadOnlySpan<GlyphVertex> GlyphVertices => _glyphs.AsSpan(0, GlyphCount);
     private readonly (int First, Vector3 Clip)[] _batches = new (int, Vector3)[MaxBatches];
     private int _batchCount;
     public int VertexCount { get; private set; }
@@ -49,6 +53,7 @@ public sealed class Overlay
     public void Clear()
     {
         VertexCount = 0;
+        GlyphCount = 0;
         _batchCount = 1;
         _batches[0] = (0, new Vector3(0, 0, float.MaxValue));
     }
@@ -87,6 +92,18 @@ public sealed class Overlay
         Triangle(min, max, new Vector2(min.X, max.Y), color);
     }
 
+    /// <summary>Axis-aligned rectangle with a horizontal colour gradient (<paramref name="left"/> → <paramref name="right"/>).</summary>
+    public void RectGradient(Vector2 min, Vector2 max, uint left, uint right)
+    {
+        if (!Reserve(6)) return;
+        Put(min, Vector2.Zero, 1, left);
+        Put(new Vector2(max.X, min.Y), Vector2.Zero, 1, right);
+        Put(max, Vector2.Zero, 1, right);
+        Put(min, Vector2.Zero, 1, left);
+        Put(max, Vector2.Zero, 1, right);
+        Put(new Vector2(min.X, max.Y), Vector2.Zero, 1, left);
+    }
+
     /// <summary>Anti-aliased line of <paramref name="width"/> pixels with round-ish ends (extended by half the width).</summary>
     public void Line(Vector2 a, Vector2 b, float width, uint color)
     {
@@ -123,68 +140,85 @@ public sealed class Overlay
     }
 
     /// <summary>Circle outline from <paramref name="segments"/> lines.</summary>
-    public void Ring(Vector2 center, float radius, float width, uint color, int segments = 64)
+    public void Ring(Vector2 center, float radius, float width, uint color, int segments = 64) => Arc(center, radius, width, color, 0, MathF.Tau, segments);
+
+    /// <summary>Arc from angle <paramref name="from"/> to <paramref name="to"/> (radians, clockwise on screen from +x) in <paramref name="segments"/> lines.</summary>
+    public void Arc(Vector2 center, float radius, float width, uint color, float from, float to, int segments = 64)
     {
-        var prev = center + new Vector2(radius, 0);
+        var prev = center + new Vector2(MathF.Cos(from), MathF.Sin(from)) * radius;
         for (var i = 1; i <= segments; i++)
         {
-            var a = i * MathF.Tau / segments;
+            var a = from + i * (to - from) / segments;
             var p = center + new Vector2(MathF.Cos(a), MathF.Sin(a)) * radius;
             Line(prev, p, width, color);
             prev = p;
         }
     }
 
-    /// <summary>Width in pixels of <paramref name="text"/> at dot pitch <paramref name="dot"/> (6 dots per glyph incl. gap).</summary>
-    public static float TextWidth(int chars, float dot) => chars > 0 ? (chars * 6 - 1) * dot : 0;
+    /// <summary>Filled quad a-b-c-d (convex, either winding), no anti-aliasing.</summary>
+    public void Quad(Vector2 a, Vector2 b, Vector2 c, Vector2 d, uint color)
+    {
+        Triangle(a, b, c, color);
+        Triangle(a, c, d, color);
+    }
 
     /// <summary>
-    ///     Dot-matrix text, top-left at <paramref name="pos"/>, <paramref name="dot"/> pixels per dot (glyph 5×7 dots).
-    ///     Unknown characters draw as blanks.
+    ///     Text in <see cref="Font"/>, <paramref name="baseline"/> = left end of the baseline (shifted by
+    ///     −<paramref name="align"/> × width: 0 left, 0.5 centre, 1 right), <paramref name="size"/> = em in pixels.
+    ///     <paramref name="weight"/> grows the glyphs by that many pixels (negative: thinner), <paramref name="soft"/>
+    ///     widens the edge (shadows/glow; both limited by the font's distance range), <paramref name="skew"/> slants (italic, x per y).
+    ///     Glyphs go to <see cref="GlyphVertices"/>, drawn by <see cref="TextRenderer"/> after all shapes. Returns the advance width.
     /// </summary>
-    public void Text(ReadOnlySpan<char> text, Vector2 pos, float dot, uint color)
+    public float Text(ReadOnlySpan<char> text, Vector2 baseline, float size, uint color, float align = 0, float weight = 0, float soft = 0, float skew = 0)
     {
-        var r = dot * 0.42f;
-        for (var c = 0; c < text.Length; c++)
+        if (Font is not { } f) return 0;
+        var width = f.Measure(text, size);
+        var x = baseline.X - width * align;
+        var range = size * SdfFont.Spread / SdfFont.EmPx; // distance range in screen pixels
+        weight = MathF.Min(weight, range * 0.6f);
+        soft = Math.Clamp(soft, 0, MathF.Max(2 * (range - weight) - 1, 0));
+        var scale = 2 * range;
+        foreach (var c in text)
         {
-            var g = Glyph(text[c]);
-            for (var row = 0; row < 7; row++)
-            for (var col = 0; col < 5; col++)
-                if ((g[row] & (0x10 >> col)) != 0)
-                    Disc(pos + new Vector2((c * 6 + col + 0.5f) * dot, (row + 0.5f) * dot), r, color);
+            if (!f.TryGet(c, out var g)) { x += size * 0.5f; continue; }
+            if (g.Plane.Z > g.Plane.X && GlyphCount + 6 <= MaxGlyphVertices)
+            {
+                float x0 = x + g.Plane.X * size, x1 = x + g.Plane.Z * size, y0 = baseline.Y - g.Plane.W * size, y1 = baseline.Y - g.Plane.Y * size;
+                float k0 = (baseline.Y - y0) * skew, k1 = (baseline.Y - y1) * skew;
+                GlyphVertex V(float px, float py, float u, float v) => new(new Vector2(px, py), new Vector2(u, v), color, scale, weight, soft);
+                var (a, b, cc, d) = (V(x0 + k0, y0, g.Uv.X, g.Uv.Y), V(x1 + k0, y0, g.Uv.Z, g.Uv.Y), V(x1 + k1, y1, g.Uv.Z, g.Uv.W), V(x0 + k1, y1, g.Uv.X, g.Uv.W));
+                _glyphs[GlyphCount++] = a;
+                _glyphs[GlyphCount++] = b;
+                _glyphs[GlyphCount++] = cc;
+                _glyphs[GlyphCount++] = a;
+                _glyphs[GlyphCount++] = cc;
+                _glyphs[GlyphCount++] = d;
+            }
+            x += g.Advance * size;
         }
+        return width;
     }
+}
 
-    private static ReadOnlySpan<byte> Font =>
-    [
-        0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E, // 0
-        0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E, // 1
-        0x0E, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1F, // 2
-        0x1F, 0x02, 0x04, 0x02, 0x01, 0x11, 0x0E, // 3
-        0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02, // 4
-        0x1F, 0x10, 0x1E, 0x01, 0x01, 0x11, 0x0E, // 5
-        0x06, 0x08, 0x10, 0x1E, 0x11, 0x11, 0x0E, // 6
-        0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08, // 7
-        0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E, // 8
-        0x0E, 0x11, 0x11, 0x0F, 0x01, 0x02, 0x0C, // 9
-        0x18, 0x19, 0x02, 0x04, 0x08, 0x13, 0x03, // %
-        0x01, 0x01, 0x02, 0x04, 0x08, 0x10, 0x10, // /
-        0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11, // A
-        0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11, // H
-        0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11, // K
-        0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11, // M
-        0x11, 0x11, 0x19, 0x15, 0x13, 0x11, 0x11, // N
-        0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11, // R
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // blank
-    ];
+/// <summary>
+///     Text vertex (<see cref="Overlay.Text"/>): pixel position, atlas uv, sRGB colour, <see cref="Scale"/> = screen pixels per
+///     unit of the distance field around 0.5, <see cref="Weight"/>/<see cref="Soft"/> in pixels (text.frag).
+/// </summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct GlyphVertex(Vector2 position, Vector2 uv, uint color, float scale, float weight, float soft)
+{
+    public Vector2 Position = position;
+    public Vector2 Uv = uv;
+    public uint Color = color;
+    public float Scale = scale;
+    public float Weight = weight;
+    public float Soft = soft;
 
-    private static ReadOnlySpan<byte> Glyph(char c)
-    {
-        var i = c switch
-        {
-            >= '0' and <= '9' => c - '0', '%' => 10, '/' => 11, 'A' => 12, 'H' => 13, 'K' => 14, 'M' => 15, 'N' => 16, 'R' => 17,
-            _ => 18,
-        };
-        return Font.Slice(i * 7, 7);
-    }
+    public const int Size = 32;
+
+    public static readonly VertexLayout Layout = VertexLayout.Interleaved(Size,
+        new VertexAttribute(0, VertexFormat.Float2, 0),
+        new VertexAttribute(1, VertexFormat.Float2, 8),
+        new VertexAttribute(2, VertexFormat.UByte4Norm, 16),
+        new VertexAttribute(3, VertexFormat.Float3, 20));
 }

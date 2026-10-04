@@ -18,7 +18,9 @@ Assets kommen zur Laufzeit aus der eigenen ISO (SLPM-65268), nie ins Repo.
 ## Starten
 
 ```sh
-dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso" [AKINA_DAY|AKINA_NIT|USUI_NIT|…]
+dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso"   # Titelmenü (Kurs, Auto, Einstellungen)
+dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso" [AKINA_DAY|AKINA_NIT|USUI_NIT|…]   # direkt fahren, ohne Menü
+dotnet run --project Touge -- "<iso>" --menu title|course|car|pause|settings --shot out/proof/ui_car.png [--shot-size 3200x1800]   # Menü-Bild
 dotnet run --project Touge -- "<iso>" --shot out/akina.png   # ein Frame als PNG, dann Ende
 dotnet run --project Touge -- "<iso>" --ground out/g.png [--at 300]   # Kollision: Raycast-Timing + Draufsicht mit Wänden
 dotnet run --project Touge -- "<iso>" --shot out/ae86.png --orbit 35   # Kamera ums Auto (0 vorne, 90 links, 180 hinten)
@@ -36,10 +38,18 @@ dotnet run --project Touge -- "<iso>" --sun --shot out/sun.png   # freie Kamera 
 ```
 
 Fahren (Standard): W/S oder ↑/↓ Gas/Bremse, A/D oder ←/→ lenken, Leertaste Handbremse, S im Stand halten = Rückwärts (Automatik), T Automatik/Manuell,
-Shift/Strg hoch-/runterschalten (manuell, auch in R), R zurück auf die Fahrlinie (nächster freier Punkt, Blick in Fahrtrichtung), B Richtung wechseln (bergab ↔ bergauf, setzt auf die Fahrlinie der Gegenrichtung; Minimap/Fortschritt folgen), C Verfolger-/Stoßstangenkamera,
+Shift/Strg hoch-/runterschalten (manuell, auch in R), R (Pad: Y) zurück auf die Fahrlinie (nächster freier Punkt, Blick in Fahrtrichtung), B Richtung wechseln (bergab ↔ bergauf, setzt auf die Fahrlinie der Gegenrichtung; Minimap/Fortschritt folgen), C Verfolger-/Stoßstangenkamera,
 F2 Grafikqualität hoch/niedrig (4× MSAA, Bloom und Sonnenschatten an/aus; `--quality off` startet niedrig).
-HUD: F4 an/aus, N Minimap mitdrehend → nordausgerichtet → ganze Strecke (`--hud north|overview|off` beim Start); Minimap oben rechts
-(Straße aus CRS_ROAD, Start grün, Ziel rot, Auto als Pfeil, Fortschritt in %), Gang und km/h unten rechts.
+Menüs: Ohne Kurs/Test-Flags startet das Spiel im Titelmenü (Strecke im Hintergrund abgeflogen) → Kurswahl (↑/↓ Kurs, ←/→ Tageszeit und
+Richtung) → Autowahl (↑/↓ Auto, ←/→ Lack) → Fahren. Esc (Pad: Start) pausiert: Weiter, Neustart, Kurs/Auto wechseln, Einstellungen
+(Grafik, Musik an/aus + Lautstärke, HUD, Minimap, Kamera), Beenden. Navigation Pfeile/WASD, Enter, Esc bzw. D-Pad/Stick, A, B.
+Einstellungen, letzte Wahl und Bestzeiten liegen als JSON im App-Data-Ordner (macOS `~/Library/Application Support/InitialDRemake/settings.json`,
+Windows `%APPDATA%\InitialDRemake`), nicht im Repo; Starts mit Kurs oder Test-Flags lesen/schreiben sie nicht.
+HUD: F4 an/aus, N Minimap mitdrehend → nordausgerichtet → ganze Strecke (`--hud north|overview|off` beim Start). Oben links Zeit, Bestzeit
+und 4 Sektoren (je 25 % der Strecke, Delta zur Bestzeit grün/rot; Zeit läuft ab der Startlinie, stoppt im Ziel), oben Mitte Drift-Kombo
+(Punkte aus Winkel × Tempo, Multiplikator, Wandkontakt löscht), oben rechts Minimap (Start grün, Ziel kariert) mit Fortschritt,
+unten rechts Drehzahlmesser mit Schaltblitz, km/h, Gang und AT/MT. Falschfahrt-Warnung, Hinweis „R“ zum Zurücksetzen, wenn das Auto feststeckt.
+Schrift: Rajdhani Bold (SIL Open Font License, `Touge/Assets/Fonts/OFL.txt`), zur Laufzeit als Distanzfeld-Atlas.
 Ton: M nächster Eurobeat-Titel, F3 Musik an/aus (Startstück fest je Kurs).
 Auto (nur im Stand, < 3 km/h): 1/2 voriges/nächstes Auto, 3 nächste Lackfarbe. Autos (`--car`, Index in Klammern):
 AE86T (0), AE86L, AE85, MR2, MRS, ALTEZ, GT-4, R32, R34, ER34, S13 (10), S14Q, S14, S15, ONE80, SIL80, EK9, EG6, INTGR, S2000,
@@ -48,7 +58,7 @@ Gangzahl aus dem Spiel, Masse, Leistung, Übersetzungen, Antrieb aus realen Date
 Auto aus der Original-Zuordnung (FORMATS.md, AE86T/AE86L mit der voll getunten `AE86`-Bank).
 Pad: linker Stick lenken, Trigger Gas/Bremse, A Handbremse, Schultertasten schalten.
 F1 Freiflug: WASD fliegen, Q/E runter/hoch, rechte Maustaste oder Pfeiltasten umschauen, Shift schnell,
-Leertaste ~400 m weiter auf der Fahrlinie. F11 Vollbild, Esc Ende.
+Leertaste ~400 m weiter auf der Fahrlinie. F11 Vollbild, Esc Pause-Menü.
 Backend: Metal (macOS) bzw. Vulkan, umschaltbar mit `--backend metal|vulkan|opengl` (oder `PENELOPE_BACKEND`).
 
 | OS | Backend | Einrichtung |
