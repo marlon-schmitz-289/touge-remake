@@ -11,7 +11,9 @@ public static class CourseLoader
     /// <param name="Env">Per road point the renderer texture indices of ENV_TOP/BOTTOM/LEFT/RIGHT (null: course has no env maps).</param>
     /// <param name="Lights">CRS_LIGHT points (empty if none).</param>
     /// <param name="FogColour">The original's fog colour for this course and time of day (CRS_INFO, gamma 0..1), null if missing.</param>
-    public sealed record Course(StaticMesh World, StaticMesh Sky, Vector3[] DrivingLine, Vector3[] Road, int[][]? Env, Vector3[] Lights, Vector3? FogColour)
+    /// <param name="Sun">Centre of the sky's sun sprite (texture <c>sun</c>, only AKINA_DAY's <c>skylod</c> has one; not drawn), null if none.</param>
+    public sealed record Course(StaticMesh World, StaticMesh Sky, Vector3[] DrivingLine, Vector3[] Road, int[][]? Env, Vector3[] Lights, Vector3? FogColour,
+        Vector3? Sun)
     {
         /// <summary>Index of the road point nearest to <paramref name="p"/>.</summary>
         public int NearestRoadPoint(Vector3 p)
@@ -48,7 +50,8 @@ public static class CourseLoader
         var road = CourseRoad.Read(Data($"CRS_ROAD_{course}.BIN") ?? throw new FileNotFoundException($"CRS_ROAD_{course}.BIN"));
         var lights = Data($"CRS_LIGHT_{course}.BIN") is { } l ? CourseRoad.ReadLights(l) : [];
         Vector3? fog = Data($"CRS_INFO_{course}.BIN") is { } cif ? CourseInfo.FogColour(cif, CourseInfo.FogSlot(courseTime[(courseTime.LastIndexOf('_') + 1)..])) : null;
-        return new Course(world, sky, ReadDrivingLine(iso, course), road, LoadEnv(models, Data($"CRS_ENV_{course}.BIN"), courseTime, road.Length, renderer), lights, fog);
+        return new Course(world, sky, ReadDrivingLine(iso, course), road, LoadEnv(models, Data($"CRS_ENV_{course}.BIN"), courseTime, road.Length, renderer), lights, fog,
+            SunSprite(pac, entries));
     }
 
     /// <summary>
@@ -72,6 +75,18 @@ public static class CourseLoader
             .. Enumerable.Range(0, roadCount).Select(i => env[i % env.Length])
                 .Select(e => new[] { Id("TOP", e.Top), Id("BOTTOM", e.Bottom), Id("LEFT", e.Left), Id("RIGHT", e.Right) }),
         ];
+    }
+
+    private static Vector3? SunSprite(byte[] pac, IEnumerable<Pac.Entry> entries)
+    {
+        foreach (var e in entries.Where(e => e.Type == 3 && e.Name.StartsWith("sky")))
+        {
+            var mesh = Mesh.Parse(pac.AsSpan(e.Offset, e.Size));
+            foreach (var m in mesh.Materials)
+                if (m.Texture >= 0 && m.Texture < mesh.Textures.Length && mesh.Textures[m.Texture] == "sun" && m.Triangles.Count > 0)
+                    return m.Triangles.Aggregate(Vector3.Zero, (s, v) => s + v.Position) / m.Triangles.Count;
+        }
+        return null;
     }
 
     /// <summary>CRS_DRV_&lt;course&gt;_I.BIN, valid points only.</summary>

@@ -19,7 +19,7 @@ namespace Kansei.Graphics;
 /// </summary>
 public sealed class WorldRenderer : IDisposable
 {
-    internal const int PushBytes = 672; // scene_push.glsl
+    internal const int PushBytes = 720; // scene_push.glsl
     /// <summary>
     ///     Metres an overlay layer (<see cref="MeshBatch.Layer"/>) is pulled towards the camera per layer (world.vert,
     ///     car.vert): above the gap up to which layers are formed (1 mm, Touge.Formats.ZFight.FightGap) and far above the
@@ -191,6 +191,9 @@ public sealed class WorldRenderer : IDisposable
         MemoryMarshal.Write(push[608..], new Vector4(a.Zenith, Time));
         for (var i = 0; i < 2; i++) MemoryMarshal.Write(push[(624 + i * 16)..], new Vector4(l.TailLightPosition[i], 0));
         MemoryMarshal.Write(push[656..], new Vector4(l.TailLightColor, 0));
+        MemoryMarshal.Write(push[672..], new Vector4(a.SunColor, a.Specular));
+        MemoryMarshal.Write(push[688..], new Vector4(a.ShadeSky, a.ContactShadow));
+        MemoryMarshal.Write(push[704..], new Vector4(a.ShadeGround, 0));
     }
 
     /// <summary>uFogParams + uFogSun (scene_push.glsl, sky.frag).</summary>
@@ -281,7 +284,7 @@ public sealed class WorldRenderer : IDisposable
         pass.SetPipeline(pipeline);
         BindScene(pass);
         Span<byte> push = stackalloc byte[PushBytes];
-        WritePush(push, viewProj, Matrix4x4.Identity, eye, sky, false);
+        WritePush(push, viewProj, Lights.Car, eye, sky, false); // world.frag: uModel = the car (contact shadow)
         pass.SetVertexBuffer(0, mesh.Vertices);
         pass.SetIndexBuffer(mesh.Indices, IndexType.UInt32);
         DrawBatches(pass, mesh, push);

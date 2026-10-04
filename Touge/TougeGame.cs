@@ -79,6 +79,12 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         var sw = System.Diagnostics.Stopwatch.StartNew();
         _course = CourseLoader.Load(iso, courseTime, _renderer);
         SetupFog(_renderer.Atmosphere);
+        if (courseTime.EndsWith("_DAY") && _course.Sun is { } sun) // light from where the original's sun sprite sits, at our elevation
+        {
+            var a = _renderer.Atmosphere;
+            var up = Vector3.Normalize(a.SunDirection).Y;
+            a.SunDirection = Vector3.Normalize(new Vector3(sun.X, 0, sun.Z)) * MathF.Sqrt(1 - up * up) + Vector3.UnitY * up;
+        }
         _drive = new Drive(iso, courseTime);
         Console.WriteLine($"[Touge] {courseTime} geladen in {sw.ElapsedMilliseconds} ms, {_course.World.Batches.Count} Batches, {_drive.Ground.Walls.Length} Wandsegmente");
         _carRenderer = new CarRenderer(_renderer);
@@ -342,6 +348,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         // rear lamps (placed by eye on the AE86 mesh): dim red with the headlights on, bright when braking
         for (var i = 0; i < 2; i++) l.TailLightPosition[i] = Vector3.Transform(new Vector3(i == 0 ? 0.5f : -0.5f, 0.7f, -2.15f), _carBody);
         l.TailLightColor = new Vector3(1f, 0.08f, 0.03f) * ((l.HeadlightColor != Vector3.Zero ? 0.08f : 0) + 0.8f * l.Brake);
+        l.Car = _carBody;
         if (_course.Env is { } env)
         {
             var e = env[_course.NearestRoadPoint(_carBody.Translation)];
@@ -374,7 +381,17 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             FogColor = new(0.22f, 0.23f, 0.25f), FogSun = Vector3.Zero, FogStart = 15, FogEnd = 1300, HeightFogDensity = 0.0025f, LightGlow = 0.0004f,
             Exposure = 1.5f, BloomThreshold = 1.6f, BloomStrength = 0.4f, Tint = new(0.96f, 0.99f, 1.03f), Saturation = 0.9f, Vignette = 0.3f,
         },
-        _ => new Atmosphere(),
+        // clear day: a lower (32°), warm sun against cool sky shade and a warm ground bounce; less of the baked light kept
+        // in shade, more re-lit by the sun (flat road in sun ≈ original brightness, walls facing the sun brighter, the
+        // others and the car's shadow side darker), sun glints, contact shadow under the car, blue aerial haze, filmic contrast
+        _ => new Atmosphere
+        {
+            SunDirection = Vector3.Normalize(new Vector3(0.48f, 0.53f, 0.36f)), SunColor = new(1.1f, 0.97f, 0.8f),
+            ShadeSky = new(0.86f, 0.98f, 1.2f), ShadeGround = new(1.05f, 1f, 0.82f),
+            BakedKeep = 0.38f, BakedSun = 1.15f, SunIntensity = 1.5f, Ambient = new(0.22f, 0.25f, 0.30f),
+            Specular = 0.6f, ContactShadow = 0.6f,
+            FogEnd = 6000, Exposure = 1.35f, Contrast = 1.12f, Saturation = 1.1f,
+        },
     };
 
     /// <summary>

@@ -24,6 +24,22 @@ float shadowAt(vec3 p, vec3 n)
     return 1.0;
 }
 
+// Tint of the shade/ambient for normal n: ground bounce below, sky above (1 = neutral).
+vec3 hemisphere(vec3 n)
+{
+    return mix(pc.uShadeGround.rgb, pc.uShadeSky.rgb, n.y * 0.5 + 0.5);
+}
+
+// Ambient occlusion of the ground under the player car (uModel, car space: +y up, origin on the ground): 1 = open,
+// darkest under the middle of the footprint, fading out ~0.8 m beyond the body and above the wheel tops.
+float contactShadow(vec3 p)
+{
+    if (pc.uShadeSky.w <= 0.0) return 1.0;
+    vec3 q = transpose(mat3(pc.uModel)) * (p - pc.uModel[3].xyz);
+    float off = length(max(abs(q.xz) - vec2(0.45, 1.5), 0.0));
+    return 1.0 - pc.uShadeSky.w * smoothstep(0.85, 0.0, off) * smoothstep(0.8, 0.0, q.y) * step(-0.5, q.y);
+}
+
 // Headlight i's beam (0..1) in direction `dir` (unit, lamp → point): elliptical (wide, flat) around the axis, so the
 // road just in front of the car is not blown out while the beam still reaches far.
 float beam(int i, vec3 dir)

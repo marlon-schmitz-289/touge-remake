@@ -91,7 +91,7 @@ internal sealed class PostProcess : IDisposable
         }
         MemoryMarshal.Write(push, new Vector4(1f / outW, 1f / outH, a.Exposure, bloom ? a.BloomStrength / BloomLevels : 0));
         MemoryMarshal.Write(push[16..], new Vector4(a.Tint, a.Saturation));
-        MemoryMarshal.Write(push[32..], new Vector4(a.Vignette, (float)outW / outH, 0, 0));
+        MemoryMarshal.Write(push[32..], new Vector4(a.Vignette, (float)outW / outH, a.Contrast, 0));
         Pass(encoder, output, LoadOp.DontCare, outW, outH, _tonemapPipeline, _tonemapGroup, push);
     }
 

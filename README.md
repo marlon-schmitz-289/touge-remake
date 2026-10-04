@@ -60,6 +60,11 @@ Env-Maps des Kurses (`ENV_TEX_*`, je Straßenpunkt per `CRS_ENV` gewählt), Sche
 leuchten beim Bremsen (Bloom). Nacht: zwei Scheinwerfer-Kegel (flach/breit) und die `CRS_LIGHT`-Punkte als
 Straßenlaternen (4 nächste), Rückleuchten als kleine rote Punktlichter.
 
+Tag (`_DAY`): Sonne 32° hoch, auf Akina aus der Richtung des Original-Sonnensprites (`skylod`/`sun`, wird nicht
+gezeichnet), warm gegen kühlen Himmels-Schatten und warmes Bodenlicht (`Atmosphere.SunColor/ShadeSky/ShadeGround`), weniger
+gebackenes Licht im Schatten (Keep 0,38, Sonne 1,15), Sonnenglanz auf grauen harten Flächen (`Specular`), Kontaktschatten
+unter dem Auto (`ContactShadow`), Sonnenhof über der Himmelskuppel, Filmkontrast im Tonemapping (`Contrast`), Dunst bis 6000 m.
+
 Regen (`_RIN`, `Atmosphere.Wetness`): bedeckt (keine Sonnenschatten, weiches Umgebungslicht), alles nass-dunkler und
 satter; nur nach oben zeigende graue, deckende Flächen (Asphalt, Beton) glänzen, fleckig per Rauschen – Gras, Laub,
 Fels werden nur dunkler. Glänzende Flächen spiegeln den Himmel unscharf (Wasser-Fresnel, unter Bäumen/an Wänden

@@ -52,7 +52,10 @@ void main()
     {
         // sky mesh: a dome around the camera (x/z follow it, y does not), so its own direction is what it shows
         vec3 dir = normalize(vPos);
-        FragColor = vec4(mix(t.rgb * baked, fogColour(dir), skyFog(dir)), a);
+        // + the sun's halo over the painted dome (warm haze colour; none at night/in rain, where uFogSun is 0)
+        float s = max(dot(dir, pc.uSun.xyz), 0.0);
+        vec3 halo = pc.uFogSun.rgb * (0.5 * pow(s, 16.0) + 3.0 * pow(s, 300.0) + 60.0 * smoothstep(0.99990, 0.99994, s));
+        FragColor = vec4(mix(t.rgb * baked, fogColour(dir), skyFog(dir)) + halo, a);
         return;
     }
     vec3 v = normalize(pc.uEye.xyz - vPos);
@@ -73,7 +76,18 @@ void main()
 
     vec3 spec = vec3(0.0);
     vec3 dyn = dynamicLight(vPos, n, v, 16.0, spec);
-    vec3 c = albedo * (baked * (pc.uAmbient.w + pc.uSun.w * sh * max(dot(n, pc.uSun.xyz), 0.0)) + dyn) + spec * 0.04;
+    float ndl = max(dot(n, pc.uSun.xyz), 0.0);
+    vec3 light = baked * (pc.uAmbient.w * hemisphere(n) + pc.uSun.w * pc.uSunColor.rgb * sh * ndl) * contactShadow(vPos);
+    vec3 c = albedo * (light + dyn) + spec * 0.04;
+    if (pc.uSunColor.w > 0.0)
+    {
+        // dry sun glints on grey hard surfaces (asphalt, guardrails, concrete): broad Blinn-Phong × Schlick, strongest
+        // looking into a low sun, gone in baked shade
+        vec3 h = normalize(pc.uSun.xyz + v);
+        float fresnel = 0.04 + 0.96 * pow(1.0 - max(dot(h, v), 0.0), 5.0);
+        float lobe = (24.0 + 8.0) / 25.13 * pow(max(dot(n, h), 0.0), 24.0);
+        c += pc.uSunColor.rgb * (pc.uSunColor.w * grey * step(0.95, t.a) * sh * ndl * fresnel * lobe * smoothstep(0.05, 0.3, lum));
+    }
     if (gloss > 0.0)
     {
         vec3 nw = n;

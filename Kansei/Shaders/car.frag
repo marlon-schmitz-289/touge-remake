@@ -69,7 +69,7 @@ void main()
     float sh = shadowAt(vPos, n);
     vec3 spec = vec3(0.0);
     vec3 dyn = dynamicLight(vPos, n, v, 256.0, spec);
-    vec3 c = base * (pc.uAmbient.rgb + pc.uSun.w * sh * max(dot(n, l), 0.0) + dyn);
+    vec3 c = base * (pc.uAmbient.rgb * hemisphere(n) + pc.uSun.w * pc.uSunColor.rgb * sh * max(dot(n, l), 0.0) + dyn);
 
     if (glass || paint)
     {
@@ -87,7 +87,7 @@ void main()
         vec3 env = envAt(reflect(-v, n)) * pc.uParams.z;
         vec3 h = normalize(l + v);
         float sun = pc.uSun.w * sh * max(dot(n, l), 0.0) * (1000.0 + 8.0) / 25.13 * pow(max(dot(n, h), 0.0), 1000.0);
-        c = c * (1.0 - fresnel) + fresnel * (env + sun) + f0 * spec;
+        c = c * (1.0 - fresnel) + fresnel * (env + sun * pc.uSunColor.rgb) + f0 * spec;
     }
     if (lamp)
     {

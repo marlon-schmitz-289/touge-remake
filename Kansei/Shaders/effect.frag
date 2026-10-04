@@ -25,7 +25,7 @@ vec3 lit(vec3 albedo, vec3 n, float wrap)
     vec3 spec = vec3(0.0);
     vec3 dyn = dynamicLight(vPos, n, v, 8.0, spec);
     float ndl = clamp((dot(n, pc.uSun.xyz) + wrap) / (1.0 + wrap), 0.0, 1.0);
-    return albedo * (pc.uAmbient.rgb + pc.uSun.w * shadowAt(vPos, n) * ndl + dyn);
+    return albedo * (pc.uAmbient.rgb * hemisphere(n) + pc.uSun.w * pc.uSunColor.rgb * shadowAt(vPos, n) * ndl + dyn);
 }
 
 void main()

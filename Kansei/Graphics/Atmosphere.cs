@@ -19,6 +19,17 @@ public sealed class Atmosphere
     ///     Keep + sun × (N·L of a flat road) ≈ 1 preserves the original brightness in the sun.
     /// </summary>
     public float BakedKeep = 0.45f, BakedSun = 0.7f;
+    /// <summary>Colour of the direct sun (world, car, smoke); 1 = white as before.</summary>
+    public Vector3 SunColor = Vector3.One;
+    /// <summary>
+    ///     Hemisphere tint of the shade (the baked keep share on the world, the ambient on cars): <see cref="ShadeSky"/>
+    ///     on upward normals, <see cref="ShadeGround"/> (bounce) on downward ones. 1 = neutral as before.
+    /// </summary>
+    public Vector3 ShadeSky = Vector3.One, ShadeGround = Vector3.One;
+    /// <summary>Sun glints on grey, hard world surfaces (asphalt, guardrails, concrete); 0 = none.</summary>
+    public float Specular;
+    /// <summary>Darkening of the ground right under the car (0 = none … 1 = black at the centre).</summary>
+    public float ContactShadow;
     /// <summary>Cascaded sun shadows (also needs <see cref="WorldRenderer.HighQuality"/>).</summary>
     public bool Shadows = true;
     /// <summary>Rain: 0 dry … 1 pouring (soaked albedo, glossy ground and puddles, droplets on cars, falling rain).</summary>
@@ -37,4 +48,6 @@ public sealed class Atmosphere
     public float BloomThreshold = 1.4f, BloomStrength = 0.6f;
     public Vector3 Tint = Vector3.One;
     public float Saturation = 1.05f, Vignette = 0.25f;
+    /// <summary>Filmic contrast around mid grey before the tonemap (power in log space, 1 = none).</summary>
+    public float Contrast = 1f;
 }
