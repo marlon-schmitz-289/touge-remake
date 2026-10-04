@@ -79,12 +79,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         var sw = System.Diagnostics.Stopwatch.StartNew();
         _course = CourseLoader.Load(iso, courseTime, _renderer);
         SetupFog(_renderer.Atmosphere);
-        if (courseTime.EndsWith("_DAY") && _course.Sun is { } sun) // light from where the original's sun sprite sits, at our elevation
-        {
-            var a = _renderer.Atmosphere;
-            var up = Vector3.Normalize(a.SunDirection).Y;
-            a.SunDirection = Vector3.Normalize(new Vector3(sun.X, 0, sun.Z)) * MathF.Sqrt(1 - up * up) + Vector3.UnitY * up;
-        }
+        if (!courseTime.EndsWith("_NIT") && _course.SunDirection is { } sun) _renderer.Atmosphere.SunDirection = sun; // the original's key light
         _drive = new Drive(iso, courseTime);
         Console.WriteLine($"[Touge] {courseTime} geladen in {sw.ElapsedMilliseconds} ms, {_course.World.Batches.Count} Batches, {_drive.Ground.Walls.Length} Wandsegmente");
         _carRenderer = new CarRenderer(_renderer);
@@ -357,10 +352,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     }
 
     /// <summary>
-    ///     Sky, fog, light and grading per time of day (_DAY, _NIT, _RIN), tuned by eye. Fog ends follow the original's
-    ///     per-course table read as start/end pairs (CRS_INFO, Akina: day 9000 m, rain 1300 m, night 4000 m; meaning not
-    ///     fully confirmed, see FORMATS.md); its negative starts (haze right at the camera) read as a milky veil here, so
-    ///     the fog starts a few metres out. The tint comes from the course (<see cref="SetupFog"/>).
+    ///     Sky, fog, light and grading per time of day (_DAY, _NIT, _RIN), tuned by eye. Fog start/end and tint are
+    ///     replaced by the course's own (CRS_INFO, <see cref="SetupFog"/>), the day sun direction by its key light.
     ///     Rain is overcast: no sun shadows, soft ambient, flat contrast.
     /// </summary>
     private static Atmosphere AtmosphereFor(string courseTime) => courseTime[(courseTime.LastIndexOf('_') + 1)..] switch
@@ -381,7 +374,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             FogColor = new(0.22f, 0.23f, 0.25f), FogSun = Vector3.Zero, FogStart = 15, FogEnd = 1300, HeightFogDensity = 0.0025f, LightGlow = 0.0004f,
             Exposure = 1.5f, BloomThreshold = 1.6f, BloomStrength = 0.4f, Tint = new(0.96f, 0.99f, 1.03f), Saturation = 0.9f, Vignette = 0.3f,
         },
-        // clear day: a lower (32°), warm sun against cool sky shade and a warm ground bounce; less of the baked light kept
+        // clear day: a warm sun (direction from the course, this one is the fallback) against cool sky shade and a warm
+        // ground bounce; less of the baked light kept
         // in shade, more re-lit by the sun (flat road in sun ≈ original brightness, walls facing the sun brighter, the
         // others and the car's shadow side darker), sun glints, contact shadow under the car, blue aerial haze, filmic contrast
         _ => new Atmosphere
@@ -395,8 +389,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     };
 
     /// <summary>
-    ///     Course-dependent fog: the original's fog tint (day/rain; its night fog is black, ours stays dark blue) at our
-    ///     brightness — its values are for unlit PS2 output (USUI0 rain is as light as day, which turns puddles white) — and the
+    ///     Course-dependent fog: the original's linear start/end (CRS_INFO; negative starts = haze at the camera clamped
+    ///     to 0), its tint (day/rain; its night fog is black, ours stays dark blue) at our brightness — its values are for unlit PS2 output (USUI0 rain is as light as day, which turns puddles white) — and the
     ///     height fog over the driving line's altitude range (densest at its lowest point, ×1/e every third of the range).
     /// </summary>
     private void SetupFog(Atmosphere a)
@@ -406,6 +400,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             var tint = new Vector3(MathF.Pow(c.X, 2.2f), MathF.Pow(c.Y, 2.2f), MathF.Pow(c.Z, 2.2f));
             a.FogColor = tint * (Luminance(a.FogColor) / Luminance(tint));
         }
+        // the PS2 blends fog into gamma-space output; in linear light its haze at the camera (negative start) is a milky veil
+        if (_course.Fog is { } f) (a.FogStart, a.FogEnd) = (MathF.Max(f.Start, 0), f.End);
         float lo = float.MaxValue, hi = float.MinValue;
         foreach (var p in _course.DrivingLine) (lo, hi) = (MathF.Min(lo, p.Y), MathF.Max(hi, p.Y));
         a.HeightFogBase = lo;

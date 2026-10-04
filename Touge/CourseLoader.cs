@@ -11,9 +11,10 @@ public static class CourseLoader
     /// <param name="Env">Per road point the renderer texture indices of ENV_TOP/BOTTOM/LEFT/RIGHT (null: course has no env maps).</param>
     /// <param name="Lights">CRS_LIGHT points (empty if none).</param>
     /// <param name="FogColour">The original's fog colour for this course and time of day (CRS_INFO, gamma 0..1), null if missing.</param>
-    /// <param name="Sun">Centre of the sky's sun sprite (texture <c>sun</c>, only AKINA_DAY's <c>skylod</c> has one; not drawn), null if none.</param>
+    /// <param name="Fog">The original's linear fog start/end in metres for this time of day (CRS_INFO), null if missing.</param>
+    /// <param name="SunDirection">Towards the original's key light (CRS_INFO light 0, its car lighting), null if missing.</param>
     public sealed record Course(StaticMesh World, StaticMesh Sky, Vector3[] DrivingLine, Vector3[] Road, int[][]? Env, Vector3[] Lights, Vector3? FogColour,
-        Vector3? Sun)
+        (float Start, float End)? Fog, Vector3? SunDirection)
     {
         /// <summary>Index of the road point nearest to <paramref name="p"/>.</summary>
         public int NearestRoadPoint(Vector3 p)
@@ -40,18 +41,50 @@ public static class CourseLoader
             textures[e.Name] = renderer.AddTexture(w, h, rgba, e.Name);
         }
 
-        // tree* are local-space templates (placement data not decoded yet), lod/shd are not drawn
-        var world = Build(renderer.Device, Meshes(pac, false), textures, white, true);
-        var sky = Build(renderer.Device, Meshes(pac, true), textures, white, false); // no depth: paint order stays file order
-
         var course = courseTime[..courseTime.LastIndexOf('_')];
         var data = Afs.FromBytes(iso.ReadFile("CDVD/DATA/COURSE/CRS_DATA.AFS"), iso.ReadFile("CDVD/DATA/COURSE/CRS_DATA.TBL"));
         byte[]? Data(string name) => data.Find(name) is { } e ? data.Read(e) : null;
         var road = CourseRoad.Read(Data($"CRS_ROAD_{course}.BIN") ?? throw new FileNotFoundException($"CRS_ROAD_{course}.BIN"));
+
+        // lod/shd are not drawn; the tree templates are placed from TREE_* (baked into the world)
+        var world = Build(renderer.Device, [.. Meshes(pac, false), .. Trees(pac, course, Data, road)], textures, white, true);
+        var sky = Build(renderer.Device, Meshes(pac, true), textures, white, false); // no depth: paint order stays file order
+
         var lights = Data($"CRS_LIGHT_{course}.BIN") is { } l ? CourseRoad.ReadLights(l) : [];
-        Vector3? fog = Data($"CRS_INFO_{course}.BIN") is { } cif ? CourseInfo.FogColour(cif, CourseInfo.FogSlot(courseTime[(courseTime.LastIndexOf('_') + 1)..])) : null;
-        return new Course(world, sky, ReadDrivingLine(iso, course), road, LoadEnv(models, Data($"CRS_ENV_{course}.BIN"), courseTime, road.Length, renderer), lights, fog,
-            SunSprite(pac, entries));
+        var slot = CourseInfo.FogSlot(courseTime[(courseTime.LastIndexOf('_') + 1)..]);
+        var cif = Data($"CRS_INFO_{course}.BIN");
+        return new Course(world, sky, ReadDrivingLine(iso, course), road, LoadEnv(models, Data($"CRS_ENV_{course}.BIN"), courseTime, road.Length, renderer), lights,
+            cif == null ? null : CourseInfo.FogColour(cif, slot), cif == null ? null : CourseInfo.FogRange(cif, slot),
+            cif == null ? null : -CourseInfo.KeyLight(cif, slot).Direction);
+    }
+
+    /// <summary>
+    ///     TREE_M/TREE_L_&lt;course&gt;_L/_R → the templates <c>treeMid|Lrg_L|R%02d</c> placed in world space
+    ///     (<see cref="CourseTrees.Placement"/>, game 0x164F40), all copies of one template merged into one mesh (few batches).
+    ///     <c>treelod*</c> is never used by that loader. Duplicate PAC names (Iroha): the first wins.
+    /// </summary>
+    private static IEnumerable<(string Name, Mesh Mesh)> Trees(byte[] pac, string course, Func<string, byte[]?> data, Vector3[] road)
+    {
+        var templates = new Dictionary<string, Mesh>();
+        foreach (var e in Pac.Entries(pac).Where(e => e.Type == 3 && e.Name.StartsWith("tree")))
+            if (!templates.ContainsKey(e.Name)) templates[e.Name] = Mesh.Parse(pac.AsSpan(e.Offset, e.Size));
+        var placed = new Dictionary<string, Mesh>();
+        foreach (var (file, size) in new[] { ("M", "Mid"), ("L", "Lrg") })
+            foreach (var side in new[] { "L", "R" })
+            {
+                if (data($"TREE_{file}_{course}_{side}.BIN") is not { } bin) continue;
+                foreach (var t in CourseTrees.Read(bin))
+                {
+                    var name = $"tree{size}_{side}{t.Template:D2}";
+                    if (!templates.TryGetValue(name, out var mesh)) continue;
+                    if (!placed.TryGetValue(name, out var into))
+                        placed[name] = into = new Mesh { Textures = mesh.Textures, Nodes = [], Materials = [.. mesh.Materials.Select(x => x with { Triangles = [] })] };
+                    var m = CourseTrees.Placement(t, road);
+                    for (var k = 0; k < mesh.Materials.Length; k++)
+                        into.Materials[k].Triangles.AddRange(mesh.Materials[k].Triangles.Select(v => v with { Position = Vector3.Transform(v.Position, m) }));
+                }
+            }
+        return placed.Select(p => (p.Key, p.Value));
     }
 
     /// <summary>
@@ -75,18 +108,6 @@ public static class CourseLoader
             .. Enumerable.Range(0, roadCount).Select(i => env[i % env.Length])
                 .Select(e => new[] { Id("TOP", e.Top), Id("BOTTOM", e.Bottom), Id("LEFT", e.Left), Id("RIGHT", e.Right) }),
         ];
-    }
-
-    private static Vector3? SunSprite(byte[] pac, IEnumerable<Pac.Entry> entries)
-    {
-        foreach (var e in entries.Where(e => e.Type == 3 && e.Name.StartsWith("sky")))
-        {
-            var mesh = Mesh.Parse(pac.AsSpan(e.Offset, e.Size));
-            foreach (var m in mesh.Materials)
-                if (m.Texture >= 0 && m.Texture < mesh.Textures.Length && mesh.Textures[m.Texture] == "sun" && m.Triangles.Count > 0)
-                    return m.Triangles.Aggregate(Vector3.Zero, (s, v) => s + v.Position) / m.Triangles.Count;
-        }
-        return null;
     }
 
     /// <summary>CRS_DRV_&lt;course&gt;_I.BIN, valid points only.</summary>
