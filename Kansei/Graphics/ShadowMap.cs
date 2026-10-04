@@ -8,8 +8,9 @@ namespace Kansei.Graphics;
 ///     Sun shadows: <see cref="Cascades"/> cascades around the camera in one depth atlas (tiles side by side),
 ///     each an orthographic box around the bounding sphere of its slice of the view frustum. The sphere radius only
 ///     depends on the slice and the field of view (rounded up to 2 m), and the box centre snaps to whole texels in
-///     light space, so moving the camera does not make shadow edges crawl. Casters are drawn without culling
-///     (two-sided foliage, alpha-tested) with slope-scaled depth bias; receivers add a normal offset of
+///     light space, so moving the camera does not make shadow edges crawl. Casters outside a cascade's box are skipped
+///     (<see cref="StaticMesh.Bounds"/>), the rest drawn without face culling (two-sided foliage, alpha-tested) with
+///     slope-scaled depth bias; receivers add a normal offset of
 ///     ~1.5 texels (<see cref="TexelWorld"/>) and filter with 3×3 bilinear compare taps (lighting.glsl).
 /// </summary>
 public sealed class ShadowMap : IDisposable
@@ -93,36 +94,44 @@ public sealed class ShadowMap : IDisposable
             -c.Z - casterReach, -c.Z + radius);
     }
 
-    /// <summary>Renders the casters into every cascade tile; <paramref name="cars"/> use <see cref="CarVertex"/>.</summary>
-    public void Render(ICommandEncoder encoder, Func<int, BindGroupHandle> textureGroup, StaticMesh world, ReadOnlySpan<(StaticMesh Mesh, Matrix4x4 Model)> cars)
+    /// <summary>Renders the casters into every cascade tile; <paramref name="cars"/> use <see cref="CarVertex"/>. Returns the number of draws.</summary>
+    public int Render(ICommandEncoder encoder, Func<int, BindGroupHandle> textureGroup, StaticMesh world, ReadOnlySpan<(StaticMesh Mesh, Matrix4x4 Model)> cars)
     {
         using var pass = encoder.BeginRenderPass(new RenderPassDesc([],
             new DepthStencilAttachment(View, LoadOp.Clear, StoreOp.Store, 1f, LoadOp.Clear, StoreOp.DontCare, 0, false, false),
             DebugName: "shadows"));
         Span<byte> push = stackalloc byte[80];
+        var draws = 0;
         for (var c = 0; c < Cascades; c++)
         {
             pass.SetViewport(c * TileSize, 0, TileSize, TileSize);
             pass.SetScissor(c * TileSize, 0, TileSize, TileSize);
             pass.SetPipeline(_worldPipeline);
-            Draw(pass, world, ViewProj[c], 0.3f, textureGroup, push);
+            draws += Draw(pass, world, ViewProj[c], 0.3f, textureGroup, push);
             pass.SetPipeline(_carPipeline);
-            foreach (var (mesh, model) in cars) Draw(pass, mesh, model * ViewProj[c], 0.5f, textureGroup, push);
+            foreach (var (mesh, model) in cars) draws += Draw(pass, mesh, model * ViewProj[c], 0.5f, textureGroup, push);
         }
+        return draws;
     }
 
-    private static void Draw(IRenderPassEncoder pass, StaticMesh mesh, in Matrix4x4 mvp, float cutoff, Func<int, BindGroupHandle> textureGroup, Span<byte> push)
+    private static int Draw(IRenderPassEncoder pass, StaticMesh mesh, in Matrix4x4 mvp, float cutoff, Func<int, BindGroupHandle> textureGroup, Span<byte> push)
     {
         MemoryMarshal.Write(push, in mvp);
         MemoryMarshal.Write(push[64..], new Vector4(cutoff, 0, 0, 0));
         pass.SetPushConstants(ShaderStage.Vertex | ShaderStage.Fragment, 0, push);
         pass.SetVertexBuffer(0, mesh.Vertices);
         pass.SetIndexBuffer(mesh.Indices, IndexType.UInt32);
-        foreach (var b in mesh.Batches)
+        int draws = 0, texture = -1;
+        var bounds = mesh.Bounds;
+        for (var i = 0; i < mesh.Batches.Count; i++)
         {
-            pass.SetBindGroup(0, textureGroup(b.Texture));
+            if (bounds != null && !Frustum.Visible(mvp, bounds[i].Min, bounds[i].Max)) continue; // outside this cascade's box
+            var b = mesh.Batches[i];
+            if (b.Texture != texture) pass.SetBindGroup(0, textureGroup(texture = b.Texture));
             pass.DrawIndexed(b.IndexCount, 1, b.FirstIndex);
+            draws++;
         }
+        return draws;
     }
 
     public void Dispose()

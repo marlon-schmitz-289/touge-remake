@@ -58,11 +58,11 @@ internal static class Program
             _ => throw new ArgumentException($"Unknown shader stage extension '.{ext}' (expected .vert/.frag/.comp)"),
         };
 
-        // `#include "file"` (relative to the source) is pasted in textually; list included files as
-        // <PenelopeShaderInclude> so edits to them trigger a re-bake.
-        var source = System.Text.RegularExpressions.Regex.Replace(File.ReadAllText(sourcePath), "^#include \"([^\"]+)\"",
-            m => File.ReadAllText(Path.Combine(Path.GetDirectoryName(sourcePath)!, m.Groups[1].Value)),
-            System.Text.RegularExpressions.RegexOptions.Multiline);
+        // `#include "file"` (relative to the source, also inside included files) is pasted in textually; list included
+        // files as <PenelopeShaderInclude> so edits to them trigger a re-bake.
+        static string Expand(string text, string dir) => System.Text.RegularExpressions.Regex.Replace(text, "^#include \"([^\"]+)\"",
+            m => Expand(File.ReadAllText(Path.Combine(dir, m.Groups[1].Value)), dir), System.Text.RegularExpressions.RegexOptions.Multiline);
+        var source = Expand(File.ReadAllText(sourcePath), Path.GetDirectoryName(sourcePath)!);
         var spirv = CompileToSpirv(source, stage, sourcePath);
 
         // Bake names mirror the existing glslc convention: "<base>.<ext>.spv" so existing

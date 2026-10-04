@@ -10,8 +10,11 @@ using Touge;
 // --audio-capture <wav> <s> (mit --autodrive): Spielton offline (OpenAL-Loopback) als WAV + Auswertung, ohne Fenster; --no-music ohne BGM.
 // --audio-capture <wav> 0 --sweep: nur Motor, Drehzahlrampe Leerlauf → Begrenzer (Vollgas, 3. Gang) und zurück (Schub), WAV + CSV je Tick.
 // --ground <png>: Kollision des Kurses laden, Raycasts timen, Draufsicht mit Wandsegmenten schreiben (ohne Fenster).
-// --bench <s>: Pilot fährt <s> Sekunden in Echtzeit mit Verfolgerkamera und Ton, danach Frametimes (avg/p99/max) und Ende.
+// --bench <s>: Pilot fährt höchstens <s> Sekunden (bzw. bis ins Ziel) in Echtzeit mit Verfolgerkamera und Ton; pro Sekunde Position, fps, CPU-ms,
+//   Draws, Effekte, GC, Speicher, Wärmezustand; am Ende Frametimes (avg/p99/max, > 18/25 ms) und je 500 m. Mit --flow: erst durch die Menüs (Kurs/Zeit
+//   wie angegeben, 24 Autovorschauen), dann das Rennen.
 // --quality off: ohne MSAA/Bloom starten (F2 schaltet um).
+// --offscreen (Metal): Bild nur in ein eigenes Ziel statt ins Fenster, ohne Display-Takt – mit --bench zeigt die Frametime dann die echten GPU-Kosten.
 // --flicker <prefix>: Z-Fighting im Bild messen (8 Punkte der Fahrlinie + 8 Winkel ums Auto, je 3× mit verschobener Rundung), Ausschnitte als <prefix>_course/_car.png.
 // --zfight [filter]: Z-Fighting-Kandidaten (fast koplanar, überlappend) aller Kurse und Autos auflisten (ohne Fenster).
 // --hud north|overview|off: Minimap nordausgerichtet / ganze Strecke / HUD aus (Standard: mitdrehend; N und F4 schalten um).
@@ -106,7 +109,7 @@ if (Arg("--ground") is { } groundPng)
 var plain = args.Where((a, i) => a != iso && a != "--backend" && (i == 0 || args[i - 1] != "--backend")).All(a => a == "--menu" || a == Arg("--menu"));
 KanseiApp.Run(new TougeGame(iso, course.ToUpperInvariant(), shot, at, orbit, autodrive, bench, Arg("--quality") != "off", args.Contains("--drift"), Arg("--flicker"))
     { HudMode = Arg("--hud"), Reverse = args.Contains("--reverse"), Car = car, Paint = paint, Livery = livery, ContactSheet = Arg("--cars"), LookAtSun = args.Contains("--sun"),
-      UseMenus = plain, StartMenu = Arg("--menu"), Flow = Arg("--flow"),
+      UseMenus = plain, StartMenu = Arg("--menu"), Flow = Arg("--flow"), Offscreen = args.Contains("--offscreen"),
       ShotSize = Arg("--shot-size") is { } size && size.Split('x') is [var sw, var sh] ? (int.Parse(sw), int.Parse(sh)) : (1280, 720) }, new WindowSettings
 {
     Title = $"Touge – {course}",

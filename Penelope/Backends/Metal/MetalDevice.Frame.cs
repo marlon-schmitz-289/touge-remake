@@ -6,6 +6,8 @@ namespace Penelope.Backends.Metal;
 [SupportedOSPlatform("macos")]
 public sealed unsafe partial class MetalDevice
 {
+    public bool Offscreen { get; set; }
+
     public bool BeginFrame()
     {
         if (_frameActive) throw new InvalidOperationException("Frame already active.");
@@ -29,10 +31,13 @@ public sealed unsafe partial class MetalDevice
             { t.Width = dw; t.Height = dh; }
         }
 
-        _currentDrawable = Layer.NextDrawable;
-        if (_currentDrawable.NativePtr == 0)
-            // Layer wasn't ready (window minimised, drawable timeout). Skip frame.
-            return false;
+        if (!Offscreen)
+        {
+            _currentDrawable = Layer.NextDrawable;
+            if (_currentDrawable.NativePtr == 0)
+                // Layer wasn't ready (window minimised, drawable timeout). Skip frame.
+                return false;
+        }
 
         // Patch the swapchain proxy texture so any pass that uses CurrentSwapchainView this
         // frame sees the right MTLTexture. The drawable's texture lifecycle is owned by

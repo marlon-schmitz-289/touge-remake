@@ -33,7 +33,11 @@ public sealed class WorldRenderer : IDisposable
     internal static readonly TextureFormat ShadowFormat = TextureFormat.Depth32Float;
 
     private readonly IPenelopeDevice _device;
-    private readonly ShaderHandle _shader, _skyShader;
+    private readonly ShaderHandle _shader, _opaqueShader, _skyShader, _glowShader;
+    private readonly RenderPipelineHandle _glow;
+    private BindGroupHandle _depthGroup;
+    private Matrix4x4 _viewProj;
+    private Vector3 _eye;
     private readonly BindGroupLayoutHandle _layout, _sceneLayout;
     private readonly ShadowMap _shadow;
     private readonly Dictionary<(int, int, int, int), BindGroupHandle> _sceneGroups = [];
@@ -42,7 +46,8 @@ public sealed class WorldRenderer : IDisposable
     private readonly Vector4[] _points = new Vector4[4];
     private readonly Func<int, BindGroupHandle> _textureGroup;
     // index 0: 1 sample, 1: 4× MSAA
-    private readonly RenderPipelineHandle[] _pipeline = new RenderPipelineHandle[2], _skyMesh = new RenderPipelineHandle[2], _sky = new RenderPipelineHandle[2];
+    private readonly RenderPipelineHandle[] _pipeline = new RenderPipelineHandle[2], _opaque = new RenderPipelineHandle[2], _skyMesh = new RenderPipelineHandle[2],
+        _sky = new RenderPipelineHandle[2];
     private readonly SamplerHandle _sampler;
     private readonly PostProcess _post;
     private readonly List<(TextureHandle Tex, TextureViewHandle View, BindGroupHandle Group)> _textures = [];
@@ -64,12 +69,16 @@ public sealed class WorldRenderer : IDisposable
     public bool HighQuality = true;
     /// <summary>Seconds, animates rain ripples.</summary>
     public float Time;
+    /// <summary>Indexed draws issued so far (scene + shadow passes); a counter for benches, the caller resets it.</summary>
+    public int DrawCalls;
 
     public WorldRenderer(IPenelopeDevice device)
     {
         _device = device;
         _shader = device.CreateShader(ShaderLoader.LoadGraphics(typeof(WorldRenderer).Assembly, "world", "world", "world"));
+        _opaqueShader = device.CreateShader(ShaderLoader.LoadGraphics(typeof(WorldRenderer).Assembly, "world", "world_opaque", "world-opaque"));
         _skyShader = device.CreateShader(ShaderLoader.LoadGraphics(typeof(WorldRenderer).Assembly, "fullscreen", "sky", "sky"));
+        _glowShader = device.CreateShader(ShaderLoader.LoadGraphics(typeof(WorldRenderer).Assembly, "fullscreen", "glow", "glow"));
         _layout = device.GetBindGroupLayout(new BindGroupLayoutDesc(
             [new BindGroupLayoutEntry(0, BindingType.CombinedImageSampler, ShaderStage.Fragment)], "world-tex"));
         _sampler = device.GetSampler(SamplerDesc.LinearWrap with { MaxAnisotropy = 8 });
@@ -78,6 +87,7 @@ public sealed class WorldRenderer : IDisposable
             [.. Enumerable.Range(1, 5).Select(b => new BindGroupLayoutEntry(b, BindingType.CombinedImageSampler, ShaderStage.Fragment)),
                 PostProcess.UniformEntry(6, ShaderStage.Vertex | ShaderStage.Fragment)], "scene"));
         _shadow = new ShadowMap(device, _layout);
+        _glow = PostProcess.Fullscreen(device, _glowShader, PostProcess.HdrFormat, BlendState.Additive with { SrcColor = BlendFactor.One }, [_layout, _sceneLayout], 0);
         _textureGroup = TextureGroup;
         var grey = AddTexture(1, 1, [118, 118, 118, 255], "env-grey"); // 18 % linear until a course sets its maps
         SetEnvironment(grey, grey, grey, grey);
@@ -85,6 +95,7 @@ public sealed class WorldRenderer : IDisposable
         {
             var ms = MultisampleState.Disabled with { SampleCount = Samples(q), AlphaToCoverageEnabled = q == 1 };
             _pipeline[q] = ScenePipeline(_shader, WorldVertex.Layout, ms, true, "world");
+            _opaque[q] = ScenePipeline(_opaqueShader, WorldVertex.Layout, ms with { AlphaToCoverageEnabled = false }, true, "world-opaque");
             _skyMesh[q] = ScenePipeline(_shader, WorldVertex.Layout, ms with { AlphaToCoverageEnabled = false }, false, "sky-mesh");
             _sky[q] = PostProcess.Fullscreen(device, _skyShader, PostProcess.HdrFormat, BlendState.Opaque, [_layout, _sceneLayout], 0, Samples(q), DepthFormat, true);
         }
@@ -132,6 +143,25 @@ public sealed class WorldRenderer : IDisposable
         return _textures.Count - 1;
     }
 
+    /// <summary>Number of textures added so far: the index the next <see cref="AddTexture"/> returns.</summary>
+    public int TextureCount => _textures.Count;
+
+    /// <summary>
+    ///     Frees the textures from index <paramref name="first"/> on (the last ones added, e.g. a car's being replaced).
+    ///     The GPU must be done with them (WaitIdle) and none may be an env map of <see cref="SetEnvironment"/>.
+    /// </summary>
+    public void ReleaseTextures(int first)
+    {
+        for (var i = _textures.Count - 1; i >= first; i--)
+        {
+            var (tex, view, group) = _textures[i];
+            _device.DestroyBindGroup(group);
+            _device.DestroyTextureView(view);
+            _device.DestroyTexture(tex);
+        }
+        _textures.RemoveRange(first, _textures.Count - first);
+    }
+
     /// <summary>Env maps (texture indices) the cars reflect from now on: ENV_TOP/BOTTOM/LEFT/RIGHT of the current road point.</summary>
     public void SetEnvironment(int top, int bottom, int left, int right)
     {
@@ -161,7 +191,7 @@ public sealed class WorldRenderer : IDisposable
         _shadowsThisFrame = Atmosphere.Shadows && HighQuality;
         if (!_shadowsThisFrame) return;
         _shadow.Update(eye, forward, fovY, aspect, Vector3.Normalize(Atmosphere.SunDirection), _device.Backend == BackendKind.Vulkan);
-        _shadow.Render(encoder, _textureGroup, world, cars);
+        DrawCalls += _shadow.Render(encoder, _textureGroup, world, cars);
     }
 
     /// <summary>
@@ -250,6 +280,7 @@ public sealed class WorldRenderer : IDisposable
         pass.SetScissor(0, 0, _w, _h);
 
         Matrix4x4.Invert(view, out var camera);
+        (_eye, _viewProj) = (camera.Translation, view * proj);
         PickStreetLights(camera.Translation);
         var a = Atmosphere;
         (_viewRotProj, _proj) = (view with { M41 = 0, M42 = 0, M43 = 0 } * proj, proj);
@@ -274,8 +305,33 @@ public sealed class WorldRenderer : IDisposable
     public void EndScene(ICommandEncoder encoder, IRenderPassEncoder pass, FrameCapture? target = null)
     {
         pass.Dispose();
+        DrawGlow(encoder);
         _post.Run(encoder, Atmosphere, HighQuality, target?.View ?? _device.CurrentSwapchainView, _w, _h, _viewRotProj, _proj,
             _device.Backend == BackendKind.Metal ? -1 : 1);
+    }
+
+    /// <summary>
+    ///     Adds the glow of the dynamic lights in the fog (glow.frag) onto the resolved scene, once per pixel along the
+    ///     ray to the resolved depth; nothing when <see cref="Atmosphere.LightGlow"/> is 0 (day).
+    /// </summary>
+    private void DrawGlow(ICommandEncoder encoder)
+    {
+        if (Atmosphere.LightGlow <= 0) return;
+        if (_depthGroup.IsNull)
+            _depthGroup = _device.CreateBindGroup(new BindGroupDesc(_layout,
+                [BindGroupEntry.CombinedImageSampler(0, _post.DepthView, _device.GetSampler(SamplerDesc.Nearest))], "glow-depth"));
+        using var pass = encoder.BeginRenderPass(new RenderPassDesc([new ColorAttachment(_post.SceneView, LoadOp.Load, StoreOp.Store, ClearColor.Black)],
+            DebugName: "glow"));
+        pass.SetViewport(0, 0, _w, _h);
+        pass.SetScissor(0, 0, _w, _h);
+        Matrix4x4.Invert(_viewProj, out var inv);
+        Span<byte> push = stackalloc byte[PushBytes];
+        var screen = new Matrix4x4 { M11 = 1f / _w, M12 = 1f / _h, M13 = _device.Backend == BackendKind.Metal ? -1 : 1 };
+        WritePush(push, inv, screen, _eye, false, false);
+        pass.SetPipeline(_glow);
+        pass.SetBindGroup(0, _depthGroup);
+        SetScene(pass, push);
+        pass.Draw(3);
     }
 
     /// <summary>
@@ -295,31 +351,60 @@ public sealed class WorldRenderer : IDisposable
         WritePush(push, viewProj, Lights.Car, eye, sky, false); // world.frag: uModel = the car (contact shadow)
         pass.SetVertexBuffer(0, mesh.Vertices);
         pass.SetIndexBuffer(mesh.Indices, IndexType.UInt32);
-        DrawBatches(pass, mesh, push);
+        DrawBatches(pass, mesh, push, viewProj, eye, sky ? default : _opaque[Quality], pipeline);
     }
 
     /// <summary>
     ///     Draws <paramref name="mesh"/>'s batches with <paramref name="push"/> (filled by <see cref="WritePush"/>), resent
-    ///     with the layer offset whenever the layer changes (batches are sorted by layer).
+    ///     with the layer offset whenever the layer changes. With <see cref="StaticMesh.Bounds"/> (the course): batches
+    ///     outside <paramref name="mvp"/> are skipped, the rest drawn front to back from <paramref name="eye"/> within each
+    ///     layer, so the depth test rejects hidden fragments before the alpha-tested shading (no hidden-surface removal).
+    ///     With an <paramref name="opaque"/> pipeline, <see cref="MeshBatch.Opaque"/> batches come first with it, then the
+    ///     rest with <paramref name="cutout"/> (layers are depth-offset, so their order across the two groups does not matter).
     /// </summary>
-    internal void DrawBatches(IRenderPassEncoder pass, StaticMesh mesh, Span<byte> push)
+    internal void DrawBatches(IRenderPassEncoder pass, StaticMesh mesh, Span<byte> push, in Matrix4x4 mvp, Vector3 eye,
+        RenderPipelineHandle opaque = default, RenderPipelineHandle cutout = default)
     {
-        var layer = -1;
-        foreach (var b in mesh.Batches)
+        var n = 0;
+        var bounds = mesh.Bounds;
+        if (_order.Length < mesh.Batches.Count) (_order, _keys) = (new int[mesh.Batches.Count], new float[mesh.Batches.Count]);
+        for (var i = 0; i < mesh.Batches.Count; i++)
         {
+            if (bounds != null && !Frustum.Visible(mvp, bounds[i].Min, bounds[i].Max)) continue;
+            // opaque group first, then by layer (batches are sorted by layer), then by the distance to the box (0 inside)
+            _keys[n] = bounds == null ? i
+                : (mesh.Batches[i].Opaque || opaque.IsNull ? 0 : 1e7f) + mesh.Batches[i].Layer * 1e6f + Vector3.Distance(eye, Vector3.Clamp(eye, bounds[i].Min, bounds[i].Max));
+            _order[n++] = i;
+        }
+        if (bounds != null) Array.Sort(_keys, _order, 0, n);
+        int layer = -1, texture = -1, group = -1;
+        for (var k = 0; k < n; k++)
+        {
+            var b = mesh.Batches[_order[k]];
+            if (!opaque.IsNull && (b.Opaque ? 0 : 1) != group)
+            {
+                group = b.Opaque ? 0 : 1;
+                pass.SetPipeline(b.Opaque ? opaque : cutout);
+                layer = texture = -1; // rebind after the pipeline change
+            }
             if (b.Layer != layer)
             {
                 layer = b.Layer;
                 MemoryMarshal.Write(push[LayerPush..], layer * LayerOffset);
                 SetScene(pass, push);
             }
-            pass.SetBindGroup(0, _textures[b.Texture].Group);
+            if (b.Texture != texture) pass.SetBindGroup(0, _textures[texture = b.Texture].Group);
             pass.DrawIndexed(b.IndexCount, 1, b.FirstIndex);
+            DrawCalls++;
         }
     }
 
+    private int[] _order = [];
+    private float[] _keys = [];
+
     private void EnsureTargets(int w, int h, int samples)
     {
+        if (w != _w || h != _h) ReleaseDepthGroup();
         _post.Resize(w, h);
         if (w == _w && h == _h && samples == _samples) return;
         ReleaseTargets();
@@ -333,6 +418,12 @@ public sealed class WorldRenderer : IDisposable
             _msaaView = _device.DefaultTextureView(_msaa);
         }
         (_w, _h, _samples) = (w, h, samples);
+    }
+
+    private void ReleaseDepthGroup()
+    {
+        if (!_depthGroup.IsNull) _device.DestroyBindGroup(_depthGroup);
+        _depthGroup = default;
     }
 
     private void ReleaseTargets()
@@ -356,10 +447,13 @@ public sealed class WorldRenderer : IDisposable
             _device.DestroyTexture(tex);
         }
         ReleaseTargets();
+        ReleaseDepthGroup();
         _shadow.Dispose();
         _post.Dispose();
-        foreach (var p in _pipeline.Concat(_skyMesh).Concat(_sky)) _device.DestroyRenderPipeline(p);
+        foreach (var p in _pipeline.Concat(_opaque).Concat(_skyMesh).Concat(_sky).Append(_glow)) _device.DestroyRenderPipeline(p);
         _device.DestroyShader(_shader);
+        _device.DestroyShader(_opaqueShader);
+        _device.DestroyShader(_glowShader);
         _device.DestroyShader(_skyShader);
     }
 }

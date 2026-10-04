@@ -42,14 +42,19 @@ float contactShadow(vec3 p)
 
 // Headlight i's beam (0..1) in direction `dir` (unit, lamp → point): elliptical (wide, flat) around the axis, so the
 // road just in front of the car is not blown out while the beam still reaches far.
-float beam(int i, vec3 dir)
+// beamFrame gives the beam's axis and its sideways/upward directions pre-divided by the half spreads (once per lamp).
+mat3 beamFrame(int i)
 {
     vec3 axis = pc.uSpotDir[i].xyz;
     vec3 right = normalize(cross(axis, vec3(0.0, 1.0, 0.0)));
-    vec3 up = cross(right, axis);
-    float ahead = dot(dir, axis);
+    return mat3(axis, right / pc.uSpotPos[i].w, cross(right, axis) / pc.uSpotDir[i].w);
+}
+
+float beam(mat3 frame, vec3 dir)
+{
+    float ahead = dot(dir, frame[0]);
     if (ahead <= 0.0) return 0.0;
-    vec2 off = vec2(dot(dir, right) / pc.uSpotPos[i].w, dot(dir, up) / pc.uSpotDir[i].w) / ahead;
+    vec2 off = vec2(dot(dir, frame[1]), dot(dir, frame[2])) / ahead;
     return smoothstep(1.6, 0.25, length(off));
 }
 
@@ -79,7 +84,7 @@ vec3 lightIn(int i, vec3 p, out vec3 l)
     l = d * inversesqrt(max(d2, 1e-4));
     float w = 1.0 - (d2 * d2) / (range * range * range * range);
     float att = w * w / (d2 + 1.0);
-    if (spot) att *= beam(i, -l);
+    if (spot) att *= beam(beamFrame(i), -l);
     return colour * att;
 }
 
@@ -92,6 +97,7 @@ vec3 dynamicLight(vec3 p, vec3 n, vec3 v, float shininess, inout vec3 spec)
     {
         vec3 l;
         vec3 e = lightIn(i, p, l);
+        if (e == vec3(0.0)) continue; // out of reach (most lights for most pixels): no specular power either
         float ndl = max(dot(n, l), 0.0);
         sum += e * ndl;
         spec += e * (ndl * norm * pow(max(dot(n, normalize(l + v)), 0.0), shininess));
@@ -152,23 +158,30 @@ vec3 lightGlow(vec3 p)
     }
     if (dot(pc.uSpotColor.rgb, pc.uSpotColor.rgb) > 0.0)
     {
-        float reach = min(len, 60.0), step = reach / 8.0;
-        for (int k = 0; k < 8; k++)
+        float reach = min(len, 60.0), step = reach / 8.0, beams = 0.0;
+        for (int i = 0; i < 2; i++)
         {
-            vec3 q = o + rd * ((float(k) + 0.5) * step);
-            for (int i = 0; i < 2; i++)
+            mat3 frame = beamFrame(i);
+            // skip the lamp when the first and last sample lie on the outer side of the same bounding plane of the beam
+            // (behind the lamp, or |off| ≥ 1.6 sideways/up/down): every sample between them is outside too (most of the sky)
+            vec3 a = o + rd * (0.5 * step) - pc.uSpotPos[i].xyz, b = o + rd * (reach - 0.5 * step) - pc.uSpotPos[i].xyz;
+            vec3 fa = transpose(frame) * a, fb = transpose(frame) * b;
+            vec4 ha = vec4(fa.y, -fa.y, fa.z, -fa.z) - 1.6 * fa.x, hb = vec4(fb.y, -fb.y, fb.z, -fb.z) - 1.6 * fb.x;
+            if (max(fa.x, fb.x) <= 0.0 || any(greaterThanEqual(min(ha, hb), vec4(0.0)))) continue;
+            for (int k = 0; k < 8; k++)
             {
-                vec3 dl = q - pc.uSpotPos[i].xyz;
+                vec3 dl = o + rd * ((float(k) + 0.5) * step) - pc.uSpotPos[i].xyz;
                 float d2 = dot(dl, dl);
-                sum += pc.uSpotColor.rgb * (beam(i, dl * inversesqrt(max(d2, 1e-4))) * step / (d2 + 1.0));
+                beams += beam(frame, dl * inversesqrt(max(d2, 1e-4))) / (d2 + 1.0);
             }
         }
+        sum += pc.uSpotColor.rgb * (beams * step);
     }
     return sum * pc.uFog.a;
 }
 
-// Fog over a lit surface colour at p (fog.glsl + light glow).
+// Fog over a lit surface colour at p (fog.glsl); the light glow is added per pixel afterwards (glow.frag).
 vec3 applyFog(vec3 c, vec3 p)
 {
-    return mix(c, fogColour(normalize(p - pc.uEye.xyz)), fogAmount(p)) + lightGlow(p);
+    return mix(c, fogColour(normalize(p - pc.uEye.xyz)), fogAmount(p));
 }
