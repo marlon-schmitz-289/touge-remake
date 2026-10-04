@@ -34,12 +34,14 @@ public sealed class Vehicle
     readonly GroundHit[] _hits = new GroundHit[4];
     readonly Vector3[] _mounts = new Vector3[4]; // body space, wheel centre at full droop + Travel
     readonly Vector3 _inertia;                   // body-space principal moments
-    float _steer, _shiftTimer, _rearGrip = 1, _prevBeta;
-    bool _drifting;
+    readonly float _clutchCapacity;              // Nm, fully engaged
+    float _steer, _shiftTimer, _rearGrip = 1, _prevBeta, _clutch, _gearRpm;
+    bool _drifting, _locked, _shifting, _shiftDown;
 
     public Vehicle(CarSpec spec)
     {
         Spec = spec;
+        _clutchCapacity = 1.5f * spec.TorqueNm.Max();
         float m = spec.Mass, l = spec.Length, w = spec.Width, h = spec.Height;
         _inertia = new Vector3(m / 12 * (h * h + l * l), m / 12 * (w * w + l * l), m / 12 * (w * w + h * h));
         var zFront = spec.Wheelbase * (1 - spec.FrontWeight);
@@ -63,6 +65,7 @@ public sealed class Vehicle
     public Quaternion Orientation { get; private set; }
     public Vector3 Velocity { get; private set; }
     public Vector3 AngularVelocity { get; private set; }
+    /// <summary>Engine speed: its own inertia, coupled to the gearbox through a slipping or locked clutch.</summary>
     public float Rpm { get; private set; }
     public int Gear { get; private set; } // −1 R, 0 N, 1..n
     /// <summary>Throttle of the last step (0..1, after the automatic's reverse swap).</summary>
@@ -89,6 +92,9 @@ public sealed class Vehicle
         Gear = 1;
         Rpm = Spec.IdleRpm;
         _steer = _shiftTimer = _prevBeta = 0;
+        _clutch = 1;
+        _gearRpm = 0;
+        _locked = _shifting = false;
         _rearGrip = 1;
         SlipAngle = 0;
         for (var i = 0; i < 4; i++)
@@ -173,13 +179,15 @@ public sealed class Vehicle
         var target = Gear;
         if (shift != 0)
             target = Math.Clamp(Gear + Math.Sign(shift), -1, Spec.Gears.Length);
-        else if (AutomaticGearbox && Gear >= 1 && _shiftTimer <= 0 && !clutchOpen) // handbrake opens the clutch: free revs are no reason to shift
+        else if (AutomaticGearbox && Gear >= 1 && _clutch >= 1 && !clutchOpen) // shifts on gearbox speed: free revs are no reason to shift
         {
-            if (Rpm > Spec.AutoUpRpm && Gear < Spec.Gears.Length) target++;
-            else if (Gear > 1 && _shiftTimer < -0.5f && Rpm < Spec.AutoDownRpm && Rpm * Spec.Gears[Gear - 2] / Spec.Gears[Gear - 1] < Spec.AutoUpRpm) target--;
+            if (_gearRpm > Spec.AutoUpRpm && Gear < Spec.Gears.Length) target++;
+            else if (Gear > 1 && _shiftTimer < -0.5f && _gearRpm < Spec.AutoDownRpm && _gearRpm * Spec.Gears[Gear - 2] / Spec.Gears[Gear - 1] < Spec.AutoUpRpm) target--;
         }
 
         if (target == Gear) return;
+        _shiftDown = target < Gear;
+        _shifting = true;
         Gear = target;
         _shiftTimer = Spec.ShiftTime;
     }
@@ -217,30 +225,43 @@ public sealed class Vehicle
         var df = s.DriveFront;
         float frontInertia = s.WheelInertia, rearInertia = s.WheelInertia;
         float axle = 0;
-        if (ratio != 0 && !handbrake)
+        // Clutch: open while shifting (ShiftTime) or on the handbrake, then engages over ClutchTime. Fully engaged and at
+        // equal speed it locks: engine inertia joins the wheels and torque goes straight through (the tuned handling).
+        // Otherwise the engine is its own flywheel and the clutch passes friction torque up to its (ramped) capacity.
+        _clutch = ratio == 0 || handbrake || _shiftTimer > 0 ? 0 : MathF.Min(1, _clutch + h / s.ClutchTime);
+        var driven = (1 - df) * (_wheels[2].AngularVelocity + _wheels[3].AngularVelocity) * 0.5f + df * (_wheels[0].AngularVelocity + _wheels[1].AngularVelocity) * 0.5f;
+        var gearRpm = _gearRpm = MathF.Abs(driven * ratio) * (30 / MathF.PI);
+        var slipRpm = Gear is 1 or -1 ? s.IdleRpm + throttle * (s.LaunchRpm - s.IdleRpm) : s.IdleRpm; // launch / anti-stall
+        if (_clutch < 1 || gearRpm < slipRpm) _locked = false;
+        if (_locked)
         {
-            // Clutch slips (launch) only in 1st/reverse; during a shift the engine is rev-matched, no torque.
-            var driven = (1 - df) * (_wheels[2].AngularVelocity + _wheels[3].AngularVelocity) * 0.5f + df * (_wheels[0].AngularVelocity + _wheels[1].AngularVelocity) * 0.5f;
-            var wheelRpm = MathF.Abs(driven * ratio) * (30 / MathF.PI);
-            var slipRpm = Gear is 1 or -1 ? s.IdleRpm + throttle * (s.LaunchRpm - s.IdleRpm) : s.IdleRpm;
-            float te;
-            if (wheelRpm >= slipRpm)
-            {
-                Rpm = wheelRpm;
-                frontInertia += df * s.EngineInertia * ratio * ratio / 2;
-                rearInertia += (1 - df) * s.EngineInertia * ratio * ratio / 2;
-                te = (Rpm >= s.RevLimit ? 0 : throttle * EngineTorque(Rpm)) - (1 - throttle) * s.EngineBrake * Rpm / s.RevLimit;
-            }
-            else
-            {
-                Rpm = slipRpm; // clutch slipping: no engine braking
-                te = throttle * EngineTorque(Rpm);
-            }
-
-            if (_shiftTimer <= 0) axle = te * ratio * s.DrivetrainEfficiency;
+            Rpm = gearRpm;
+            frontInertia += df * s.EngineInertia * ratio * ratio / 2;
+            rearInertia += (1 - df) * s.EngineInertia * ratio * ratio / 2;
+            var te = (Rpm >= s.RevLimit ? 0 : throttle * EngineTorque(Rpm)) - (1 - throttle) * s.EngineBrake * Rpm / s.RevLimit;
+            axle = te * ratio * s.DrivetrainEfficiency;
         }
         else
-            Rpm += (s.IdleRpm + throttle * (s.RevLimit - s.IdleRpm) - Rpm) * MathF.Min(1, 10 * h);
+        {
+            // automatic, until the clutch has synced: torque cut on an upshift, throttle blip to the new gear's revs on a downshift
+            var thr = throttle;
+            if (AutomaticGearbox && _shifting && ratio != 0 && !handbrake)
+                thr = _shiftDown ? Rpm < gearRpm ? 1 : 0 : Rpm > gearRpm ? 0 : throttle;
+            thr = MathF.Max(thr, Math.Clamp((s.IdleRpm - Rpm) / 300, 0, 1)); // idle control
+            // part throttle is airflow-limited: unloaded, the engine settles just below idle + throttle × range
+            thr *= Math.Clamp((s.IdleRpm + thr * (s.RevLimit - s.IdleRpm) - Rpm) / 500, 0, 1);
+            var te = (Rpm >= s.RevLimit ? 0 : thr * EngineTorque(Rpm)) - (1 - thr) * s.EngineBrake * Rpm / s.RevLimit;
+            var ie = s.EngineInertia;
+            float w = Rpm * (MathF.PI / 30), wg = gearRpm * (MathF.PI / 30), cap = _clutch * _clutchCapacity, tc;
+            if (gearRpm < slipRpm && Rpm > gearRpm)
+                tc = Math.Clamp(te + ie * (w - slipRpm * (MathF.PI / 30)) * 20, 0, cap); // driver feathers the clutch at slipRpm
+            else // friction torque toward equal speeds, at most what brings the engine to gearbox speed this substep
+                tc = Math.Clamp(te + ie * (w - wg) / h, -cap, cap);
+            Rpm = MathF.Max(0, w + (te - tc) * h / ie) * (30 / MathF.PI);
+            _locked = _clutch >= 1 && MathF.Abs(Rpm - gearRpm) < 20 && gearRpm >= slipRpm;
+            _shifting &= !_locked && gearRpm >= slipRpm;
+            axle = tc * ratio * s.DrivetrainEfficiency;
+        }
 
         // same LSD on every driven axle, locking with that axle's torque; an undriven axle stays open
         var lsdLock = df < 1 ? s.LsdPreload + s.LsdLock * MathF.Abs(axle * (1 - df)) : 0;

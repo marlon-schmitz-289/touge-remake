@@ -47,7 +47,7 @@ public sealed record CarSpec
     public float IdleRpm { get; init; } = 900f;
     public float RevLimit { get; init; } = 7600f;
     public float LaunchRpm { get; init; } = 3000f;            // clutch-slip rpm at full throttle below idle-coupled speed
-    public float EngineInertia { get; init; } = 0.12f;
+    public float EngineInertia { get; init; } = 0.12f;        // kg·m², crank + flywheel
     public float EngineBrake { get; init; } = 30f;            // Nm at the rev limit, throttle closed
 
     // Drivetrain (T50, FR)
@@ -57,6 +57,7 @@ public sealed record CarSpec
     public float DriveFront { get; init; }                    // share of drive torque on the front axle: 0 = FR/MR, 1 = FF, between = 4WD (locked centre)
     public float DrivetrainEfficiency { get; init; } = 0.85f;
     public float ShiftTime { get; init; } = 0.15f;            // clutch open
+    public float ClutchTime { get; init; } = 0.15f;           // clutch capacity ramps 0 → full after the shift
     public float AutoUpRpm { get; init; } = 7200f;
     public float AutoDownRpm { get; init; } = 3000f;
     public float LsdPreload { get; init; } = 40f;             // Nm

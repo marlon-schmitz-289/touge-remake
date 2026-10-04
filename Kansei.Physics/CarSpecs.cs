@@ -42,9 +42,9 @@ public static class CarSpecs
         ["EVO3"] = Make(1.460f, 2.489f, 0.300f, 1260, 0.60f, 270, 6250, 309, 3000, 7000, [2.785f, 1.950f, 1.407f, 1.031f, 0.761f], 4.529f, 0.5f, 4.31f, 1.70f),
         ["EVO4"] = Make(1.380f, 2.489f, 0.300f, 1350, 0.60f, 280, 6500, 352, 3000, 7500, [2.785f, 1.950f, 1.444f, 1.096f, 0.825f], 4.529f, 0.5f, 4.33f, 1.69f),
         ["EVO7"] = Make(1.500f, 2.622f, 0.320f, 1400, 0.60f, 280, 6500, 383, 3500, 7500, [2.785f, 1.950f, 1.407f, 1.031f, 0.761f], 4.529f, 0.5f, 4.46f, 1.77f),
-        ["FD3S"] = Make(1.480f, 2.584f, 0.320f, 1260, 0.50f, 255, 6500, 294, 5000, 8000, [3.483f, 2.015f, 1.391f, 1.000f, 0.719f], 4.10f, Fr, 4.28f, 1.76f),
-        ["FD3SA"] = Make(1.480f, 2.584f, 0.320f, 1270, 0.50f, 280, 6500, 314, 5000, 8000, [3.483f, 2.015f, 1.391f, 1.000f, 0.719f], 4.10f, Fr, 4.28f, 1.76f),
-        ["FC3S"] = Make(1.420f, 2.510f, 0.310f, 1250, 0.51f, 215, 6500, 275, 4000, 8000, [3.475f, 2.002f, 1.366f, 1.000f, 0.758f], 4.10f, Fr, 4.34f, 1.69f),
+        ["FD3S"] = Make(1.480f, 2.584f, 0.320f, 1260, 0.50f, 255, 6500, 294, 5000, 8000, [3.483f, 2.015f, 1.391f, 1.000f, 0.719f], 4.10f, Fr, 4.28f, 1.76f, rotary: true),
+        ["FD3SA"] = Make(1.480f, 2.584f, 0.320f, 1270, 0.50f, 280, 6500, 314, 5000, 8000, [3.483f, 2.015f, 1.391f, 1.000f, 0.719f], 4.10f, Fr, 4.28f, 1.76f, rotary: true),
+        ["FC3S"] = Make(1.420f, 2.510f, 0.310f, 1250, 0.51f, 215, 6500, 275, 4000, 8000, [3.475f, 2.002f, 1.366f, 1.000f, 0.758f], 4.10f, Fr, 4.34f, 1.69f, rotary: true),
         ["NA6C"] = Make(1.434f, 2.300f, 0.300f, 950, 0.52f, 120, 6500, 140, 5500, 7200, [3.136f, 1.888f, 1.330f, 1.000f, 0.814f], 4.30f, Fr, 3.97f, 1.68f),
         ["NB8C"] = Make(1.416f, 2.257f, 0.300f, 1030, 0.52f, 160, 7000, 177, 5500, 7500, [3.760f, 2.269f, 1.645f, 1.257f, 1.000f, 0.843f], 3.909f, Fr, 3.96f, 1.68f),
         ["IMP"] = Make(1.410f, 2.520f, 0.300f, 1250, 0.60f, 280, 6500, 353, 4000, 8000, [3.083f, 2.062f, 1.545f, 1.151f, 0.825f], 4.444f, 0.35f, 4.34f, 1.69f),
@@ -57,10 +57,11 @@ public static class CarSpecs
     ///     Spec from game geometry + real figures. Suspension, brakes and wheel inertia scale with mass/radius from the
     ///     AE86 (same ride frequency and deceleration). Arcade layer by drivetrain: FF keeps more rear grip when the drift
     ///     layer kicks in (0.85 instead of 0.75), 4WD rotates less through its front drive share alone and carves 20 % less.
+    ///     Engine inertia grows with √torque (bigger/turbo engines carry heavier cranks and flywheels), rotaries are 40 % lighter.
     ///     Steer-in at 110 km/h (CarSpecsTests): FR/MR 7–19° body slip (Cappuccino 30°), 4WD 5–10°, FF 3°.
     /// </summary>
     static CarSpec Make(float track, float wheelbase, float radius, float mass, float front, float ps, float psRpm, float nm, float nmRpm,
-        float limit, float[] gears, float final, float driveFront, float length, float width)
+        float limit, float[] gears, float final, float driveFront, float length, float width, bool rotary = false)
     {
         var a = CarSpec.AE86;
         float m = mass / a.Mass, r = radius / a.WheelRadius;
@@ -73,6 +74,7 @@ public static class CarSpecs
             WheelInertia = a.WheelInertia * r * r, BrakeTorque = a.BrakeTorque * m * r, HandbrakeTorque = a.HandbrakeTorque * m * r,
             TorqueRpm = tRpm, TorqueNm = tNm, RevLimit = limit, AutoUpRpm = limit - 400, AutoDownRpm = 0.4f * limit,
             Gears = gears, FinalDrive = final, DriveFront = driveFront,
+            EngineInertia = a.EngineInertia * MathF.Sqrt(nm / a.TorqueNm.Max()) * (rotary ? 0.6f : 1),
             DriftRearGrip = driveFront < 1 ? a.DriftRearGrip : 0.85f,
             DriftCarve = driveFront is > 0 and < 1 ? 0.8f * a.DriftCarve : a.DriftCarve,
         };

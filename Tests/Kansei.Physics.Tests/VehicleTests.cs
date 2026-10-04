@@ -159,4 +159,40 @@ public class VehicleTests(ITestOutputHelper log)
         log.WriteLine($"handbrake revs: gear {gear} -> {car.Gear}, rpm {car.Rpm:F0}");
         Assert.True(car.Gear <= gear, $"upshifted on free revs: {gear} -> {car.Gear}");
     }
+
+    /// <summary>
+    ///     Engine speed is a flywheel behind a friction clutch: through an upshift at full throttle it falls over ≥ 0.1 s to
+    ///     the new gear's revs, through a manual downshift without blip it is dragged up — never a jump (limiter aside).
+    /// </summary>
+    [Fact]
+    public void RpmIsContinuousThroughShifts()
+    {
+        var car = NewCar();
+        float maxStep = 0, prev = car.Rpm, shiftAt = -1, before = 0, t = 0;
+        void Tick(VehicleInput input)
+        {
+            car.Step(input, Flat, Dt);
+            t += Dt;
+            if (prev < car.Spec.RevLimit - 50 && car.Rpm < car.Spec.RevLimit - 50) maxStep = MathF.Max(maxStep, MathF.Abs(car.Rpm - prev));
+            prev = car.Rpm;
+        }
+
+        while (car.Gear == 1 && t < 10) { before = car.Rpm; Tick(new VehicleInput(1, 0, 0)); }
+        shiftAt = t;
+        var coupled = before * car.Spec.Gears[1] / car.Spec.Gears[0];
+        while (car.Rpm > coupled + 200 && t < shiftAt + 1) Tick(new VehicleInput(1, 0, 0));
+        var drop = t - shiftAt;
+        log.WriteLine($"1→2 at {before:F0} rpm: {drop:F2} s down to {car.Rpm:F0} (coupled ≈ {coupled:F0}), max step {maxStep:F0} rpm/tick");
+        Assert.InRange(drop, 0.1f, 0.6f);
+
+        car.AutomaticGearbox = false;
+        while (car.Gear < 3 && t < 30) Tick(new VehicleInput(1, 0, 0, Shift: car.Rpm > 7000 ? 1 : 0));
+        for (var i = 0; i < 60; i++) Tick(new VehicleInput(0, 0, 0));
+        var low = car.Rpm;
+        Tick(new VehicleInput(0, 0, 0, Shift: -1));
+        for (var i = 0; i < 90; i++) Tick(new VehicleInput(0, 0, 0));
+        log.WriteLine($"3→2 lifted: {low:F0} → {car.Rpm:F0} rpm, max step {maxStep:F0} rpm/tick");
+        Assert.InRange(car.Rpm, low * 1.25f, low * 1.6f); // ratio 1.46, minus the speed lost to engine braking
+        Assert.InRange(maxStep, 1, 250);
+    }
 }

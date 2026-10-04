@@ -79,7 +79,7 @@ public class LinePilotTests(ITestOutputHelper log)
         Assert.Equal(0, Contacts(car, Road));
         var z0 = car.Position.Z;
         var walls = 0;
-        for (var t = 0; t < 240; t++)
+        for (var t = 0; t < 300; t++) // 2.5 s: the engine first spins up to launch revs through the slipping clutch
         {
             car.Step(pilot.Drive(car), Road, 1f / 120);
             walls += car.WallContacts;
