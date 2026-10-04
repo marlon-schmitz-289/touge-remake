@@ -22,7 +22,7 @@ public static class BattleRun
         var battle = new Battle(setup.Rule, drive.Pilot.Length - LapTimer.Gate, setup.Leader);
         var race = new RaceSession(drive.Ground, drive.Line, drive.RunOutLine, battle);
         race.Add(playerName, drive.Car, player);
-        var rival = new Vehicle(CarSpecs.All[setup.Rival.Car]) { SurfaceGrip = drive.Car.SurfaceGrip };
+        var rival = new Vehicle(setup.Rival.Spec) { SurfaceGrip = drive.Car.SurfaceGrip };
         race.Add(setup.Rival.Name, rival, new AiDriver(new RivalPilot(drive.Line, setup.Rival.Style)));
         drive.ResetTo(0);
         var at = race.Cars[0].Track.Track(drive.Car.Position).Along;

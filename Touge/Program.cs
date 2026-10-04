@@ -38,6 +38,9 @@ using Touge;
 // --sim-wheel: virtuelles Lenkrad (Lenkung pendelt, Pedale pumpen) für Bilder/Tests ohne Hardware; --menu controls:keyboard|pad|wheel öffnet die Steuerungsseite.
 // --battle <rivale|auto> [--rule race|chase] [--lead player|rival]: Schnellbattle gegen die KI (Telop, Countdown, Battle-HUD, Ergebnis);
 //   mit --autodrive <s> ohne Fenster: Autopilot gegen die KI, Log je Sekunde (Abstand, Führung, Kontakte) + Zusammenfassung.
+// --legend-sim [--legend-progress <json>] [--autodrive <s>]: Legend of the Streets ohne Fenster, Autopilot fährt jede Rivalenleiter hoch, Freischaltungen + Fortschritt (JSON).
+// --legend-progress <json>: Legend-Fortschritt aus/in diese Datei (Testläufe sonst nur im Speicher); --flow <dir> --legend: Legend-Ablauf per Skript (2 Battles).
+// --menu legend|legend-rivals|legend-card[:KURS/rivale]: Legend-Schritt beim Start öffnen (z. B. --menu legend-card:AKINA/takumi --shot …).
 // --drift: Pilot reißt alle 7 s (ab 4,5 s) einen 2,5-s-Handbremsdrift (Reifenrauch/Bremsspuren testen), z. B. --autodrive 6.3 --drift --shot.
 var iso = args.FirstOrDefault(a => a.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
           ?? Environment.GetEnvironmentVariable("INITIALD_ISO");
@@ -46,7 +49,7 @@ if (iso == null || !File.Exists(iso))
     Console.Error.WriteLine("usage: touge <Initial D Special Stage (SLPM-65268).iso> [KURS_ZEIT, z. B. AKINA_DAY]  (oder INITIALD_ISO setzen)");
     return 1;
 }
-string[] valueFlags = ["--battle", "--rule", "--lead", "--flow", "--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--hud-scale", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture", "--lights", "--render-scale", "--jukebox"];
+string[] valueFlags = ["--battle", "--rule", "--lead", "--flow", "--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--hud-scale", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture", "--lights", "--render-scale", "--jukebox", "--legend-progress"];
 string? Arg(string flag) { var i = Array.IndexOf(args, flag); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
 // --car: HCAR name (AE86T, FD3S, R32, EVO3, …) or index 0–31 in that list (Touge.Formats.CarPaint.Cars)
 var carArg = Arg("--car") ?? "AE86T";
@@ -119,6 +122,12 @@ if (Arg("--battle") is { } rivalArg)
         return 1;
     }
 }
+// --legend-sim [--legend-progress <json>] [--car X] [--autodrive <s per battle>]: Legend of the Streets headless, the autopilot up every ladder
+if (args.Contains("--legend-sim"))
+{
+    using var isoFile = new Touge.Formats.Iso9660(iso);
+    return Touge.Race.LegendSim.Run(isoFile, car, Arg("--legend-progress"), autodrive ?? 600) ? 0 : 2;
+}
 if (autodrive is { } battleSeconds && shot == null && battle != null)
 {
     using var isoFile = new Touge.Formats.Iso9660(iso);
@@ -154,7 +163,7 @@ var plain = args.Where((a, i) => a != iso && a != "--backend" && (i == 0 || args
 var saved = plain ? Touge.Ui.Settings.Load() : new Touge.Ui.Settings();
 KanseiApp.Run(new TougeGame(iso, course.ToUpperInvariant(), shot, at, orbit, autodrive, bench, Arg("--quality") != "off", args.Contains("--drift"), Arg("--flicker"))
     { HudMode = Arg("--hud"), HudScale = Arg("--hud-scale") is { } hs ? float.Parse(hs, CultureInfo.InvariantCulture) / 100 : 1, Reverse = args.Contains("--reverse"), Fog = args.Contains("--fog"), Car = car, Paint = paint, Livery = livery, ContactSheet = Arg("--cars"), LookAtSun = args.Contains("--sun"), OrbitDistance = orbitDistance,
-      Battle = battle, ShotBattleResult = args.Contains("--battle-result"), Lights = Arg("--lights") is { } lights ? Enum.Parse<Headlights.Mode>(lights, true) : null,
+      Battle = battle, LegendProgressPath = Arg("--legend-progress"), LegendFlow = args.Contains("--legend"), ShotBattleResult = args.Contains("--battle-result"), Lights = Arg("--lights") is { } lights ? Enum.Parse<Headlights.Mode>(lights, true) : null,
       RenderScale = Arg("--render-scale") is { } rs ? int.Parse(rs) : 100,
       InputDebug = args.Contains("--input-debug"), SimWheel = args.Contains("--sim-wheel"),
       UseMenus = plain, StartMenu = Arg("--menu"), Flow = Arg("--flow"), Offscreen = args.Contains("--offscreen"),

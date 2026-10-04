@@ -175,6 +175,35 @@ Aus dem Recomp (ELF-Adresse = Dateioffset + 0xFFF80):
 
 **Iketanis Autovorstellung** (Hauptmenü 池谷先輩の車紹介): Texturen `TSDATA.AFS` `TIKETEX.PAC` (`itag_00…10`: Rahmen, Kappe/Gesichter Iketani, Itsuki, Takumi, Titelband, „STARTボタンでスキップ“, Pfeile, drei Streifen mit den 32 Autonamen + `?????`, Einleitungsdialog als Bild: Itsuki bittet Iketani, Takumi über Autos aufzuklären, Iketani fragt, welches Auto), Animation `TIKEANI.PAC`, BGM `WORRY.adx`. Die Ansage je Auto ist `SOUND/IKETANI.AFS` `INTRO_` + Auto-ID + `.ADX` (ELF-Strings `IKETANI.AFS`, `INTRO_`, `.ADX` bei 0x1CD2F0/0x1CD348), mono 24 kHz, 34–66 s, japanisch; Texte dazu gibt es auf der Disc nicht (WORDS.AFS = Renn-Sprüche `RACEWORDS_*`).
 
+## Legend of the Streets (公道最速伝説) – Rivalen geknackt, Regeln teils
+Aus dem Recomp (ELF-Adresse = Dateioffset + 0xFFF80; Kursauswahl-Modul 0x1DB1B0 ff. lädt `TSDATA/KCRSSEL0–2.PAC`):
+- **Rivalen je Kursfeld** `0x29B2E0`: 12 Felder (Rasterreihenfolge wie Time Attack) × 8 s32, 0xFF = leer (`0x1DD290`, Anzahl `0x1DE8F0`):
+  MYOGI 0–3, USUI 4–7, AKAGI 8–11, AKINA 12–15 + 33, HAPPOGAHARA 16–19, IROHAZAKA 20–24, MYOGI+ 25–26, USUI+ 27, SHOMARU 28,
+  MOMIJI LINE 29–30, SHIONA 31–32, Feld 11 leer.
+- **Rivalen-Record** `0x2A2D90`, 8 B je Rivale 0–33: [0] Id, [2] Kurs (interne Nummer, Tabelle `0x24CD00`: 0 MYOUGI0 … 8 MOMIJI, 9 SHIONA,
+  10 SHOMARU), [3] Richtung (1 = Gegenrichtung), [4] Wetter (1 = nass), [5] Nacht, [6] Figur (Setup-Record `0x2A2EA0`: Auto, Lack,
+  Tuningteile, Aufkleber). `0x170A00` kopiert ihn nach `0x328154…0x32815B` (Kurs `0x328156`, Richtung `…57`, Wetter `…58`, Nacht `…59`,
+  Figur `…5A`) – dieselben Bytes setzt Time Attack aus der Auswahl (`0x1DF740…0x1DF810`, Figur = −1); der Kursaufbau `0x161B60` legt
+  `…58`/`…59` nach Kurs +0x1D8/+0x1D7 (Regen-/Nachtzweig `0x161F44`). Ist die Figur schon besiegt (Zähler `0x327950 + Figur × 2` > 0), schreibt
+  `0x170A00` den Zähler ins Wetterbyte – die Revanche läuft nass.
+- Figuren der 34 Rivalen (Name aus den Namensstreifen `KCRSSEL2 r_selnm0–5`, 27 Bilder, je Kursgruppe eine Spalte): Itsuki (AE85), Takumi
+  (AE85!), Shingo (EG6), Nakazato (R32) | „die zwei aus Tokio“ (S15), Nobuhiko Akiyama (Altezza), Mako & Sayuki (Sileighty), Sakamoto
+  (Cappuccino) | Kyoko Iwase (FD, Lack 3), Kenta Nakamura (S14 Q's), Keisuke, Ryosuke | Kenji (180SX), Iketani (S13), Wataru (AE86 Levin),
+  Takumi (AE86) | Toru Suetsugu (Roadster NA), Daiki Ninomiya (EK9), Smiley Sakai (DC2), Tomoyuki Tachi (EK9) | Seiji (Evo IV), Kyoichi
+  (Evo III), Kai (MR2), Keisuke und Takumi von Project D | Zusatzkurse: Shingo, Nakazato, Mako, Wataru, Suetsugu, Atsuro Kawai (ER34), Daiki,
+  Sakai | Bunta (Impreza GC8 V, Figur 25). Die Fahrer-Bytes der Figuren-Records gehen 0x00–0x1B (0x16 Bunta, 0x17 Kawai).
+- **Bedingungen** `0x1663B0` (Sprungtabelle `0x2C58E0`, Fall = a0): Fall 4 (Akina, 5. Rivale = Bunta) alle Figuren 0–23 besiegt, Fall 6
+  (Irohazaka, 5. Rivale = Takumi von Project D) alle Figuren 0–33 außer 25 (Bunta); `0x327940` ≠ 0 schaltet alles frei (Debug/Komplett?).
+  Eine Reihenfolge innerhalb eines Kurses gibt es im Original nicht – alle Rivalen eines Kurses sind wählbar; besiegte bekommen das Kreuz
+  `r_selpeke` (`0x1DE960`), die Anzeige unterscheidet Zählerwert 0 / 1 / > 1 (`0x1DD380`).
+- **Musik**: `MANGA/MG_BGM.AFS` hat je Figur ein Thema (ITSUKI, TAKUMI01–03, SHINGO, NAKAZATO, DEBU = die zwei aus Tokio, NOBUHIKO, MAKO,
+  SAKAMOTO, KYOUKO, KENTA, KEISUKE01/02, RYOSUKE, KENJI, IKETANI, WATARU, BUNTA, SUETSUGU, DAIKI, SAKAI, TACHI, SEIJI, KYOICHI, KAI,
+  ATSUO = Kawai) sowie R_WIN01/02, R_LOSE (39–55 s mit Loop-Punkt, also Ergebnis-BGM, keine Jingles; Namensliste im ELF ab Dateioffset 0x1D3150, 0x44 B je Name).
+- Nicht gefunden: Belohnungen (welche Autos/Lacke ein Sieg freischaltet – der Car Guide kennt „?????“-Einträge), KI-Stärke je Rivale
+  (vermutlich Tabelle `0x2C7930`, Höchstgeschwindigkeit je Kurs/Richtung/Slot + Stufe), Tageszeit/Wetter bei „nass + Nacht“ (Sakamoto; die
+  Disc hat Regen nur am Tag). Remake: Leiter je Kurs, Zusatzkurse ab 3 Hauptkursen, Impreza nach Bunta, Leistung der ersten drei Rivalen
+  eines Hauptkurses 80/88/95 % (eigene Wahl, `Race/Legend`).
+
 ## Offen
 - INFO: 0x150…0x1DF (Ambient je Slot?), 0x2A0…0x2BF, Abschnitts-Flag; LOD-Abstand `gp−0x7C14`; zweites u32 im ROAD-Header
 - Bedeutung von VU addr 4, Material-Flags außer 0x100/0x200/0x400

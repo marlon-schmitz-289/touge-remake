@@ -31,6 +31,28 @@ public class LinePilotTests(ITestOutputHelper log)
         Assert.True(pilot.Track(line[50] + new Vector3(3, 0, 0)).Lateral > 0);
     }
 
+    /// <summary>
+    ///     A circuit's line runs two laps, so the grid lies on it twice: a car beside the line at the start (closer to the
+    ///     second lap's points) is found on the second lap by a plain global search, near 0 m when told where to look.
+    /// </summary>
+    [Fact]
+    public void Nearest_OnTwoLaps_KeepsTheLapAsked()
+    {
+        var line = new Vector3[2 * 63 + 1];
+        for (var i = 0; i < line.Length; i++)
+        {
+            var a = i * MathF.Tau / 63;
+            var r = i < 63 ? 100 : 100.5f; // the second lap's line runs half a metre further out
+            line[i] = new Vector3(r * MathF.Cos(a), 0, r * MathF.Sin(a));
+        }
+        var pilot = new LinePilot(line);
+        var p = new Vector3(102, 0, 1); // the outer car of a grid pair at the start
+        pilot.Nearest(p);
+        Assert.True(pilot.Track(p).Along > pilot.Length / 2 - 20); // the second lap
+        pilot.Nearest(p, 0);
+        Assert.InRange(pilot.Track(p).Along, 0, 20);
+    }
+
     /// <summary>8 m wide road x ∈ [−4, 4], z ∈ [−20, 300], walls along both sides.</summary>
     static readonly TriangleGround Road = WallTests.Grid([-4, 4], [-20, 300], (_, _) => false);
 

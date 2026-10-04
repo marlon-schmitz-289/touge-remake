@@ -12,7 +12,13 @@ public static class Rivals
     /// <param name="Id">Short CLI id (--battle keisuke).</param>
     /// <param name="Car">HCAR name (<see cref="Touge.Formats.CarPaint.Cars"/>), driven with the character's livery.</param>
     /// <param name="Team">Team/subtitle for the telop and result sheet.</param>
-    public sealed record Rival(string Id, string Name, string Team, string Car, RivalStyle Style);
+    /// <param name="Paint">CAR_ENV body colour (0 = the car's first; Legend: Kyoko's FD).</param>
+    /// <param name="Power">Engine torque factor of the rival's car (1 = stock; Legend detunes the first rivals of a course).</param>
+    public sealed record Rival(string Id, string Name, string Team, string Car, RivalStyle Style, int Paint = 0, float Power = 1)
+    {
+        /// <summary>The rival's car spec with <see cref="Power"/> applied.</summary>
+        public CarSpec Spec => Power == 1 ? CarSpecs.All[Car] : CarSpecs.All[Car] with { TorqueNm = [.. CarSpecs.All[Car].TorqueNm.Select(t => t * Power)] };
+    }
 
     public static readonly Rival[] All =
     [

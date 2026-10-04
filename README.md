@@ -22,6 +22,9 @@ dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).
 dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso" [AKINA_DAY|AKINA_NIT|USUI_NIT|…]   # direkt fahren, ohne Menü
 dotnet run --project Touge -- "<iso>" AKINA_NIT --menu boot|logo|disclaimer|title|mode|quit|course|route|time|weather|maker|car|gearbox|intro|pause|records|guide|guide-list|guide-talk|options[:gamesetting|hud|screen|graphics|sound|playlist|controller] --shot out/proof/ui_car.png [--shot-size 3200x1800]   # Menü-Bild (options:<seite> öffnet eine Optionsseite)
 dotnet run --project Touge -- "<iso>" --flow out/proof   # ganzer Ablauf per Skript im Fenster (Titel → Auswahl → Laden → Countdown → Rennen mit Pilot in 16× → Pause → Ziel → Ergebnis → Rekorde → Optionen → Car Guide), PNG je Schritt
+dotnet run --project Touge -- "<iso>" --flow out/proof/legend/flow --legend [--car FD3S]   # Legend of the Streets per Skript: Akina, zwei Battles (Autopilot, 16×), Leiter danach, PNG je Schritt
+dotnet run --project Touge -- "<iso>" --legend-sim [--legend-progress out/legend.json] [--car FD3S]   # Legend ohne Fenster: Autopilot fährt jede Rivalenleiter hoch (Niederlage beendet den Kurs), Freischaltungen + Bilanz, Fortschritt als JSON
+dotnet run --project Touge -- "<iso>" --menu legend|legend-rivals|legend-card[:AKINA/takumi] [--legend-progress <json>] --shot out/proof/l.png   # Legend-Schritt als Bild (Fortschritt aus der Datei, sonst leer)
 dotnet run --project Touge -- "<iso>" --jukebox 720   # Rennmusik-Jukebox offline ohne Fenster: Zufallsfolge, M, Menüpause, Titelende → nächster, Log
 dotnet run --project Touge -- "<iso>" --frontend-capture out/proof/fe.wav   # ganzer Menüablauf per Skript offline: Original-SE/BGM als WAV + Log aller Auslöser
 dotnet run --project Touge -- "<iso>" --shot out/akina.png   # ein Frame als PNG, dann Ende
@@ -77,7 +80,7 @@ Menüs: Ohne Kurs/Test-Flags startet das Spiel im Front-End im Stil des Original
 Original-Menütexturen; Ablauf/Zeiten/Bewegung aus dem Originalcode, siehe FORMATS.md): Hinweis zu den Speicherdaten → Karte „Based on …“ →
 Hinweis „Fiktion“ → Titel (Akina bei Nacht im Hintergrund abgeflogen, Logo, blinkendes PRESS START BUTTON; nach 10 s ohne Eingabe zurück zu
 den Karten) → Hauptmenü (Trommel mit den 7 Modi des Originals, Chromplatten, pulsierender gelber Rahmen; nach 30 s ohne Eingabe zurück zum
-Titel). Gebaut sind davon TIME ATTACK, REPLAY & RECORD (→ Rekorde), IKETANI'S CAR GUIDE und OPTIONS; die anderen Modi piepen (BEEP001) wie gesperrte Einträge
+Titel). Gebaut sind davon LEGEND OF THE STREETS, TIME ATTACK, REPLAY & RECORD (→ Rekorde), IKETANI'S CAR GUIDE und OPTIONS; die anderen Modi piepen (BEEP001) wie gesperrte Einträge
 im Original. Als letzter Eintrag QUIT GAME (nur Windows/Linux/macOS): Abfrage „QUIT THE GAME?“ YES/NO (NO vorgewählt, ←/→ wählen,
 Enter/A entscheiden, Esc/B = NO), YES speichert die Einstellungen und schließt das Fenster. Esc im Hauptmenü zurück zum Titel, im Titel beenden. Danach alle Bildschirme ebenfalls im Originalstil (`Ui/Menu` + `Ui/Canvas`:
 graue Logo-Kachelwand, roter/blauer Laufschrift-Kopf, Chromplatten, Karbonpaneele, gelber Pulsrahmen, Verlaufswörter rot/blau, alles Englisch):
@@ -109,6 +112,19 @@ schreibt die Zeile fertig, dann weiter) → Liste aller 32 Autos unter Herstelle
 kg/PS, Fahrer in Initial D). ↑/↓ Auto, ←/→ Lackfarbe, Entscheiden = Iketani spricht (Original-Ansage `IKETANI.AFS` `INTRO_<AUTO>.ADX`,
 japanisch, 34–66 s; Liste fährt weg, Auto in die Mitte, Text tippt im Tempo der Ansage mit, Fortschrittsbalken, Musik leiser), Entscheiden/Zurück bricht ab,
 Zurück → Hauptmenü (gespeichertes Auto kommt zurück). `--menu guide` (Dialog), `guide-list`, `guide-talk` mit `--car`/`--paint` für Bilder (ohne Hauptmenü schließt Zurück das Fenster).
+LEGEND OF THE STREETS (`Ui/LegendScreen`, `Race/Legend`, wie das Original 公道最速伝説): Kurswahl im Raster (11 Kurse) mit Punkten je Rivale
+(gold = besiegt, goldener Rand = Kurs geschafft) → Rivalenleiter des Kurses (Name, Team, Auto, Status WIN / CHALLENGE / NEW! / LOCKED, rotes Kreuz
+über besiegten wie das Original; rechts Datenblatt: Auto, Route, Tageszeit, Wetter, Stufe 1–5, Bilanz, bester Abstand) → VS-Karte über dem
+3D-Auto des Rivalen auf seinem Kurs bei seiner Tageszeit/seinem Wetter (seine Lackierung, sein Thema aus `MG_BGM.AFS`; der Kurs lädt hinter der Blende) → Herstellerwahl/Auto/Getriebe wie Time Attack → Laden → Telop „VS …“ →
+Battle (Regel des Originals: wer zuerst im Ziel ist, dazu Sieg ab 8 s Vorsprung) → YOU WIN/LOSE und Battle-Blatt (Musik `R_WIN01`/`R_LOSE` aus `MG_BGM.AFS`) → RETRY / RIVAL SELECT /
+CAR SELECT / EXIT. Rivalen und Bedingungen aus dem Original (34 Rivalen auf 11 Kursen, Richtung/Tageszeit/Wetter je Rivale, siehe FORMATS.md);
+je Kurs eine Leiter (der nächste Rivale nach einem Sieg über den vorigen), die fünf Zusatzkurse (MYOGI+ … SHIONA) ab 3 geschafften Hauptkursen,
+Bunta (Akina) nach allen 24 Rivalen der Hauptkurse, Takumi von Project D (Irohazaka) nach allen anderen außer Bunta; ein Sieg über Bunta schaltet
+sein Impreza (IMP3) für Legend-Battles frei (dort bis dahin „?????“; Time Attack hat es immer). Revanche gegen einen besiegten Rivalen im Regen (wie das Original). Die ersten drei
+Rivalen eines Hauptkurses fahren mit 80/88/95 % Motormoment (eigene Abstimmung, damit der Trueno am Anfang mithalten kann).
+Nach einem Battle steht der Cursor auf dem nächsten Rivalen, Neues (Rivalen, Kurse, Auto) läuft unten als rotes Band ein. Fortschritt in
+`legend.json` neben `settings.json` (Siege, Niederlagen, bester Abstand je Rivale; `Race/Legend.Progress`). Pause-Exit und Zurück aus der
+Autowahl führen zur Leiter, EXIT ins Hauptmenü.
 Navigation Pfeile/WASD, Enter, Esc bzw. D-Pad/Stick, A, B.
 Einstellungen, letzte Wahl und Bestzeiten liegen als JSON im App-Data-Ordner (macOS `~/Library/Application Support/InitialDRemake/settings.json`,
 Windows `%APPDATA%\InitialDRemake`), nicht im Repo; Starts mit Kurs oder Test-Flags lesen/schreiben sie nicht (Fenster dort immer 1600×900).

@@ -17,8 +17,8 @@ namespace Touge;
 /// </summary>
 public sealed partial class TougeGame
 {
-    /// <summary>--battle: rival and rules of a quick battle; null = time attack.</summary>
-    public BattleSetup? Battle { get; init; }
+    /// <summary>--battle: rival and rules of a quick battle (Legend of the Streets sets it per battle); null = time attack.</summary>
+    public BattleSetup? Battle { get; set; }
 
     /// <summary>--battle-result: with --shot, a decided battle shows the result sheet instead of the finish banner.</summary>
     public bool ShotBattleResult { get; init; }
@@ -53,7 +53,7 @@ public sealed partial class TougeGame
     {
         if (Battle == null) return;
         var car = Battle.Rival.Car;
-        _rivalModel = CarModel.Load(iso, car, 0, _renderer, Livery.Rival);
+        _rivalModel = CarModel.Load(iso, car, Battle.Rival.Paint, _renderer, Livery.Rival);
         _rivalModelToBody = ModelToBody(_rivalModel, CarSpecs.All[car]);
     }
 
@@ -197,6 +197,7 @@ public sealed partial class TougeGame
         var rival = Battle!.Rival;
         var name = _catalog?.Cars.FirstOrDefault(c => c.Id == rival.Car)?.Name ?? rival.Car;
         _menu.Battle = BattleReport.Of(_race, rival, name);
+        LegendRecord(_menu.Battle); // Legend of the Streets: progress
         var t = _hud.Timer;
         _menu.Finish(new Menu.Run(t.Time, (float[])t.Splits.Clone(), [.. Enumerable.Range(0, LapTimer.Sectors).Select(t.Delta)], _previousBest, false, _hud.Drift.Total));
         if (shotPath != null)
