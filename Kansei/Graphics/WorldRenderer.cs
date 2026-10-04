@@ -62,6 +62,8 @@ public sealed class WorldRenderer : IDisposable
     public SceneLights Lights { get; } = new();
     /// <summary>4× MSAA (+ alpha-to-coverage), bloom and shadows; off = 1 sample, no bloom/shadows (tonemapping stays).</summary>
     public bool HighQuality = true;
+    /// <summary>Wet-ground SSR (high quality, rain); off only for measuring (<c>--flicker</c> motion).</summary>
+    public bool Reflections = true;
     /// <summary>Seconds, animates rain ripples.</summary>
     public float Time;
 
@@ -274,7 +276,7 @@ public sealed class WorldRenderer : IDisposable
     public void EndScene(ICommandEncoder encoder, IRenderPassEncoder pass, FrameCapture? target = null)
     {
         pass.Dispose();
-        _post.Run(encoder, Atmosphere, HighQuality, target?.View ?? _device.CurrentSwapchainView, _w, _h, _viewRotProj, _proj,
+        _post.Run(encoder, Atmosphere, HighQuality, Reflections, target?.View ?? _device.CurrentSwapchainView, _w, _h, _viewRotProj, _proj,
             _device.Backend == BackendKind.Metal ? -1 : 1);
     }
 

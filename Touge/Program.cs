@@ -13,7 +13,8 @@ using Touge;
 // --ground <png>: Kollision des Kurses laden, Raycasts timen, Draufsicht mit Wandsegmenten, Sperren und Fahrlinie/Auslauf schreiben, Ausschnitte bei --at, Start, Ziel (ohne Fenster).
 // --bench <s>: Pilot fährt <s> Sekunden in Echtzeit mit Verfolgerkamera und Ton, danach Frametimes (avg/p99/max) und Ende.
 // --quality off: ohne MSAA/Bloom starten (F2 schaltet um).
-// --flicker <prefix>: Z-Fighting im Bild messen (8 Punkte der Fahrlinie + 8 Winkel ums Auto, je 3× mit verschobener Rundung), Ausschnitte als <prefix>_course/_car.png.
+// --flicker <prefix>: Z-Fighting im Bild messen (8 Punkte der Fahrlinie + 8 Winkel ums Auto, je 3× mit verschobener Rundung), Ausschnitte als <prefix>_course/_car.png;
+//   dazu _motion: Kamera in 1-cm-Schritten, je mit/ohne SSR (Springen nasser Spiegelungen).
 // --zfight [filter]: Z-Fighting-Kandidaten (fast koplanar, überlappend) aller Kurse und Autos auflisten (ohne Fenster).
 // --hud north|overview|off: Minimap nordausgerichtet / ganze Strecke / HUD aus (Standard: mitdrehend; N und F4 schalten um).
 // --reverse: Gegenrichtung (bergauf): CRS_COLI_<KURS>_1 (Rundkurse _0) + CRS_DRV_<KURS>_O, Start am anderen Ende; im Spiel B.

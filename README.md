@@ -37,7 +37,7 @@ dotnet run --project Touge -- "<iso>" --car FD3S --paint 2   # Auto (HCAR-Name o
 dotnet run --project Touge -- "<iso>" --car AE86T --livery stock   # Aufkleber/Kennzeichen: rival (Standard: Auto der Anime-Figur, z. B. Tofu-Schriftzug, RedSuns, Emperor), stock (Serienauto des Spiels), none (ohne Aufkleber/Kennzeichen)
 dotnet run --project Touge -- "<iso>" --hud off --cars out/proof/c_cars.png [--orbit 145]   # Kontaktbogen aller 32 Autos (4 × 8, Reihenfolge wie unten, Blickwinkel 35° bzw. --orbit), dann Ende
 dotnet run --project Touge -- "<iso>" --zfight [AKINA]   # Z-Fighting-Kandidaten aller Kurse/Autos (fast koplanar, überlappend), gruppiert je Batch-Paar
-dotnet run --project Touge -- "<iso>" USUI0_RIN --flicker out/proof/fl [--at n]   # Flackern messen: 8 Fahrlinienpunkte, 8 Winkel ums Auto, 8 Fundstellen, je 3× mit anderer Rundung (Schwelle nach Bildhelligkeit)
+dotnet run --project Touge -- "<iso>" USUI0_RIN --flicker out/proof/fl [--at n]   # Flackern messen: 8 Fahrlinienpunkte, 8 Winkel ums Auto, 8 Fundstellen, je 3× mit anderer Rundung (Schwelle nach Bildhelligkeit); dazu „motion“: dieselben Punkte/Winkel mit Auto, Kamera 3× je 1 cm vor, je mit/ohne SSR – zählt Pixel, deren Spiegelungsanteil nicht gleichmäßig mitläuft
 dotnet run --project Touge -- "<iso>" --sun --shot out/sun.png   # freie Kamera hinter dem Auto, Blick zur Sonne (Blendung prüfen)
 ```
 
@@ -117,7 +117,8 @@ Strecke: alle Abschnitte `crsNN` + `mnt00`/`gate*` als ein Mesh, dazu die Bäume
 Grafik: Szene in HDR (RGBA16F, 4× MSAA mit Resolve, Alpha-to-Coverage für Laub) plus G-Puffer (RGBA8: Ambient-Anteil,
 Spiegelgewicht, Streifen) und Tiefe, beide mit aufgelöst (Depth-Resolve Sample 0: Metal, Vulkan `SAMPLE_ZERO`). Danach in halber Auflösung
 Ambient Occlusion (ao.frag: 12 Taps im 1,2-m-Radius aus der Tiefe, 4×4-Bayer-Drehung + 4×4-Bilateral-Blur, kein
-zeitliches Rauschen) und im Regen Bildschirmraum-Spiegelungen auf nassem Boden (ssr.frag, Rückfall Himmel), Bloom,
+zeitliches Rauschen) und im Regen Bildschirmraum-Spiegelungen auf nassem Boden (ssr.frag gegen die volle fp32-Tiefe, Spiegelebene = Straßennormale aus der Tiefe,
+Treffer erst nach Bisektion + Dickentest; ssr_blur.frag verschmiert sie senkrecht zu Streifen, Rückfall Himmel), Bloom,
 im Tonemapping AO nur auf den Ambient-Anteil (Sonne/Lampen bleiben), SSR, ACES, Belichtung, Farbstimmung, Vignette je
 Tageszeit (`_DAY`/`_NIT`/`_RIN`, `TougeGame.AtmosphereFor`) und ±1-LSB-Dither gegen Banding. Texturen sRGB mit
 Mipmaps (CPU, Alpha-Abdeckung bleibt erhalten) und 8× anisotrop. Himmel: analytischer Verlauf + Sonne hinter dem Sky-Mesh.

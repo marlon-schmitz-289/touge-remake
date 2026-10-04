@@ -13,30 +13,39 @@ namespace Touge;
 ///     night views count too) show surfaces with tied depth = z-fight; the rest is edge noise (silhouettes with MSAA).
 ///     Groups: <c>course</c> = <see cref="CoursePoints"/> points evenly along the driving line from <c>firstPoint</c>
 ///     (car hidden), <c>car</c> = <see cref="CarAngles"/> orbit angles around the parked car (course hidden),
-///     <c>spots</c> = the largest overlaps the detector rates critical (<see cref="Spots"/>), seen from ≤ 10 m.
+///     <c>spots</c> = the largest overlaps the detector rates critical (<see cref="Spots"/>), seen from ≤ 10 m,
+///     <c>motion</c> = the course points and car angles again with car and course, the camera moving forward in
+///     <see cref="MotionStep"/> steps instead of turning, each step with and without wet-ground reflections (SSR): a pixel
+///     counts when the reflections' share D = with − without does not change smoothly over the three steps
+///     (|D₂ − 2D₁ + D₀| ≥ threshold) — reflections popping/swimming while driving.
 ///     Writes the worst 160×160 crop per group as <c>&lt;prefix&gt;_&lt;group&gt;.png</c> (left: frame, right: flipping
 ///     pixels in red, ×2) and that whole frame as <c>_full.png</c>.
 /// </summary>
 public sealed class FlickerProbe
 {
     public const int CoursePoints = 8, CarAngles = 8, Threshold = 40, Crop = 160;
+    /// <summary>Camera move per frame of a <c>motion</c> view (m).</summary>
+    public const float MotionStep = 0.01f;
     /// <summary>Mean luma (0–255) of a typical day frame, where <see cref="Threshold"/> applies unscaled.</summary>
     public const double DayLuma = 70;
     /// <summary>Turns in radians.</summary>
     public static readonly float[] Spins = [0, 0.013f, -0.029f];
-    private static readonly string[] Groups = ["course", "car", "spots"];
+    private static readonly string[] Groups = ["course", "car", "spots", "motion"];
 
-    /// <param name="Group">0 course (driving line point <paramref name="LinePoint"/>), 1 car (orbit <paramref name="Orbit"/> degrees), 2 spot.</param>
-    public readonly record struct View(int Group, int LinePoint, float Orbit, Vector3 Eye, Vector3 Target, float Spin);
+    /// <param name="Group">
+    ///     0 course (driving line point <paramref name="LinePoint"/>), 1 car (orbit <paramref name="Orbit"/> degrees), 2 spot,
+    ///     3 motion (driving line point, or orbit when <paramref name="LinePoint"/> &lt; 0; camera <paramref name="Push"/> m forward).
+    /// </param>
+    public readonly record struct View(int Group, int LinePoint, float Orbit, Vector3 Eye, Vector3 Target, float Spin, float Push = 0, bool NoSsr = false);
 
     private readonly string _prefix, _label;
     private readonly List<View> _views = [];
     private int _job;
     private readonly List<byte[]> _frames = [];
-    private readonly long[] _flips = new long[3], _pixels = new long[3];
-    private readonly double[] _thresholds = new double[3];
-    private readonly int[] _counts = new int[3];
-    private readonly (int Count, byte[]? Rgba, bool[]? Mask, int X, int Y)[] _worst = new (int, byte[]?, bool[]?, int, int)[3];
+    private readonly long[] _flips = new long[4], _pixels = new long[4];
+    private readonly double[] _thresholds = new double[4];
+    private readonly int[] _counts = new int[4];
+    private readonly (int Count, byte[]? Rgba, bool[]? Mask, int X, int Y)[] _worst = new (int, byte[]?, bool[]?, int, int)[4];
 
     public FlickerProbe(string prefix, string label, Vector3[] line, int firstPoint, Vector3[] spots)
     {
@@ -47,6 +56,11 @@ public sealed class FlickerProbe
         {
             var d = line.MinBy(p => Vector3.DistanceSquared(p, s)) + new Vector3(0, 1.5f, 0) - s;
             Add(new View(2, 0, 0, s + Vector3.Normalize(d) * MathF.Min(d.Length(), 10), s, 0));
+        }
+        for (var i = 0; i < CoursePoints + CarAngles; i++)
+        {
+            var point = i < CoursePoints ? (firstPoint + (int)((i + 0.5f) * line.Length / CoursePoints)) % line.Length : -1;
+            for (var f = 0; f < 6; f++) _views.Add(new View(3, point, (i - CoursePoints) * 360f / CarAngles, default, default, 0, f / 2 * MotionStep, f % 2 == 1));
         }
     }
 
@@ -84,8 +98,8 @@ public sealed class FlickerProbe
     public void Add(int w, int h, byte[] rgba)
     {
         _frames.Add(rgba);
-        if (_frames.Count < Spins.Length) return;
         var group = _views[_job - 1].Group;
+        if (_frames.Count < (group == 3 ? 6 : Spins.Length)) return;
         var mask = new bool[w * h];
         var flips = 0;
         var threshold = ThresholdFor(_frames[0]);
@@ -94,9 +108,12 @@ public sealed class FlickerProbe
         for (var i = 0; i < mask.Length; i++)
         {
             var d = 0;
-            for (var f = 1; f < _frames.Count; f++)
             for (var c = 0; c < 3; c++)
-                d = Math.Max(d, Math.Abs(_frames[f][i * 4 + c] - _frames[0][i * 4 + c]));
+            {
+                int o = i * 4 + c, f0 = _frames[0][o];
+                d = Math.Max(d, group == 3 ? Math.Abs(_frames[4][o] - _frames[5][o] - 2 * (_frames[2][o] - _frames[3][o]) + f0 - _frames[1][o])
+                    : Math.Max(Math.Abs(_frames[1][o] - f0), Math.Abs(_frames[2][o] - f0)));
+            }
             if (d < threshold) continue;
             mask[i] = true;
             flips++;
