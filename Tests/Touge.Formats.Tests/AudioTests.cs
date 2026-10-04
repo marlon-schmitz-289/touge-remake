@@ -82,4 +82,20 @@ public class AudioTests
         Assert.Equal([0, 0, 50, 100, 100, 50, 0, 0], new[] { 0, 10, 15, 20, 30, 35, 40, 300 }.Select(x => s.Value(15, Sect.Volume, x)));
         Assert.Equal(64, s.Value(0, Sect.Pan, -5));
     }
+
+    [Fact]
+    public void Engine_index_follows_the_games_formula()
+    {
+        for (var p = 0; p < 3; p++)
+        foreach (var g in new[] { 0f, 0.5f, 1f })
+        {
+            Assert.Equal(5, Sect.EngineIndex(0, g, p), 3);
+            Assert.Equal(255, Sect.EngineIndex(1, g, p), 3);
+            for (var x = 0.01f; x < 0.9f; x += 0.01f) Assert.True(Sect.EngineIndex(x, g, p) > Sect.EngineIndex(x - 0.01f, g, p));
+        }
+        // (the hump term 3·(1 − x)·x^c overshoots 255 by < 1 just below the limit; the game clamps to 240/255)
+        // stock profile, 1st gear, half revs: 5 + 250·(0.8·0.5³ + 0.2·√0.5 + 3·0.5·0.5¹⁶)
+        Assert.Equal(65.36f, Sect.EngineIndex(0.5f, 0, 0), 2);
+        Assert.True(Sect.EngineIndex(0.5f, 1, 0) < Sect.EngineIndex(0.5f, 0, 2)); // top gear stock vs 1st gear full tune
+    }
 }

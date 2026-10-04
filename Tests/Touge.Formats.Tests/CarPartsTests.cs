@@ -20,5 +20,15 @@ public class CarPartsTests
         Assert.Equal(-0.8f, Vector3.Transform(outer, w[3]).X, 5);
         Assert.True(w[1].GetDeterminant() > 0);
         Assert.True(CarParts.IsDefaultBody("body00") && !CarParts.IsDefaultBody("bodyshd00") && !CarParts.IsDefaultBody("Bcali00FL"));
+        Assert.Equal(("emblem00", "emblem01"), CarParts.Emblem("AE86T", 0));
+        Assert.Equal(("emblem01", "emblem00"), CarParts.Emblem("AE86T", 1));
+        Assert.Equal((null, null), CarParts.Emblem("AE86L", 1));
+
+        // pop-up lamps sit at fr_rk_close; other parts and bodies without the node stay put
+        var lamp = new Mesh { Textures = [], Nodes = [], Materials = [new Mesh.Material(-1, 0, 0, [new Mesh.Vertex(Vector3.Zero, Vector3.UnitY, default, default)])] };
+        var popUp = new Mesh { Textures = [], Materials = [], Nodes = [("fr_rk_close", Matrix4x4.CreateTranslation(0, 0.6f, 1.9f))] };
+        Assert.Equal(new Vector3(0, 0.6f, 1.9f), CarParts.Placed("Flight00", lamp, popUp).Materials[0].Triangles[0].Position);
+        Assert.Same(lamp, CarParts.Placed("Flight00", lamp, body));
+        Assert.Same(lamp, CarParts.Placed("grill00", lamp, popUp));
     }
 }

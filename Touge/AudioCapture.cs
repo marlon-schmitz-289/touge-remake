@@ -13,18 +13,18 @@ internal static class AudioCapture
 {
     private const int Rate = 48000, FramesPerTick = Rate / 120, TicksPerBlock = 12; // analysis blocks of 0.1 s
 
-    public static bool Run(Iso9660 iso, string courseTime, int at, float driveSeconds, string wavPath, float seconds, bool music)
+    public static bool Run(Iso9660 iso, string courseTime, int at, float driveSeconds, string wavPath, float seconds, bool music, string carName)
     {
         using var dev = new AudioDevice(Rate);
         if (!dev.Enabled) return false;
-        var drive = new Drive(iso, courseTime);
+        var drive = new Drive(iso, courseTime, spec: CarSpecs.All[carName]);
         drive.ResetTo(at);
-        using var audio = new GameAudio(iso, courseTime, dev);
+        using var audio = new GameAudio(iso, courseTime, dev, carName);
         if (music) audio.PlayTrack(background: false);
 
         var ticks = (int)(seconds * 120) / TicksPerBlock * TicksPerBlock;
         var pcm = new short[ticks * FramesPerTick * 2];
-        float[] rpm = new float[ticks], pitch = new float[ticks], slip = new float[ticks], squeal = new float[ticks], kmh = new float[ticks], gas = new float[ticks];
+        float[] rpm = new float[ticks], pitch = new float[ticks], index = new float[ticks], udBend = new float[ticks], slip = new float[ticks], squeal = new float[ticks], kmh = new float[ticks], gas = new float[ticks];
         long allocated = 0;
         int wallTicks = 0;
         float maxImpact = 0, maxScrape = 0;
@@ -37,6 +37,7 @@ internal static class AudioCapture
             audio.Update(car, input.Throttle, input.Handbrake, Drive.Dt);
             allocated += GC.GetAllocatedBytesForCurrentThread() - before;
             dev.Render(pcm.AsSpan(n * FramesPerTick * 2, FramesPerTick * 2));
+            (index[n], udBend[n]) = (audio.EngineIndex, audio.BendOverrun - audio.BendLoad);
             (rpm[n], pitch[n], slip[n], squeal[n], kmh[n], gas[n]) = (car.Rpm, audio.EnginePitch, audio.Slip, audio.SquealGain, car.SpeedKmh, input.Throttle);
             if (car.WallContacts > 0) wallTicks++;
             (maxImpact, maxScrape) = (MathF.Max(maxImpact, car.WallImpactSpeed), MathF.Max(maxScrape, audio.ScrapeGain));
@@ -74,7 +75,15 @@ internal static class AudioCapture
         var full = eng.Where(x => x.Gas > 0.9).ToArray();
         Console.WriteLine($"[Audio] {wavPath}: {seconds:F0} s, Musik {(music ? audio.Track : "aus")}, RMS {Db(Math.Sqrt(total / pcm.Length)):F1} dBFS, Spitze {Db(peak):F2} dBFS, Samples an ±32767: {clipped}");
         Console.WriteLine($"[Audio] Korrelation Drehzahl ↔ Motor-Pitch (gesetzt) r = {Pearson(eng.Select(x => x.Rpm), eng.Select(x => x.Pitch)):F3}, ↔ spektraler Schwerpunkt des Mix r = {Pearson(eng.Select(x => x.Rpm), eng.Select(x => x.Centroid)):F3}, Pitch ↔ Schwerpunkt r = {Pearson(eng.Select(x => x.Pitch), eng.Select(x => x.Centroid)):F3} ({eng.Length} Blöcke > 1200 U/min)");
-        Console.WriteLine($"[Audio] nur Vollgas (nur AE86_U-Schichten, {full.Length} Blöcke): Drehzahl ↔ Motor-Pitch r = {Pearson(full.Select(x => x.Rpm), full.Select(x => x.Pitch)):F3}, ↔ Schwerpunkt r = {Pearson(full.Select(x => x.Rpm), full.Select(x => x.Centroid)):F3}");
+        Console.WriteLine($"[Audio] nur Vollgas (nur _U-Schichten, {full.Length} Blöcke): Drehzahl ↔ Motor-Pitch r = {Pearson(full.Select(x => x.Rpm), full.Select(x => x.Pitch)):F3}, ↔ Schwerpunkt r = {Pearson(full.Select(x => x.Rpm), full.Select(x => x.Centroid)):F3}");
+        // engine index and U/D: bend of the _D layers minus the _U layers at the same index, and set pitch off vs on throttle per 500-rpm bin
+        var running = Enumerable.Range(0, ticks).Where(i => rpm[i] > 1200).ToArray();
+        var bins = b.Where(x => x.Rpm > 1200).GroupBy(x => (int)(x.Rpm / 500))
+            .Select(g => (On: g.Where(x => x.Gas > 0.9).Select(x => x.Pitch).DefaultIfEmpty().Average(), Off: g.Where(x => x.Gas < 0.1).Select(x => x.Pitch).DefaultIfEmpty().Average()))
+            .Where(p => p.On > 0 && p.Off > 0).Select(p => 12 * Math.Log2(p.Off / p.On)).ToArray();
+        Console.WriteLine($"[Audio] {carName}: SECT-Index {running.Min(i => index[i]):F0}–{running.Max(i => index[i]):F0}, Drehzahl ↔ Index r = {Pearson(running.Select(i => (double)rpm[i]), running.Select(i => (double)index[i])):F3}; " +
+                          $"Bend _D − _U am selben Index Ø {running.Average(i => Math.Abs(udBend[i])):F2} / max {running.Max(i => Math.Abs(udBend[i])):F2} Halbtöne; " +
+                          $"Pitch Schub − Last je 500 U/min: {(bins.Length > 0 ? $"Ø {bins.Average():F2}, max {bins.Max(Math.Abs):F2} Halbtöne ({bins.Length} Klassen)" : "keine Klasse mit beidem")}");
         Console.WriteLine($"[Audio] Wand: {wallTicks} Ticks mit Kontakt, max Aufprall {maxImpact:F1} m/s, Crash-Sounds {audio.Crashes}, max Kratz-Gain {maxScrape:F2}");
         Console.WriteLine($"[Audio] Korrelation Schlupf ↔ Quietsch-Gain r = {Pearson(b.Select(x => x.Slip), b.Select(x => x.Squeal)):F3}; Blöcke mit Quietschen > 0,1: {b.Count(x => x.Squeal > 0.1)} von {blocks}, mittlerer Schlupf dort {b.Where(x => x.Squeal > 0.1).Select(x => x.Slip).DefaultIfEmpty().Average():F2} (sonst {b.Where(x => x.Squeal <= 0.1).Select(x => x.Slip).DefaultIfEmpty().Average():F2})");
         Console.WriteLine($"[Audio] Allokationen in GameAudio.Update: {allocated} B über {ticks} Updates ({(double)allocated / ticks:F1} B/Update)");

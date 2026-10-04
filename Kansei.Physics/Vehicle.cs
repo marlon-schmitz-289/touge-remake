@@ -209,20 +209,23 @@ public sealed class Vehicle
         var steerRot = Quaternion.CreateFromAxisAngle(up, -_steer);
         var r = s.WheelRadius;
 
-        // Engine + clutch + LSD → drive torque on the rear wheels.
+        // Engine + clutch + LSD → drive torque on the driven axles (front share DriveFront, locked centre for 4WD).
         var ratio = Ratio;
-        var rearInertia = s.WheelInertia;
+        var df = s.DriveFront;
+        float frontInertia = s.WheelInertia, rearInertia = s.WheelInertia;
         float axle = 0;
         if (ratio != 0 && !handbrake)
         {
             // Clutch slips (launch) only in 1st/reverse; during a shift the engine is rev-matched, no torque.
-            var wheelRpm = MathF.Abs((_wheels[2].AngularVelocity + _wheels[3].AngularVelocity) * 0.5f * ratio) * (30 / MathF.PI);
+            var driven = (1 - df) * (_wheels[2].AngularVelocity + _wheels[3].AngularVelocity) * 0.5f + df * (_wheels[0].AngularVelocity + _wheels[1].AngularVelocity) * 0.5f;
+            var wheelRpm = MathF.Abs(driven * ratio) * (30 / MathF.PI);
             var slipRpm = Gear is 1 or -1 ? s.IdleRpm + throttle * (s.LaunchRpm - s.IdleRpm) : s.IdleRpm;
             float te;
             if (wheelRpm >= slipRpm)
             {
                 Rpm = wheelRpm;
-                rearInertia += s.EngineInertia * ratio * ratio / 2;
+                frontInertia += df * s.EngineInertia * ratio * ratio / 2;
+                rearInertia += (1 - df) * s.EngineInertia * ratio * ratio / 2;
                 te = (Rpm >= s.RevLimit ? 0 : throttle * EngineTorque(Rpm)) - (1 - throttle) * s.EngineBrake * Rpm / s.RevLimit;
             }
             else
@@ -236,8 +239,11 @@ public sealed class Vehicle
         else
             Rpm += (s.IdleRpm + throttle * (s.RevLimit - s.IdleRpm) - Rpm) * MathF.Min(1, 10 * h);
 
-        var lsdLock = s.LsdPreload + s.LsdLock * MathF.Abs(axle);
+        // same LSD on every driven axle, locking with that axle's torque; an undriven axle stays open
+        var lsdLock = df < 1 ? s.LsdPreload + s.LsdLock * MathF.Abs(axle * (1 - df)) : 0;
         var lsd = Math.Clamp((_wheels[2].AngularVelocity - _wheels[3].AngularVelocity) * rearInertia / (2 * h), -lsdLock, lsdLock);
+        var lsdLockFront = df > 0 ? s.LsdPreload + s.LsdLock * MathF.Abs(axle * df) : 0;
+        var lsdFront = Math.Clamp((_wheels[0].AngularVelocity - _wheels[1].AngularVelocity) * frontInertia / (2 * h), -lsdLockFront, lsdLockFront);
 
         // Pass 1: suspension raycasts (ray starts one radius above the mount so bump-stop hits still register).
         var rayLength = s.Travel + 2 * r;
@@ -259,8 +265,8 @@ public sealed class Vehicle
         {
             ref var w = ref _wheels[i];
             var front = i < 2;
-            var inertia = front ? s.WheelInertia : rearInertia;
-            var drive = front ? 0 : axle / 2 + (i == 2 ? -lsd : lsd);
+            var inertia = front ? frontInertia : rearInertia;
+            var drive = front ? axle * df / 2 + (i == 0 ? -lsdFront : lsdFront) : axle * (1 - df) / 2 + (i == 2 ? -lsd : lsd);
             var brakeTorque = brake * s.BrakeTorque * (front ? s.BrakeBias : 1 - s.BrakeBias) / 2 + (!front && handbrake ? s.HandbrakeTorque : 0);
 
             var omega = w.AngularVelocity + drive * h / inertia;

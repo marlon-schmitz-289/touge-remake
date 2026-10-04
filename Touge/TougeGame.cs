@@ -9,10 +9,10 @@ using Touge.Formats;
 namespace Touge;
 
 /// <summary>
-///     Course from the ISO with a drivable AE86 (default) and a free-fly camera (F1).
+///     Course from the ISO with a drivable car (<see cref="Car"/>, AE86 by default) and a free-fly camera (F1).
 ///     Drive: W/S or ↑/↓ throttle/brake (automatic: hold S at standstill to reverse), A/D or ←/→ steer, Space handbrake, T auto/manual, Shift/Ctrl gear up/down (manual),
 ///     R reset onto the driving line, B reset in the other direction (downhill/uphill), C chase/bumper camera, F2 graphics quality (MSAA, bloom, shadows) on/off,
-///     F4 HUD on/off, N minimap mode (<see cref="Hud"/>). Pad: left stick, triggers, A handbrake, bumpers shift.
+///     F4 HUD on/off, N minimap mode (<see cref="Hud"/>), 1/2 previous/next car and 3 next paint at standstill. Pad: left stick, triggers, A handbrake, bumpers shift.
 ///     Fly: WASD, Q/E down/up, right mouse or arrow keys look, Shift fast, Space jump along the driving line. Esc quit.
 ///     <paramref name="orbit"/> (degrees, 0 = front, 90 = left, 180 = rear) puts the fly camera around the car;
 ///     <paramref name="autodrive"/> lets the line pilot drive that many seconds before the first frame (for --shot);
@@ -39,6 +39,14 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     public string? HudMode { get; init; }
     /// <summary>--reverse: start in the reverse (uphill) direction; B switches direction at runtime (<see cref="Drive.Reverse"/>).</summary>
     public bool Reverse { get; init; }
+    /// <summary>--car / --paint: HCAR name (<see cref="CarPaint.Cars"/>) and CAR_ENV colour at start; 1/2 cycle the car, 3 the paint (at standstill).</summary>
+    public string Car { get; init; } = "AE86T";
+    public int Paint { get; init; }
+    /// <summary>--cars: PNG path of a contact sheet of all cars (orbit shots), written before quitting.</summary>
+    public string? ContactSheet { get; init; }
+    private string _carName = "";
+    private int _paint, _sheetCar;
+    private byte[]? _sheet;
     private readonly Effects _fx = new();
     private readonly Random _rng = new(3);
     private readonly float[] _smokeDebt = new float[4], _sprayDebt = new float[4];
@@ -82,7 +90,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _course = CourseLoader.Load(iso, courseTime, _renderer);
         SetupFog(_renderer.Atmosphere);
         if (!courseTime.EndsWith("_NIT") && _course.SunDirection is { } sun) _renderer.Atmosphere.SunDirection = sun; // the original's key light
-        _drive = new Drive(iso, courseTime, Reverse);
+        _drive = new Drive(iso, courseTime, Reverse, CarSpecs.All[Car]);
         Console.WriteLine($"[Touge] {courseTime} geladen in {sw.ElapsedMilliseconds} ms, {_course.World.Batches.Count} Batches, {_drive.Ground.Walls.Length} Wandsegmente");
         _carRenderer = new CarRenderer(_renderer);
         _fxRenderer = new EffectsRenderer(_renderer);
@@ -93,13 +101,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             Mode = HudMode switch { "north" => Hud.MapMode.NorthUp, "overview" => Hud.MapMode.Overview, _ => Hud.MapMode.Rotating },
         };
         SetupLights(courseTime.EndsWith("_NIT"), courseTime.EndsWith("_RIN"));
-        _car = CarModel.Load(iso, "AE86T", 0, _renderer);
-
-        // model space → physics body space (origin CoG): model wheel centres onto the physics wheel centres at rest
-        var spec = _drive.Car.Spec;
-        var modelWheels = Vector3.Zero;
-        foreach (var w in _car.Wheels) modelWheels += w.Translation / 4;
-        _modelToBody = Matrix4x4.CreateTranslation(new Vector3(0, spec.WheelRadius - spec.CogHeight, spec.Wheelbase * (0.5f - spec.FrontWeight)) - modelWheels);
+        (_carName, _paint) = (Car, Paint);
+        LoadCarModel(iso);
 
         _drive.ResetTo(startPoint);
         _drive.ForceDrift = drift;
@@ -118,6 +121,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             OrbitCar(deg * MathF.PI / 180);
         }
         if (shotPath != null) (_capture, _shotState) = (new FrameCapture(Device, 1280, 720), 1);
+        else if (ContactSheet != null) (_capture, _sheet, _fly) = (new FrameCapture(Device, 1280, 720), new byte[SheetW * SheetH * 4], true);
         else if (flicker != null)
         {
             var models = Afs.FromBytes(iso.ReadFile("CDVD/DATA/MODEL/COURSE.AFS"), iso.ReadFile("CDVD/DATA/MODEL/COURSE.TBL"));
@@ -128,9 +132,78 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         else
         {
             _audioDevice = new AudioDevice();
-            _audio = new GameAudio(iso, courseTime, _audioDevice);
+            _audio = new GameAudio(iso, courseTime, _audioDevice, _carName);
             _audio.PlayTrack(background: true);
         }
+    }
+
+    /// <summary>
+    ///     Model of <see cref="_carName"/>/<see cref="_paint"/>, and model space → physics body space (origin CoG): the
+    ///     model's wheel centres onto the physics wheel centres at rest.
+    /// </summary>
+    private void LoadCarModel(Iso9660 iso)
+    {
+        _car = CarModel.Load(iso, _carName, _paint, _renderer);
+        var spec = _drive.Car.Spec;
+        var modelWheels = Vector3.Zero;
+        foreach (var w in _car.Wheels) modelWheels += w.Translation / 4;
+        _modelToBody = Matrix4x4.CreateTranslation(new Vector3(0, spec.WheelRadius - spec.CogHeight, spec.Wheelbase * (0.5f - spec.FrontWeight)) - modelWheels);
+    }
+
+    /// <summary>
+    ///     Car <paramref name="car"/> (index in <see cref="CarPaint.Cars"/>) with <paramref name="paint"/>: new model, and for a
+    ///     different car its physics spec (back on the line where the old one stood) and engine sound.
+    ///     ponytail: the old car's textures stay in the renderer (a few MB per change); free them if cars are swapped a lot.
+    /// </summary>
+    private void SwitchCar(int car, int paint)
+    {
+        var name = CarPaint.Cars[(car % CarPaint.Cars.Length + CarPaint.Cars.Length) % CarPaint.Cars.Length];
+        using var iso = new Iso9660(isoPath);
+        Device.WaitIdle(); // the last frame may still read the old meshes
+        _car.Dispose();
+        if (name != _carName)
+        {
+            _drive.ChangeCar(CarSpecs.All[name]);
+            _audio?.SetCar(name);
+            SyncPose();
+        }
+        (_carName, _paint) = (name, paint);
+        LoadCarModel(iso);
+        Console.WriteLine($"\n[Touge] Auto {_carName} (Lack {_paint + 1}/{_car.Paints}), {_drive.Car.Spec.Mass:F0} kg, Antrieb vorn {_drive.Car.Spec.DriveFront:P0}, Motor {GameAudio.Engines[Array.IndexOf(CarPaint.Cars, _carName)].Bank}");
+    }
+
+    private const int SheetCols = 4, SheetTile = 4, SheetW = SheetCols * 1280 / SheetTile, SheetH = 8 * 720 / SheetTile; // 32 cars, 320×180 each
+
+    /// <summary>--cars: renders each car from the orbit (35°), pastes the 4× box-filtered frame into its tile, writes the sheet after the last.</summary>
+    private void ContactSheetStep()
+    {
+        if (_shotState == 1) return;
+        if (_shotState == 2)
+        {
+            var px = _capture!.ReadRgba();
+            int x0 = _sheetCar % SheetCols * 1280 / SheetTile, y0 = _sheetCar / SheetCols * 720 / SheetTile;
+            for (var y = 0; y < 720 / SheetTile; y++)
+            for (var x = 0; x < 1280 / SheetTile; x++)
+            for (var c = 0; c < 4; c++)
+            {
+                var sum = 0;
+                for (var dy = 0; dy < SheetTile; dy++)
+                for (var dx = 0; dx < SheetTile; dx++) sum += px[((y * SheetTile + dy) * 1280 + x * SheetTile + dx) * 4 + c];
+                _sheet![((y0 + y) * SheetW + x0 + x) * 4 + c] = (byte)(sum / (SheetTile * SheetTile));
+            }
+            if (++_sheetCar == CarPaint.Cars.Length)
+            {
+                Png.Write(ContactSheet!, SheetW, SheetH, _sheet!);
+                Console.WriteLine($"[Touge] Kontaktbogen -> {ContactSheet}");
+                Window.ShouldClose = true;
+                return;
+            }
+        }
+        SwitchCar(_sheetCar, 0);
+        UpdateCarMatrices(1);
+        OrbitCar(35 * MathF.PI / 180);
+        _camLook = _pos + Forward();
+        _shotState = 1;
     }
 
     private void SyncPose() => (_prevPos, _prevRot, _camSnap) = (_drive.Car.Position, _drive.Car.Orientation, true);
@@ -235,6 +308,11 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             ProbeStep();
             return;
         }
+        if (_sheet != null)
+        {
+            ContactSheetStep();
+            return;
+        }
         if (_shotState == 2)
         {
             Png.Write(shotPath!, _capture!.Width, _capture.Height, _capture.ReadRgba());
@@ -255,6 +333,13 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         if (bench is { } benchSeconds && Bench(time, benchSeconds)) return;
         if (_audio != null && k.IsKeyPressed(Key.M)) _audio.NextTrack();
         if (_audio != null && k.IsKeyPressed(Key.F3)) _audio.MusicOn = !_audio.MusicOn;
+        if (_drive.Car.SpeedKmh < 3) // car/paint change only at standstill
+        {
+            var id = Array.IndexOf(CarPaint.Cars, _carName);
+            if (k.IsKeyPressed(Key.D1)) SwitchCar(id - 1, 0);
+            if (k.IsKeyPressed(Key.D2)) SwitchCar(id + 1, 0);
+            if (k.IsKeyPressed(Key.D3)) SwitchCar(id, (_paint + 1) % _car.Paints);
+        }
         if (k.IsKeyPressed(Key.F1))
         {
             _fly = !_fly;
@@ -268,7 +353,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         if (time.TotalTime - _statusTime >= 0.1)
         {
             var c = _drive.Car;
-            Console.Write($"\r[Touge] {c.SpeedKmh,4:F0} km/h  Gang {Drive.Gear(c),-2}  {c.Rpm,5:F0} rpm  Schräglauf {c.SlipAngle * 180 / MathF.PI,6:F1}°  {_frames / (time.TotalTime - _statusTime),4:F0} fps   ");
+            Console.Write($"\r[Touge] {_carName,-5} {c.SpeedKmh,4:F0} km/h  Gang {Drive.Gear(c),-2}  {c.Rpm,5:F0} rpm  Schräglauf {c.SlipAngle * 180 / MathF.PI,6:F1}°  {_frames / (time.TotalTime - _statusTime),4:F0} fps   ");
             (_statusTime, _frames) = (time.TotalTime, 0);
         }
     }

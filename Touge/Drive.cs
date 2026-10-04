@@ -5,7 +5,7 @@ using Touge.Formats;
 namespace Touge;
 
 /// <summary>
-///     The drivable part of a course: collision as ground, driving line + pilot, one AE86 on it.
+///     The drivable part of a course: collision as ground, driving line + pilot, one car on it (AE86 by default).
 ///     <see cref="Reverse" /> = uphill/reverse direction like the original's flag 0x1D6 (FORMATS.md): CRS_COLI_&lt;COURSE&gt;_1
 ///     (falls back to _0 for the circuits MYOUGI0/USUI0, as the game does) and CRS_DRV_&lt;COURSE&gt;_O.
 /// </summary>
@@ -20,13 +20,14 @@ public sealed class Drive
     public Vector3[] Line { get; private set; } = null!;
     public LinePilot Pilot { get; private set; } = null!;
     public bool Reverse { get; private set; }
-    public Vehicle Car { get; } = new(CarSpec.AE86);
+    public Vehicle Car { get; private set; }
 
-    public Drive(Iso9660 iso, string courseTime, bool reverse = false)
+    public Drive(Iso9660 iso, string courseTime, bool reverse = false, CarSpec? spec = null)
     {
         _course = courseTime[..courseTime.LastIndexOf('_')];
+        Car = new Vehicle(spec ?? CarSpec.AE86);
         SetDirection(iso, reverse);
-        Car.SurfaceGrip = id => (uint)id < (uint)_grip.Length ? _grip[id] : 1;
+        Car.SurfaceGrip = id => (uint)id < (uint)_grip.Length ? _grip[id] : 1; // reads _grip live, so direction changes apply
     }
 
     /// <summary>Loads ground and driving line of a direction; the car stays where it is (call <see cref="ResetNearest" />).</summary>
@@ -36,6 +37,14 @@ public sealed class Drive
         (Ground, Reverse, _grip) = (ground, reverse, Array.ConvertAll(collision.Materials, Grip));
         Line = CourseLoader.ReadDrivingLine(iso, _course, reverse);
         Pilot = new LinePilot(Line);
+    }
+
+    /// <summary>Swaps in a car with <paramref name="spec"/>, at rest on the driving line where the old one was.</summary>
+    public void ChangeCar(CarSpec spec)
+    {
+        var old = Car;
+        Car = new Vehicle(spec) { SurfaceGrip = old.SurfaceGrip, AutomaticGearbox = old.AutomaticGearbox };
+        ResetTo(Pilot.Nearest(old.Position));
     }
 
     /// <summary>Grip factor per collision material name (R16road, R32gutter, R25r_grass, R21r_bump, …). Guessed, not from game data.</summary>

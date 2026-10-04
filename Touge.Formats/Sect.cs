@@ -6,11 +6,39 @@ namespace Touge.Formats;
 ///     CARSE <c>.DAT</c> ("SECTver0.502"): per bank 16 entries (one per HD program/voice; the game drives the first 8),
 ///     u32 offsets at 0x20. Each entry = 3 curves × 6 points (i32 x 0…255, i32 y 0…127): pitch (64 = centre, sent as
 ///     pitch bend y·128), volume, pan. The game expands them piecewise-linearly into a 256-row table
-///     (sub_001981A0) and indexes it with an rpm-like value 0…255 (sub_00178800). Default curve: y = 64 everywhere.
+///     (sub_001981A0) and indexes it with <see cref="EngineIndex"/> (sub_0018A170 → sub_00178D20, read in sub_00178800).
+///     Default curve: y = 64 everywhere.
 /// </summary>
 public sealed class Sect
 {
     public const int Entries = 16, Pitch = 0, Volume = 1, Pan = 2;
+
+    /// <summary>
+    ///     Pitch-bend range of the CARSE programs: HD split bendRangeLow/High = 0x0100 in 1/128 semitone (MODHSYN.IRX
+    ///     0x45C0: bend·range ≫ 13 into the voice's fine pitch, 128 per semitone) → curve value 0/127 = −2/+1.97 semitones.
+    /// </summary>
+    public const float BendSemitones = 2;
+
+    /// <summary>
+    ///     The engine voices are keyed on note 64 (sub_00178800 → sub_0017F380, t0 = 0x40) against sampleBaseNote 60 of
+    ///     every CARSE sample (Smpl chunk byte 11): all layers play 4 semitones above their sample rate.
+    /// </summary>
+    public const int KeyTranspose = 4;
+
+    // (a, b, c) per profile, ELF 0x24EAD0; the game picks it by tuning level (sub_00189B00: stock 0, tuned 1–2)
+    private static readonly (float A, float B, float C)[] Profiles = [(3, 5, 16), (2.6f, 4.6f, 10), (2.1f, 4.1f, 7)];
+
+    /// <summary>
+    ///     Curve index of the engine sound, sub_0018A170 (soft-float doubles): with x = rpm / rev limit (0…1) and
+    ///     g = (gear − 1) / (gears − 1), <c>5 + 250·(0.8·x^(a + (b − a)·g) + 0.2·√x + 3·(1 − x)·x^c)</c> — 5 at standstill,
+    ///     255 at the limit, rising late in low gears (high exponent) and earlier in top gear.
+    /// </summary>
+    public static float EngineIndex(float x, float gear, int profile)
+    {
+        var (a, b, c) = Profiles[profile];
+        x = Math.Clamp(x, 0, 1);
+        return 5 + 250 * (0.8f * MathF.Pow(x, a + (b - a) * gear) + 0.2f * MathF.Sqrt(x) + 3 * (1 - x) * MathF.Pow(x, c));
+    }
     private readonly byte[] _table = new byte[Entries * 3 * 256]; // [entry][curve][x]
 
     public Sect(ReadOnlySpan<byte> d)

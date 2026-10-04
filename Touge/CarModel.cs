@@ -7,14 +7,16 @@ namespace Touge;
 /// <summary>
 ///     A car from HCAR.AFS with paint from CAR_ENV.BIN: default body parts as one mesh, one wheel mesh
 ///     (tire + brake disk; calipers left out) and the four wheel transforms in car space (fr_l, fr_r, re_l, re_r).
+///     <see cref="Paints"/> = number of CAR_ENV colours of the car.
 /// </summary>
-public sealed record CarModel(StaticMesh Body, StaticMesh Wheel, Matrix4x4[] Wheels, float WheelRadius) : IDisposable
+public sealed record CarModel(StaticMesh Body, StaticMesh Wheel, Matrix4x4[] Wheels, float WheelRadius, int Paints) : IDisposable
 {
     public static CarModel Load(Iso9660 iso, string car, int paint, WorldRenderer renderer)
     {
         var hcar = Afs.FromBytes(iso.ReadFile("CDVD/DATA/MODEL/HCAR.AFS"), iso.ReadFile("CDVD/DATA/MODEL/HCAR.TBL"));
         var pac = hcar.Read(hcar.Find(car + ".PAC") ?? throw new FileNotFoundException(car + ".PAC"));
         var colours = CarPaint.Parse(iso.ReadFile("CDVD/DATA/BINARY/CAR_ENV.BIN"))[Array.IndexOf(CarPaint.Cars, car)];
+        paint = Math.Clamp(paint, 0, colours.Length - 1);
         var entries = Pac.Entries(pac);
 
         var textures = new Dictionary<string, int> { [""] = renderer.AddTexture(1, 1, [255, 255, 255, 255], "white") };
@@ -28,10 +30,12 @@ public sealed record CarModel(StaticMesh Body, StaticMesh Wheel, Matrix4x4[] Whe
 
         var tire = parts["tire00FL"];
         var radius = tire.Materials.SelectMany(m => m.Triangles).Max(v => v.Position.Y);
+        var emblem = CarParts.Emblem(car, paint);
         return new CarModel(
-            Build(renderer.Device, parts.Where(p => CarParts.IsDefaultBody(p.Key)).Select(p => (p.Key, p.Value)), textures),
+            Build(renderer.Device, parts.Where(p => CarParts.IsDefaultBody(p.Key) && p.Key != emblem.Hide || p.Key == emblem.Show)
+                .Select(p => (p.Key, CarParts.Placed(p.Key, p.Value, parts["body00"]))), textures),
             Build(renderer.Device, [("tire00FL", tire), ("Bdisk00", parts["Bdisk00"])], textures),
-            CarParts.Wheels(parts["body00"]), radius);
+            CarParts.Wheels(parts["body00"]), radius, colours.Length);
     }
 
     /// <summary>
@@ -46,7 +50,8 @@ public sealed record CarModel(StaticMesh Body, StaticMesh Wheel, Matrix4x4[] Whe
         var batches = new List<(int Texture, int First)>();
         foreach (var (name, mesh, m) in Flatten(meshes))
         {
-            var tex = textures[m.Texture >= 0 && m.Texture < mesh.Textures.Length ? mesh.Textures[m.Texture] : ""];
+            // a few parts name textures their PAC does not contain (S15: S15067_002): drawn untextured
+            var tex = textures.GetValueOrDefault(m.Texture >= 0 && m.Texture < mesh.Textures.Length ? mesh.Textures[m.Texture] : "", textures[""]);
             var rgb = new Vector3(m.Rgba & 0xFF, (m.Rgba >> 8) & 0xFF, (m.Rgba >> 16) & 0xFF) / 128f;
             var gloss = name.StartsWith("Blamp") ? 2f : name.StartsWith("wind") ? 0.5f
                 : (m.Flags & CarPaint.PaintFlag) != 0 || m.Flags == 0x1000 && m.Texture < 0 && !name.StartsWith("tire") ? 1f : 0f;

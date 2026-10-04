@@ -54,6 +54,7 @@ public sealed record CarSpec
     public float[] Gears { get; init; } = [3.587f, 2.022f, 1.384f, 1.000f, 0.861f];
     public float ReverseGear { get; init; } = 3.484f;
     public float FinalDrive { get; init; } = 4.30f;
+    public float DriveFront { get; init; }                    // share of drive torque on the front axle: 0 = FR/MR, 1 = FF, between = 4WD (locked centre)
     public float DrivetrainEfficiency { get; init; } = 0.85f;
     public float ShiftTime { get; init; } = 0.15f;            // clutch open
     public float AutoUpRpm { get; init; } = 7200f;
