@@ -30,6 +30,7 @@ using Touge;
 // Ohne Kurs und ohne Test-Flags (außer --backend) startet das Spiel im Front-End (Ui/FrontEnd: Hinweis, Karten, Titel, Hauptmenü) mit den gespeicherten Einstellungen (Ui/Settings).
 // --menu boot|logo|disclaimer|title|mode|quit (Front-End; quit = QUIT GAME mit offener Abfrage) bzw. course|route|time|weather|maker|car|gearbox|intro|pause|records|options: diesen Schritt/dieses Menü beim Start öffnen (auch mit Test-Flags, z. B. --menu mode --shot out/m.png).
 // --flow <dir>: ganzer Ablauf per Skript im Fenster (Titel → Auswahl → Laden → Countdown → Rennen (Pilot, 16×) → Pause → Ziel → Ergebnis → Rekorde → Optionen), PNG je Schritt nach <dir>, Einstellungen bleiben unberührt.
+// --jukebox <s>: Renn-Musik (Jukebox) offline ohne Fenster: Zufallsfolge, Weiterschalten, Songende → nächster Titel, Log.
 // --frontend-capture <wav>: ganzer Menüablauf per Skript offline (Titel → Auswahl → Countdown → Ergebnis mit erfundener Fahrt) mit Original-SE/BGM als WAV, Log aller Auslöser.
 // --shot-size WxH: Größe des --shot-Bildes (Standard 1280x720), z. B. 3200x1800 für die HUD-Skalierung.
 // --render-scale <prozent>: 3D-Auflösung in % des Fensters (50–150, Optionen SCREEN), z. B. mit --bench für GPU-Kosten.
@@ -41,7 +42,7 @@ if (iso == null || !File.Exists(iso))
     Console.Error.WriteLine("usage: touge <Initial D Special Stage (SLPM-65268).iso> [KURS_ZEIT, z. B. AKINA_DAY]  (oder INITIALD_ISO setzen)");
     return 1;
 }
-string[] valueFlags = ["--flow", "--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--hud-scale", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture", "--lights", "--render-scale"];
+string[] valueFlags = ["--flow", "--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--hud-scale", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture", "--lights", "--render-scale", "--jukebox"];
 string? Arg(string flag) { var i = Array.IndexOf(args, flag); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
 // --car: HCAR name (AE86T, FD3S, R32, EVO3, …) or index 0–31 in that list (Touge.Formats.CarPaint.Cars)
 var carArg = Arg("--car") ?? "AE86T";
@@ -76,6 +77,11 @@ if (Arg("--frontend-capture") is { } frontWav)
 {
     using var isoFile = new Touge.Formats.Iso9660(iso);
     return AudioCapture.FrontEnd(isoFile, frontWav) ? 0 : 2;
+}
+if (Arg("--jukebox") is { } jukeboxSeconds)
+{
+    using var isoFile = new Touge.Formats.Iso9660(iso);
+    return AudioCapture.Jukebox(isoFile, float.Parse(jukeboxSeconds, CultureInfo.InvariantCulture)) ? 0 : 2;
 }
 if (Arg("--audio-capture") is { } wav)
 {

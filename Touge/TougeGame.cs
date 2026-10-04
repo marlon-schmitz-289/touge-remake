@@ -22,7 +22,7 @@ namespace Touge;
 ///     Tyre smoke, skid marks and sparks come from the car's wheel/wall state every tick (<see cref="TickEffects"/>), in rain
 ///     also tyre spray; falling rain is drawn around the camera.
 ///     Fog: per time of day (<see cref="AtmosphereFor"/>) with the original's fog colour (CRS_INFO) and height fog over the course's altitude range.
-///     Sound: engine, tyres, walls, wind, race BGM (M next track, F3 music on/off); none for --shot.
+///     Sound: engine, tyres, walls, wind, race music (<see cref="Jukebox"/>: M / pad D-pad right next song, F3 music on/off); none for --shot.
 ///     <paramref name="flicker"/>: no game loop, renders the <see cref="FlickerProbe"/> views and quits.
 /// </summary>
 public sealed class TougeGame(string isoPath, string courseTime, string? shotPath = null, int startPoint = 0, float? orbit = null, float? autodrive = null,
@@ -56,6 +56,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     /// <summary>Boot cards, title and main menu (started plainly or with --menu boot|logo|disclaimer|title|mode).</summary>
     private FrontEnd? _front;
     private MenuAudio? _menuAudio;
+    /// <summary>Race music, shuffled over all enabled songs, independent of the course (<see cref="Jukebox"/>).</summary>
+    private Jukebox? _jukebox;
     private readonly MenuKeys _frontKeys = new();
     /// <summary>What the music stream plays: null silence, <see cref="Menu.RaceMusic"/>, or a BGM.AFS track of the menus ("" = decide again).</summary>
     private string? _music = "";
@@ -256,6 +258,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         {
             _audioDevice = new AudioDevice { Music = _settings.MusicVolume, Master = _settings.MasterVolume };
             if (_menu != null) _menuAudio = new MenuAudio(iso, _audioDevice) { Volume = _settings.MenuVolume, Clock = () => _menuTime };
+            _jukebox = new Jukebox(iso, _audioDevice, _settings) { Clock = () => _menuTime };
             StartAudio(iso);
         }
     }
@@ -520,6 +523,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         var dt = time.DeltaTime;
         _menuTime += dt;
         SyncAudio();
+        _jukebox?.Update(dt, hold: _menu?.Current == Menu.Screen.Pause);
         var keys = Flow != null ? FlowKeys(dt) : _frontKeys.Read(Input, dt);
         if (_front is { Active: true })
         {
@@ -564,10 +568,10 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             ApplyGraphics();
             Console.WriteLine($"\n[Touge] Grafik: {(_renderer.HighQuality ? "hoch (4× MSAA, Bloom, Schatten)" : "niedrig (ohne MSAA/Bloom/Schatten)")}");
         }
-        if (_audio != null && k.IsKeyPressed(Key.M))
+        if (_jukebox != null && (k.IsKeyPressed(Key.M) || Input.Gamepad.IsButtonPressed(GamepadButton.DpadRight)))
         {
             _settings.MusicOn = true;
-            _audio.NextTrack();
+            _jukebox.Next();
         }
         if (k.IsKeyPressed(Key.F3)) _settings.MusicOn = !_settings.MusicOn; // SyncMusic follows
         if (_drive.Car.SpeedKmh < 3) // car/paint change only at standstill
@@ -634,13 +638,13 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         if (_audioDevice!.Sfx != sfx) _audioDevice.Sfx = sfx; // the setter touches every voice
         var want = !_settings.MusicOn ? null : front ? _front!.Music : _menu!.Music(_music);
         if (want == _music) return;
-        if (_music == Menu.RaceMusic) _audio.MusicOn = false;
+        if (_music == Menu.RaceMusic) _jukebox!.Stop();
         _music = want;
         if (want != Menu.RaceMusic) _menuAudio.Music(want);
         else
         {
             _menuAudio.Music(null);
-            _audio.MusicOn = true;
+            _jukebox!.Play();
         }
     }
 
@@ -1250,6 +1254,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             _overlay.Clear();
             _menu!.Build(_overlay, w, h);
         }
+        if (_jukebox is { Playing: true, Current: { } song } && _music == Menu.RaceMusic && _front is not { Active: true })
+            NowPlaying.Draw(_overlay, w, h, song, _jukebox.Since, hold: _menu?.Current == Menu.Screen.Pause);
         DrawOverlay(ctx.Encoder, target, w, h);
         if (shot != null)
         {

@@ -101,7 +101,8 @@ public sealed class Options
         }
         if (Current.Input is { } input)
         {
-            if (input(k, sound) != Result.Leave) return Result.None;
+            var r = input(k, sound);
+            if (r != Result.Leave) return r;
             sound?.Invoke("BEEP001");
             Current = null;
             return Result.None;
@@ -228,6 +229,7 @@ public sealed class Options
                     Row.Slider("MENU SE", () => s.MenuVolume, v => s.MenuVolume = v, "Cursor, decide and countdown sounds."),
                 },
             },
+            Playlist.Page(s),
             new Page("CONTROLLER", "Keyboard and pad layout.")
             {
                 Rows =
@@ -248,10 +250,10 @@ public sealed class Options
     }
 
     private static readonly string[] KeyboardHelp =
-        ["W/S or UP/DOWN throttle and brake, A/D or LEFT/RIGHT steer, SPACE handbrake,", "SHIFT/CTRL gear up/down (MT), T AT/MT, R back to the road, C camera,", "L lights, H high beam, F2 graphics, F3 music, F4 HUD, N map, ESC pause."];
+        ["W/S or UP/DOWN throttle and brake, A/D or LEFT/RIGHT steer, SPACE handbrake,", "SHIFT/CTRL gear up/down (MT), T AT/MT, R back to the road, C camera,", "L lights, H high beam, F2 graphics, F3 music, M next song, F4 HUD, N map, ESC pause."];
 
     private static readonly string[] PadHelp =
-        ["Left stick steer, right/left trigger throttle and brake, A handbrake,", "bumpers gear up/down (MT), Y back to the road, START pause.", "D-pad up/down lights/high beam. Menus: D-pad or stick, A decide, B back."];
+        ["Left stick steer, right/left trigger throttle and brake, A handbrake,", "bumpers gear up/down (MT), Y back to the road, START pause.", "D-pad up/down lights/high beam, right next song. Menus: D-pad/stick, A, B."];
 
     // ---------------------------------------------------------------- drawing
 

@@ -20,8 +20,9 @@ Assets kommen zur Laufzeit aus der eigenen ISO (SLPM-65268), nie ins Repo.
 ```sh
 dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso"   # Front-End (Hinweis, Karten, Titel, Hauptmenü) → Kurs, Auto, Rennen, Ergebnis, Rekorde, Optionen
 dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso" [AKINA_DAY|AKINA_NIT|USUI_NIT|…]   # direkt fahren, ohne Menü
-dotnet run --project Touge -- "<iso>" AKINA_NIT --menu boot|logo|disclaimer|title|mode|quit|course|route|time|weather|maker|car|gearbox|intro|pause|records|options[:gamesetting|hud|screen|graphics|sound|controller] --shot out/proof/ui_car.png [--shot-size 3200x1800]   # Menü-Bild (options:<seite> öffnet eine Optionsseite)
+dotnet run --project Touge -- "<iso>" AKINA_NIT --menu boot|logo|disclaimer|title|mode|quit|course|route|time|weather|maker|car|gearbox|intro|pause|records|options[:gamesetting|hud|screen|graphics|sound|playlist|controller] --shot out/proof/ui_car.png [--shot-size 3200x1800]   # Menü-Bild (options:<seite> öffnet eine Optionsseite)
 dotnet run --project Touge -- "<iso>" --flow out/proof   # ganzer Ablauf per Skript im Fenster (Titel → Auswahl → Laden → Countdown → Rennen mit Pilot in 16× → Pause → Ziel → Ergebnis → Rekorde → Optionen), PNG je Schritt
+dotnet run --project Touge -- "<iso>" --jukebox 720   # Rennmusik-Jukebox offline ohne Fenster: Zufallsfolge, M, Menüpause, Titelende → nächster, Log
 dotnet run --project Touge -- "<iso>" --frontend-capture out/proof/fe.wav   # ganzer Menüablauf per Skript offline: Original-SE/BGM als WAV + Log aller Auslöser
 dotnet run --project Touge -- "<iso>" --shot out/akina.png   # ein Frame als PNG, dann Ende
 dotnet run --project Touge -- "<iso>" --ground out/g.png [--at 300] [--reverse]   # Kollision: Raycast-Timing + Draufsicht mit Wänden, Sperren, Fahrlinie/Auslauf; Ausschnitte _at300/_start/_goal
@@ -73,7 +74,7 @@ GAME SETTING (Einheit km/h/mph im Kombiinstrument, Getriebe-Vorwahl AT/MT, Lenkh
 LOW/NORMAL/HIGH = `DriftDamping` × 0,5/1/1,6 – beide ab dem nächsten Lauf; andere Hilfen als FULL/NORMAL fahren eigene Bestzeiten, RECORDS zeigt nur die Serienwerte –, Startkamera, Blickwinkel 50–90°, Kamerawackeln, Aufkleber
 ANIME/STOCK/NONE), HUD (an/aus, HUD SIZE 80–130 %, Navi-Karte), SCREEN (WINDOW/BORDERLESS, außer macOS auch FULLSCREEN exklusiv; Auflösung aus den Modi des
 Bildschirms; VSync; Bildratenbegrenzung 30–240; Render-Skalierung 50–150 %), GRAPHICS (Voreinstellung LOW/MEDIUM/HIGH/ULTRA bzw. CUSTOM aus den
-Schaltern MSAA, Sonnenschatten, AO, Bloom, Regen-Spiegelungen), SOUND (Gesamt, Musik an/aus + Lautstärke, SE, Motor, Menü-SE), CONTROLLER
+Schaltern MSAA, Sonnenschatten, AO, Bloom, Regen-Spiegelungen), SOUND (Gesamt, Musik an/aus + Lautstärke, SE, Motor, Menü-SE), PLAYLIST (Renntitel einzeln an/aus), CONTROLLER
 (Tastatur-/Pad-Belegung). Andere Features hängen eigene Seiten an `Menu.Options.Pages` an (Zeilen per `Options.Row.Choice/Toggle/Slider`
 oder eigener Bildschirm über `Page.Input`/`Page.Draw`). Zurück geht die besuchten
 Schritte rückwärts. Zwischen Modulen 30-Frame-Schwarzblenden. Ton: Original-SE aus SYSSE (SYS005 Cursor, SYS006 Bestätigen, BEEP001
@@ -100,13 +101,13 @@ kleine Instrumente nur mit Beschriftung + rotem Bereich; Gehäuse höchstens 400
 Kilometerzähler-Fenster, Gang + AT/MT unter dem Drehzahlmesser; Tests prüfen Überdeckung, Größe/Lage bei 720p/1080p/4:3/21:9 und dass keine Schrift
 im Zeigerbereich liegt). Alles in einem gemeinsamen Sicherheitsrahmen (`Style.Safe`: 44/900 Rand, ab 2:1 mittig begrenzt). Falschfahrt-Warnung, Hinweis „R“ zum Zurücksetzen, wenn das Auto feststeckt.
 Schrift: Rajdhani Bold (SIL Open Font License, `Touge/Assets/Fonts/OFL.txt`), zur Laufzeit als Distanzfeld-Atlas.
-Ton: M nächster Eurobeat-Titel, F3 Musik an/aus (Startstück fest je Kurs).
+Ton: Rennmusik als Jukebox über alle 31 Eurobeat-Titel, unabhängig von der Strecke: jeder Titel einmal bis zum Ende, dann zufällig der nächste (keine Wiederholung, bis alle eingeschalteten liefen), läuft über Retry/Kurswechsel weiter (Menümusik hält ihn an). M (Pad: D-Pad rechts) nächster Titel, F3 Musik an/aus. Beim Titelstart fährt oben rechts „NOW PLAYING“ mit Titel und Interpret ein (5 s, in der Pause dauerhaft). Optionen → PLAYLIST: jeden Titel ON/OFF schalten (ALL SONGS für alle; alle aus = Stille).
 Auto (nur im Stand, < 3 km/h): 1/2 voriges/nächstes Auto, 3 nächste Lackfarbe. Autos (`--car`, Index in Klammern):
 AE86T (0), AE86L, AE85, MR2, MRS, ALTEZ, GT-4, R32, R34, ER34, S13 (10), S14Q, S14, S15, ONE80, SIL80, EK9, EG6, INTGR, S2000,
 EVO3 (20), EVO4, EVO7, FD3S, FD3SA, FC3S, NA6C, NB8C, IMP, IMP2, IMP3 (30), CAPPU. Physik je Auto: Spur/Radstand/Radradius und
 Gangzahl aus dem Spiel, Masse, Leistung, Übersetzungen, Antrieb aus realen Daten (`Kansei.Physics/CarSpecs.cs`); Motorsound je
 Auto aus der Original-Zuordnung (FORMATS.md, AE86T/AE86L mit der voll getunten `AE86`-Bank).
-Pad: linker Stick lenken, Trigger Gas/Bremse, A Handbremse, Schultertasten schalten, D-Pad hoch Licht, runter Fernlicht.
+Pad: linker Stick lenken, Trigger Gas/Bremse, A Handbremse, Schultertasten schalten, D-Pad hoch Licht, runter Fernlicht, rechts nächster Musiktitel.
 F1 Freiflug: WASD fliegen, Q/E runter/hoch, rechte Maustaste oder Pfeiltasten umschauen, Shift schnell,
 Leertaste ~400 m weiter auf der Fahrlinie. F11 Vollbild, Esc Pause-Menü.
 Backend: Metal (macOS) bzw. Vulkan, umschaltbar mit `--backend metal|vulkan|opengl` (oder `PENELOPE_BACKEND`).

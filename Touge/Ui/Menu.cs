@@ -18,7 +18,7 @@ namespace Touge.Ui;
 ///     UI sounds by SYSSE name through <see cref="Sound"/> (SYS005 move, SYS006 decide, BEEP001 back/locked); the
 ///     game reads <see cref="Music"/>, reacts to the returned <see cref="Action"/> and reads the selection.
 /// </summary>
-public sealed class Menu(Catalog catalog, Settings settings)
+public sealed partial class Menu(Catalog catalog, Settings settings)
 {
     public enum Screen { None, Course, Route, Time, Weather, Maker, Car, Gearbox, Loading, Intro, Pause, Finish, Result, Records, Options }
 

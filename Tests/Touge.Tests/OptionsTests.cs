@@ -126,9 +126,10 @@ public class OptionsTests
         (int, int, bool, bool) up = (0, -1, false, false), down = (0, 1, false, false), left = (-1, 0, false, false), right = (1, 0, false, false),
             ok = (0, 0, true, false), back = (0, 0, false, true);
         Assert.Equal("OPTIONS", o.Title);
-        Assert.Equal(["GAME SETTING", "HUD", "SCREEN", "GRAPHICS", "SOUND", "CONTROLLER"], o.Pages.Select(p => p.Title));
+        Assert.Equal(["GAME SETTING", "HUD", "SCREEN", "GRAPHICS", "SOUND", "PLAYLIST", "CONTROLLER"], o.Pages.Select(p => p.Title));
         Assert.Equal(Options.Result.None, o.Update(up, sounds.Add)); // wraps to CONTROLLER
-        Assert.Equal(5, o.Section);
+        Assert.Equal(6, o.Section);
+        o.Update(up, sounds.Add);
         o.Update(up, sounds.Add);
         o.Update(ok, sounds.Add);
         Assert.Equal("SOUND", o.Title);
@@ -138,7 +139,7 @@ public class OptionsTests
         Assert.Equal(Options.Result.None, o.Update(right, sounds.Add)); // already full
         o.Update(back, sounds.Add);
         Assert.Null(o.Current);
-        Assert.Equal(["SYS005", "SYS005", "SYS006", "SYS005", "SYS005", "BEEP001"], sounds);
+        Assert.Equal(["SYS005", "SYS005", "SYS005", "SYS006", "SYS005", "SYS005", "BEEP001"], sounds);
 
         Assert.True(o.OpenPage("screen"));
         // the current window size (1600 x 900) is offered between the display's modes

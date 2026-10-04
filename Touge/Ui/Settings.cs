@@ -42,6 +42,8 @@ public sealed class Settings
     public float MasterVolume { get; set; } = 1;
     public bool MusicOn { get; set; } = true;
     public float MusicVolume { get; set; } = 0.8f;
+    /// <summary>Race songs switched off in Options → PLAYLIST (<see cref="Jukebox.Song.File"/>); all off = silence in races.</summary>
+    public HashSet<string> MusicOff { get; set; } = [];
     /// <summary>Game sound effects (engine, tyres, walls, wind).</summary>
     public float SoundVolume { get; set; } = 1;
     /// <summary>Engine on top of <see cref="SoundVolume"/>.</summary>
@@ -204,6 +206,7 @@ public sealed class Settings
         Course ??= "AKINA_DAY";
         Car ??= "AE86T";
         Best ??= [];
+        MusicOff ??= [];
         Version = CurrentVersion;
     }
 
