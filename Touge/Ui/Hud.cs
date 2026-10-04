@@ -27,6 +27,8 @@ public sealed class Hud
     public bool Visible = true;
     /// <summary>Night course: cluster illumination on.</summary>
     public bool Night;
+    /// <summary>Light switch for the cluster's tell-tales.</summary>
+    public Headlights.Mode Lights;
     public MapMode Mode = MapMode.Rotating;
     public LapTimer Timer { get; }
     public DriftMeter Drift { get; } = new();
@@ -88,7 +90,7 @@ public sealed class Hud
             _progress, _pilot.Length * (1 - _progress), Timer, Cluster.Cars[carName], Night);
         var gauge = Cluster.Cars[carName];
         Cluster.Draw(o, gauge, new Vector2(g.Right, g.Bottom), Cluster.Fit(gauge, g),
-            new Cluster.Reading(car.Rpm, car.SpeedKmh, car.Gear, car.AutomaticGearbox, _boost, Night, time));
+            new Cluster.Reading(car.Rpm, car.SpeedKmh, car.Gear, car.AutomaticGearbox, _boost, Night, time, Lights));
         var timingH = Drift.Total > 0 ? 186 : 150;
         Timing(o, new Vector2(g.Left, g.Top), timingH, u, time);
         // drift combo top centre; when it would crowd the timing panel (4:3, 5:4) it moves below the top row

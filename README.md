@@ -25,7 +25,8 @@ dotnet run --project Touge -- "<iso>" --flow out/proof   # ganzer Ablauf per Skr
 dotnet run --project Touge -- "<iso>" --frontend-capture out/proof/fe.wav   # ganzer Menüablauf per Skript offline: Original-SE/BGM als WAV + Log aller Auslöser
 dotnet run --project Touge -- "<iso>" --shot out/akina.png   # ein Frame als PNG, dann Ende
 dotnet run --project Touge -- "<iso>" --ground out/g.png [--at 300]   # Kollision: Raycast-Timing + Draufsicht mit Wänden
-dotnet run --project Touge -- "<iso>" --shot out/ae86.png --orbit 35   # Kamera ums Auto (0 vorne, 90 links, 180 hinten)
+dotnet run --project Touge -- "<iso>" --shot out/ae86.png --orbit 35[:20]   # Kamera ums Auto (0 vorne, 90 links, 180 hinten), optional Abstand in m (Standard 5,5)
+dotnet run --project Touge -- "<iso>" AKINA_NIT --lights off|low|high --shot out/l.png   # Autolicht beim Start (Standard: nachts/Regen Abblendlicht, tags aus)
 dotnet run --project Touge -- "<iso>" --autodrive 60 [--shot out/ad.png]   # Pilot fährt 60 s die Fahrlinie ab, Log pro Sekunde
 dotnet run --project Touge -- "<iso>" AKINA_DAY --at 710 --autodrive 40 [--ram] [--reverse]   # hinter dem Ziel: Auslauf bis vor die Endsperre bzw. mit --ram Vollgas in die Sperre; Zusammenfassung (Weg hinter dem Ziel, Abstand zur Sperre, Wandkontakt, Höhe)
 dotnet run --project Touge -- "<iso>" AKINA_DAY --reverse [--autodrive 60|--shot …|--ground …]   # Gegenrichtung (bergauf): CRS_COLI_<KURS>_1 + CRS_DRV_<KURS>_O, Start am anderen Ende
@@ -43,6 +44,7 @@ dotnet run --project Touge -- "<iso>" --sun --shot out/sun.png   # freie Kamera 
 
 Fahren (Standard): W/S oder ↑/↓ Gas/Bremse, A/D oder ←/→ lenken, Leertaste Handbremse, S im Stand halten = Rückwärts (Automatik), T Automatik/Manuell,
 Shift/Strg hoch-/runterschalten (manuell, auch in R), R (Pad: Y) zurück auf die Fahrlinie (nächster freier Punkt, Blick in Fahrtrichtung), B Richtung wechseln (bergab ↔ bergauf, setzt auf die Fahrlinie der Gegenrichtung; Minimap/Fortschritt folgen), C Verfolger-/Stoßstangenkamera,
+L Licht an/aus, H Fernlicht an/aus (Umschalter, schaltet das Licht auch ein; Pad: D-Pad hoch/runter),
 F2 Grafikqualität hoch/niedrig (4× MSAA, Bloom und Sonnenschatten an/aus; `--quality off` startet niedrig).
 Menüs: Ohne Kurs/Test-Flags startet das Spiel im Front-End im Stil des Originals (`Ui/FrontEnd`, nur Vektorformen + Schrift, keine
 Original-Menütexturen; Ablauf/Zeiten/Bewegung aus dem Originalcode, siehe FORMATS.md): Hinweis zu den Speicherdaten → Karte „Based on …“ →
@@ -87,7 +89,7 @@ AE86T (0), AE86L, AE85, MR2, MRS, ALTEZ, GT-4, R32, R34, ER34, S13 (10), S14Q, S
 EVO3 (20), EVO4, EVO7, FD3S, FD3SA, FC3S, NA6C, NB8C, IMP, IMP2, IMP3 (30), CAPPU. Physik je Auto: Spur/Radstand/Radradius und
 Gangzahl aus dem Spiel, Masse, Leistung, Übersetzungen, Antrieb aus realen Daten (`Kansei.Physics/CarSpecs.cs`); Motorsound je
 Auto aus der Original-Zuordnung (FORMATS.md, AE86T/AE86L mit der voll getunten `AE86`-Bank).
-Pad: linker Stick lenken, Trigger Gas/Bremse, A Handbremse, Schultertasten schalten.
+Pad: linker Stick lenken, Trigger Gas/Bremse, A Handbremse, Schultertasten schalten, D-Pad hoch Licht, runter Fernlicht.
 F1 Freiflug: WASD fliegen, Q/E runter/hoch, rechte Maustaste oder Pfeiltasten umschauen, Shift schnell,
 Leertaste ~400 m weiter auf der Fahrlinie. F11 Vollbild, Esc Pause-Menü.
 Backend: Metal (macOS) bzw. Vulkan, umschaltbar mit `--backend metal|vulkan|opengl` (oder `PENELOPE_BACKEND`).
@@ -120,7 +122,7 @@ Tageszeit (`_DAY`/`_NIT`/`_RIN`, `TougeGame.AtmosphereFor`) und ±1-LSB-Dither g
 Mipmaps (CPU, Alpha-Abdeckung bleibt erhalten) und 8× anisotrop. Himmel: analytischer Verlauf + Sonne hinter dem Sky-Mesh.
 Nebel (fog.glsl, pro Pixel auf Strecke, Auto, Effekte, Regen und Horizont von Himmel/Sky-Mesh): linear nach Entfernung +
 Höhennebel (am dichtesten am tiefsten Punkt der Fahrlinie, Täler laufen voll), Start/Ende (negativer Start → 0) und Farbton aus dem Kurs (`CRS_INFO`), tags
-warm zur Sonne hin, nachts dunkelblau mit Lichthof um Laternen und sichtbaren Scheinwerferkegeln, im Regen dichter grauer
+warm zur Sonne hin, nachts dunkelblau mit Lichthof um Laternen, im Regen dichter grauer
 Dunst. Z-Fighting: Dreiecke, die < 1 mm über einem früheren liegen (Decals, überlappende
 Streckenabschnitte, Auto-Aufkleber), werden beim Laden zu Overlay-Ebenen (`ZFight`) und pro Ebene 2 mm Richtung Kamera
 gezogen – wie auf der PS2 gewinnt die spätere Schicht, statt je nach Rundung zu flackern.
@@ -130,8 +132,17 @@ neu verteilt: `gebacken × (Rest + Sonne × Schatten × N·L)` (`Atmosphere.Bake
 (bis 12/40/150 m) in einem 6144×2048-Tiefenatlas, texelgenau eingerastet, 3×3-PCF; Auto, Bäume, Schilder und Gebäude
 werfen Schatten, gebackene Schatten werden nicht doppelt abgedunkelt. Auto: Klarlack mit Fresnel, Spiegelung der
 Env-Maps des Kurses (`ENV_TEX_*`, je Straßenpunkt per `CRS_ENV` gewählt), Scheiben dunkel + spiegelnd, Rücklichter
-leuchten beim Bremsen (Bloom). Nacht: zwei Scheinwerfer-Kegel (flach/breit) und die `CRS_LIGHT`-Punkte als
-Straßenlaternen (4 nächste), Rückleuchten als kleine rote Punktlichter.
+leuchten beim Bremsen (Bloom). Autolicht (`Headlights`, L/H): aus / Abblend- / Fernlicht, zwei Scheinwerfer an den
+Linsenmitten des Modells (`CarModel.Lamps`), Abblendlicht mit japanischer Hell-Dunkel-Grenze (0,7° unter dem Horizont,
+links zum Straßenrand ansteigend), Licht staut sich unter der Grenze und wird zum Auto hin dünner (Straße von ~5 bis
+~60 m gleichmäßig statt heller Fleck vor der Stoßstange), Fernlicht ohne Grenze, breiter, 2,5× heller, bis 160 m.
+Mit Licht an die Nachtteile des Spiels (`Flight01`, `Blamp02`: leuchtende Gläser) plus Glühen (Bloom),
+Klappscheinwerfer (AE86, MR2, FD3S, FC3S, ONE80, NA6C) fahren in 0,6 s zwischen `fr_rk_close`/`fr_rk_open` und
+leuchten erst oben; Rückleuchten rot (Bremse heller), Rückfahrlicht weiß im Rückwärtsgang. Grün/blaue Kontrollleuchten
+im Kombiinstrument. Alle lokalen Lichter (Scheinwerfer, Laternen, Rückleuchten) sind auf Flächen gedeckelt
+(`LightCap`, weich, je Licht nach N·L und in Summe) und wirken nur bei Dunkelheit (`Atmosphere.LocalLightShare`:
+tags/Regen 0 – kein Lichtkegel auf der Straße, die Gläser glühen gedämpft). Keine Lichtkegel im Dunst mehr.
+Nacht: die `CRS_LIGHT`-Punkte als Straßenlaternen (4 nächste).
 
 Tag (`_DAY`) und Regen: Sonnenrichtung = Hauptlicht des Originals fürs Auto (`CRS_INFO`, je Kurs, Akina 26,6° von +X wie
 das Sonnensprite), warm gegen kühlen Himmels-Schatten und warmes Bodenlicht (`Atmosphere.SunColor/ShadeSky/ShadeGround`), weniger

@@ -50,4 +50,18 @@ public sealed class Atmosphere
     public float Saturation = 1.05f, Vignette = 0.25f;
     /// <summary>Filmic contrast around mid grey before the tonemap (power in log space, 1 = none).</summary>
     public float Contrast = 1f;
+
+    /// <summary>
+    ///     Share of the local lights (headlight beams, street and rear lamps) that shows on surfaces: 1 at night, 0 once the
+    ///     daylight (ambient luminance + sun) reaches 0.35. A car's beam is about a thousandth of daylight, so by day — overcast
+    ///     rain too — the road shows none of it; the lamps themselves still glow (car.frag).
+    /// </summary>
+    public float LocalLightShare
+    {
+        get
+        {
+            var t = Math.Clamp((0.35f - Vector3.Dot(Ambient, new Vector3(0.2126f, 0.7152f, 0.0722f)) - SunIntensity) / 0.17f, 0, 1);
+            return t * t * (3 - 2 * t);
+        }
+    }
 }

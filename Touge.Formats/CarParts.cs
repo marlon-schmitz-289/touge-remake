@@ -56,8 +56,9 @@ public static class CarParts
     ///     spoiler or bonnet replaces), roll01 for a roll cage; the player car
     ///     (<c>0x159510</c>) adds rival00 when the rival flag is set and assi00; <c>0x15D060</c> swaps the AE86T emblem
     ///     by paint. Plates (<c>number</c>, <c>Rnumber00</c> = night glow) are placed separately (<see cref="PlateNodes"/>).
+    ///     <paramref name="lit"/>: the night lamps instead (<see cref="Lit"/>), as the game shows them with the lights on.
     /// </summary>
-    public static HashSet<string> Visible(string car, IReadOnlySet<string> have, Setup s, int paint)
+    public static HashSet<string> Visible(string car, IReadOnlySet<string> have, Setup s, int paint, bool lit = false)
     {
         HashSet<string> show = ["body00", "wind00", "grill00", "other00", "other01", "emblem00", "Blamp00", "Flight00", "assi00"];
         for (var k = 0; k < Slots.Length; k++) show.Add(Variant(have, Slots[k], s.Slot(k)));
@@ -98,19 +99,32 @@ public static class CarParts
         if (s.Rival) show.Add("rival00");
         if (car == "AE86T") Swap(show, paint == 1 ? "emblem01" : "emblem00", paint == 1 ? "emblem00" : "emblem01");
         show.IntersectWith(have);
+        if (lit) show = [.. show.Select(p => Lit(p, have))];
         return show;
+    }
+
+    /// <summary>
+    ///     Night variant of a lamp part (tables <c>0x24C880</c>/<c>0x24C870</c>): headlamps <c>Flight</c>x0 → x1, rear lamps
+    ///     <c>Blamp00</c> → <c>Blamp02</c> — the same mesh with the lit lens textures. Other parts, and lamps without a
+    ///     night variant in <paramref name="have"/>, stay.
+    /// </summary>
+    public static string Lit(string part, IReadOnlySet<string> have)
+    {
+        var night = part.StartsWith("Flight") && part.EndsWith('0') ? part[..^1] + "1" : part == "Blamp00" ? "Blamp02" : part;
+        return have.Contains(night) ? night : part;
     }
 
     /// <summary>
     ///     Body parts to draw for <paramref name="livery"/> in PAC order (<see cref="Visible"/>, pop-up lamps
     ///     <see cref="Placed"/>) plus the two plates (<c>number</c> at <see cref="PlateNodes"/>, texture renamed to
     ///     <paramref name="plateTexture"/> when given). <see cref="Livery.None"/>: stock parts without decal materials (flag
-    ///     0x400; windows are 0xC00 and stay) and without plates.
+    ///     0x400; windows are 0xC00 and stay) and without plates. <paramref name="lit"/>: night lamps (<see cref="Lit"/>).
     /// </summary>
-    public static List<(string Name, Mesh Mesh)> Body(string car, IReadOnlyDictionary<string, Mesh> parts, Livery livery, int paint, string? plateTexture = null)
+    public static List<(string Name, Mesh Mesh)> Body(string car, IReadOnlyDictionary<string, Mesh> parts, Livery livery, int paint, string? plateTexture = null,
+        bool lit = false)
     {
         var setup = SetupOf(car, livery);
-        var show = Visible(car, parts.Keys.ToHashSet(), setup, paint);
+        var show = Visible(car, parts.Keys.ToHashSet(), setup, paint, lit);
         List<(string Name, Mesh Mesh)> body = [.. parts.Where(p => show.Contains(p.Key)).Select(p => (p.Key, Placed(p.Key, p.Value, parts["body00"])))];
         if (livery == Livery.None)
             return [.. body.Select(p => (p.Name, new Mesh { Textures = p.Mesh.Textures, Nodes = p.Mesh.Nodes, Materials = [.. p.Mesh.Materials.Where(m => (m.Flags & 0xC00) != 0x400)] }))];

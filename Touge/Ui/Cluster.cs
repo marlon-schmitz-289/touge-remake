@@ -144,8 +144,9 @@ public static class Cluster
             Black, White, Orange, NOrange, Housing.Cowls, NumSize: 0.85f),
     };
 
-    /// <summary>What the dials show this frame; <see cref="Boost"/> in bar (−1..1), <see cref="Time"/> in s for blinking.</summary>
-    public readonly record struct Reading(float Rpm, float Kmh, int Gear, bool Automatic, float Boost, bool Night, float Time);
+    /// <summary>What the dials show this frame; <see cref="Boost"/> in bar (−1..1), <see cref="Time"/> in s for blinking, <see cref="Lights"/> the tell-tales.</summary>
+    public readonly record struct Reading(float Rpm, float Kmh, int Gear, bool Automatic, float Boost, bool Night, float Time,
+        Headlights.Mode Lights = Headlights.Mode.Off);
 
     /// <summary>Needle sweep of one dial in px: hub, start angle and span (rad), needle length, tail length.</summary>
     public readonly record struct Sweep(Vector2 C, float From, float Span, float Len, float Tail);
@@ -201,7 +202,9 @@ public static class Cluster
                 case Kind.Tach:
                     var tach = new Scale(g.TachMax, 1000, g.Minor > 0 ? g.Minor : g.TachMax > 9000 ? 2 : 4, 1000, g.Redline, 1000);
                     Dial(o, c, rad, u, k, tach, r.Rpm, "x1000r/min", 20 * g.NumSize * MathF.Min(1, m.R / 96), g.Badge, g.BadgeRed);
-                    GearWindow(o, watch ? column + new Vector2(0, 150 * u) : c + new Vector2(0, MathF.Min(0.7f * rad, rad - 24 * u)), u, r);
+                    var gearAt = watch ? column + new Vector2(0, 150 * u) : c + new Vector2(0, MathF.Min(0.7f * rad, rad - 24 * u));
+                    GearWindow(o, gearAt, u, r);
+                    TellTales(o, gearAt, 44 * u, u, r.Lights);
                     break;
                 case Kind.Speedo:
                     var speedo = new Scale(SpeedoMax, 20, g.Minor > 0 ? g.Minor : 2, 20, float.MaxValue, 1);
@@ -468,6 +471,29 @@ public static class Cluster
         o.Text(r.Automatic ? "AT" : "MT", new Vector2(c.X + 16 * u, c.Y + 10 * u), 12 * u, Style.Fade(Style.Amber, 0.7f), 0.5f, 0.2f * u);
     }
 
+    /// <summary>
+    ///     Light tell-tales <paramref name="dx"/> left and right of <paramref name="c"/>, only while lit: green lamp with its
+    ///     rays dipped (lights on), blue lamp with level rays (high beam) — the ISO 2575 symbols.
+    /// </summary>
+    private static void TellTales(Overlay o, Vector2 c, float dx, float u, Headlights.Mode lights)
+    {
+        if (lights == Headlights.Mode.Off) return;
+        Lamp(o, c - new Vector2(dx, 0), u, Style.Green, 0.35f);
+        if (lights == Headlights.Mode.High) Lamp(o, c + new Vector2(dx, 0), u, Rgba(0.25f, 0.55f, 1), 0);
+
+        static void Lamp(Overlay o, Vector2 c, float u, uint colour, float dip)
+        {
+            var body = c + new Vector2(3 * u, 0);
+            o.Arc(body, 4.5f * u, 1.4f * u, colour, -MathF.PI / 2, MathF.PI / 2, 12);
+            o.Line(body - new Vector2(0, 5.2f * u), body + new Vector2(0, 5.2f * u), 1.4f * u, colour);
+            for (var i = 0; i < 4; i++)
+            {
+                var y = (i - 1.5f) * 3 * u;
+                o.Line(new Vector2(body.X - 2.5f * u, c.Y + y), new Vector2(body.X - 8.5f * u, c.Y + y + 6 * u * dip), 1.2f * u, colour);
+            }
+        }
+    }
+
     /// <summary>R34 multi-function display: upright dark LCD panel (half height <paramref name="h"/>) with boost bar, oil and water temperatures.</summary>
     private static void Mfd(Overlay o, Vector2 c, float h, float u, in Reading r, int tachMax)
     {
@@ -540,6 +566,7 @@ public static class Cluster
         var gear = r.Gear < 0 ? "R" : r.Gear == 0 ? "N" : r.Gear.ToString();
         o.Text(gear, new Vector2(gc.X, gc.Y + o.Font!.CapHeight * 34 * u / 2), 34 * u, g.Ink, 0.5f, 0.5f * u, 0, 0.08f);
         o.Text(r.Automatic ? "AT" : "MT", new Vector2(gc.X + half.X + 6 * u, gc.Y + half.Y), 11 * u, Style.Fade(g.Ink, 0.7f), 0, 0.2f * u);
+        TellTales(o, gc - new Vector2(half.X + 40 * u, 0), 14 * u, u, r.Lights);
         // fuel (left) and temp (right) bar graphs
         Bars(o, new Vector2(min.X + 34 * u, max.Y - 32 * u), u, g.Ink, unlit, 0.7f, "F");
         Bars(o, new Vector2(max.X - 34 * u - 8 * 9 * u, max.Y - 32 * u), u, g.Ink, unlit, 0.5f, "T");

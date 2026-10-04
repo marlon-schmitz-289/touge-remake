@@ -12,7 +12,7 @@ namespace Touge;
 /// <summary>
 ///     Course from the ISO with a drivable car (<see cref="Car"/>, AE86 by default) and a free-fly camera (F1).
 ///     Drive: W/S or ↑/↓ throttle/brake (automatic: hold S at standstill to reverse), A/D or ←/→ steer, Space handbrake, T auto/manual, Shift/Ctrl gear up/down (manual),
-///     R (pad Y) reset onto the driving line, B reset in the other direction (downhill/uphill), C chase/bumper camera, F2 graphics quality (MSAA, bloom, shadows) on/off,
+///     R (pad Y) reset onto the driving line, B reset in the other direction (downhill/uphill), C chase/bumper camera, L lights, H high beam (pad D-pad up/down, <see cref="Headlights"/>), F2 graphics quality (MSAA, bloom, shadows) on/off,
 ///     F4 HUD on/off, N minimap mode (<see cref="Hud"/>), 1/2 previous/next car and 3 next paint at standstill. Pad: left stick, triggers, A handbrake, bumpers shift.
 ///     Fly: WASD, Q/E down/up, right mouse or arrow keys look, Shift fast, Space jump along the driving line. Esc/Start pause menu (<see cref="Menu"/>; without CLI test arguments the game starts in the title menu).
 ///     <paramref name="orbit"/> (degrees, 0 = front, 90 = left, 180 = rear) puts the fly camera around the car;
@@ -84,6 +84,10 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     private string _carName = "";
     private int _paint, _sheetCar;
     private byte[]? _sheet;
+    /// <summary>--orbit …:m: distance of the orbit camera from the car.</summary>
+    public float OrbitDistance { get; init; } = 5.5f;
+    /// <summary>--lights: light switch at the start instead of the course default (<see cref="Headlights.For"/>).</summary>
+    public Headlights.Mode? Lights { get; init; }
     /// <summary>--sun: free camera at the start point looking towards the sun (glare check).</summary>
     public bool LookAtSun { get; init; }
     private Effects _fx = new();
@@ -104,6 +108,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     private WorldRenderer _renderer = null!;
     private CourseLoader.Course _course = null!;
     private Drive _drive = null!;
+    private Headlights _lights = new(Headlights.Mode.Off);
 
     // physics → render interpolation
     private Vector3 _prevPos;
@@ -252,7 +257,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _carRenderer = new CarRenderer(_renderer);
         _fxRenderer = new EffectsRenderer(_renderer);
         _fx = new Effects();
-        SetupLights(courseTime.EndsWith("_NIT"), courseTime.EndsWith("_RIN"));
+        SetupLights(courseTime.EndsWith("_NIT"));
         (_carName, _paint) = (car, paint);
         LoadCarModel(iso);
         _drive.ResetTo(at);
@@ -371,6 +376,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _brakeLight = input.Brake;
         car.Step(input, _drive.Ground, dt);
         _simTime += dt;
+        _lights.Tick(dt);
         TickEffects(dt);
         _hud.Tick(car, dt);
         _audio?.Update(car, input.Throttle, input.Handbrake, dt);
@@ -448,7 +454,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     {
         var target = Vector3.Transform(new Vector3(0, 0.4f, 0), _carBody);
         var dir = Vector3.TransformNormal(new Vector3(MathF.Sin(angle), 0, MathF.Cos(angle)), _carBody);
-        _pos = target + dir * 5.5f + new Vector3(0, 1.3f, 0);
+        _pos = target + dir * OrbitDistance + new Vector3(0, 1.3f * OrbitDistance / 5.5f, 0);
         var look = Vector3.Normalize(target - _pos);
         (_yaw, _pitch) = (MathF.Atan2(look.X, look.Z), MathF.Asin(look.Y));
     }
@@ -805,32 +811,23 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     }
 
     /// <summary>
-    ///     Night: headlights on, CRS_LIGHT points as sodium street lights (on Akina they sit 6–7 m above and 5–10 m beside
-    ///     the road: lamp heads; the game itself only brightens the car near them). Rain: headlights on (dimmer, it is day). Intensities tuned by eye.
+    ///     Car lights on at night and in rain (<see cref="Headlights.For"/>), CRS_LIGHT points as sodium street lights at night
+    ///     (on Akina they sit 6–7 m above and 5–10 m beside the road: lamp heads; the game itself only brightens the car near
+    ///     them). Intensities tuned by eye.
     /// </summary>
-    private void SetupLights(bool night, bool rain)
+    private void SetupLights(bool night)
     {
         var l = _renderer.Lights;
-        l.HeadlightColor = night ? new Vector3(1f, 0.92f, 0.8f) * 700 : rain ? new Vector3(1f, 0.92f, 0.8f) * 250 : Vector3.Zero;
+        _lights = new Headlights(Lights ?? Headlights.For(_courseTime));
         l.StreetLights = _course.Lights;
         l.StreetLightColor = night ? new Vector3(1f, 0.62f, 0.3f) * 50 : Vector3.Zero;
     }
 
-    /// <summary>Per frame: headlights and rear lamps from the car pose, brake lamps, env maps of the road point nearest to the car.</summary>
+    /// <summary>Per frame: the car's lamps from its pose (<see cref="Headlights.Apply"/>), env maps of the road point nearest to the car.</summary>
     private void UpdateLights()
     {
         var l = _renderer.Lights;
-        var dir = Vector3.Normalize(Vector3.TransformNormal(new Vector3(0, -0.03f, 1), _carBody));
-        for (var i = 0; i < 2; i++)
-        {
-            // AE86 pop-up lamps, model space (x left, z front), placed by eye on the mesh
-            l.HeadlightPosition[i] = Vector3.Transform(new Vector3(i == 0 ? 0.55f : -0.55f, 0.62f, 2.0f), _carBody);
-            l.HeadlightDirection[i] = dir;
-        }
-        l.Brake = _fly ? 0 : _brakeLight;
-        // rear lamps (placed by eye on the AE86 mesh): dim red with the headlights on, bright when braking
-        for (var i = 0; i < 2; i++) l.TailLightPosition[i] = Vector3.Transform(new Vector3(i == 0 ? 0.5f : -0.5f, 0.7f, -2.15f), _carBody);
-        l.TailLightColor = new Vector3(1f, 0.08f, 0.03f) * ((l.HeadlightColor != Vector3.Zero ? 0.08f : 0) + 0.8f * l.Brake);
+        _lights.Apply(l, _car.Lamp, _carBody, _renderer.Atmosphere.LocalLightShare, _fly ? 0 : _brakeLight, !_fly && _drive.Car.Gear < 0);
         l.Car = _carBody;
         if (_course.Env is { } env)
         {
@@ -919,6 +916,8 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         if (k.IsKeyPressed(Key.C))
             (_bumperCam, _settings.BumperCam, _camSnap) = (!_bumperCam, !_bumperCam, true);
         if (k.IsKeyPressed(Key.T)) car.AutomaticGearbox = !car.AutomaticGearbox;
+        if (k.IsKeyPressed(Key.L) || pad.IsButtonPressed(GamepadButton.DpadUp)) _lights.Toggle();
+        if (k.IsKeyPressed(Key.H) || pad.IsButtonPressed(GamepadButton.DpadDown)) _lights.ToggleHigh();
         if (!car.AutomaticGearbox)
         {
             if (k.IsKeyPressed(Key.LeftShift) || k.IsKeyPressed(Key.RightShift) || pad.IsButtonPressed(GamepadButton.RightShoulder)) _pendingShift = 1;
@@ -1039,9 +1038,10 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         }
 
         UpdateLights();
+        var shell = _lights.State != Headlights.Mode.Off ? _car.Lit : _car.Day;
         Span<(StaticMesh, Matrix4x4)> casters =
         [
-            (_car.Body, _carBody), (_car.Wheel, _carWheels[0]), (_car.Wheel, _carWheels[1]), (_car.Wheel, _carWheels[2]), (_car.Wheel, _carWheels[3]),
+            (shell.Body, _carBody), (_car.Wheel, _carWheels[0]), (_car.Wheel, _carWheels[1]), (_car.Wheel, _carWheels[2]), (_car.Wheel, _carWheels[3]),
         ];
         _renderer.RenderShadows(ctx.Encoder, _pos, Vector3.Normalize(_camLook - _pos), _fov, aspect, _course.World, casters);
         var pass = _renderer.BeginScene(ctx.Encoder, skyView, proj, shot);
@@ -1049,7 +1049,11 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         _renderer.DrawSky(pass, _course.Sky, Matrix4x4.CreateTranslation(_pos with { Y = 0 }) * view * proj, _pos); // follows the camera
         var carView = _probe != null && _probeView.Group == 1;
         if (_probe == null || !carView) _renderer.Draw(pass, _course.World, view * proj, _pos);
-        if (_probe == null || carView) _carRenderer.Draw(pass, _car.Body, _car.Decals, _car.Wheel, _carBody, _carWheels, view * proj, _pos);
+        if (_probe == null || carView)
+        {
+            _carRenderer.Draw(pass, shell.Body, shell.Decals, _car.Wheel, _carBody, _carWheels, view * proj, _pos);
+            if (_car.Lamp.PopUp is { } popUp) _carRenderer.DrawPart(pass, popUp, _car.Lamp.PopUpAt(_lights.Open) * _carBody, view * proj, _pos);
+        }
         _fxRenderer.Draw(pass, _fx, view, view * proj, _pos);
         // camera velocity stretches the rain streaks; a shot has no previous frame, the chase camera moves with the car
         var frameDt = ctx.Time.DeltaTime;
@@ -1063,7 +1067,10 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         var menuShown = _menu is { Current: not Menu.Screen.None };
         if (_front is { Active: true }) _front.Build(_overlay, w, h);
         else if (_hud.Visible && (!menuShown || _menu!.OverRace)) // telop/countdown and pause lie over the HUD
+        {
+            _hud.Lights = _lights.State;
             _hud.Build(_overlay, w, h, _carPose.Translation, Vector3.TransformNormal(Vector3.UnitZ, _carPose), _drive.Car, _carName, _menuTime);
+        }
         else _overlay.Clear();
         if (_front is not { Active: true } && menuShown) _menu!.Build(_overlay, w, h);
         var target = shot?.View ?? Device.CurrentSwapchainView;

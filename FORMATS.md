@@ -46,6 +46,13 @@ Index = Auto-ID (Namensliste `0x2C4978`, 8 B je Name).
 - `0x2CBBD0`: 24 B je Auto (Struct an Auto + 0x550, Physik `0x1517B0` ab `0x1531E0`): s32 Getriebetabelle (0/1), s32 Gangzahl (5/6), f32 Begrenzer (7500 AE86 … 11500 Cappuccino), f32 4000–8000, f32 6500–10800, f32 2. Die Getriebetabellen (`0x2CBF30`, 88 B) sind keine Übersetzungen, sondern Anteile der Höchstgeschwindigkeit je Gang (0,2 / 0,4 / … / 1,0) plus Drehzahl-Anstiegsraten: Arcade, keine realen Fahrzeugdaten. Auto + 0x560 = (Gang − 1)/(Gänge − 1), + 0x564/0x568 = Drehzahl roh/geglättet (5 % je Frame Richtung max(Drehzahl + 100, 800)), + 0x56C = Begrenzer.
 - `BINARY/CARPARTS.AFS` (`PARTS_<AUTO>.BIN`): Tuning-Teilekatalog (Shift-JIS-Namen, Preise 5000/10000), keine Physikwerte.
 - Pop-up-Scheinwerfer: Teile `Flight…` sind um den Ursprung modelliert und gehören an den Knoten `fr_rk_close` des `body00` (AE86T, MR2, FD3S, FC3S, ONE80, NA6C …; S2000/SIL80 haben feste Leuchten in Position) – umgesetzt (`CarParts.Placed`), vorher klafften dort Löcher.
+  `fr_rk_open` hat dieselbe Drehachse/Position wie `fr_rk_close`, aber keine Drehung; zu ist um X gekippt (AE86T 78°,
+  FD3S 54°, FC3S 48°, ONE80 47°, NA6C 44,5°, MR2 42°). Das Remake dreht das Teil in 0,6 s dazwischen (`CarModel.Lamps.PopUpAt`).
+- Nachtleuchten: `Flight01` (bzw. `Flight11` zur Haube 1) und `Blamp02` sind dasselbe Mesh wie `Flight00`/`Blamp00`,
+  nur mit den Texturen der leuchtenden Gläser (z. B. R32013 → R32016, AE86T104 → AE86T108); bei Klappscheinwerfern sind
+  `Flight00`/`Flight01` gleich. Mit Licht an zeigt das Remake diese (`CarParts.Lit`), die Linsenmitten (texturierte
+  Materialien links/rechts) sind die Scheinwerfer-/Rückleuchtenpositionen. `Blamp01/03`, `HMBlamp…`, `fog…`, `Rnumber00` noch ungenutzt.
+- Kein Schalter-Klick im Ton: SYSSE hat kein passendes Geräusch (`CAR002`/`CAR003` sind 0,2/0,35-s-Rauschstöße unbekannter Rolle), Licht schalten bleibt stumm.
 - Fehlende Texturen: S15 verweist auf `S15067_002`, die nicht im PAC liegt (wird weiß gezeichnet).
 
 ## Autos: Teileauswahl, Aufkleber, Kennzeichen – geknackt
@@ -153,5 +160,5 @@ Stichprobe (WAV-Export + Spektrum, Python/numpy): alle Exporte nicht still (RMS 
 - Bedeutung von VU addr 4, Material-Flags außer 0x100/0x200/0x400
 - CAR_ENV-Bytepaar-Tabelle: welcher Lichtzustand welche Zeile
 - CARSE: SRIP-Index (Kurven springen, eher Zufall/LFO als Schlupf?), Turbo-Stimme (`TURBO`, sub_0018A7D0, Index = 255 × Auto+0x574), Bend-Offset +0xC9DC, f32-Tabelle `0x24E9A0`, HD-Chunks außer `IECSigaV`/`IECSlpmS`/`IECSgorP`
-- Autos: S13-Zweifarben-Karosserie (`0x15BED0`/`0x193E10`), Nachtteile (`Blamp02`, `Flight01`, `fog`, `Rnumber00`, `NUMBER_N`), Byte 2 des Setup-Records, Sinn von Fahrer-Index 1 bei AE85/ONE80
+- Autos: S13-Zweifarben-Karosserie (`0x15BED0`/`0x193E10`), Nachtteile (`fog`, `Rnumber00`, `NUMBER_N`), Byte 2 des Setup-Records, Sinn von Fahrer-Index 1 bei AE85/ONE80
 - Autos: Bedeutung der Felder [4]–[7], [9], [10] in `0x24EB00` und der Drehzahlwerte [3]/[4] in `0x2CBBD0`; Byte 0x13 des Auto-Structs (= 5 → feste Farben)

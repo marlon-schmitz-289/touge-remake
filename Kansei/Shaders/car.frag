@@ -3,9 +3,9 @@
 // Car shading, linear light. Diffuse = albedo × (ambient + sun × shadow × N·L + headlights/street lights). Paint and
 // glass get a clear coat on top: Schlick Fresnel (F0 0.04 / 0.06) blends towards the reflection of the course's
 // environment maps (ENV_TOP/BOTTOM/LEFT/RIGHT of the nearest road point, a crude cube in car space, see envAt)
-// plus a sharp sun highlight that feeds the bloom. Glass is darker (the cabin behind it is dark). Rear lamps
-// (kind 2) glow: dim with the headlights on, bright when braking. Rain: paint a bit darker (wet), beaded with
-// droplets — small domes (hashed per 1.8 cm cell in car space, on the plane facing the normal) that only add light:
+// plus a sharp sun highlight that feeds the bloom. Glass is darker (the cabin behind it is dark). Lamps glow: headlamps
+// (kind 3) with the lights on, rear lamps (kind 2) dim with the lights on, bright when braking, white when reversing.
+// Rain: paint a bit darker (wet), beaded with droplets — small domes (hashed per 1.8 cm cell in car space, on the plane facing the normal) that only add light:
 // a sharp highlight of the sun/lamps and the bright upper environment refracted through the bent surface, over a
 // very faint wet spot. Antialiased by derivatives: soft drop edges over ~1 px, and drops fade out (to nothing,
 // not to an average) once a cell gets smaller than ~3 px, so distant cars do not sparkle with rounding.
@@ -116,8 +116,17 @@ void main()
     }
     if (lamp)
     {
-        float on = dot(pc.uSpotColor.rgb, vec3(1.0)) > 0.0 ? 1.0 : 0.0;
-        c += t.rgb * vColor.rgb * (1.5 * on + 8.0 * pc.uParams.w);
+        // emissive lenses (the lit night textures while the lights are on, CarModel): headlamps (kind 3) in their bright
+        // core, rear lamps (2) in their red parts — dim running light, bright braking — and in their white parts (reverse)
+        vec3 e = t.rgb * vColor.rgb;
+        float glow = pc.uSpotDir[0].w;
+        if (kind > 2.5) c += e * (1.8 * glow * smoothstep(0.45, 0.9, max(e.r, max(e.g, e.b))));
+        else
+        {
+            float red = smoothstep(0.75, 0.9, (e.r - max(e.g, e.b)) / max(e.r, 1e-3)); // hue, not brightness: dark day lenses too
+            float white = smoothstep(0.45, 0.75, min(e.r, min(e.g, e.b)));
+            c += e * (red * (1.5 * step(0.001, glow) + 8.0 * pc.uParams.w) + white * 5.0 * pc.uSpotDir[1].w);
+        }
     }
     vec3 fogged = applyFog(c, vPos);
     float share = dot(ambient, vec3(0.2126, 0.7152, 0.0722)) * (1.0 - fogAmount(vPos)) / max(dot(fogged, vec3(0.2126, 0.7152, 0.0722)), 1e-5);

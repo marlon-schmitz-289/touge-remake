@@ -5,7 +5,8 @@ using Touge;
 
 // touge <ISO> [KURS_ZEIT] [--shot out.png]   z. B. touge "Initial D - Special Stage (Japan) (v2.00).iso" AKINA_NIT
 // --shot rendert einen Frame als PNG und beendet sich; --at <n> startet bei Punkt n der Fahrlinie;
-// --orbit <grad> Kamera ums geparkte Auto (0 vorne, 90 links, 180 hinten).
+// --orbit <grad>[:<m>] Kamera ums geparkte Auto (0 vorne, 90 links, 180 hinten), Abstand Standard 5,5 m.
+// --lights off|low|high: Autolicht beim Start (Standard: nachts/Regen Abblendlicht, tags aus; im Spiel L/H).
 // --autodrive <s>: Pilot fährt die Fahrlinie ab, Log pro Sekunde; ohne --shot ohne Fenster, mit --shot Verfolgerbild am Ende.
 //   Hinter dem Ziel: Auslauf bis vor die Endsperre (Drive.Coast), mit --ram Vollgas weiter in die Sperre; Zusammenfassung danach.
 // --audio-capture <wav> <s> (mit --autodrive): Spielton offline (OpenAL-Loopback) als WAV + Auswertung, ohne Fenster; --no-music ohne BGM.
@@ -33,7 +34,7 @@ if (iso == null || !File.Exists(iso))
     Console.Error.WriteLine("usage: touge <Initial D Special Stage (SLPM-65268).iso> [KURS_ZEIT, z. B. AKINA_DAY]  (oder INITIALD_ISO setzen)");
     return 1;
 }
-string[] valueFlags = ["--flow", "--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture"];
+string[] valueFlags = ["--flow", "--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture", "--lights"];
 string? Arg(string flag) { var i = Array.IndexOf(args, flag); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
 // --car: HCAR name (AE86T, FD3S, R32, EVO3, …) or index 0–31 in that list (Touge.Formats.CarPaint.Cars)
 var carArg = Arg("--car") ?? "AE86T";
@@ -53,7 +54,13 @@ if (!Enum.TryParse<Touge.Formats.Livery>(Arg("--livery") ?? "rival", true, out v
 }
 var shot = Arg("--shot");
 var at = int.Parse(Arg("--at") ?? "0");
-float? orbit = Arg("--orbit") is { } o ? float.Parse(o, CultureInfo.InvariantCulture) : null;
+float? orbit = Arg("--orbit") is { } o ? float.Parse(o.Split(':')[0], CultureInfo.InvariantCulture) : null;
+var orbitDistance = Arg("--orbit") is { } od && od.Split(':') is [_, var m] ? float.Parse(m, CultureInfo.InvariantCulture) : 5.5f;
+if (Arg("--lights") is { } lightArg && !Enum.TryParse<Headlights.Mode>(lightArg, true, out _))
+{
+    Console.Error.WriteLine($"--lights {lightArg}: unbekannt, möglich: off low high");
+    return 1;
+}
 var course = args.Where((a, i) => i == 0 || !valueFlags.Contains(args[i - 1]))
                  .FirstOrDefault(a => a.Contains('_') && !a.EndsWith(".iso", StringComparison.OrdinalIgnoreCase)) ?? "AKINA_DAY";
 float? autodrive = Arg("--autodrive") is { } ad ? float.Parse(ad, CultureInfo.InvariantCulture) : null;
@@ -106,7 +113,8 @@ if (Arg("--ground") is { } groundPng)
 // menus (and the saved settings) only when started plainly: any course or test flag means a scripted run
 var plain = args.Where((a, i) => a != iso && a != "--backend" && (i == 0 || args[i - 1] != "--backend")).All(a => a == "--menu" || a == Arg("--menu"));
 KanseiApp.Run(new TougeGame(iso, course.ToUpperInvariant(), shot, at, orbit, autodrive, bench, Arg("--quality") != "off", args.Contains("--drift"), Arg("--flicker"))
-    { HudMode = Arg("--hud"), Reverse = args.Contains("--reverse"), Car = car, Paint = paint, Livery = livery, ContactSheet = Arg("--cars"), LookAtSun = args.Contains("--sun"),
+    { HudMode = Arg("--hud"), Reverse = args.Contains("--reverse"), Car = car, Paint = paint, Livery = livery, ContactSheet = Arg("--cars"), LookAtSun = args.Contains("--sun"), OrbitDistance = orbitDistance,
+      Lights = Arg("--lights") is { } lights ? Enum.Parse<Headlights.Mode>(lights, true) : null,
       UseMenus = plain, StartMenu = Arg("--menu"), Flow = Arg("--flow"),
       ShotSize = Arg("--shot-size") is { } size && size.Split('x') is [var sw, var sh] ? (int.Parse(sw), int.Parse(sh)) : (1280, 720) }, new WindowSettings
 {
