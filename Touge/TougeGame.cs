@@ -273,7 +273,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
     {
         var key = Settings.BestKey(_courseTime[.._courseTime.LastIndexOf('_')], _drive.Reverse);
         _previousBest = _settings.Best.GetValueOrDefault(key)?[^1];
-        var hud = new Hud(_course.Road, _drive.Line, _drive.Pilot, _settings.Best.GetValueOrDefault(key))
+        var hud = new Hud(_course.Road, _drive.Line, _drive.Pilot, _settings.Best.GetValueOrDefault(key), _drive.Start)
         {
             Visible = _settings.HudOn, Mode = _settings.MapMode, Night = _courseTime.EndsWith("_NIT"),
         };

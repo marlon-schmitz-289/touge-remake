@@ -21,6 +21,7 @@ public sealed class Hud
 
     private readonly Vector3[] _line;
     private readonly LinePilot _pilot;
+    private readonly float _start;
     private readonly MapWidget _map;
     private float _progress, _wrongFor, _stuckFor, _wrongA, _driftA, _hintA, _boost = -0.6f;
 
@@ -31,10 +32,11 @@ public sealed class Hud
     public LapTimer Timer { get; }
     public DriftMeter Drift { get; } = new();
 
-    public Hud(Vector3[] road, Vector3[] line, LinePilot pilot, float[]? best)
+    /// <param name="start">Start line, m along <paramref name="line"/> (the car spawns behind it); timing and progress run from there.</param>
+    public Hud(Vector3[] road, Vector3[] line, LinePilot pilot, float[]? best, float start = 0)
     {
-        (_line, _pilot) = (line, pilot);
-        Timer = new LapTimer(pilot.Length, best);
+        (_line, _pilot, _start) = (line, pilot, start);
+        Timer = new LapTimer(pilot.Length - start, best);
         _map = new MapWidget(road, line);
     }
 
@@ -49,8 +51,8 @@ public sealed class Hud
     public void Tick(Vehicle car, float dt)
     {
         var (along, lateral) = _pilot.Track(car.Position);
-        _progress = Math.Clamp(along / _pilot.Length, 0, 1);
-        Timer.Update(along, dt);
+        _progress = Math.Clamp((along - _start) / (_pilot.Length - LapTimer.Gate - _start), 0, 1);
+        Timer.Update(along - _start, dt);
         var kmh = car.SpeedKmh;
         Drift.Update(car.SlipAngle, kmh, car.WallContacts > 0, dt);
         _map.Tick(kmh, dt);
@@ -85,7 +87,7 @@ public sealed class Hud
         // course dial bottom left, same height as the cluster box (Cluster.Box.Y), so the two read as one dash row
         var s = g.U * Cluster.Box.Y / (2 * MapWidget.Radius);
         _map.Draw(o, new Vector2(g.Left + MapWidget.Radius * s, g.Bottom - MapWidget.Radius * s), s, Mode, Xz(carPos), Xz(carForward),
-            _progress, _pilot.Length * (1 - _progress), Timer, Cluster.Cars[carName], Night);
+            _progress, (_pilot.Length - LapTimer.Gate - _start) * (1 - _progress), Timer, Cluster.Cars[carName], Night);
         var gauge = Cluster.Cars[carName];
         Cluster.Draw(o, gauge, new Vector2(g.Right, g.Bottom), Cluster.Fit(gauge, g),
             new Cluster.Reading(car.Rpm, car.SpeedKmh, car.Gear, car.AutomaticGearbox, _boost, Night, time));

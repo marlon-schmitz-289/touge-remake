@@ -20,7 +20,10 @@ public sealed class Drive
     private float _coastDecel;
 
     public TriangleGround Ground { get; private set; } = null!;
+    /// <summary>Driving line from the spawn to the goal (<see cref="CourseEnd"/>).</summary>
     public Vector3[] Line { get; private set; } = null!;
+    /// <summary>Start line, m along <see cref="Line"/>: the car spawns behind it (0 on circuits).</summary>
+    public float Start { get; private set; }
     public LinePilot Pilot { get; private set; } = null!;
     public bool Reverse { get; private set; }
     public Vehicle Car { get; private set; }
@@ -36,14 +39,14 @@ public sealed class Drive
     }
 
     /// <summary>
-    ///     Loads ground and driving line of a direction, the line ending at the goal and both course ends walled off
+    ///     Loads ground and driving line of a direction, the line running from the spawn to the goal and both course ends walled off
     ///     (<see cref="CourseEnd"/>); the car stays where it is (call <see cref="ResetNearest" />).
     /// </summary>
     public void SetDirection(Iso9660 iso, bool reverse)
     {
         var (ground, collision) = CourseGround.Load(iso, _courseTime[.._courseTime.LastIndexOf('_')], reverse ? 1 : 0);
         var ends = CourseEnd.Close(iso, _courseTime, reverse, ground);
-        (Ground, Reverse, _grip, Line, EndBarrier) = (ground, reverse, Array.ConvertAll(collision.Materials, Grip), ends.Line, ends.Barrier);
+        (Ground, Reverse, _grip, Line, Start, EndBarrier) = (ground, reverse, Array.ConvertAll(collision.Materials, Grip), ends.Line, ends.Start, ends.Barrier);
         Pilot = new LinePilot(Line);
         _runOut = ends.RunOut.Length > 1 ? new LinePilot(ends.RunOut) : null;
     }
@@ -103,19 +106,20 @@ public sealed class Drive
     ///     After the finish, like an arcade racer's auto-run: no throttle, brakes, steers along the run-out and slows at one
     ///     constant rate (fixed at the first call: <see cref="CoastDecel"/>, or more if the barrier is closer) to a stop
     ///     <see cref="CoastGap"/> m before <see cref="EndBarrier"/>; at a standstill the handbrake holds it (the brake would
-    ///     engage reverse). The tyres brake what they can, <see cref="Vehicle.LimitSpeed"/> the rest.
+    ///     engage reverse). The tyres brake what they can, <see cref="Vehicle.LimitSpeed"/> the rest; harder where the pilot
+    ///     brakes for a corner of the run-out (SHOMARU downhill: a hairpin 50 m past the goal).
     /// </summary>
     public VehicleInput Coast()
     {
-        var steer = (_runOut ?? Pilot).Drive(Car).Steer;
+        var pilot = (_runOut ?? Pilot).Drive(Car);
         var v = Car.Velocity.Length();
-        if (EndBarrier is { } b)
+        if (EndBarrier != null && _runOut != null)
         {
-            var d = MathF.Max(Vector3.Dot(Car.Position - b.A, b.Normal) - CoastGap, 0);
+            var d = MathF.Max(_runOut.Length - _runOut.Track(Car.Position).Along - CoastGap, 0); // along the run-out: it may bend
             if (_coastDecel == 0) _coastDecel = MathF.Max(CoastDecel, v * v / (2 * MathF.Max(d, 0.5f)));
             Car.LimitSpeed(MathF.Sqrt(2 * _coastDecel * d)); // also when parked: no creeping downhill into the barrier
         }
-        return v < 1 ? new VehicleInput(0, 0, steer, Handbrake: true) : new VehicleInput(0, 0.6f, steer);
+        return v < 1 ? new VehicleInput(0, 0, pilot.Steer, Handbrake: true) : new VehicleInput(0, MathF.Max(0.6f, pilot.Brake), pilot.Steer);
     }
 
     /// <summary>--ram: after the goal <see cref="AutoDrive"/> keeps full throttle along the run-out into the end barrier instead of <see cref="Coast"/>.</summary>
@@ -149,7 +153,7 @@ public sealed class Drive
             if (goalAt != null)
             {
                 past = MathF.Max(past, _runOut?.Track(Car.Position).Along ?? Vector2.Distance(new(Car.Position.X, Car.Position.Z), new(Line[^1].X, Line[^1].Z)));
-                if (EndBarrier is { } b) gap = MathF.Min(gap, Vector3.Dot(Car.Position - b.A, b.Normal) - Car.Spec.Length / 2);
+                if (EndBarrier != null && _runOut != null) gap = MathF.Min(gap, _runOut.Length - _runOut.Track(Car.Position).Along - Car.Spec.Length / 2);
                 minY = MathF.Min(minY, Car.Position.Y);
                 if (Car.WallContacts > 0) goalWall++;
             }
@@ -171,7 +175,8 @@ public sealed class Drive
         if (goalAt != null)
             Console.WriteLine($"[AutoDrive] Ziel nach {goalAt:F1} s mit {goalKmh:F0} km/h, danach {(Ram ? "Vollgas weiter" : "Auslauf")}: bis {past:F1} m hinter dem Ziel " +
                               $"(Endsperre {(_runOut == null ? "keine" : $"bei {_runOut.Length:F1} m")}), Front min {(gap < float.MaxValue ? $"{gap:F2} m vor der Sperre" : "-")}, " +
-                              $"{goalWall} Ticks Wandkontakt, Höhe min {minY - goalY:+0.0;-0.0} m, jetzt {Car.SpeedKmh:F0} km/h");
+                              $"{goalWall} Ticks Wandkontakt, Höhe min {minY - goalY:+0.0;-0.0} m, jetzt {Car.SpeedKmh:F0} km/h" +
+                              (Ram ? "" : $", Verzögerung {_coastDecel:F1} m/s²"));
         return true;
     }
 

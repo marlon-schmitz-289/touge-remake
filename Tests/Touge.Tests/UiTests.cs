@@ -137,6 +137,26 @@ public class UiTests
         for (var i = 0; i < along.Length; i++) Assert.Equal(along[i], twice[i], 0.04f); // the 15 m jump back to the start counts in each lap
     }
 
+    /// <summary>
+    ///     The car spawns behind the start line (CourseEnd.Lead, the HUD passes the distance from the line): the clock runs from
+    ///     crossing it, not from driving off, and stops at the goal – the opposite direction's start line – after length − Gate.
+    /// </summary>
+    [Fact]
+    public void LapTimer_RunsFromStartLineToGoal()
+    {
+        var t = new LapTimer(102, null);
+        for (var i = 0; i < 10; i++) t.Update(-5, 0.1f); // standing 5 m behind the line (countdown)
+        t.Update(-0.5f, 0.1f);
+        Assert.Equal(LapTimer.State.Ready, t.Phase);
+        t.Update(0.5f, 0.1f);
+        Assert.Equal(LapTimer.State.Running, t.Phase);
+        for (var along = 1f; along < 100; along += 1) t.Update(along, 0.1f);
+        Assert.Equal(LapTimer.State.Running, t.Phase);
+        t.Update(100, 0.1f);
+        Assert.Equal(LapTimer.State.Finished, t.Phase);
+        Assert.Equal(10, t.Time, 0.01f); // 100 m from the start line in 100 ticks
+    }
+
     /// <summary>A car spawned past the start (line starts off the road) still starts the clock once it drives off.</summary>
     [Fact]
     public void LapTimer_StartsWhenSpawnedPastTheStartLine()
