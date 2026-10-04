@@ -46,7 +46,7 @@ public sealed class Drive
         if (i != want) Console.WriteLine($"[Drive] Fahrlinie Punkt {want} ohne befahrbaren Boden, starte bei Punkt {i}");
         var d = Line[i + 1] - Line[i];
         Car.Reset(hit.Point, MathF.Atan2(d.X, d.Z));
-        for (var t = 0; t < 60; t++) Car.Step(new VehicleInput(0, 1, 0), Ground, Dt);
+        for (var t = 0; t < 60; t++) Car.Step(new VehicleInput(0, 0, 0, Handbrake: true), Ground, Dt); // handbrake, not brake: brake at standstill engages reverse
         Pilot.Nearest(Car.Position);
     }
 
