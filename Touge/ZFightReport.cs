@@ -12,8 +12,7 @@ namespace Touge;
 /// </summary>
 public static class ZFightReport
 {
-    /// <summary>Gap below which the groups are listed: within the depth noise of float world coordinates (~0.1 mm) plus margin.</summary>
-    private const float Critical = 0.001f;
+    private const float Critical = ZFight.FightGap;
 
     public static void Run(Iso9660 iso, string? filter)
     {
@@ -73,7 +72,7 @@ public static class ZFightReport
         var layered = layers.Count(l => l > 0);
         Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
             $"{title}: {corners.Length / 3} Dreiecke, {pairs.Count} Paare, {pairs.Sum(p => p.Area):F2} m², Abstand <1 mm {pairs.Count(p => p.Gap < 0.001f)}, " +
-            $"<5 mm {pairs.Count(p => p.Gap < 0.005f)}, <3 cm {pairs.Count}; Ebenen>0: {layered} Dreiecke (max {(layers.Length > 0 ? layers.Max() : 0)})"));
+            $"<5 mm {pairs.Count(p => p.Gap < 0.005f)}, <3 cm {pairs.Count}; Ebenen>0: {layered} Dreiecke (max {(layers.Length > 0 ? layers.Max() : 0)}), kritisch ungelöst (Abstand < 1 mm, spätere Ebene nicht höher) {pairs.Count(p => p.Gap < Critical && layers[p.B] <= layers[p.A])}"));
         foreach (var g in pairs.Where(p => p.Gap < Critical).GroupBy(p => (Batch(p.A), Batch(p.B))).OrderByDescending(g => g.Sum(p => p.Area)).Take(8))
         {
             var worst = g.MaxBy(p => p.Area);

@@ -38,8 +38,8 @@ public static class CourseLoader
         }
 
         // tree* are local-space templates (placement data not decoded yet), lod/shd are not drawn
-        var world = Build(renderer.Device, Meshes(pac, false), textures, white);
-        var sky = Build(renderer.Device, Meshes(pac, true), textures, white);
+        var world = Build(renderer.Device, Meshes(pac, false), textures, white, true);
+        var sky = Build(renderer.Device, Meshes(pac, true), textures, white, false); // no depth: paint order stays file order
 
         var course = courseTime[..courseTime.LastIndexOf('_')];
         var data = Afs.FromBytes(iso.ReadFile("CDVD/DATA/COURSE/CRS_DATA.AFS"), iso.ReadFile("CDVD/DATA/COURSE/CRS_DATA.TBL"));
@@ -83,20 +83,36 @@ public static class CourseLoader
     /// <summary>
     ///     Flattens meshes into one vertex/index buffer, one batch per material (texture) in file order
     ///     (<see cref="Flatten"/>). Normals: <see cref="Normals.Smooth"/> over everything, so seams between
-    ///     sections stay smooth.
+    ///     sections stay smooth. <paramref name="layered"/>: triangles lying on earlier coplanar ones (decals, overlapping
+    ///     sections, <see cref="ZFight"/>) become overlay layers so the later one wins like on the PS2 (<see cref="Layered"/>).
     /// </summary>
-    private static StaticMesh Build(Penelope.IPenelopeDevice device, IEnumerable<(string Name, Mesh Mesh)> meshes, Dictionary<string, int> textures, int white)
+    private static StaticMesh Build(Penelope.IPenelopeDevice device, IEnumerable<(string Name, Mesh Mesh)> meshes, Dictionary<string, int> textures, int white,
+        bool layered)
     {
         var (corners, batches) = Flatten(meshes);
-        var normals = Normals.Smooth(corners.Select(v => v.Position).ToArray());
+        var positions = corners.Select(v => v.Position).ToArray();
+        var normals = Normals.Smooth(positions);
         var verts = corners.Select((v, i) => new WorldVertex(v.Position, v.Uv, v.Color, normals[i])).ToArray();
-        var indices = new uint[corners.Count];
-        for (var i = 0; i < indices.Length; i++) indices[i] = (uint)i;
+        var (indices, ranges) = Layered(positions, [.. batches.Select(b => b.First)], layered);
         return new StaticMesh(device, verts, indices,
-        [
-            .. batches.Select((b, i) => new MeshBatch(textures.GetValueOrDefault(b.Texture, white), b.First * 3,
-                ((i + 1 < batches.Count ? batches[i + 1].First : corners.Count / 3) - b.First) * 3)),
-        ]);
+            [.. ranges.Select(r => new MeshBatch(textures.GetValueOrDefault(batches[r.Batch].Texture, white), r.First * 3, r.Count * 3, r.Layer))]);
+    }
+
+    /// <summary>
+    ///     Index buffer (triangle list over <paramref name="positions"/>) and draw ranges in triangles: each batch
+    ///     (<paramref name="batchStart"/> = first triangle) split into its <see cref="ZFight.Layers"/>, layer 0 first,
+    ///     file order within a layer. Without <paramref name="layered"/> everything stays layer 0 in file order.
+    /// </summary>
+    public static (uint[] Indices, List<(int Batch, int Layer, int First, int Count)> Ranges) Layered(Vector3[] positions, List<int> batchStart, bool layered)
+    {
+        var tris = positions.Length / 3;
+        var layer = layered ? ZFight.Layers(tris, ZFight.Find(positions)) : new int[tris];
+        var ranges = ZFight.Order(batchStart, layer, out var order);
+        var indices = new uint[tris * 3];
+        for (var i = 0; i < tris; i++)
+            for (var k = 0; k < 3; k++)
+                indices[i * 3 + k] = (uint)(order[i] * 3 + k);
+        return (indices, ranges);
     }
 
     /// <summary>

@@ -63,7 +63,7 @@ public sealed class FlickerProbe
         }
         return
         [
-            .. ZFight.Find(corners).Where(p => p.Gap < 0.001f).GroupBy(p => (Batch(p.A), Batch(p.B)))
+            .. ZFight.Find(corners).Where(p => p.Gap < ZFight.FightGap).GroupBy(p => (Batch(p.A), Batch(p.B)))
                 .OrderByDescending(g => g.Sum(p => p.Area)).Take(count).Select(g => g.MaxBy(p => p.Area).At),
         ];
     }

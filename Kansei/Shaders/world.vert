@@ -20,6 +20,10 @@ layout(location = 4) out vec3 vNormal;
 void main()
 {
     gl_Position = pc.uMvp * vec4(aPos, 1.0);
+    // overlay layer (MeshBatch.Layer): moved uPointColor.w metres towards the camera along the view ray, so it wins
+    // against coplanar earlier geometry like the PS2's draw order does. Reversed-Z: depth = near / w.
+    float pull = pc.uPointColor.w;
+    if (pull > 0.0 && gl_Position.w > 0.0) gl_Position.z *= gl_Position.w / max(gl_Position.w - pull, 0.5 * gl_Position.w);
     vUv = aUv;
     vColor = vec4(pow(aColor.rgb, vec3(2.2)), aColor.a);
     vFog = clamp(length(aPos - pc.uEye.xyz) * pc.uFog.a, 0.0, 1.0);

@@ -39,14 +39,9 @@ public sealed class CarRenderer : IDisposable
     {
         Span<byte> push = stackalloc byte[WorldRenderer.PushBytes];
         _world.WritePush(push, model * viewProj, model, eye, false, true);
-        pass.SetPushConstants(ShaderStage.Vertex | ShaderStage.Fragment, 0, push);
         pass.SetVertexBuffer(0, mesh.Vertices);
         pass.SetIndexBuffer(mesh.Indices, IndexType.UInt32);
-        foreach (var b in mesh.Batches)
-        {
-            pass.SetBindGroup(0, _world.TextureGroup(b.Texture));
-            pass.DrawIndexed(b.IndexCount, 1, b.FirstIndex);
-        }
+        _world.DrawBatches(pass, mesh, push);
     }
 
     public void Dispose()

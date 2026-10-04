@@ -65,15 +65,20 @@ public static class ZFight
         return pairs;
     }
 
+    /// <summary>Planes closer than this can fight: ~10× the depth noise of float world coordinates 1–2 km from the origin.</summary>
+    public const float FightGap = 0.001f;
+
     /// <summary>
-    ///     Per triangle: 0, or 1 + the highest layer of an earlier triangle it overlaps (<paramref name="pairs"/> from
-    ///     <see cref="Find"/>), capped at <paramref name="max"/>.
+    ///     Per triangle: 0, or 1 + the highest layer of an earlier triangle it overlaps within <see cref="FightGap"/>
+    ///     (<paramref name="pairs"/> from <see cref="Find"/>), capped at <paramref name="max"/>. Farther layers keep
+    ///     their geometric order, so a pulled layer never jumps in front of something it really lies behind.
     /// </summary>
-    public static int[] Layers(int triangles, List<Pair> pairs, int max = 7)
+    public static int[] Layers(int triangles, List<Pair> pairs, int max = 15)
     {
         var layer = new int[triangles];
         foreach (var p in pairs) // sorted by B, and A < B: layer[A] is final when read
-            layer[p.B] = Math.Min(Math.Max(layer[p.B], layer[p.A] + 1), max);
+            if (p.Gap < FightGap)
+                layer[p.B] = Math.Min(Math.Max(layer[p.B], layer[p.A] + 1), max);
         return layer;
     }
 

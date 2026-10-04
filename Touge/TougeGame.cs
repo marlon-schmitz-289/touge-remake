@@ -462,9 +462,14 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
         // Game data is right-handed (y up). Vulkan clip space is Y-down, Metal/GL Y-up.
         var proj = WorldRenderer.Perspective(_fov, aspect, 0.3f, Device.Backend == Penelope.BackendKind.Vulkan);
         var shake = _fly ? Vector3.Zero : _shakeOffset; // moves the view only, not the camera spring
-        // --flicker: camera and world turned together by Spin (same image, different depth rounding)
-        var spin = Matrix4x4.CreateRotationY(_probeView.Spin);
-        var view = spin * Matrix4x4.CreateLookAt(Vector3.Transform(_pos + shake, spin), Vector3.Transform(_camLook + shake * 0.5f, spin), Vector3.UnitY);
+        var view = Matrix4x4.CreateLookAt(_pos + shake, _camLook + shake * 0.5f, Vector3.UnitY);
+        var skyView = view; // analytic sky + sun
+        if (_probeView.Spin != 0)
+        {
+            // --flicker: camera and world turned together (same image, different depth rounding)
+            var spin = Matrix4x4.CreateRotationY(_probeView.Spin);
+            view = spin * Matrix4x4.CreateLookAt(Vector3.Transform(_pos, spin), Vector3.Transform(_camLook, spin), Vector3.UnitY);
+        }
 
         UpdateLights();
         Span<(StaticMesh, Matrix4x4)> casters =
@@ -472,7 +477,7 @@ public sealed class TougeGame(string isoPath, string courseTime, string? shotPat
             (_car.Body, _carBody), (_car.Wheel, _carWheels[0]), (_car.Wheel, _carWheels[1]), (_car.Wheel, _carWheels[2]), (_car.Wheel, _carWheels[3]),
         ];
         _renderer.RenderShadows(ctx.Encoder, _pos, Vector3.Normalize(_camLook - _pos), _fov, aspect, _course.World, casters);
-        var pass = _renderer.BeginScene(ctx.Encoder, view, proj, shot);
+        var pass = _renderer.BeginScene(ctx.Encoder, skyView, proj, shot);
         _renderer.DrawSky(pass, _course.Sky, Matrix4x4.CreateTranslation(_pos with { Y = 0 }) * view * proj); // follows the camera
         var carView = _probe != null && _probeView.Group == 1;
         if (_probe == null || !carView) _renderer.Draw(pass, _course.World, view * proj, _pos);
