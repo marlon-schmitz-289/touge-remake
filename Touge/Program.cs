@@ -59,6 +59,10 @@ using Touge;
 // --menu replay|replay-best|replay-records|replay-delete|saveload|saveload-actions|saveload-name|photo: REPLAY & RECORD, SAVE & LOAD, Fotomodus (Bilder).
 // --cam chase|far|hood|cockpit|bumper: Startkamera (sonst Einstellung bzw. Verfolger), im Spiel C / Pad BACK.
 // --drift: Pilot reißt alle 7 s (ab 4,5 s) einen 2,5-s-Handbremsdrift (Reifenrauch/Bremsspuren testen), z. B. --autodrive 6.3 --drift --shot.
+// started from Finder/Explorer/launcher (no args or just the ISO): no console to read, so everything also goes to touge.log in the profile folder
+// ponytail: "desktop start" guessed from the arguments, not from the console; an explicit --log flag if that ever guesses wrong
+if (args.All(a => a.EndsWith(".iso", StringComparison.OrdinalIgnoreCase)))
+    Touge.LogFile.Start(Path.Combine(Path.GetDirectoryName(Touge.Ui.Settings.FilePath)!, "touge.log"));
 var iso = args.FirstOrDefault(a => a.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
           ?? Environment.GetEnvironmentVariable("INITIALD_ISO");
 if (iso == null || !File.Exists(iso))

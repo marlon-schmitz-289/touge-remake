@@ -4,6 +4,35 @@ Privater Nachbau (eigene C#-Engine). Plan: [PLAN.md](PLAN.md), Formate: [FORMATS
 
 Assets kommen zur Laufzeit aus der eigenen ISO (SLPM-65268), nie ins Repo.
 
+## Installieren (ohne Terminal)
+
+Fertige Pakete baut `Tools/publish.sh` (self-contained, kein .NET nötig) nach `out/dist/`:
+
+```sh
+Tools/publish.sh                    # alle: auf macOS osx-arm64 + win-x64 + linux-x64, auf Linux win-x64 + linux-x64
+Tools/publish.sh osx-arm64          # nur eins (osx-x64 = Intel-Mac auf Wunsch; stürzt unter Rosetta beim Fensterstart ab, ungetestet auf echtem Intel)
+python3 Tools/Icon/make_icon.py     # Icon neu erzeugen (eigene Grafik, Pillow; .icns nur auf macOS)
+```
+
+Die Pakete enthalten **keine Spieldaten** – jeder braucht seine eigene ISO.
+
+- **macOS** (`Touge-osx-arm64.zip`): entpacken, `Touge.app` nach Programme ziehen, doppelklicken. Die App ist nur ad-hoc signiert
+  (keine Apple-ID); eine heruntergeladene Kopie blockiert Gatekeeper beim ersten Start: Rechtsklick → Öffnen → Öffnen, bzw. ab
+  macOS 15 Systemeinstellungen → Datenschutz & Sicherheit → „Dennoch öffnen“. Oder einmal im Terminal:
+  `xattr -dr com.apple.quarantine /Applications/Touge.app`
+- **Windows** (`Touge-win-x64.zip`): entpacken, `Touge\Touge.exe` starten (kein Konsolenfenster). SmartScreen „Unbekannter
+  Herausgeber“: Weitere Informationen → Trotzdem ausführen. Braucht einen Vulkan-fähigen Grafiktreiber.
+- **Linux** (`Touge-linux-x64.tar.gz`): `tar xzf Touge-linux-x64.tar.gz`, dann `Touge/Touge` starten; `Touge/install-desktop.sh`
+  trägt es ins Anwendungsmenü ein (`~/.local/share/applications/touge.desktop`). Braucht Vulkan (`libvulkan1` + Mesa/Treiber).
+
+Ohne Argument (Doppelklick) öffnet das Spiel den Launcher zur ISO-Auswahl. Unter Windows/Linux kann die ISO auch auf
+`Touge.exe`/`Touge` gezogen werden; als erstes Argument geht sie überall (`Touge.app/Contents/MacOS/Touge "<iso>"`), alle
+Kommandozeilen-Flags gelten wie unten.
+Wird das Spiel so gestartet (ohne Argument oder nur mit der ISO), schreibt es seine Ausgabe zusätzlich nach `touge.log` im
+Profilordner (macOS `~/Library/Application Support/InitialDRemake/`, Windows `%APPDATA%\InitialDRemake\`, Linux
+`~/.config/InitialDRemake/`) – dort nachsehen, wenn etwas nicht startet. Schriften/Assets liegen neben dem Programm
+(`AppContext.BaseDirectory`), das Arbeitsverzeichnis ist egal.
+
 ## Projekte
 
 | Projekt | Inhalt |
