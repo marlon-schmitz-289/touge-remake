@@ -16,7 +16,7 @@ public sealed class ReplayInfo
     public bool Reverse { get; set; }
     public bool Fog { get; set; }
     public DateTime Date { get; set; }
-    /// <summary>"TIME ATTACK", "BATTLE" (older files: also Legend and Story runs), "LEGEND", "STORY", "FREE BATTLE vs &lt;rival&gt;" or "FOUR PASSES n/4".</summary>
+    /// <summary>"TIME ATTACK", "BATTLE" (older files: also Legend and Story runs), "LEGEND", "STORY", "FREE BATTLE" or "FOUR PASSES n/4".</summary>
     public string Mode { get; set; } = "TIME ATTACK";
     /// <summary>STORY: the chapter as shown (1-based) and its title; null in other modes and older files.</summary>
     public int? Chapter { get; set; }

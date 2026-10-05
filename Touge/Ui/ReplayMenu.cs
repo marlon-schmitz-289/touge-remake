@@ -178,7 +178,7 @@ public sealed class ReplayMenu(Catalog catalog, Settings settings)
             "LEGEND" => $"LEGEND{rival} {i.Result}",
             "STORY" => $"STORY ch.{i.Chapter} {i.Title} {i.Result}",
             "BATTLE" => $"BATTLE{rival} {i.Result}",
-            _ when i.Mode.StartsWith("FREE BATTLE") => $"{i.Mode} {i.Result}",
+            "FREE BATTLE" => $"FREE BATTLE{rival} {i.Result}",
             _ => i.Mode,
         }).TrimEnd();
     }
@@ -201,7 +201,8 @@ public sealed class ReplayMenu(Catalog catalog, Settings settings)
             c.Rule(196, 484, y + 44);
             if (sel) c.Diamond(200, y + 15, 4);
             c.Fit(Where(info), 210, y + 19, 186, 0, sel ? Canvas.Yellow : Canvas.White, 0.15f, 0.06f, 14);
-            var cars = string.Join("  VS  ", info.Cars.Select(x => CarName(x.Car)));
+            // with a rival the label names it: only the player's car, so the line keeps a readable size
+            var cars = Label(info).Contains(" vs ") ? CarName(info.Cars[0].Car) : string.Join("  VS  ", info.Cars.Select(x => CarName(x.Car)));
             c.Fit($"{Label(info)}   {cars}", 210, y + 37, 186, 0, Overlay.Rgba(0.75f, 0.78f, 0.8f), 0.12f, 0, 11);
             if (Tab == 0 && ReplayStore.IsKept(path)) c.Text("KEPT", 400, y + 37, 10, Canvas.Yellow, 0, 0.12f);
             c.Text(Style.Time(info.Time), 484, y + 19, 15, Canvas.White, 1, 0.15f, 0, 0.3f);

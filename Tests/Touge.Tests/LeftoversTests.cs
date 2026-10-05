@@ -25,7 +25,7 @@ public class LeftoversTests
         Assert.Equal("STORY ch.3 THE GHOST OF AKINA LOSE", ReplayMenu.Label(Info("STORY", "LOSE", 3, "THE GHOST OF AKINA")));
         Assert.Equal("BATTLE vs KENJI DRAW", ReplayMenu.Label(Info("BATTLE", "DRAW")));
         Assert.Equal("TIME ATTACK", ReplayMenu.Label(new ReplayInfo()));
-        Assert.Equal("FREE BATTLE vs KENJI WIN", ReplayMenu.Label(Info("FREE BATTLE vs KENJI", "WIN")));
+        Assert.Equal("FREE BATTLE vs KENJI WIN", ReplayMenu.Label(Info("FREE BATTLE", "WIN")));
         Assert.Equal("FOUR PASSES 2/4", ReplayMenu.Label(new ReplayInfo { Mode = "FOUR PASSES 2/4" }));
         Assert.Equal("STORY ch.1 TOFU", ReplayMenu.Label(new ReplayInfo { Mode = "STORY", Chapter = 1, Title = "TOFU" })); // a run alone: no rival, no result
     }
