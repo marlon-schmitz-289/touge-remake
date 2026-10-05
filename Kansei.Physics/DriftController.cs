@@ -63,7 +63,10 @@ public sealed class DriftController
     public bool EndedEarly { get; private set; }
     /// <summary>Last slip command (rad, toward the bend).</summary>
     public float Command { get; private set; }
-    public string Debug { get; private set; } = "";
+    /// <summary>The hold's last numbers (traces): the line's and the wanted path curvature, the measured one, metres wide, heading out, slip trim, wanted speed.</summary>
+    public string Debug => $"κl {_dbg.KLine:F3} κr {_dbg.KRef:F3} κm {_kappa:F3} wide {_dbg.Wide:+0.0;-0.0} ψo {_dbg.Psi * Deg:+0;-0} trim {_dbg.Trim * Deg:+0;-0} vr {_dbg.VRef * 3.6f:F0}";
+
+    private (float KLine, float KRef, float Wide, float Psi, float Trim, float VRef) _dbg;
 
     private Entry _entry;
     private float _t, _integral, _heading, _kappa, _exitFrom, _hb;
@@ -175,7 +178,7 @@ public sealed class DriftController
             var vRef = line.SpeedAt(s) * MathF.Sqrt(kLine / MathF.Max(kRef, 0.002f));
             var throttle = Math.Clamp(ThrottleBase + ThrottleP * (vRef - v), Engage, 1);
             if (beta < 0.6f * Command && car.Spec.DriveFront < 1) throttle = MathF.Max(throttle, 0.8f); // power the tail out
-            Debug = $"κl {kLine:F3} κr {kRef:F3} κm {_kappa:F3} wide {wide:+0.0;-0.0} ψo {outPsi * Deg:+0;-0} trim {trim * Deg:+0;-0} vr {vRef * 3.6f:F0}";
+            _dbg = (kLine, kRef, wide, outPsi, trim, vRef);
             return new VehicleInput(throttle, 0, Steer(beta, Command));
         }
 

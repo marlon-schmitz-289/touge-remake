@@ -405,9 +405,10 @@ public static class AiBench
                     var race = BattleRun.Create(d, new BattleSetup(rival, rule, lead), new AiDriver(new RivalPilot(d.Line, BattleRun.Autopilot)), "AUTO");
                     Console.SetOut(quiet);
                     var b = race.Battle!;
-                    if (Environment.GetEnvironmentVariable("AIBENCH_ATTEMPTS") != null)
+                    if (Environment.GetEnvironmentVariable("AIBENCH_ATTEMPTS") != null || BattleTrace != null)
                         foreach (var (car, who) in new[] { (race.Cars[0], "P"), (race.Cars[1], "R") })
-                            ((AiDriver)car.Driver).Pilot.Log = m => Console.WriteLine($"[Attempt] {course} {(rev ? "up" : "down")} {rival.Id} {rule}{lead} {who} t {race.Time:F1} {m}");
+                            ((AiDriver)car.Driver).Pilot.Log = Environment.GetEnvironmentVariable("AIBENCH_ATTEMPTS") == null ? _ => { }
+                                : m => Console.WriteLine($"[Attempt] {course} {(rev ? "up" : "down")} {rival.Id} {rule}{lead} {who} t {race.Time:F1} {m}");
                     float firstPass = -1;
                     var overtakes = 0;
                     for (var n = 0; n < 600 / Dt && b.Outcome == BattleOutcome.None; n++)

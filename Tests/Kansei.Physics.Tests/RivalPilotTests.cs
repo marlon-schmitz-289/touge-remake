@@ -129,6 +129,71 @@ public class RivalPilotTests(ITestOutputHelper log)
         Assert.InRange(blocks, 5, 10);
     }
 
+    /// <summary>
+    ///     A faster AI behind another car on a 9 m road (scripted on the course line: as fast as the AI on the straights, so
+    ///     no pass there, but braking early at 5 m/s² to 9 m/s for each hairpin): it presses, sets up on the inside in the
+    ///     braking zone and commits only once it is alongside (overlap by the turn-in), never inside a car length of the
+    ///     other car's tail; then it is past.
+    /// </summary>
+    [Fact]
+    public void Passes_under_braking_only_from_alongside()
+    {
+        var line = DriftLineTests.Line((300, 20, MathF.PI), (300, 20, -MathF.PI), (300, 20, MathF.PI));
+        var ground = new DriftLineTests.Corridor(line, 4.5f);
+        var ai = new RivalPilot(line, new RivalStyle(0.9f, 0.8f, 0));
+        var car = new Vehicle(CarSpec.AE86);
+        car.Reset(Vector3.Zero, 0);
+        ai.Pilot.Nearest(car.Position);
+        float lead = 12, leadSpeed = 0;
+        var nose = new List<float>(); // our nose past its tail at each commit
+        var rammed = false;
+        var passed = false;
+        for (var t = 0f; t < 120 && !passed; t += Dt)
+        {
+            var map = ai.Map;
+            var (s, lat) = ai.Pilot.Track(car.Position);
+            var next = map?.NextCorner(lead) is { } n and >= 0 ? map.Corners[n].From - lead : float.MaxValue;
+            leadSpeed = map?.CornerAt(lead) >= 0 ? 9 : MathF.Min(MathF.Max(car.Velocity.Length(), leadSpeed), MathF.Sqrt(81 + 2 * 5 * MathF.Max(next, 0)));
+            lead += leadSpeed * Dt;
+            var was = ai.State;
+            car.Step(ai.Drive(car, ground, [new Opponent(lead, 0, leadSpeed)], Dt), ground, Dt);
+            if (ai.State == RivalPilot.Mode.Pass && was != RivalPilot.Mode.Pass) nose.Add(s - lead + 4.4f);
+            rammed |= MathF.Abs(lat) < RivalPilot.Alongside && MathF.Abs(lead - s) < 4.4f;
+            passed = s > lead + 8;
+        }
+        log.WriteLine($"passed {passed}, nose at the commits {string.Join(" ", nose.Select(x => x.ToString("F1")))} m, attempts {ai.Attempts}, commits {ai.Commits}");
+        Assert.True(passed, "got past");
+        Assert.True(ai.Commits >= 1, "under braking");
+        Assert.All(nose, x => Assert.True(x >= RivalPilot.CommitOverlap - 0.05f, $"committed only alongside: {x:F1} m"));
+        Assert.False(rammed, "never in its boot");
+    }
+
+    /// <summary>
+    ///     The car ahead stops hard (8 m/s² from cruising speed) while the AI presses it at aggression 1: time-to-contact
+    ///     braking keeps it off its bumper (or it goes round the stopped car, never through it).
+    /// </summary>
+    [Fact]
+    public void Brakes_for_a_car_that_stops_in_front()
+    {
+        var line = Straight();
+        var ground = Road(4);
+        var ai = new RivalPilot(line, new RivalStyle(1, 1, 0));
+        var car = new Vehicle(CarSpec.AE86);
+        car.Reset(Vector3.Zero, 0);
+        ai.Pilot.Nearest(car.Position);
+        float lead = 14, leadSpeed = 0, closest = float.MaxValue;
+        for (var t = 0f; t < 20; t += Dt)
+        {
+            leadSpeed = t < 10 ? MathF.Min(leadSpeed + 3 * Dt, 25) : MathF.Max(leadSpeed - 8 * Dt, 0);
+            lead += leadSpeed * Dt;
+            car.Step(ai.Drive(car, ground, [new Opponent(lead, 0, leadSpeed)], Dt), ground, Dt);
+            var (s, lat) = ai.Pilot.Track(car.Position);
+            if (MathF.Abs(lat) < RivalPilot.Alongside && lead - s > -4.4f) closest = MathF.Min(closest, lead - s);
+        }
+        log.WriteLine($"closest in line {closest:F2} m");
+        Assert.True(closest > 4.6f, $"kept off its bumper: {closest:F2} m");
+    }
+
     [Fact]
     public void Pace_rises_with_skill_and_rubber_band_is_subtle()
     {

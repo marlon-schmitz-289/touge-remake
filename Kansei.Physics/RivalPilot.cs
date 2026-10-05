@@ -92,10 +92,10 @@ public sealed class RivalPilot
     public Mode State { get; private set; }
     /// <summary>No passing (follow only), e.g. the chaser in the first seconds of a lead/chase.</summary>
     public bool NoPass { get; set; }
-    /// <summary>Passing attempts set up in braking zones, and how many got half a car alongside (statistics).</summary>
+    /// <summary>Passing attempts set up in braking zones, and how many got alongside and committed (statistics).</summary>
     public int Attempts { get; private set; }
     public int Commits { get; private set; }
-    /// <summary>What the racecraft saw this tick (traces).</summary>
+    /// <summary>What the racecraft saw this tick (traces: only while <see cref="Log"/> is set).</summary>
     public string Note { get; private set; } = "";
     /// <summary>The mistakes rolled for the current corner (traces).</summary>
     public string MistakeNote => _rolled >= 0 ? $"err c{_rolled} shift {_err.Shift:+0.0;-0.0} wide {_err.Wide:+0.0;-0.0}{(_err.Lock ? " lock" : "")}{(_err.Throttle ? " throttle" : "")}{(_err.Over ? " over" : "")}" : "";
@@ -369,7 +369,7 @@ public sealed class RivalPilot
                         : z.Corner >= 0 && (cs[z.Corner].Dir > 0 ? passHi - o.Lateral : o.Lateral - passLo) >= Alongside ? cs[z.Corner].Dir : open;
                     var want = Math.Clamp(o.Lateral + side * PassGap, passLo, passHi);
                     var close = dsAhead <= FollowGap(v, Style.Aggression, true) + 2; // pressing, right behind
-                    if (MathF.Abs(want - o.Lateral) < Alongside) why = $"room[{passLo:F1},{passHi:F1}]o{o.Lateral:F1}s{side}"; // no room for two here
+                    if (MathF.Abs(want - o.Lateral) < Alongside) why = "room"; // no room for two here
                     else if (z.Corner >= 0)
                     {
                         // a braking zone: pull out from close behind before the leader brakes, stay out and brake later
@@ -428,7 +428,8 @@ public sealed class RivalPilot
                     target = Math.Clamp(o.Lateral + cs[z2.Corner].Dir * 0.8f, lo, hi); // show the nose on the inside
             }
             if (mode is Mode.Setup or Mode.Pass) rate = 2.5f;
-            Note = $"{why} adv {adv * 100:+0.0;-0.0}% zone {zi}{(zone is { } zn ? zn.Corner >= 0 ? $"→c{zn.Corner}" : "=str" : "")} setup {_setupZone} fail {_failedZone} nose {nose:+0.0;-0.0} tgt {target:+0.0;-0.0}";
+            if (Log != null) // traces only: no garbage per tick in the game
+                Note = $"{why} adv {adv * 100:+0.0;-0.0}% zone {zi}{(zone is { } zn ? zn.Corner >= 0 ? $"→c{zn.Corner}" : "=str" : "")} setup {_setupZone} fail {_failedZone} nose {nose:+0.0;-0.0} tgt {target:+0.0;-0.0}";
             State = mode;
             if (_passing >= 0 && (s >= cs[_passing].To || mode != Mode.Pass)) _passing = -1;
             // keep out of its boot: in line behind it the following gap, against any overlap a time to contact ≥ 1 s
@@ -662,7 +663,8 @@ public sealed class RivalPilot
     /// <summary>Forgets traffic and drift state (car reset onto the line).</summary>
     public void Reset()
     {
-        (_fresh, _passing, _defended, _driftDone, _decided, _gripCorner, _lockUntil, _throttleUntil) = (true, -1, -1, -1, -1, -1, -1, -1);
+        (_fresh, _passing, _defended, _driftDone, _decided, _gripCorner, _lockUntil, _throttleUntil, _overUntil) = (true, -1, -1, -1, -1, -1, -1, -1, -1);
+        (_setupZone, _failedZone, _defendZone, _oSpeed, _oDecel) = (-1, -1, -1, float.NaN, 0);
         (Pilot.Offset, Pilot.SpeedCap, Pilot.Blend) = (0, float.PositiveInfinity, 0);
         Drift.Stop();
     }
