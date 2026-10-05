@@ -923,7 +923,7 @@ public sealed partial class TougeGame
         return split && !_versusUi!.Vertical ? units / 2 + 14 : units;
     }
 
-    /// <summary>Menu keys of one split-screen player from a part of the keyboard and some pads (D-pad, stick edges, A/START, B).</summary>
+    /// <summary>Menu keys of one split-screen player from a part of the keyboard and some pads (D-pad/stick with repeat, A/START, B).</summary>
     private sealed class SeatKeys
     {
         public sealed record Keys(Key[] Up, Key[] Down, Key[] Left, Key[] Right, Key[] Ok, Key[] Back);
@@ -933,7 +933,7 @@ public sealed partial class TougeGame
         public static readonly Keys Arrows = new([Key.Up], [Key.Down], [Key.Left], [Key.Right], [Key.Enter, Key.RightCtrl], [Key.Backspace]);
         public static readonly Keys None = new([], [], [], [], [], []);
 
-        private readonly Dictionary<GamepadState, Vector2> _sticks = [];
+        private readonly DirRepeat _dirs = new();
 
         public (int X, int Y, bool Ok, bool Back) Read(InputSnapshot input, float dt, Keys keys, GamepadState[] pads)
         {
@@ -942,21 +942,16 @@ public sealed partial class TougeGame
             bool Hit(Key[] ks) => ks.Any(k.IsKeyPressed);
             int x = (Rep(keys.Right) ? 1 : 0) - (Rep(keys.Left) ? 1 : 0), y = (Rep(keys.Down) ? 1 : 0) - (Rep(keys.Up) ? 1 : 0);
             bool ok = Hit(keys.Ok), back = Hit(keys.Back);
+            bool up = false, down = false, left = false, right = false;
             foreach (var pad in pads)
             {
-                if (pad.IsButtonPressed(GamepadButton.DpadUp)) y--;
-                if (pad.IsButtonPressed(GamepadButton.DpadDown)) y++;
-                if (pad.IsButtonPressed(GamepadButton.DpadLeft)) x--;
-                if (pad.IsButtonPressed(GamepadButton.DpadRight)) x++;
-                var s = new Vector2(pad.GetAxis(GamepadAxis.LeftX), pad.GetAxis(GamepadAxis.LeftY));
-                var was = _sticks.GetValueOrDefault(pad);
-                if (MathF.Abs(s.Y) > 0.6f && MathF.Abs(was.Y) <= 0.6f) y += MathF.Sign(s.Y);
-                if (MathF.Abs(s.X) > 0.6f && MathF.Abs(was.X) <= 0.6f) x += MathF.Sign(s.X);
-                _sticks[pad] = s;
+                var (u, d, l, r) = DirRepeat.Held(pad); // D-pad and stick repeat as the keys do
+                (up, down, left, right) = (up | u, down | d, left | l, right | r);
                 ok |= pad.IsButtonPressed(GamepadButton.A) || pad.IsButtonPressed(GamepadButton.Start);
                 back |= pad.IsButtonPressed(GamepadButton.B);
             }
-            return (Math.Sign(x), Math.Sign(y), ok, back);
+            var (dx, dy) = _dirs.Step(up, down, left, right, dt);
+            return (Math.Sign(x + dx), Math.Sign(y + dy), ok, back);
         }
     }
 }

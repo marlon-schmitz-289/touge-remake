@@ -433,10 +433,5 @@ public sealed class CarGuide(Catalog catalog)
         }
     }
 
-    /// <summary>Red hint line along the bottom, as the original's red help strips (and <see cref="Menu"/>'s).</summary>
-    private static void Hint(Canvas c, string text)
-    {
-        c.O.Rect(new Vector2(0, MathF.Round(c.P(0, 428).Y)), new Vector2(c.Width, MathF.Round(c.P(0, 448).Y)), Overlay.Rgba(0, 0, 0, 0.65f));
-        c.Text(text, 256, 442, 11.5f, Overlay.Rgba(1, 0.2f, 0.15f), 0.5f, 0.15f, 0, 0.3f);
-    }
+    private static void Hint(Canvas c, string text) => Menu.Hint(c, text);
 }

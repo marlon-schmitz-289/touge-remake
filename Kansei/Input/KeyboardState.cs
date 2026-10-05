@@ -4,8 +4,8 @@ namespace Kansei.Input;
 
 public sealed class KeyboardState
 {
-    private const float RepeatDelay = 0.35f;
-    private const float RepeatInterval = 0.035f;
+    public const float RepeatDelay = 0.35f;
+    public const float RepeatInterval = 0.035f;
     private readonly HashSet<KeyCode> _current = new();
 
     // ── Key repeat ────────────────────────────────────────────────

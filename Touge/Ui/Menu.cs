@@ -575,7 +575,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
             case Screen.Controls:
                 c.Backdrop(_clock);
                 Controls!.Draw(c, Theta);
-                Hint(c, "UP/DOWN: Select    LEFT/RIGHT: Change    DECIDE: Bind    BACK: Options");
+                Hint(c, Controls!.Footer, false);
                 c.Marquee("CONTROLLER", true, _clock);
                 break;
         }
@@ -583,10 +583,13 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     }
 
     /// <summary>Red hint line along the bottom, as the original's small red help strips.</summary>
-    internal static void Hint(Canvas c, string text)
+    /// <remarks>DECIDE, BACK and the arrows become the keys of the device used last (<see cref="Hints.Menu"/>) unless <paramref name="translate"/> is off.</remarks>
+    internal static void Hint(Canvas c, string text, bool translate = true)
     {
+        if (translate) text = Hints.Menu(text);
         c.O.Rect(new Vector2(0, MathF.Round(c.P(0, 428).Y)), new Vector2(c.Width, MathF.Round(c.P(0, 448).Y)), Overlay.Rgba(0, 0, 0, 0.65f));
-        c.Text(text, 256, 442, 11.5f, Overlay.Rgba(1, 0.2f, 0.15f), 0.5f, 0.15f, 0, 0.3f);
+        var size = MathF.Min(11.5f, 496 * c.Kx / c.O.Font!.Measure(text, 1) / c.Ky); // pad/wheel names are longer: shrink to the width
+        c.Text(text, 256, 442, size, Overlay.Rgba(1, 0.2f, 0.15f), 0.5f, 0.15f, 0, 0.3f);
     }
 
     /// <summary>Entrance 0 → 1 over <paramref name="seconds"/>.</summary>
@@ -926,49 +929,5 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
         }
         if (FourPassStages != null) FourPassRecords(c, settings, 106 + catalog.Courses.Count * 26, 36, 140, r => 190 + r * 150, 13, true);
         Hint(c, "Best time per course and route    BACK: Main menu");
-    }
-}
-
-/// <summary>Menu navigation from keyboard (arrows with key repeat, Enter/Space, Esc/Backspace) and pad (D-pad, stick edges, A/Start, B).</summary>
-internal sealed class MenuKeys
-{
-    private Vector2 _stick;
-
-    /// <summary>Wheel in the menus: hat = arrows, shift paddles = left/right, MENU DECIDE/BACK bindings (Options → Controls).</summary>
-    public ControlSettings? Wheel { get; set; }
-
-    public (int X, int Y, bool Ok, bool Back) Read(InputSnapshot input, float dt)
-    {
-        var k = input.Keyboard;
-        var pad = input.Gamepad;
-        int x = 0, y = 0;
-        if (k.IsKeyRepeating(Key.Up, dt) || k.IsKeyRepeating(Key.W, dt)) y--;
-        if (k.IsKeyRepeating(Key.Down, dt) || k.IsKeyRepeating(Key.S, dt)) y++;
-        if (k.IsKeyRepeating(Key.Left, dt) || k.IsKeyRepeating(Key.A, dt)) x--;
-        if (k.IsKeyRepeating(Key.Right, dt) || k.IsKeyRepeating(Key.D, dt)) x++;
-        var ok = k.IsKeyPressed(Key.Enter) || k.IsKeyPressed(Key.Space);
-        var back = k.IsKeyPressed(Key.Escape) || k.IsKeyPressed(Key.Backspace);
-        if (pad.IsConnected)
-        {
-            if (pad.IsButtonPressed(GamepadButton.DpadUp)) y--;
-            if (pad.IsButtonPressed(GamepadButton.DpadDown)) y++;
-            if (pad.IsButtonPressed(GamepadButton.DpadLeft)) x--;
-            if (pad.IsButtonPressed(GamepadButton.DpadRight)) x++;
-            var s = new Vector2(pad.GetAxis(GamepadAxis.LeftX), pad.GetAxis(GamepadAxis.LeftY));
-            if (MathF.Abs(s.Y) > 0.6f && MathF.Abs(_stick.Y) <= 0.6f) y += MathF.Sign(s.Y);
-            if (MathF.Abs(s.X) > 0.6f && MathF.Abs(_stick.X) <= 0.6f) x += MathF.Sign(s.X);
-            _stick = s;
-            ok |= pad.IsButtonPressed(GamepadButton.A) || pad.IsButtonPressed(GamepadButton.Start);
-            back |= pad.IsButtonPressed(GamepadButton.B);
-        }
-        if (Wheel != null && DriverInput.FindWheel(input, Wheel.WheelName) is { } w)
-        {
-            bool P(Control c) => Wheel.Get(DeviceKind.Wheel, c).Any(b => DriverInput.Pressed(b, w));
-            y += (w.HatPressed(0, 4) ? 1 : 0) - (w.HatPressed(0, 1) ? 1 : 0);
-            x += (w.HatPressed(0, 2) || P(Control.ShiftUp) ? 1 : 0) - (w.HatPressed(0, 8) || P(Control.ShiftDown) ? 1 : 0);
-            ok |= P(Control.MenuOk);
-            back |= P(Control.MenuBack);
-        }
-        return (Math.Sign(x), Math.Sign(y), ok, back);
     }
 }

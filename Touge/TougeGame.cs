@@ -171,7 +171,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
                 MapMode = HudMode switch { "north" => Hud.MapMode.NorthUp, "overview" => Hud.MapMode.Overview, _ => Hud.MapMode.Rotating }, Livery = Livery, RenderScale = RenderScale,
             };
         _driver = new DriverInput(_settings.Controls);
-        _frontKeys.Wheel = _settings.Controls;
+        _frontKeys.Wheel = Hints.Controls = _settings.Controls;
         if (SimWheel) Input.AddVirtual(_simWheel = new JoystickState("Simulated wheel", 4, 20, 1, wheel: true));
         if (flicker == null && ContactSheet == null)
         {

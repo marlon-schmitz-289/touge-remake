@@ -79,7 +79,9 @@ public sealed class PhotoMode
             c.Carbon(c.Left + 20, 70, c.Left + 190, 130, 1, false);
             Row(c, "FIELD OF VIEW", $"{Fov:0}°", 92);
             Row(c, "EXPOSURE", (MathF.Round(Ev, 1) + 0f).ToString("+0.0;-0.0", System.Globalization.CultureInfo.InvariantCulture) + " EV", 118);
-            Menu.Hint(c, "WASD/QE: Move  IJKL/MOUSE: Look  UP/DOWN: Zoom  LEFT/RIGHT: Exposure  H: Hide  ENTER: Take photo  ESC: Back");
+            Menu.Hint(c, Hints.Pick("WASD/QE: Move  IJKL/MOUSE: Look  UP/DOWN: Zoom  LEFT/RIGHT: Exposure  H: Hide  ENTER: Take photo  ESC: Back",
+                "L-STICK: Move  R-STICK: Look  LT/RT: Down/Up  D-PAD UP/DOWN: Zoom  D-PAD LEFT/RIGHT: Exposure  X: Hide  A: Take photo  B: Back",
+                $"{Hints.Of(Control.MenuOk)}: Take photo  {Hints.Of(Control.MenuBack)}: Back  (camera on keyboard or pad)"), false);
         }
         if (_flash > 0) c.Text(_flashText, 256, 400, 14, Style.Fade(Canvas.White, MathF.Min(1, _flash * 2)), 0.5f, 0.15f, 0.1f, 0.3f);
     }

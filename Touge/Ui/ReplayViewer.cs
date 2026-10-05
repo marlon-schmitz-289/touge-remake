@@ -128,9 +128,14 @@ public sealed class ReplayViewer
         c.Text($"{Style.Time(t)} / {Style.Time(total)}", x1 - 2, y + 5, 12, Canvas.White, 1, 0.15f, 0, 0.2f);
         c.Text(CameraNames[(int)Cam], x1 + 10, y - 26, 13, Canvas.White, 1, 0.15f, 0.08f, 0.3f); // top right belongs to NOW PLAYING
         Menu.Hint(c, Cam == Camera.Free
-            ? "WASD/QE: Fly  IJKL/MOUSE: Look  SPACE: Pause  ARROWS: Rewind/Speed  C: Camera  H: Hide  P: Photo  ESC: Exit"
-            : "SPACE: Pause  LEFT/RIGHT: Rewind/Forward  UP/DOWN: Speed  C: Camera  TAB: Car  H: Hide  P: Photo  ESC: Exit");
+            ? Hints.Pick("WASD/QE: Fly  IJKL/MOUSE: Look  SPACE: Pause  ARROWS: Rewind/Speed  C: Camera  H: Hide  P: Photo  ESC: Exit",
+                "L-STICK: Fly  R-STICK: Look  LT/RT: Down/Up  A: Pause  D-PAD: Rewind/Speed  Y: Camera  X: Hide  RS: Photo  B: Exit", WheelHint)
+            : Hints.Pick("SPACE: Pause  LEFT/RIGHT: Rewind/Forward  UP/DOWN: Speed  C: Camera  TAB: Car  H: Hide  P: Photo  R: Restart  ESC: Exit",
+                "A: Pause  D-PAD LEFT/RIGHT or LB/RB: Rewind/Forward  D-PAD UP/DOWN: Speed  Y: Camera  BACK: Car  X: Hide  RS: Photo  LS: Restart  B: Exit", WheelHint), false);
     }
+
+    /// <summary>The wheel only has the menu buttons here; the rest is on the keyboard and pad.</summary>
+    private static string WheelHint => $"{Hints.Of(Control.MenuOk)}: Pause  {Hints.Of(Control.MenuBack)}: Exit  (camera, speed and photo on keyboard or pad)";
 
     /// <summary>▶ playing, ❚❚ paused, ◀◀ / ▶▶ scrubbing, in yellow.</summary>
     private void State(Canvas c, float x, float y)
