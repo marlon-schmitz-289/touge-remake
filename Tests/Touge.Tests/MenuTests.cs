@@ -121,4 +121,27 @@ public class MenuTests
         Run(0.1f, ok);
         Assert.Equal([Menu.Action.Quit], actions.Where(a => a != Menu.Action.None));
     }
+
+    /// <summary>Versus pause: Replay and Photo greyed out (online also Retry), the cursor jumps over them both ways.</summary>
+    [Fact]
+    public void VersusPause_SkipsGreyedButtons()
+    {
+        var catalog = new Catalog([new Catalog.Course("AKINA", "AKINA", ["DAY"], [new(0, 0), new(100, 0)], 7700, 465, true, false)],
+            [new Catalog.Car("AE86T", "TOYOTA", "TRUENO GT-APEX [AE86]", "FR", 130, 940, [1])]);
+        var m = new Menu(catalog, new Settings()) { NoReplay = true };
+        m.Open(Menu.Screen.Pause, "AKINA_DAY", false, "AE86T", 0);
+        void Key(int x) => m.Update((x, 0, false, false), 0.1f);
+        Key(1);
+        Key(1);
+        m.Select("Exit");
+        m.NoRetry = true;
+        Key(-1);
+        Assert.Equal(Menu.Action.Resume, m.Update((0, 0, true, false), 0.1f)); // Exit → Continue in one step
+        m.Open(Menu.Screen.Pause, "AKINA_DAY", false, "AE86T", 0);
+        Key(1);
+        Key(-1);
+        Key(1);
+        Assert.Equal(Menu.Action.None, m.Update((0, 0, true, false), 0.1f)); // Exit: leaves after the fade
+        Assert.Contains(Menu.Action.Exit, Enumerable.Range(0, 60).Select(_ => m.Update(default, 1 / 60f)));
+    }
 }

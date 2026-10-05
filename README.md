@@ -23,8 +23,8 @@ dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).
 dotnet run --project Touge -- "<iso>" AKINA_NIT --menu boot|logo|disclaimer|title|mode|quit|course|route|time|weather|maker|car|gearbox|intro|pause|records|guide|guide-list|guide-talk|options[:gamesetting|hud|screen|graphics|sound|playlist|controller] --shot out/proof/ui_car.png [--shot-size 3200x1800]   # Menü-Bild (options:<seite> öffnet eine Optionsseite)
 dotnet run --project Touge -- "<iso>" --flow out/proof   # ganzer Ablauf per Skript im Fenster (Titel → Auswahl → Laden → Countdown → Rennen mit Pilot in 16× → Pause → Ziel → Ergebnis → Rekorde → Optionen → Car Guide), PNG je Schritt
 dotnet run --project Touge -- "<iso>" --flow out/proof/legend/flow --legend [--car FD3S]   # Legend of the Streets per Skript: Akina, zwei Battles (Autopilot, 16×), Leiter danach, PNG je Schritt
-dotnet run --project Touge -- "<iso>" --legend-sim [--legend-progress out/legend.json] [--car FD3S]   # Legend ohne Fenster: Autopilot fährt jede Rivalenleiter hoch (Niederlage beendet den Kurs), Freischaltungen + Bilanz, Fortschritt als JSON
-dotnet run --project Touge -- "<iso>" --menu legend|legend-rivals|legend-card[:AKINA/takumi] [--legend-progress <json>] --shot out/proof/l.png   # Legend-Schritt als Bild (Fortschritt aus der Datei, sonst leer)
+dotnet run --project Touge -- "<iso>" --legend-sim [--legend-progress out/progress.json] [--car FD3S]   # Legend ohne Fenster: Autopilot fährt jede Rivalenleiter hoch (Niederlage beendet den Kurs), Freischaltungen + Bilanz, Fortschritt als JSON
+dotnet run --project Touge -- "<iso>" --menu legend|legend-rivals|legend-card[:AKINA/takumi] [--legend-progress <json>|--data-dir <ordner>] --shot out/proof/l.png   # Legend-Schritt als Bild (Fortschritt aus der Datei bzw. dem Ordner, sonst leer)
 dotnet run --project Touge -- "<iso>" --jukebox 720   # Rennmusik-Jukebox offline ohne Fenster: Zufallsfolge, M, Menüpause, Titelende → nächster, Log
 dotnet run --project Touge -- "<iso>" --frontend-capture out/proof/fe.wav   # ganzer Menüablauf per Skript offline: Original-SE/BGM als WAV + Log aller Auslöser
 dotnet run --project Touge -- "<iso>" --shot out/akina.png   # ein Frame als PNG, dann Ende
@@ -85,10 +85,11 @@ GEIST (Optionen → GAME SETTING → GHOST, Standard an): in Time Attack fährt 
 durchsichtiges, bläuliches Auto mit (eigenes Auto des Laufs; nur die vorderste Fläche wird gemischt; blendet innerhalb 10 m zur Kamera aus).
 FOTOMODUS (Pause → Photo oder P im Replay): Spiel steht, freie Kamera wie oben, ↑/↓ Blickwinkel 10–100°, ←/→ Belichtung ±2 EV, H Overlay,
 Enter/Leertaste (Pad A) speichert ein PNG ohne Overlay in `Screenshots/` neben settings.json, Esc (Pad B) zurück. Tiefenunschärfe: nicht gebaut.
-SAVE & LOAD (`SaveSlots`, `Ui/SaveLoadScreen`): 3 Spielstände (Name, Spielzeit, Rekorde, Fortschritt, Datum). Ein Spielstand ist eine Kopie aller
-`*.json` direkt im App-Data-Ordner (settings.json + was andere Modi dort ablegen, z. B. legend.json/story.json – ohne Anmeldung) in
-`Saves/Slot<n>/`, dazu die Bestzeit-Läufe `Replays/Best/` (Geister und BEST RUNS gehören zum Profil); Laden kopiert sie zurück (fehlende Fortschrittsdateien werden entfernt), übernimmt alles außer Steuerung und Bildschirm dieses
-Rechners und meldet `SaveSlots.Loaded` (für Modi mit Zustand im Speicher). Entscheiden auf einem Platz: SAVE / LOAD / RENAME / DELETE / CANCEL
+SAVE & LOAD (`SaveSlots`, `Ui/SaveLoadScreen`): 3 Spielstände (Name, Spielzeit, Rekorde, Fortschritt „STORY n/31 LEGEND n/34“, Datum). Ein Spielstand ist eine Kopie aller
+`*.json` direkt im App-Data-Ordner (settings.json, progress.json – der eine Fortschritt von Story und Legend – und was sonst dort liegt) in
+`Saves/Slot<n>/`, dazu die Bestzeit-Läufe `Replays/Best/` (Geister und BEST RUNS gehören zum Profil); Laden kopiert sie zurück (fehlende Fortschrittsdateien werden entfernt), übernimmt alles außer Steuerung, Bildschirm und Netz-Port/Join-Adresse dieses
+Rechners, liest den Fortschritt neu ein (Legend-Leiter, Story-Kapitel und das Legend-Auto zeigen sofort den geladenen Stand) und meldet `SaveSlots.Loaded`.
+Ein gewonnenes Battle oder geschafftes Kapitel speichert den Fortschritt und sichert ihn bei AUTOSAVE gleich in den aktiven Platz. Entscheiden auf einem Platz: SAVE / LOAD / RENAME / DELETE / CANCEL
 (Überschreiben, Laden, Löschen fragen JA/NEIN), ein leerer Platz fragt nach dem Namen (Arcade-Eingabe ↑/↓ Buchstabe, ←/→ Stelle, oder tippen).
 AUTOSAVE (an/aus) speichert nach jedem fertigen Lauf und beim Beenden in den Platz in Benutzung (zuletzt gespeichert/geladen).
 
@@ -128,7 +129,7 @@ Ergebnis, WIN/LOSE-Jingle beim Entscheid): SPLIT SCREEN oder ONLINE.
   Rennen, jeder sein Auto, Gäste melden READY, Ping je Spieler, der Host startet, wenn alle bereit sind. Laden (wartet auf alle, höchstens
   30 s), gemeinsamer Countdown (GO auf allen Rechnern zur selben Zeit: Host-Sekunden bis GO minus halbe Paketlaufzeit), Rennen, Ergebnis
   (Plätze, Zeiten, „m BEHIND“ bei vorzeitigem Battle-Sieg, DNF) → Host REMATCH/LOBBY/LEAVE, Gäste folgen. Pause hält online nicht an (das
-  Auto bremst, RETRY ist ausgegraut), EXIT des Hosts bringt alle in die Lobby, ein Gast verlässt die Sitzung. Verbindungsverlust (5 s still) → Meldung, zurück
+  Auto bremst, RETRY ist ausgegraut; Replay und Photo sind im Versus immer grau, Versus-Rennen werden nicht aufgezeichnet), EXIT des Hosts bringt alle in die Lobby, ein Gast verlässt die Sitzung. Verbindungsverlust (5 s still) → Meldung, zurück
   zu ONLINE; ein Gast, der geht, ist DNF (sein Auto verschwindet), bleibt nur einer übrig, gewinnt er.
 - Netz (`Touge/Net`, Protokoll in FORMATS.md): UDP ohne Threads, einmal je Bild abgefragt; Stern um den Host (er leitet Zustände weiter).
   Jedes Auto rechnet nur sein eigener Rechner (keine Eingabeverzögerung), 30 Zustände/s (Lage, Bewegung, Eingabe, Federweg und Rutschen
@@ -196,7 +197,8 @@ Bunta (Akina) nach allen 24 Rivalen der Hauptkurse, Takumi von Project D (Irohaz
 sein Impreza (IMP3) für Legend-Battles frei (dort bis dahin „?????“; Time Attack hat es immer). Revanche gegen einen besiegten Rivalen im Regen (wie das Original). Die ersten drei
 Rivalen eines Hauptkurses fahren mit 80/88/95 % Motormoment (eigene Abstimmung, damit der Trueno am Anfang mithalten kann).
 Nach einem Battle steht der Cursor auf dem nächsten Rivalen, Neues (Rivalen, Kurse, Auto) läuft unten als rotes Band ein. Fortschritt in
-`legend.json` neben `settings.json` (Siege, Niederlagen, bester Abstand je Rivale; `Race/Legend.Progress`). Pause-Exit und Zurück aus der
+`progress.json` neben `settings.json` (`Rivals`: Siege, Niederlagen, bester Abstand je Rivale; dieselbe Datei wie Story, `Progress`; ein altes
+`legend.json` wird beim Laden übernommen und beim nächsten Speichern gelöscht). Pause-Exit und Zurück aus der
 Autowahl führen zur Leiter, EXIT ins Hauptmenü.
 Navigation Pfeile/WASD, Enter, Esc bzw. D-Pad/Stick, A, B.
 STORY (`Touge/Story`, wie der Story-Modus des Originals, Daten zur Laufzeit aus der ISO, FORMATS.md „Story“): 31 Kapitel in drei Teilen
@@ -214,7 +216,7 @@ und überholen (auch: in 120 s); 100 s dranbleiben; allein mit Zeitgrenze, Tofu 
 im Rennen oben rechts eine Tafel mit Restzeit/Wandtreffern/Drift. Rivalenstärke je Kapitel aus einer Kalibrierung gegen den Autopiloten, am Anfang
 mit Spielraum. Pause → Exit führt zur Kapitelwahl zurück. Regen bei Nacht (Kapitel 11, MYOGI) gibt es auf der Disc nicht: der Nachtkurs bekommt
 Regen (Tropfen, nasse Spiegelungen, Gischt, Regen-Sound, Telop WET); die Haftung ist wie auf den _RIN-Kursen unverändert. Fortschritt in `progress.json` neben den Einstellungen (Schlüssel `story/nn`, Zähler
-`…/tries`, `…/wins`; die Datei ist für alle Modi mit Karriere gedacht, z. B. Legend of the Streets); Story-Läufe zählen nicht als Time-Attack-Rekord.
+`…/tries`, `…/wins`; dieselbe Datei hält Legend of the Streets); Story-Läufe zählen nicht als Time-Attack-Rekord.
 Einstellungen, letzte Wahl und Bestzeiten liegen als JSON im App-Data-Ordner (macOS `~/Library/Application Support/InitialDRemake/settings.json`,
 Windows `%APPDATA%\InitialDRemake`), nicht im Repo; Starts mit Kurs oder Test-Flags lesen/schreiben sie nicht (Fenster dort immer 1600×900).
 Die Datei hat eine `Version` (derzeit 2); ältere werden beim Laden umgestellt (v1: `HighQuality` → die fünf Grafikschalter, SE-Lautstärke auch

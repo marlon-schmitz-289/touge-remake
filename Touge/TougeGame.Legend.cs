@@ -90,6 +90,7 @@ public sealed partial class TougeGame
     /// <summary>The ladder again after a battle (or backing out of the car select), the cursor on the next rival to beat.</summary>
     private void ReturnToLadder()
     {
+        EndRecording(); // the battle's replay is saved now, not at the next battle
         _inRace = false;
         _legend!.Open(LegendScreen.Step.Rivals, _legendRival?.Key);
     }

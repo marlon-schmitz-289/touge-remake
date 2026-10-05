@@ -164,6 +164,7 @@ public sealed partial class TougeGame
     /// <summary>Drops the battle of a story chapter (rival model, sound, HUD) so the next run is plain time attack.</summary>
     private void EndBattle()
     {
+        EndRecording(); // the chapter's run is saved now (replay, autosave)
         if (Battle == null && _race == null) return;
         Device.WaitIdle(); // the rival's textures may still be in flight
         Battle = null;

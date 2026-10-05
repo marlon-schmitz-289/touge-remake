@@ -68,6 +68,9 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     public string? Versus { get; set; }
     /// <summary>Online race: the pause's RETRY is greyed out and skipped (one player cannot restart a shared race).</summary>
     public bool NoRetry { get; set; }
+    /// <summary>Versus: the pause's Replay and Photo are greyed out (versus runs are not recorded; an online race runs on).</summary>
+    public bool NoReplay { get; set; }
+    private bool PauseOff(int i) => i == 1 && NoRetry || i is 2 or 3 && NoReplay;
     /// <summary>Original UI sound by SYSSE name.</summary>
     public Action<string>? Sound { get; set; }
 
@@ -375,7 +378,8 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                 else if (k.X != 0)
                 {
                     var n = Math.Clamp(_row + k.X, 0, PauseButtons.Length - 1);
-                    if (n == 1 && NoRetry) n += k.X;
+                    while (PauseOff(n) && n + k.X >= 0 && n + k.X < PauseButtons.Length) n += k.X;
+                    if (PauseOff(n)) n = _row;
                     if (n != _row) Sound?.Invoke("SYS005");
                     _row = n;
                 }
@@ -772,7 +776,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
         for (var i = 0; i < PauseButtons.Length; i++)
         {
             var x = x0 + i * step;
-            var off = i == 1 && NoRetry;
+            var off = PauseOff(i);
             c.Plate(x, 380, step - 10, 22, off ? 0.5f : 1);
             c.Text(PauseButtons[i], x + (step - 10) / 2, 396, 12, off ? grey : Canvas.Shade(0.08f, 0.08f, 0.08f, 1), 0.5f, 0.18f);
         }

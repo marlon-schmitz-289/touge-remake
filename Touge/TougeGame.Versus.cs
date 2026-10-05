@@ -475,7 +475,7 @@ public sealed partial class TougeGame
         }
         _vsRace = race;
         (_vsResult, _vsDecidedAt) = (null, -1);
-        if (_menu != null) (_menu.Versus, _menu.NoRetry) = (string.Join(" / ", _vsCars.Select(c => c.Name)), _netRace != null); // the telop's "VS ..."
+        if (_menu != null) (_menu.Versus, _menu.NoRetry, _menu.NoReplay) = (string.Join(" / ", _vsCars.Select(c => c.Name)), _netRace != null, true); // the telop's "VS ..."
         foreach (var c in _vsCars)
         {
             Array.Clear(c.Smoke);
@@ -494,7 +494,7 @@ public sealed partial class TougeGame
         if (_savedDriver != null) (_driver, _savedDriver) = (_savedDriver, null);
         _p2Input = null;
         _finished = false;
-        if (_menu != null) (_menu.Versus, _menu.NoRetry) = (null, false);
+        if (_menu != null) (_menu.Versus, _menu.NoRetry, _menu.NoReplay) = (null, false, false);
     }
 
     /// <summary>EXIT from the pause menu: split screen back to its lobby; online the host takes everybody back to the lobby, a guest leaves.</summary>
@@ -682,8 +682,7 @@ public sealed partial class TougeGame
         ("VsLobby", 0.5f, "vs_lobby_start", 0, 0, true, false), ("VsLobby", 0.6f, "vs_lobby_ready", 0, 0, true, false),
         ("Intro", 1, "vs_telop", 0, 0, false, false), ("Intro", 2.5f, "vs_countdown", 0, 0, false, false),
         ("Race", 1.5f, "vs_race", 0, 0, false, true), ("Pause", 0.8f, "vs_pause", 1, 0, false, false), ("Pause", 0.4f, null, 0, 0, true, false),
-        ("Race", 1.5f, "vs_race_retry", 0, 0, false, true), ("Pause", 0.8f, null, 1, 0, false, false), ("Pause", 0.4f, null, 1, 0, false, false),
-        ("Pause", 0.4f, null, 1, 0, false, false), ("Pause", 0.4f, null, 1, 0, false, false),
+        ("Race", 1.5f, "vs_race_retry", 0, 0, false, true), ("Pause", 0.8f, null, 1, 0, false, false), ("Pause", 0.4f, null, 1, 0, false, false), // Replay/Photo greyed: skipped
         ("Pause", 0.4f, "vs_pause_exit", 0, 0, true, false),
         ("VsLobby", 1.2f, "vs_lobby_back", 0, 0, false, true), ("VsMode", 0.8f, null, 0, 0, false, true), ("Modes", 1, "vs_modes_back", 0, 0, false, false),
     ];
