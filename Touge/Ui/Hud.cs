@@ -120,10 +120,7 @@ public sealed class Hud
         if (!Dashboard) Cluster.Draw(o, gauge, new Vector2(g.Right, g.Bottom), k * Cluster.Fit(gauge, g), reading);
         var timingH = Drift.Total > 0 ? 186 : 150;
         Timing(o, new Vector2(g.Left, g.Top), timingH, u, time);
-        // drift combo top centre; when it would crowd the timing panel (4:3, 5:4) it moves below the top row
-        var cx = width / 2f;
-        var fits = cx - DriftHalf * u > g.Left + (TimingW + 24) * u;
-        DriftPanel(o, new Vector2(cx, fits ? g.Top : g.Top + (timingH + 24) * u), u);
+        DriftPanel(o, new Vector2(width / 2f, DriftBox(width, height, Scale, timingH).Min.Y), u);
         Banners(o, width, height, u, time);
     }
 
@@ -148,6 +145,27 @@ public sealed class Hud
         o.Line(h1, r1, 2 * g.U, edge);
         o.Line(r1, r0, 2 * g.U, edge);
         Cluster.Draw(o, gauge, new Vector2(cx + size.X / 2, bottom), u, reading);
+    }
+
+    /// <summary>
+    ///     The drift combo panel (with its rising combo line) at <paramref name="scale"/>: top centre; when it would crowd the
+    ///     timing panel (<paramref name="timingH"/> units high; 4:3, 5:4, split views) it moves below the top row.
+    /// </summary>
+    public static (Vector2 Min, Vector2 Max) DriftBox(int width, int height, float scale, float timingH = 186)
+    {
+        var g = Style.Safe(width, height);
+        var u = g.U * Math.Clamp(scale, 0.8f, 1.3f);
+        var cx = width / 2f;
+        var top = cx - DriftHalf * u > g.Left + (TimingW + 24) * u ? g.Top : g.Top + (timingH + 24) * u;
+        return (new Vector2(cx - DriftHalf * u, top), new Vector2(cx + DriftHalf * u, top + 130 * u));
+    }
+
+    /// <summary>What the HUD keeps along the top at <paramref name="scale"/> (timing panel, drift combo): the music toast stays clear of it.</summary>
+    public static (Vector2 Min, Vector2 Max)[] TopBoxes(int width, int height, float scale)
+    {
+        var g = Style.Safe(width, height);
+        var u = g.U * Math.Clamp(scale, 0.8f, 1.3f);
+        return [(new Vector2(g.Left, g.Top), new Vector2(g.Left + TimingW * u, g.Top + 186 * u)), DriftBox(width, height, scale)];
     }
 
     private void Timing(Overlay o, Vector2 at, float h, float u, float time)

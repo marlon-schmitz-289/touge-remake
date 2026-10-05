@@ -142,7 +142,7 @@ public static class Headless
     {
         var r = net.Result!;
         Console.WriteLine($"[{who}] Ergebnis Rennen {r.RaceId} ({r.Reason}): " +
-                          string.Join(", ", r.Entries.OrderBy(e => e.Place).Select(e => $"{e.Place}. {net.NameOf(e.Id)} {(e.Time >= 0 ? $"{e.Time:F2} s" : $"DNF bei {e.Along:F0} m")}")));
+                          string.Join(", ", r.Entries.OrderBy(e => e.Place).Select(e => $"{e.Place}. {net.NameOf(e.Id)} {Ui.Versus.ValueOf(r, e)} ({e.Along:F0} m)")));
         Console.WriteLine($"[{who}] Kontakte {race.Race.Contacts} (härtester {race.Race.MaxImpact * 3.6f:F1} km/h), eigene Zielzeit {(race.LocalFinish is { } f ? $"{f:F2} s" : "-")}");
         foreach (var (id, car) in race.ByPlayer)
             if (car.Driver is RemoteDriver rd)

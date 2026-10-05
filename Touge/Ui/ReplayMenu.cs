@@ -169,6 +169,20 @@ public sealed class ReplayMenu(Catalog catalog, Settings settings)
         return course == null ? i.Course : $"{course.Name}  {Catalog.DirectionName(course, i.Reverse)}  {time}";
     }
 
+    /// <summary>What kind of run: "LEGEND vs KENJI WIN", "STORY ch.3 THE GHOST OF AKINA", "BATTLE LOSE", "TIME ATTACK".</summary>
+    public static string Label(ReplayInfo i)
+    {
+        var rival = i.Cars.Count > 1 ? $" vs {i.Cars[1].Name}" : "";
+        return (i.Mode switch
+        {
+            "LEGEND" => $"LEGEND{rival} {i.Result}",
+            "STORY" => $"STORY ch.{i.Chapter} {i.Title} {i.Result}",
+            "BATTLE" => $"BATTLE{rival} {i.Result}",
+            _ when i.Mode.StartsWith("FREE BATTLE") => $"{i.Mode} {i.Result}",
+            _ => i.Mode,
+        }).TrimEnd();
+    }
+
     public string CarName(string id) => catalog.Cars.FirstOrDefault(c => c.Id == id)?.Name ?? id;
 
     private void List(Canvas c)
@@ -188,7 +202,7 @@ public sealed class ReplayMenu(Catalog catalog, Settings settings)
             if (sel) c.Diamond(200, y + 15, 4);
             c.Fit(Where(info), 210, y + 19, 186, 0, sel ? Canvas.Yellow : Canvas.White, 0.15f, 0.06f, 14);
             var cars = string.Join("  VS  ", info.Cars.Select(x => CarName(x.Car)));
-            c.Fit($"{(info.Mode.Contains("BATTLE") ? $"{info.Mode} {info.Result}" : info.Mode)}   {cars}", 210, y + 37, 186, 0, Overlay.Rgba(0.75f, 0.78f, 0.8f), 0.12f, 0, 11);
+            c.Fit($"{Label(info)}   {cars}", 210, y + 37, 186, 0, Overlay.Rgba(0.75f, 0.78f, 0.8f), 0.12f, 0, 11);
             if (Tab == 0 && ReplayStore.IsKept(path)) c.Text("KEPT", 400, y + 37, 10, Canvas.Yellow, 0, 0.12f);
             c.Text(Style.Time(info.Time), 484, y + 19, 15, Canvas.White, 1, 0.15f, 0, 0.3f);
             c.Text(info.Date.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture), 484, y + 37, 10, Overlay.Rgba(0.75f, 0.78f, 0.8f), 1, 0.1f);

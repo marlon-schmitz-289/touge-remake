@@ -103,7 +103,7 @@ public sealed partial class TougeGame
     /// <summary>VERSUS from the main menu.</summary>
     private void OpenVersus()
     {
-        _versusUi ??= new Versus(_catalog!) { Sound = n => _menuAudio?.Play(n) };
+        _versusUi ??= new Versus(_catalog!) { Sound = n => _menuAudio?.Play(n), CarLocked = id => Race.Legend.CarLocked(id, _progress) };
         _versusUi.Open();
         (_versusUi.Name, _versusUi.Address, _versusUi.Vertical, _versusUi.Port) = (_settings.PlayerName, _settings.JoinAddress, _settings.SplitVertical, NetPort ?? _settings.NetPort);
         _inRace = false;
@@ -327,7 +327,7 @@ public sealed partial class TougeGame
         (_settings.PlayerName, _settings.JoinAddress, _settings.SplitVertical) = (ui.Name, ui.Address, ui.Vertical);
         if (NetPort == null || ui.Port != NetPort) _settings.NetPort = ui.Port; // a --port run keeps the saved port unless changed on screen
         if (ui.Active && ui.Current == Versus.Screen.Lobby) (_settings.Car, _settings.Paint) = (ui.CarId(0), ui.Seats[0].Paint);
-        if (_persist) _settings.Save();
+        if (SavesRuns) _settings.Save();
     }
 
     /// <summary>The client side of the host's phases (and the host's own): joined → lobby, loading, countdown, results, back to the lobby, lost.</summary>
@@ -618,7 +618,7 @@ public sealed partial class TougeGame
         if (_menu?.Current is Menu.Screen.Pause) _menu.Close();
         _versusUi.ShowResult(Standings(result));
         if (shotPath != null && ShotAfter <= 0) _versusUi.Settle();
-        Console.WriteLine($"\n[Versus] Ergebnis ({result.Reason}): {string.Join(", ", Standings(result).Lines.Select(l => $"{l.Place}. {l.Name} {(l.Time is { } t ? $"{t:F2} s" : "DNF")}"))}");
+        Console.WriteLine($"\n[Versus] Ergebnis ({result.Reason}): {string.Join(", ", Standings(result).Lines.Select(l => $"{l.Place}. {l.Name} {l.Value}"))}");
         return true;
     }
 
@@ -643,13 +643,8 @@ public sealed partial class TougeGame
 
     private Versus.Standings Standings(Result r)
     {
-        var early = r.Reason is "BREAKAWAY" or "OPPONENTS LEFT";
-        var leader = r.Entries.Max(e => e.Along);
-        var lines = r.Entries.OrderBy(e => e.Place).Select(e =>
-        {
-            float? time = e.Time >= 0 ? e.Time : null;
-            return new Versus.Standing(e.Place, NameOf(e.Id), CarOf(e.Id), time, Versus.ValueOf(time, e.Place, e.Along, leader, early), !_vsSplit && e.Id == MyId);
-        }).ToArray();
+        var lines = r.Entries.OrderBy(e => e.Place)
+            .Select(e => new Versus.Standing(e.Place, NameOf(e.Id), CarOf(e.Id), e.Time >= 0 ? e.Time : null, Versus.ValueOf(r, e), !_vsSplit && e.Id == MyId)).ToArray();
         var winner = r.Entries.First(e => e.Place == 1).Id;
         var mine = r.Entries.FirstOrDefault(e => e.Id == MyId).Place;
         var title = _vsSplit ? $"{NameOf(winner)} WINS!!" : mine == 1 ? "YOU WIN!!" : r.Entries.Length == 2 ? "YOU LOSE" : $"{Place(mine)} PLACE";
@@ -915,14 +910,6 @@ public sealed partial class TougeGame
         var id = view == 0 ? MyId : (byte)1;
         var place = result.Entries.FirstOrDefault(e => e.Id == id).Place;
         VersusHud.Verdict(o, w, h, place == 1 ? "WIN!!" : result.Entries.Length == 2 ? "LOSE" : Place(place), place == 1, _menuTime - _vsDecidedAt);
-    }
-
-    /// <summary>Where the music toast goes under the versus HUD (units of the whole screen).</summary>
-    private float VersusHudBelow(bool split)
-    {
-        if (_vsRace == null || !_hud.Visible) return 0;
-        var units = VersusHud.Height(_vsRace.Cars.Count) + 14;
-        return split && !_versusUi!.Vertical ? units / 2 + 14 : units;
     }
 
     /// <summary>Menu keys of one split-screen player from a part of the keyboard and some pads (D-pad/stick with repeat, A/START, B).</summary>

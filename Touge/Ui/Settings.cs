@@ -74,6 +74,9 @@ public sealed class Settings
     /// <summary>HUD size 0.8..1.3 (Options HUD SIZE, <see cref="Hud.Scale"/>).</summary>
     public float HudScale { get; set; } = 1;
     public Hud.MapMode MapMode { get; set; }
+    /// <summary>The race music's NOW PLAYING toast (Options → HUD).</summary>
+    public enum Toast { On, Off, PauseOnly }
+    public Toast NowPlaying { get; set; }
     /// <summary>Stickers and plates of the car.</summary>
     public Touge.Formats.Livery Livery { get; set; } = Touge.Formats.Livery.Rival;
 
@@ -137,6 +140,26 @@ public sealed class Settings
     /// <summary>settings.json; its folder holds every other store (replays, save slots, photos); --data-dir moves it.</summary>
     public static string FilePath { get; set; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "InitialDRemake", "settings.json");
+
+    /// <summary>
+    ///     settings.json of this start: in <paramref name="dataDir"/> (--data-dir), the real profile (<paramref name="plain"/>
+    ///     start), or a throwaway folder of this process (any scripted run: its saves never reach the real profile; removed at exit).
+    /// </summary>
+    public static string RunFile(string? dataDir, bool plain)
+    {
+        if (dataDir != null) return Path.Combine(Path.GetFullPath(dataDir), "settings.json");
+        if (plain) return FilePath;
+        var scratch = Path.Combine(Path.GetTempPath(), $"InitialDRemake-run-{Environment.ProcessId}");
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        {
+            try
+            {
+                if (Directory.Exists(scratch)) Directory.Delete(scratch, true);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        };
+        return Path.Combine(scratch, "settings.json");
+    }
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
 
@@ -218,6 +241,7 @@ public sealed class Settings
         if (!Enum.IsDefined(Display)) Display = DisplayMode.Window;
         if (!Enum.IsDefined(MapMode)) MapMode = Hud.MapMode.Rotating;
         if (!Enum.IsDefined(Camera)) Camera = CameraView.Chase;
+        if (!Enum.IsDefined(NowPlaying)) NowPlaying = Toast.On;
         if (!Enum.IsDefined(Livery)) Livery = Touge.Formats.Livery.Rival;
         (Width, Height) = Width is >= 640 and <= 16384 && Height is >= 360 and <= 16384 ? (Width, Height) : (1600, 900);
         if (!FrameCaps.Contains(FrameCap)) FrameCap = 0;

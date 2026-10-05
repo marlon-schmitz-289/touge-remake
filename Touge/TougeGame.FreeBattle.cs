@@ -47,7 +47,7 @@ public sealed partial class TougeGame
                 var lobby = _versusUi!.CpuLobby;
                 _settings.FreeBattle = lobby.Choice.Copy();
                 (_settings.Car, _settings.Paint, _settings.Manual) = (lobby.CarId, lobby.Paint, lobby.Manual);
-                if (_persist) _settings.Save();
+                if (SavesRuns) _settings.Save();
                 _versusUi.ShowLoading();
                 _fbLoadPending = true;
                 return true;

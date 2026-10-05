@@ -126,6 +126,9 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     /// <summary>Rain over a dry course (a story chapter): the telop says WET.</summary>
     public bool Rain { get; set; }
 
+    /// <summary>Screenshots: the maker screen's model list with row <paramref name="row"/> selected.</summary>
+    public void ShowModel(int row) => (_inModels, _model) = (true, Math.Clamp(row, 0, MakerCars(_maker).Length - 1));
+
     /// <summary>Opens <paramref name="s"/> with the selection at the given course/direction/car/paint; backing out of it leaves to the main menu.</summary>
     public void Open(Screen s, string courseTime, bool reverse, string car, int paint, bool manual = false, bool fog = false)
     {
@@ -728,7 +731,8 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
             c.Fit(Locked(cars[i]) ? "?????" : catalog.Cars[cars[i]].Name, 292, y, 190, 0, Locked(cars[i]) ? Overlay.Rgba(1, 1, 1, 0.35f) : sel ? Canvas.Yellow : Canvas.White, 0.15f, 0.06f, 13);
         }
         if (_inModels) c.Glow(270, 166 + _model * 22, 490, 188 + _model * 22, Canvas.Pulse(Theta));
-        Hint(c, _inModels ? "UP/DOWN: Select model    DECIDE: OK    BACK: Makers" : "UP/DOWN: Select maker    DECIDE: Models    BACK: Return");
+        Hint(c, _inModels && Locked(cars[_model]) ? Race.Legend.SecretCarHint
+            : _inModels ? "UP/DOWN: Select model    DECIDE: OK    BACK: Makers" : "UP/DOWN: Select maker    DECIDE: Models    BACK: Return");
     }
 
     private void CarScreen(Canvas c)

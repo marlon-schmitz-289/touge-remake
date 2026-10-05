@@ -48,7 +48,7 @@ public sealed partial class TougeGame
     {
         LoadProgress();
         _legend = new LegendScreen(_catalog!, _progress) { Sound = n => _menuAudio?.Play(n) };
-        _menu!.CarLocked = id => _menu.Legend && Legend.CarLocked(id, _progress); // the reward car only in Legend; time attack keeps every car
+        _menu!.CarLocked = id => Legend.CarLocked(id, _progress); // every car select, as the original (FORMATS.md: Legend of the Streets)
     }
 
     /// <summary>--menu legend[-rivals|-card][:COURSE/rival]: opens that Legend step (screenshots).</summary>

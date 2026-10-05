@@ -61,6 +61,18 @@ public class FreeBattleTests
         Assert.True(f.Manual);
     }
 
+    /// <summary>A locked car (IMP3 before it is won) is never offered: the saved one falls back, stepping skips it.</summary>
+    [Fact]
+    public void Lobby_SkipsLockedCar()
+    {
+        var f = new FreeBattle(TestCatalog()) { CarLocked = id => id == "FD3S" };
+        f.Open(new FreeBattleChoice { Rival = "takumi" }, "FD3S", 1, false);
+        Assert.Equal("AE86T", f.CarId);
+        while (f.Selected != FreeBattle.Row.Car) f.Update(Down, _ => { });
+        f.Update(Right, _ => { });
+        Assert.Equal("AE86T", f.CarId);
+    }
+
     /// <summary>A hand-edited or old choice: unknown course, rival and a fog the course cannot have fall back to valid values.</summary>
     [Fact]
     public void Open_FallsBack()

@@ -42,7 +42,7 @@ public sealed partial class TougeGame
         Console.WriteLine($"\n[FourPasses] Etappe {f.Finished}/{f.Stages.Count} {f.Current.Course}: {Style.Time(f.StageTime(f.Finished - 1))}, gesamt {Style.Time(f.Total)}");
         if (!f.NewRecord) return;
         _settings.Best[_settings.RunKey(FourPasses.CourseKey(f.Wet), false)] = f.Splits;
-        if (_persist) _settings.Save();
+        if (SavesRuns) _settings.Save();
     }
 
     /// <summary>Replay label of a stage, e.g. "FOUR PASSES 2/4".</summary>

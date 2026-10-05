@@ -39,6 +39,8 @@ public sealed class FreeBattle(Catalog catalog)
 
     public FreeBattleChoice Choice { get; private set; } = new();
     public int Car { get; private set; }
+    /// <summary>Cars not won yet (IMP3 until Story's end or Bunta), skipped as in every car select.</summary>
+    public Func<string, bool>? CarLocked { get; set; }
     public int Paint { get; private set; }
     public bool Manual { get; private set; }
     public string CarId => catalog.Cars[Car].Id;
@@ -58,7 +60,7 @@ public sealed class FreeBattle(Catalog catalog)
         Choice.Rival = Rival.Id;
         if (!Enum.IsDefined(Choice.Level)) Choice.Level = AiLevel.Normal;
         if (!Enum.IsDefined(Choice.Rule)) Choice.Rule = BattleRule.LeadChase;
-        Car = Math.Max(0, catalog.Cars.ToList().FindIndex(c => c.Id == car));
+        Car = Math.Max(0, catalog.Cars.ToList().FindIndex(c => c.Id == car && CarLocked?.Invoke(c.Id) != true));
         (Paint, Manual) = (Math.Clamp(paint, 0, catalog.Cars[Car].Paints.Length - 1), manual);
         _row = Math.Min(_row, Rows.Length - 1);
     }
@@ -108,7 +110,11 @@ public sealed class FreeBattle(Catalog catalog)
             case Row.Lead: c.PlayerLeads = !c.PlayerLeads; break;
             case Row.Level: c.Level = (AiLevel)Wrap((int)c.Level + d, 3); break;
             case Row.Rival: c.Rival = Rivals.All[Wrap(RivalIndex + d, Rivals.All.Length)].Id; break;
-            case Row.Car: (Car, Paint) = (Wrap(Car + d, catalog.Cars.Count), 0); break;
+            case Row.Car:
+                do Car = Wrap(Car + d, catalog.Cars.Count);
+                while (CarLocked?.Invoke(catalog.Cars[Car].Id) == true);
+                Paint = 0;
+                break;
             case Row.Colour: Paint = Wrap(Paint + d, catalog.Cars[Car].Paints.Length); break;
             case Row.Gearbox: Manual = !Manual; break;
         }

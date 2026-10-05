@@ -161,7 +161,7 @@ public sealed class NetSession : IDisposable
         if (!IsHost || Phase != Phase.Race) return;
         Result = result;
         Enter(Phase.Results);
-        Say($"Ergebnis ({result.Reason}): {string.Join(", ", result.Entries.OrderBy(e => e.Place).Select(e => $"{e.Place}. {NameOf(e.Id)} {(e.Time >= 0 ? $"{e.Time:F2} s" : "DNF")}"))}");
+        Say($"Ergebnis ({result.Reason}): {string.Join(", ", result.Entries.OrderBy(e => e.Place).Select(e => $"{e.Place}. {NameOf(e.Id)} {Ui.Versus.ValueOf(result, e)}"))}");
     }
 
     /// <summary>

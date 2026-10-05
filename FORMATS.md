@@ -216,9 +216,22 @@ Aus dem Recomp (ELF-Adresse = Dateioffset + 0xFFF80; Kursauswahl-Modul 0x1DB1B0 
 - **Musik**: `MANGA/MG_BGM.AFS` hat je Figur ein Thema (ITSUKI, TAKUMI01–03, SHINGO, NAKAZATO, DEBU = die zwei aus Tokio, NOBUHIKO, MAKO,
   SAKAMOTO, KYOUKO, KENTA, KEISUKE01/02, RYOSUKE, KENJI, IKETANI, WATARU, BUNTA, SUETSUGU, DAIKI, SAKAI, TACHI, SEIJI, KYOICHI, KAI,
   ATSUO = Kawai) sowie R_WIN01/02, R_LOSE (39–55 s mit Loop-Punkt, also Ergebnis-BGM, keine Jingles; Namensliste im ELF ab Dateioffset 0x1D3150, 0x44 B je Name).
-- Nicht gefunden: Belohnungen (welche Autos/Lacke ein Sieg freischaltet – der Car Guide kennt „?????“-Einträge), KI-Stärke je Rivale
+- **Freischaltungen** (Bedingungsfunktion `0x1663B0`, Sprungtabelle `0x2C58E0`, 14 Fälle; Speicherblock `0x2F3920`, Story-Block `0x3172E0`):
+  Fall 2 = Auto-Flag `0x2F3951[Auto]` (32 B; Start: nur Auto 0), Fall 3 = `0x2F3971[n]` (32 B; Start: 0–11 offen, n = 0 immer), Fall 4/5/6/11 =
+  Figuren-Zähler (0–23 / 0–24 / 0–33 ohne 25 / alle 34 besiegt), Fall 7–10 = Story-Rang von Kapitel 18/23/29/30 (`0x3172F0 + Kapitel`, bestes Ergebnis
+  1–4, geschrieben von `0x19B460`; `0x3172E0` = erreichte Kapitel). Story-Ergebnis `0x18C340`: Rang ≥ 1 öffnet `0x2F3971[0x24F100[Kapitel]]`,
+  Rang ≥ 2 setzt das Auto-Flag `0x24F120[Kapitel]` (eine Permutation der 32 Autos) – das Auto-Flag liest außer dieser Stelle niemand.
+  **IMP3**: die gemeinsame Autowahl (`0x1F5D00…`, alle Modi) holt die Autos je Hersteller aus `0x29F9A0` (7 × 11 × s32, 0xFF = leer) über
+  `0x1F1970`; Hersteller 5 (SUBARU) Platz 2 = IMP3 liefert 0xFF, solange Fall 10 (Story-Kapitel 30 = das letzte) keinen Rang hat, die
+  Herstellerplatte zeichnet dann Bild 7 statt 5 (`0x1FC420`). Das Impreza GC8 V ist also auch in Time Attack bis zum Story-Finale versteckt.
+  **Kurse**: Time Attack hat immer alle 12 Felder (`0x1DB160`: Modus 1 → 12; Modus 0 = Legend 11, der Aufruf von Fall 5 davor wird
+  überschrieben); nur Legends Kursraster (`0x1DFA60`) lässt die Zusatzkurse erst nach Fall 5 (Figuren 0–24 besiegt) zu, sonst Kurs 0–5.
+  Remake: IMP3 in jeder Autowahl (Time Attack, Legend, Versus-Lobby) „?????“ bis Story-Kapitel 31 geschafft oder Bunta besiegt (eigene
+  Ergänzung), Time-Attack-Kurse frei, Legend-Zusatzkurse weiter nach 3 Hauptkursen (eigene Regel).
+- Nicht gefunden: Belohnungen der Lacke (der Car Guide kennt „?????“-Einträge), Bedeutung von `0x2F3971[n]` (32 Einträge, Legend-Figuren wählen
+  damit zwischen zwei Setups, `0x170C80`; Liste mit Sprung über gesperrte Einträge in `0x1DC7B0`), KI-Stärke je Rivale
   (vermutlich Tabelle `0x2C7930`, Höchstgeschwindigkeit je Kurs/Richtung/Slot + Stufe), Tageszeit/Wetter bei „nass + Nacht“ (Sakamoto; die
-  Disc hat Regen nur am Tag). Remake: Leiter je Kurs, Zusatzkurse ab 3 Hauptkursen, Impreza nach Bunta, Leistung der ersten drei Rivalen
+  Disc hat Regen nur am Tag). Remake: Leiter je Kurs, Zusatzkurse ab 3 Hauptkursen, Impreza nach Story-Finale oder Bunta, Leistung der ersten drei Rivalen
   eines Hauptkurses 80/88/95 % (eigene Wahl, `Race/Legend`).
 ## Four Passes (四峠走破) – geknackt
 Aus dem Recomp (ELF-Adresse = Dateioffset + 0xFFF80):
