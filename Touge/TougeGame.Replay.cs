@@ -237,7 +237,7 @@ public sealed partial class TougeGame
             if (info.Time == null && _hud.Timer.Phase == LapTimer.State.Finished)
             {
                 info.Time = _hud.Timer.Time;
-                if (_hud.Timer.NewRecord && _front != null) _recBestKey = _settings.RunKey(_courseTime[.._courseTime.LastIndexOf('_')], _drive.Reverse);
+                if (_hud.Timer.NewRecord && _front != null && FourPass == null) _recBestKey = _settings.RunKey(_courseTime[.._courseTime.LastIndexOf('_')], _drive.Reverse);
             }
         }
         if (info.Time != null && _recEnd < 0) _recEnd = rec.Replay.Ticks + 10 * 120;
@@ -250,7 +250,7 @@ public sealed partial class TougeGame
         EndRecording();
         var info = new ReplayInfo
         {
-            Course = _courseTime, Reverse = _drive.Reverse, Fog = _fog, Date = DateTime.Now, Mode = _race != null ? "BATTLE" : "TIME ATTACK",
+            Course = _courseTime, Reverse = _drive.Reverse, Fog = _fog, Date = DateTime.Now, Mode = _race != null ? "BATTLE" : FourPassLabel ?? "TIME ATTACK",
             Cars = [new ReplayCar("YOU", _carName, _paint, _settings.SteerAssist, _settings.DriftAssist)],
         };
         if (_race != null && Battle != null) info.Cars.Add(new ReplayCar(Battle.Rival.Name, Battle.Rival.Car, 0));

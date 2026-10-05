@@ -89,10 +89,10 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     private readonly Stack<Screen> _back = new();
     private Run? _run;
 
-    private const int Slots = 12; // the original's grid; slot 11 = four-pass run, locked
-    private Catalog.Course SelectedCourse => catalog.Courses[Math.Min(_slot, catalog.Courses.Count - 1)];
+    private const int Slots = 12; // the original's grid; slot 11 = four-pass run (Menu.FourPasses.cs)
+    private Catalog.Course SelectedCourse => InFourPass ? CourseOf(FourPass!.Current) : catalog.Courses[Math.Min(_slot, catalog.Courses.Count - 1)];
     public string CourseTime => $"{SelectedCourse.Id}_{(_night ? "NIT" : _wet ? "RIN" : "DAY")}";
-    public bool Reverse => _reverse;
+    public bool Reverse => InFourPass ? FourPass!.Current.Reverse : _reverse;
     /// <summary>Fog over <see cref="CourseTime"/> (always a _DAY or _NIT course).</summary>
     public bool Fog => _fog;
     public string CarId => catalog.Cars[_car].Id;
@@ -127,7 +127,8 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     public void Open(Screen s, string courseTime, bool reverse, string car, int paint, bool manual = false, bool fog = false)
     {
         var id = courseTime[..courseTime.LastIndexOf('_')];
-        _slot = Math.Max(0, catalog.Courses.ToList().FindIndex(c => c.Id == id));
+        if (s is not (Screen.Pause or Screen.Intro)) FourPass = null; // over a four-pass stage the run goes on
+        _slot = FourPass != null ? FourSlot : Math.Max(0, catalog.Courses.ToList().FindIndex(c => c.Id == id));
         (_night, _wet, _fog, _reverse) = (courseTime.EndsWith("_NIT"), courseTime.EndsWith("_RIN"), fog, reverse);
         _car = Math.Max(0, catalog.Cars.ToList().FindIndex(c => c.Id == car));
         if (Locked(_car)) (_car, paint) = (0, 0);
@@ -158,7 +159,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     public void Close() => Current = Screen.None;
 
     /// <summary>The cursor on the pause/result button <paramref name="label"/> (back from the replay viewer or photo mode).</summary>
-    public void Select(string label) => _row = Math.Max(0, Array.IndexOf(Current == Screen.Pause ? PauseButtons : ResultButtons, label));
+    public void Select(string label) => _row = Math.Max(0, Array.IndexOf(Current == Screen.Pause ? PauseButtons : Buttons, label));
 
     private void Enter(Screen s, bool fadeIn)
     {
@@ -222,6 +223,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     /// <summary>DRY (the day or night course), WET (its _RIN variant, day only) and FOG over the dry course, as present.</summary>
     private string[] Weathers()
     {
+        if (OnFourSlot) return ["DRY", "WET"]; // four passes: the original's weather choice, all at night
         var t = SelectedCourse.Times;
         var dry = t.Contains(_night ? "NIT" : "DAY");
         return [.. new[] { dry ? "DRY" : null, !_night && t.Contains("RIN") ? "WET" : null, dry ? "FOG" : null }.OfType<string>()];
@@ -267,10 +269,16 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                     _slot = Wrap(_slot + k.X + 3 * k.Y, Slots);
                     Sound?.Invoke("SYS005");
                 }
+                else if (k.Ok && OnFourSlot)
+                {
+                    Sound?.Invoke("SYS006");
+                    StartFourPass();
+                }
                 else if (k.Ok && _slot >= catalog.Courses.Count) Sound?.Invoke("BEEP001");
                 else if (k.Ok)
                 {
                     Sound?.Invoke("SYS006");
+                    FourPass = null;
                     Go(Screen.Route);
                 }
                 else if (k.Back) Back();
@@ -298,10 +306,16 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                             break;
                         case Screen.Weather:
                             (_wet, _fog) = (Choices()[_choice] == "WET", Choices()[_choice] == "FOG");
+                            if (InFourPass) FourPassWeather();
                             Go(Screen.Maker);
                             break;
                         default:
                             _manual = _choice == 1;
+                            if (InFourPass)
+                            {
+                                FourPass!.Reset(); // a new car starts the four passes again
+                                FourPassWeather();
+                            }
                             Go(Screen.Loading);
                             break;
                     }
@@ -390,7 +404,11 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                     switch (PauseButtons[_row])
                     {
                         case "Continue": return Resume();
+                        case "Retry" when InFourPass && FourPass!.Index > 0:
+                            RestartFourPass(); // back to stage 1: another course
+                            break;
                         case "Retry":
+                            if (InFourPass) FourPass!.Reset();
                             Enter(Screen.Intro, false);
                             return Action.Restart;
                         case "Replay": return Action.Replay;
@@ -417,15 +435,22 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                 }
                 if (k.X != 0)
                 {
-                    var n = Math.Clamp(_row + k.X, 0, ResultButtons.Length - 1);
+                    var n = Math.Clamp(_row + k.X, 0, Buttons.Length - 1);
                     if (n != _row) Sound?.Invoke("SYS005");
                     _row = n;
                 }
                 else if (k.Ok)
                 {
                     Sound?.Invoke("SYS006");
-                    switch (ResultButtons[_row])
+                    switch (Buttons[_row])
                     {
+                        case "NEXT":
+                            FourPass!.Next();
+                            Leave(Screen.Loading, Action.None);
+                            break;
+                        case "RETRY" when InFourPass:
+                            RestartFourPass();
+                            break;
                         case "RETRY":
                             Leave(Screen.Intro, Action.Restart);
                             break;
@@ -564,11 +589,13 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     private void CourseScreen(Canvas c)
     {
         var o = c.O;
-        var locked = _slot >= catalog.Courses.Count;
+        var locked = _slot >= catalog.Courses.Count && FourPassStages == null;
         var course = SelectedCourse;
         // carbon "monitor" with the course map: white line with green start (and red goal) ticks, as h_selm00-05
         c.Carbon(16, 72, 250, 306);
-        if (!locked) MapLine(c, course, Current == Screen.Route ? _choice == 1 : _reverse, 34, 90, 232, 288);
+        var four = OnFourSlot;
+        if (four) FourPassMaps(c);
+        else if (!locked) MapLine(c, course, Current == Screen.Route ? _choice == 1 : _reverse, 34, 90, 232, 288);
         else c.Text("LOCKED", 133, 196, 22, Grey, 0.5f, 0.2f);
         // 3 × 4 grid of dark-steel buttons with the course names
         for (var i = 0; i < Slots; i++)
@@ -579,13 +606,14 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
             o.Rect(min, max, Overlay.Rgba(0.55f, 0.56f, 0.58f));
             o.RectGradient(min + new Vector2(1.5f, 1.5f) * c.S, max - new Vector2(1.5f, 1.5f) * c.S, Overlay.Rgba(0.2f, 0.21f, 0.22f), Overlay.Rgba(0.08f, 0.08f, 0.09f));
             o.Line(new Vector2(min.X + 2 * c.S, min.Y + 2 * c.S), new Vector2(max.X - 2 * c.S, min.Y + 2 * c.S), 1, Overlay.Rgba(1, 1, 1, 0.35f));
-            c.Fit(name, x + 35, y + 20, 60, 0.5f, i < catalog.Courses.Count ? Canvas.White : Overlay.Rgba(1, 1, 1, 0.35f), 0.12f, 0.05f, 13);
+            c.Fit(name, x + 35, y + 20, 60, 0.5f, i < catalog.Courses.Count || FourPassStages != null ? Canvas.White : Overlay.Rgba(1, 1, 1, 0.35f), 0.12f, 0.05f, 13);
         }
         float sx = 266 + _slot % 3 * 76, sy = 74 + _slot / 3 * 38;
         c.Glow(sx - 3, sy - 3, sx + 73, sy + 33, Current == Screen.Course ? Canvas.Pulse(Theta) : 0.5f);
         // info panel: length, elevation, best of the shown direction
         c.Carbon(262, 232, 496, 306, 1, false);
-        if (!locked)
+        if (four) FourPassStats(c);
+        else if (!locked)
         {
             var best = settings.Best.GetValueOrDefault(Settings.BestKey(course.Id, Current == Screen.Route ? _choice == 1 : _reverse));
             Stat(c, "LENGTH", FormattableString.Invariant($"{course.LengthM / 1000:0.0} km"), 274);
@@ -600,12 +628,12 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
             return;
         }
         // course name in big blue lettering with a white outline, yellow arrows either side
-        var label = locked ? "FOUR PASSES" : course.Name;
+        var label = locked || four ? "FOUR PASSES" : course.Name;
         c.Lettering(label, 256, 372, MathF.Min(54, 380 * c.Kx / o.Font!.Measure(label, c.Ky)), Overlay.Rgba(0.35f, 0.45f, 1), Canvas.BrushBlue, 0.5f, 0.12f, true);
         c.Arrow(40, 340, 40, 370, 24, 355);
         c.Arrow(472, 340, 472, 370, 488, 355);
         var times = locked ? "" : string.Join(" / ", course.Times.Select(Catalog.TimeName));
-        c.Text(locked ? "Not available in this remake" : $"{times}   {Catalog.DirectionName(course, false)} / {Catalog.DirectionName(course, true)}", 256, 404, 12, Canvas.White, 0.5f, 0.15f, 0.08f);
+        c.Text(locked ? "Not available in this remake" : four ? FourPassRoute() : $"{times}   {Catalog.DirectionName(course, false)} / {Catalog.DirectionName(course, true)}", 256, 404, 12, Canvas.White, 0.5f, 0.15f, 0.08f);
         Hint(c, "ARROWS: Select course    DECIDE: OK    BACK: Main menu");
     }
 
@@ -742,8 +770,9 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
         c.O.Rect(Vector2.Round(c.P(x0, 214)), Vector2.Round(c.P(c.Right, 216)), Overlay.Rgba(0.8f, 0.07f, 0.06f));
         var shift = (1 - wipe) * 400;
         c.Lettering(course.Name, 490 + shift, 200, MathF.Min(46, 330 * c.Kx / c.O.Font!.Measure(course.Name, c.Ky)), Overlay.Rgba(0.35f, 0.45f, 1), Canvas.BrushBlue, 1, 0.12f, true);
-        var tags = $"{(_night ? "NIGHT" : "DAY")}    [{Catalog.DirectionName(course, _reverse)}]    [{(_wet || Rain ? "WET" : "DRY")}]";
+        var tags = $"{(_night ? "NIGHT" : "DAY")}    [{Catalog.DirectionName(course, Reverse)}]    [{(_wet || Rain ? "WET" : "DRY")}]";
         c.Text(tags, 490 + shift, 234, 13, Canvas.White, 1, 0.12f, 0.08f);
+        FourPassTelop(c, shift);
         if (Versus != null) c.Text($"VS  {Versus}", 490 + shift, 258, 17, Canvas.WordRed, 1, 0.15f, 0.08f, 0.3f);
     }
 
@@ -792,6 +821,11 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
             BattleScreens.Banner(c, battle, _t);
             return;
         }
+        if (InFourPass)
+        {
+            FourPassBanner(c);
+            return;
+        }
         var run = _run!;
         var pop = Style.Ease(_t / 0.25f);
         var text = run.NewRecord ? "NEW RECORD!!" : "FINISH!!";
@@ -806,6 +840,11 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
         {
             BattleScreens.Sheet(c, battle, i => Style.Ease((_t - (RowFirst + RowStep * i)) / 0.15f));
             ResultChoice(c);
+            return;
+        }
+        if (InFourPass)
+        {
+            FourPassSheet(c);
             return;
         }
         var run = _run!;
@@ -849,9 +888,10 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
         var b = Style.Ease((_t - ButtonsAt) / 0.2f);
         if (b <= 0) return;
         const float step = 94, w = 88;
-        for (var i = 0; i < ResultButtons.Length; i++)
-            c.Button(24 + i * step, 392, w, 30, Legend && ResultButtons[i] == "COURSE SELECT" ? "RIVAL SELECT" : ResultButtons[i],
-                i == 0 ? Canvas.ButtonKind.Positive : ResultButtons[i] == "EXIT" ? Canvas.ButtonKind.Negative : Canvas.ButtonKind.Neutral, b);
+        var buttons = Buttons;
+        for (var i = 0; i < buttons.Length; i++)
+            c.Button(24 + i * step, 392, w, 30, Legend && buttons[i] == "COURSE SELECT" ? "RIVAL SELECT" : buttons[i],
+                i == 0 ? Canvas.ButtonKind.Positive : buttons[i] == "EXIT" ? Canvas.ButtonKind.Negative : Canvas.ButtonKind.Neutral, b);
         var x = 24 + _row * step;
         c.Glow(x - 4, 388, x + w + 4, 426, Canvas.Pulse(Theta), b);
     }
@@ -865,7 +905,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
         for (var i = 0; i < catalog.Courses.Count; i++)
         {
             var course = catalog.Courses[i];
-            var y = 106 + i * 28;
+            var y = 106 + i * 26; // 12 rows with FOUR PASSES
             c.Rule(30, 482, y + 26);
             c.Fit(course.Name, 36, y + 21, 140, 0, Canvas.White, 0.15f, 0.06f, 17);
             for (var r = 0; r < 2; r++)
@@ -878,6 +918,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                 c.Text(Style.Time(best?[^1]), x + 70, y + 19, 13, best == null ? Overlay.Rgba(1, 1, 1, 0.35f) : Canvas.White, 0, 0.15f);
             }
         }
+        if (FourPassStages != null) FourPassRecords(c, settings, 106 + catalog.Courses.Count * 26, 36, 140, r => 190 + r * 150, 13, true);
         Hint(c, "Best time per course and route    BACK: Main menu");
     }
 }

@@ -220,6 +220,30 @@ Aus dem Recomp (ELF-Adresse = Dateioffset + 0xFFF80; Kursauswahl-Modul 0x1DB1B0 
   (vermutlich Tabelle `0x2C7930`, Höchstgeschwindigkeit je Kurs/Richtung/Slot + Stufe), Tageszeit/Wetter bei „nass + Nacht“ (Sakamoto; die
   Disc hat Regen nur am Tag). Remake: Leiter je Kurs, Zusatzkurse ab 3 Hauptkursen, Impreza nach Bunta, Leistung der ersten drei Rivalen
   eines Hauptkurses 80/88/95 % (eigene Wahl, `Race/Legend`).
+## Four Passes (四峠走破) – geknackt
+Aus dem Recomp (ELF-Adresse = Dateioffset + 0xFFF80):
+- **Kurswahl** `0x1DF870`: Feld 11 (`+0x44` des Wahlzustands = 0xB) setzt Modusbyte `0x32791E` = 8 und Kurs `0x328156` = 2 (AKAGI); Richtung/Wetter/
+  Nacht kommen wie bei Time Attack aus `0x1DF790`/`0x1DF800`/`0x1DF810` (Feld 11: Nacht 0 in der Wahl, Wetter = gewählter Wert `+0x4C`).
+  Feldtabelle `0x29C4C0` (Feld → Kurs: 0–7, 10, 8, 9, 2, 11), Routentabelle `0x29C500` (je Feld 0/1).
+- **Etappen** (Modul `0x204E50` Init / `0x204F10` Ablauf, Zustand: +0 geladen, +1 Wetter, +2 Etappe, +8 + 4·n Etappenzeit in ms): je Etappe 8 Bytes
+  aus `0x2A37F0 + 8·n` nach `0x328154` (Kapitel 0xFF, 1, Kurs, Richtung, Wetter, Nacht, Figur 0xFF, 0), danach Wetter = Wahl:
+  | n | Kurs | Richtung | Nacht |
+  |---|---|---|---|
+  | 0 | 2 AKAGI | 0 | 1 |
+  | 1 | 3 AKINA | 0 | 1 |
+  | 2 | 4 HAPPOU | 1 (Gegenrichtung) | 1 |
+  | 3 | 5 IROHA | 0 | 1 |
+  Etappenzähler `+2` und `0x327922` (= Etappe, auch Story-Teilstück) zählen nach jedem Ziel hoch; < 4 → nächste Etappe laden (Ladebildschirm,
+  `0x172320`), sonst Ende. Das Auto (Setup `0x3281B8`) bleibt, ein Gegner (Figur) gibt es nicht.
+- **Zeit**: Etappenzeit = Rennzeit `0x3281B0` (Frames → ms wie überall: × 0x3E8/0x1770 …), höchstens 0x6DDCFA ms; die Gesamtzeit ist die Summe
+  (beim Neustart einer späteren Etappe werden die Sektorfelder `+0xD4…0xDC` nicht gelöscht).
+- **Ergebnis** (`0x18B1E0`, Modus 8): zeigt so viele Zeilen wie Etappen gefahren (nach der vierten 4), dazu ACTCHOICE `act_next` (NEXT) zwischen den
+  Etappen (Knopftabelle `0x299920`: battle, retry, next, passsel, carsel, exit, replay, saverep, playback, stagesel).
+- **Rekord** je Wetter: Gesamtzeit `0x327924 + 0x120 + 4·Wetter`, je Etappe 6 Sektorzeiten `0x327924 + 0x770 + 0x60·Wetter + 0x18·Etappe`; der
+  Rekordschlüssel nimmt Kurs 11 statt des Kursbytes (`0x166140`). Fremde Zeiten im Rennen: `0x3089A0 + 0x140·Wetter` (Modus 8) statt
+  `0x2F39A0 + 0x500·Kurs + 0x280·Richtung + 0x140·Wetter` (Time Attack).
+- **Nass bei Nacht**: Die Disc hat Regen nur am Tag (`_RIN`); wie in der Story bekommt der Nachtkurs Regen (eigene Wahl, wie `0x161F44` die
+  Kombination löst, nicht verfolgt). Der Remake hat 4 statt 6 Sektoren je Etappe (`LapTimer.Sectors`), Rekordschlüssel `FOURPASS[_WET]_A`.
 ## Story – teils geknackt
 Aus dem Recomp (ELF-Adresse = Dateioffset + 0xFFF80); gelesen von `Touge.Formats/StoryScript`.
 - **Kapitel**: 31 (0–30), Byte `0x328154`. Auswahl in drei Teilen, Tabelle `0x2A2990` (31 × 8 B: Teil, Nummer im Teil): Teil 0 = Kapitel 0–18, 1 = 19–23, 2 = 24–30; Titelbilder `TSDATA/STYTTEX0–2.PAC` (nicht gezeichnet). Musik der Auswahl WORRY.adx.

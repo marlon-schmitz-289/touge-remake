@@ -208,7 +208,7 @@ public sealed class ReplayMenu(Catalog catalog, Settings settings)
         for (var i = 0; i < catalog.Courses.Count; i++)
         {
             var course = catalog.Courses[i];
-            var y = 100 + i * 28;
+            var y = 100 + i * 26; // 12 rows with FOUR PASSES
             c.Rule(192, 490, y + 26);
             c.Fit(course.Name, 196, y + 20, 100, 0, Canvas.White, 0.15f, 0.06f, 14);
             for (var r = 0; r < 2; r++)
@@ -219,5 +219,6 @@ public sealed class ReplayMenu(Catalog catalog, Settings settings)
                 c.Text(Style.Time(best?[^1]), x, y + 24, 12, best == null ? Overlay.Rgba(1, 1, 1, 0.35f) : Canvas.White, 0, 0.15f);
             }
         }
+        Menu.FourPassRecords(c, settings, 100 + catalog.Courses.Count * 26, 196, 100, r => 300 + r * 98, 12, false);
     }
 }

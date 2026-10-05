@@ -65,6 +65,8 @@ dotnet run --project Touge -- "<iso>" AKINA_DAY --replay-test 380 [--battle keis
 dotnet run --project Touge -- "<iso>" --replay out/proof/r.rpl [--replay-at 30] [--replay-cam tv|chase|bumper|free] [--shot out/proof/rv.png]   # Replay im Viewer
 dotnet run --project Touge -- "<iso>" AKINA_DAY --ghost out/proof/r.rpl --autodrive 9 --drift --shot out/proof/ghost.png   # Geist aus einer Replay-Datei (mit Menüs: der Bestzeit-Lauf)
 dotnet run --project Touge -- "<iso>" --data-dir out/proof/data --menu replay|replay-best|replay-records|replay-delete|saveload|saveload-actions|saveload-name --shot out/proof/m.png   # REPLAY & RECORD / SAVE & LOAD als Bild (anderer App-Daten-Ordner: die echten Daten bleiben unberührt)
+dotnet run --project Touge -- "<iso>" AKINA_NIT --flow out/proof/fourpasses/flow --fourpasses|--fourpasses-wet [--data-dir out/proof/fourpasses/flow_data]   # FOUR PASSES per Skript: 12. Feld → DRY bzw. WET → Auto → alle vier Etappen mit Pilot in 16× (Telop, Rennen, STAGE n CLEAR, Etappenblatt, Pause in Etappe 2) → Endergebnis → REPLAY & RECORD (Replays, RECORDS)
+dotnet run --project Touge -- "<iso>" AKINA_NIT --menu fourpasses|fourpasses-weather|fourpasses-stage|fourpasses-finish|fourpasses-result --shot out/proof/fourpasses/m.png   # FOUR PASSES als Bild (Etappenblatt/Ziel/Endergebnis mit erfundenen Zeiten)
 dotnet run --project Touge -- "<iso>" --flow out/proof/flow --data-dir out/proof/flow_data   # --flow mit echtem Speichern: Ergebnis → EXIT legt Replay + Bestzeit-Lauf in out/proof/flow_data/Replays ab, REPLAY & RECORD zeigt ihn
 dotnet run --project Touge -- "<iso>" AKINA_DAY --menu photo --shot out/proof/photo.png   # Fotomodus über dem pausierten Rennen
 ```
@@ -158,8 +160,8 @@ Titel). Gebaut sind davon LEGEND OF THE STREETS, TIME ATTACK, VERSUS (eigene Erg
 im Original. Als letzter Eintrag QUIT GAME (nur Windows/Linux/macOS): Abfrage „QUIT THE GAME?“ YES/NO (NO vorgewählt, ←/→ wählen,
 Enter/A entscheiden, Esc/B = NO), YES speichert die Einstellungen und schließt das Fenster. Esc im Hauptmenü zurück zum Titel, im Titel beenden. Danach alle Bildschirme ebenfalls im Originalstil (`Ui/Menu` + `Ui/Canvas`:
 graue Logo-Kachelwand, roter/blauer Laufschrift-Kopf, Chromplatten, Karbonpaneele, gelber Pulsrahmen, Verlaufswörter rot/blau, alles Englisch):
-TIME ATTACK = Kurswahl (3 × 4 Raster wie im Original, Streckenlinie im Karbon-„Monitor“ statt Foto, Länge/Höhe/Bestzeit; das 12. Feld „FOUR
-PASSES“ ist gesperrt) → Route (DOWNHILL/UPHILL bzw. CLOCKWISE/COUNTER-CLOCKWISE aus dem Drehsinn der Linie) → Tageszeit (DAY/NIGHT) → Wetter
+TIME ATTACK = Kurswahl (3 × 4 Raster wie im Original, Streckenlinie im Karbon-„Monitor“ statt Foto, Länge/Höhe/Bestzeit; das 12. Feld ist
+FOUR PASSES, siehe unten) → Route (DOWNHILL/UPHILL bzw. CLOCKWISE/COUNTER-CLOCKWISE aus dem Drehsinn der Linie) → Tageszeit (DAY/NIGHT) → Wetter
 (DRY/WET/FOG, nachts DRY/FOG) – Schritte mit nur einer Möglichkeit entfallen – → Hersteller (7 Chromplatten, Modellliste im Karbonpaneel) → Auto (3D-Auto dreht
 sich, ←/→ Modell, ↑/↓ Lackfarbe, Antrieb FF/MR/FR/4WD) → Getriebe (AT/MT) → Laden (weiß, „Now Loading...“) → Streckentelop + 3-2-1-GO
 (CAR010/CAR011, Auto steht bis GO) → Rennen. Esc (Pad: Start) pausiert (alarm_02): Continue/Retry/Replay/Photo/Exit/Quit Game (Quit Game wie im Hauptmenü mit Abfrage, nur Desktop). Start und Ziel sind die beiden Bögen an den
@@ -180,6 +182,17 @@ Schritte rückwärts. Zwischen Modulen 30-Frame-Schwarzblenden. Ton: Original-SE
 Zurück/gesperrt, sys002 START, alarm_02 Pause, CAR010/011 Countdown, NAME001 Ergebniszeilen) und Menü-BGM aus BGM.AFS mit Loop-Punkten:
 Titel/Hauptmenü „GAMBLE RUMBLE“ (eigene Wahl, das Original ist dort still bzw. spielt den Vorspannfilm), Kurswahl „LIVE IN TOKYO“,
 Hersteller/Auto/Rekorde „WORRY“, Laden still, Countdown/Rennen/Pause Eurobeat, Ziel „WIN“ (einmal), Ergebnis „JOY“ (wie im Original).
+FOUR PASSES (`FourPasses`, `Ui/Menu.FourPasses`, `TougeGame.FourPasses`, `Ui/FourPassHud`; das Original 四峠走破, 12. Feld der Time-Attack-Kurswahl):
+vier Pässe hintereinander mit einer Gesamtzeit, Etappen wie im Original aus der ELF-Tabelle (FORMATS.md): AKAGI bergab → AKINA bergab →
+HAPPOGAHARA bergauf → IROHAZAKA bergab, alle nachts. Kurswahl zeigt die vier Karten im „Monitor“, Gesamtlänge und Rekord; danach nur Wetter
+(DRY/WET wie im Original; WET = Regen über den Nachtkursen wie in der Story) → Hersteller/Auto/Getriebe wie Time Attack (das Auto bleibt für alle
+Etappen) → Laden → Telop „FOUR PASSES STAGE n / 4“ mit der Gesamtzeit bisher → Rennen (HUD oben rechts: STAGE n/4, Kurs, laufende Gesamtzeit;
+Sektor-Deltas gegen die Etappe des Rekordlaufs) → „STAGE n CLEAR“ (Etappenzeit, Gesamtzeit) → Etappenblatt (Pässe mit Zeit und Delta der
+Gesamtzeit gegen den Rekord, PACE, nächste Etappe) mit NEXT / RETRY / EXIT → … nach der vierten FINISH!!/NEW RECORD!! und das Endblatt (Gesamtzeit,
+vier Passzeiten mit Delta, Bestzeit, Differenz, Driftpunkte) mit RETRY / REPLAY / COURSE SELECT / CAR SELECT / EXIT. RETRY (auch in der Pause) und
+ein neues Auto beginnen wieder bei Etappe 1. Rekord je Wetter (und Hilfen, wie Time Attack) in `settings.json` (`FOURPASS_A`/`FOURPASS_WET_A`:
+16 kumulierte Sektorzeiten, letzte = Gesamtzeit), angezeigt in RECORDS und REPLAY & RECORD → RECORDS als Zeile FOUR PASSES (DRY/WET).
+Jede Etappe ist ein eigenes Replay mit dem Etikett „FOUR PASSES n/4“.
 IKETANI'S CAR GUIDE (`Ui/CarGuide`, wie das Original 池谷先輩の車紹介, BGM „WORRY“): Itsuki/Takumi/Iketani-Dialog (Entscheiden
 schreibt die Zeile fertig, dann weiter) → Liste aller 32 Autos unter Herstellerköpfen, das Auto dreht sich in 3D rechts daneben (Drehbühne auf freier, gerader Straße mitten im geladenen Kurs, weg von Start-/Zielbögen), Iketanis Text
 (eigenes Englisch) und Datenblatt (Motor, Hubraum, Bauart, Leistung/Drehmoment mit Drehzahl aus der Momentkurve, Gewicht, Antrieb, Getriebe,

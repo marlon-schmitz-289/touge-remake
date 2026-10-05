@@ -183,6 +183,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             _guide = new CarGuide(_catalog) { Sound = n => _menuAudio?.Play(n) };
             LoadLegend();
             LoadStory(iso);
+            LoadFourPasses(iso);
             SetupReplay();
             FrontEnd.Step? step = Flow != null ? FrontEnd.Step.Boot : StartMenu switch
             {
@@ -258,6 +259,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             _inRace = false;
         }
         else if (_story != null && StartMenu?.StartsWith("story") == true) StartStoryMenu(StartMenu);
+        else if (_menu != null && StartMenu?.StartsWith("fourpasses") == true) OpenFourPassMenu(StartMenu);
         else if (_menu != null && StartMenu != null)
         {
             // options:<page> opens an options page directly (screenshots), controls:<device> the controls screen
@@ -367,14 +369,15 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     private Hud NewHud()
     {
         var key = _settings.RunKey(_courseTime[.._courseTime.LastIndexOf('_')], _drive.Reverse); // other assists race their own records
-        _previousBest = _settings.Best.GetValueOrDefault(key)?[^1];
-        var hud = new Hud(_course.Road, _drive.Line, _drive.Pilot, _settings.Best.GetValueOrDefault(key), _drive.Start)
+        var best = FourPass is { } fp ? fp.StageBest() : _settings.Best.GetValueOrDefault(key); // four passes: the stage in the run's record
+        _previousBest = best?[^1];
+        var hud = new Hud(_course.Road, _drive.Line, _drive.Pilot, best, _drive.Start)
         {
             Visible = _settings.HudOn, Mode = _settings.MapMode, Scale = _settings.HudScale, Night = _courseTime.EndsWith("_NIT"), Mph = _settings.Mph,
         };
         hud.Timer.Record += best =>
         {
-            if (_race != null || _vsRace != null || _story is { InRun: true }) return; // a battle (rival, contacts), versus or story run is no time attack record
+            if (_race != null || _vsRace != null || _story is { InRun: true } || FourPass != null) return; // a battle (rival, contacts), versus, story or four-pass run is no time attack record
             _settings.Best[key] = best;
             if (_persist) _settings.Save();
         };
@@ -648,6 +651,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             // the run is over: finish banner, then the result sheet (only in the front-end flow)
             _finished = true;
             var t = _hud.Timer;
+            FourPassStage();
             _menu!.Finish(new Menu.Run(t.Time, (float[])t.Splits.Clone(), [.. Enumerable.Range(0, LapTimer.Sectors).Select(t.Delta)], _previousBest, t.NewRecord, _hud.Drift.Total));
             return;
         }
@@ -822,10 +826,12 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             case Menu.Action.Load:
                 (_settings.Course, _settings.Reverse, _settings.Car, _settings.Paint, _settings.Manual, _settings.Fog) = (menu.CourseTime, menu.Reverse, menu.CarId, menu.Paint, menu.Manual, menu.Fog);
                 if (_persist) _settings.Save();
-                if (menu.CourseTime != _courseTime || menu.Reverse != _drive.Reverse || menu.Fog != _fog)
+                if (menu.CourseTime != _courseTime || menu.Reverse != _drive.Reverse || menu.Fog != _fog || FourPassRain != _storyRain)
                 {
+                    (_storyRain, menu.Rain) = (FourPassRain, FourPassRain); // four passes WET: rain over the night course
                     using var iso = new Iso9660(isoPath);
                     LoadCourse(iso, menu.CourseTime, menu.Reverse, menu.CarId, menu.Paint, fog: menu.Fog);
+                    if (_storyRain) _renderer.Atmosphere.Wetness = 1;
                 }
                 else if (menu.CarId != _carName || menu.Paint != _paint) SwitchCar(Array.IndexOf(CarPaint.Cars, menu.CarId), menu.Paint);
                 ResetRun();
@@ -1108,7 +1114,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     /// <summary>--flow: the scripted key of this frame; asks for the step's PNG first (written next frame), quits after the last step (with --bench: races on).</summary>
     private (int X, int Y, bool Ok, bool Back) FlowKeys(float dt)
     {
-        var script = bench != null ? FlowBenchScript : LegendFlow ? LegendFlowScript : StoryFlow ? StoryFlowScript : VersusStart == "flow" ? VersusFlowScript : FlowScript;
+        var script = bench != null ? FlowBenchScript : LegendFlow ? LegendFlowScript : FourPassFlow ? FourPassFlowScript : StoryFlow ? StoryFlowScript : VersusStart == "flow" ? VersusFlowScript : FlowScript;
         if (_flowStep >= script.Length)
         {
             if (bench == null) Window.ShouldClose = true;
@@ -1485,6 +1491,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             _hud.Rival = _race is { } race ? (_rivalPose.Translation, race.Cars[1].Along) : VersusRival(0);
             _hud.Build(_overlay, hw, hh, _carPose.Translation, Vector3.TransformNormal(Vector3.UnitZ, _carPose), _drive.Car, _carName, _menuTime);
             BuildBattleHud(hw, hh);
+            BuildFourPassHud(hw, hh);
             _story?.BuildHud(_overlay, hw, hh, _race?.Battle);
             BuildVersusHud(_overlay, hw, hh, 0);
         }
@@ -1513,7 +1520,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         if (_jukebox is { Playing: true, Current: { } song } && _music == Menu.RaceMusic && _front is not { Active: true } && _guide is not { Active: true } && _legend is not { Active: true }
             && _story is not { Active: true } && _versusUi is not { Active: true } && !OverlayQuiet)
             NowPlaying.Draw(_overlay, w, h, song, _jukebox.Since, hold: _menu?.Current == Menu.Screen.Pause,
-                below: _hud.Visible ? (_race?.Battle != null ? BattleHud.H + 14 : VersusHudBelow(split != null)) + (_story?.HudHeight(_race?.Battle) ?? 0) : 0);
+                below: _hud.Visible ? (_race?.Battle != null ? BattleHud.H + 14 : VersusHudBelow(split != null)) + (_story?.HudHeight(_race?.Battle) ?? 0) + FourPassHudBelow : 0);
         if (InputDebug) InputDebugView.Build(_overlay, w, h, Input, _driver, _ffb);
         DrawOverlay(ctx.Encoder, target, w, h);
         if (shot != null)
