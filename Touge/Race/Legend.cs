@@ -39,51 +39,54 @@ public static class Legend
         new(id, name, team, car, new RivalStyle(skill, aggression, drift), paint);
 
     /// <summary>
-    ///     All 34 rivals in the original's id order (0x2A2D90 rows 0–33), grouped by slot as 0x29B2E0 lists them.
+    ///     All 34 rivals in the original's id order (0x2A2D90 rows 0–33), grouped by slot as 0x29B2E0 lists them. Skill on the
+    ///     one scale (<see cref="RivalPilot.Pace"/>) by rung: a main course's ladder 0.1–0.2 (a beginner beats it, with
+    ///     <see cref="RungPower"/>), ~0.3, 0.3–0.45, 0.3–0.5 (lower in the strong cars: the Trueno has to get through); the additions 0.55–0.7 stock, the secret ones 0.9/1 (--legend-sim
+    ///     with LEGEND_ALL=1 and --player-skill 0.2/0.5/0.8, README).
     ///     Byte 3 → <see cref="Entry.Reverse"/>, 4 → <see cref="Entry.Wet"/>, 5 → <see cref="Entry.Night"/>, 6 → <see cref="Entry.Figure"/>.
     /// </summary>
     public static readonly Entry[] All = Tiered(
     [
         // MYOGI
-        E(0, "itsuki", R("itsuki", "ITSUKI TAKEUCHI", "AKINA SPEEDSTARS", "AE85", 0.3f, 0.2f, 0.3f), false, false, false, 0, "ITSUKI.adx"),
-        E(0, "takumi", R("takumi", "TAKUMI FUJIWARA", "AKINA SPEEDSTARS", "AE85", 0.66f, 0.4f, 0.85f), true, false, false, 1, "TAKUMI01.adx"),
-        E(0, "shingo", R("shingo", "SHINGO SHOJI", "MYOGI NIGHTKIDS", "EG6", 0.6f, 0.95f, 0.2f), false, false, true, 2, "SHINGO.adx"),
-        E(0, "takeshi", R("takeshi", "TAKESHI NAKAZATO", "MYOGI NIGHTKIDS", "R32", 0.68f, 0.55f, 0.1f), true, false, true, 3, "NAKAZATO.adx"),
+        E(0, "itsuki", R("itsuki", "ITSUKI TAKEUCHI", "AKINA SPEEDSTARS", "AE85", 0.1f, 0.2f, 0.3f), false, false, false, 0, "ITSUKI.adx"),
+        E(0, "takumi", R("takumi", "TAKUMI FUJIWARA", "AKINA SPEEDSTARS", "AE85", 0.25f, 0.4f, 0.85f), true, false, false, 1, "TAKUMI01.adx"),
+        E(0, "shingo", R("shingo", "SHINGO SHOJI", "MYOGI NIGHTKIDS", "EG6", 0.35f, 0.95f, 0.2f), false, false, true, 2, "SHINGO.adx"),
+        E(0, "takeshi", R("takeshi", "TAKESHI NAKAZATO", "MYOGI NIGHTKIDS", "R32", 0.3f, 0.55f, 0.1f), true, false, true, 3, "NAKAZATO.adx"),
         // USUI
-        E(1, "tokyo", R("tokyo", "THE TWO FROM TOKYO", "TOKYO", "S15", 0.48f, 0.55f, 0.4f), false, false, false, 4, "DEBU.adx"),
-        E(1, "nobuhiko", R("nobuhiko", "NOBUHIKO AKIYAMA", "SAITAMA", "ALTEZ", 0.56f, 0.45f, 0.35f), true, false, false, 5, "NOBUHIKO.adx"),
-        E(1, "mako", R("mako", "MAKO SATO & SAYUKI", "IMPACT BLUE", "SIL80", 0.7f, 0.5f, 0.6f), false, false, true, 6, "MAKO.adx"),
-        E(1, "sakamoto", R("sakamoto", "SAKAMOTO", "SAITAMA NORTHWEST ALLIANCE", "CAPPU", 0.74f, 0.5f, 0.4f), true, true, true, 7, "SAKAMOTO.adx"),
+        E(1, "tokyo", R("tokyo", "THE TWO FROM TOKYO", "TOKYO", "S15", 0.12f, 0.55f, 0.4f), false, false, false, 4, "DEBU.adx"),
+        E(1, "nobuhiko", R("nobuhiko", "NOBUHIKO AKIYAMA", "SAITAMA", "ALTEZ", 0.25f, 0.45f, 0.35f), true, false, false, 5, "NOBUHIKO.adx"),
+        E(1, "mako", R("mako", "MAKO SATO & SAYUKI", "IMPACT BLUE", "SIL80", 0.3f, 0.5f, 0.6f), false, false, true, 6, "MAKO.adx"),
+        E(1, "sakamoto", R("sakamoto", "SAKAMOTO", "SAITAMA NORTHWEST ALLIANCE", "CAPPU", 0.5f, 0.5f, 0.4f), true, true, true, 7, "SAKAMOTO.adx"),
         // AKAGI
-        E(2, "kyoko", R("kyoko", "KYOKO IWASE", "TEAM KYOKO", "FD3S", 0.66f, 0.75f, 0.5f, 3), true, false, false, 8, "KYOUKO.adx"),
-        E(2, "kenta", R("kenta", "KENTA NAKAMURA", "AKAGI REDSUNS", "S14Q", 0.64f, 0.6f, 0.6f), false, true, false, 9, "KENTA.adx"),
-        E(2, "keisuke", R("keisuke", "KEISUKE TAKAHASHI", "AKAGI REDSUNS", "FD3S", 0.8f, 0.65f, 0.8f), true, false, true, 10, "KEISUKE01.adx"),
-        E(2, "ryosuke", R("ryosuke", "RYOSUKE TAKAHASHI", "AKAGI REDSUNS", "FC3S", 0.88f, 0.45f, 0.6f), false, false, true, 11, "RYOSUKE.adx"),
+        E(2, "kyoko", R("kyoko", "KYOKO IWASE", "TEAM KYOKO", "FD3S", 0.15f, 0.75f, 0.5f, 3), true, false, false, 8, "KYOUKO.adx"),
+        E(2, "kenta", R("kenta", "KENTA NAKAMURA", "AKAGI REDSUNS", "S14Q", 0.3f, 0.6f, 0.6f), false, true, false, 9, "KENTA.adx"),
+        E(2, "keisuke", R("keisuke", "KEISUKE TAKAHASHI", "AKAGI REDSUNS", "FD3S", 0.3f, 0.65f, 0.8f), true, false, true, 10, "KEISUKE01.adx"),
+        E(2, "ryosuke", R("ryosuke", "RYOSUKE TAKAHASHI", "AKAGI REDSUNS", "FC3S", 0.45f, 0.45f, 0.6f), false, false, true, 11, "RYOSUKE.adx"),
         // AKINA
-        E(3, "kenji", R("kenji", "KENJI", "AKINA SPEEDSTARS", "ONE80", 0.45f, 0.35f, 0.5f), true, false, false, 12, "KENJI.adx"),
-        E(3, "iketani", R("iketani", "KOICHIRO IKETANI", "AKINA SPEEDSTARS", "S13", 0.5f, 0.3f, 0.3f), false, false, false, 13, "IKETANI.adx"),
-        E(3, "wataru", R("wataru", "WATARU AKIYAMA", "SAITAMA", "AE86L", 0.8f, 0.55f, 0.7f), true, false, true, 14, "WATARU.adx"),
-        E(3, "takumi", R("takumi", "TAKUMI FUJIWARA", "AKINA SPEEDSTARS", "AE86T", 0.9f, 0.5f, 0.9f), false, false, true, 15, "TAKUMI02.adx"),
+        E(3, "kenji", R("kenji", "KENJI", "AKINA SPEEDSTARS", "ONE80", 0.1f, 0.35f, 0.5f), true, false, false, 12, "KENJI.adx"),
+        E(3, "iketani", R("iketani", "KOICHIRO IKETANI", "AKINA SPEEDSTARS", "S13", 0.25f, 0.3f, 0.3f), false, false, false, 13, "IKETANI.adx"),
+        E(3, "wataru", R("wataru", "WATARU AKIYAMA", "SAITAMA", "AE86L", 0.45f, 0.55f, 0.7f), true, false, true, 14, "WATARU.adx"),
+        E(3, "takumi", R("takumi", "TAKUMI FUJIWARA", "AKINA SPEEDSTARS", "AE86T", 0.5f, 0.5f, 0.9f), false, false, true, 15, "TAKUMI02.adx"),
         // HAPPOGAHARA
-        E(4, "suetsugu", R("suetsugu", "TORU SUETSUGU", "SEVEN STAR LEAF", "NA6C", 0.72f, 0.5f, 0.6f), false, false, true, 16, "SUETSUGU.adx"),
-        E(4, "daiki", R("daiki", "DAIKI NINOMIYA", "TODO SCHOOL", "EK9", 0.76f, 0.6f, 0.2f), true, false, true, 17, "DAIKI.adx"),
-        E(4, "sakai", R("sakai", "SMILEY SAKAI", "TODO SCHOOL", "INTGR", 0.8f, 0.55f, 0.2f), false, false, true, 18, "SAKAI.adx"),
-        E(4, "tachi", R("tachi", "TOMOYUKI TACHI", "TODO SCHOOL ALUMNI", "EK9", 0.88f, 0.6f, 0.25f), true, false, true, 19, "TACHI.adx"),
+        E(4, "suetsugu", R("suetsugu", "TORU SUETSUGU", "SEVEN STAR LEAF", "NA6C", 0.15f, 0.5f, 0.6f), false, false, true, 16, "SUETSUGU.adx"),
+        E(4, "daiki", R("daiki", "DAIKI NINOMIYA", "TODO SCHOOL", "EK9", 0.3f, 0.6f, 0.2f), true, false, true, 17, "DAIKI.adx"),
+        E(4, "sakai", R("sakai", "SMILEY SAKAI", "TODO SCHOOL", "INTGR", 0.45f, 0.55f, 0.2f), false, false, true, 18, "SAKAI.adx"),
+        E(4, "tachi", R("tachi", "TOMOYUKI TACHI", "TODO SCHOOL ALUMNI", "EK9", 0.5f, 0.6f, 0.25f), true, false, true, 19, "TACHI.adx"),
         // IROHAZAKA
-        E(5, "seiji", R("seiji", "SEIJI IWAKI", "TEAM EMPEROR", "EVO4", 0.74f, 0.65f, 0.1f), false, false, false, 20, "SEIJI.adx"),
-        E(5, "kyoichi", R("kyoichi", "KYOICHI SUDO", "TEAM EMPEROR", "EVO3", 0.84f, 0.6f, 0.15f), false, false, false, 21, "KYOICHI.adx"),
-        E(5, "kai", R("kai", "KAI KOGASHIWA", "IROHAZAKA", "MR2", 0.8f, 0.7f, 0.3f), false, false, true, 22, "KAI.adx"),
-        E(5, "keisuke", R("keisuke", "KEISUKE TAKAHASHI", "PROJECT D", "FD3S", 0.9f, 0.65f, 0.8f), false, false, true, 23, "KEISUKE02.adx"),
-        E(5, "takumi", R("takumi", "TAKUMI FUJIWARA", "PROJECT D", "AE86T", 0.97f, 0.5f, 0.9f), false, false, true, 24, "TAKUMI03.adx", true),
+        E(5, "seiji", R("seiji", "SEIJI IWAKI", "TEAM EMPEROR", "EVO4", 0.2f, 0.65f, 0.1f), false, false, false, 20, "SEIJI.adx"),
+        E(5, "kyoichi", R("kyoichi", "KYOICHI SUDO", "TEAM EMPEROR", "EVO3", 0.35f, 0.6f, 0.15f), false, false, false, 21, "KYOICHI.adx"),
+        E(5, "kai", R("kai", "KAI KOGASHIWA", "IROHAZAKA", "MR2", 0.45f, 0.7f, 0.3f), false, false, true, 22, "KAI.adx"),
+        E(5, "keisuke", R("keisuke", "KEISUKE TAKAHASHI", "PROJECT D", "FD3S", 0.45f, 0.65f, 0.8f), false, false, true, 23, "KEISUKE02.adx"),
+        E(5, "takumi", R("takumi", "TAKUMI FUJIWARA", "PROJECT D", "AE86T", 0.9f, 0.5f, 0.9f), false, false, true, 24, "TAKUMI03.adx", true),
         // MYOGI+, USUI+, SHOMARU, MOMIJI LINE, SHIONA (Special Stage's own courses, night only)
-        E(6, "shingo", R("shingo", "SHINGO SHOJI", "MYOGI NIGHTKIDS", "EG6", 0.72f, 0.95f, 0.2f), false, false, true, 26, "SHINGO.adx"),
-        E(6, "takeshi", R("takeshi", "TAKESHI NAKAZATO", "MYOGI NIGHTKIDS", "R32", 0.8f, 0.55f, 0.1f), true, false, true, 27, "NAKAZATO.adx"),
-        E(7, "mako", R("mako", "MAKO SATO & SAYUKI", "IMPACT BLUE", "SIL80", 0.8f, 0.5f, 0.6f), false, false, true, 28, "MAKO.adx"),
-        E(8, "wataru", R("wataru", "WATARU AKIYAMA", "SAITAMA", "AE86L", 0.86f, 0.55f, 0.7f), false, false, true, 29, "WATARU.adx"),
-        E(9, "suetsugu", R("suetsugu", "TORU SUETSUGU", "SEVEN STAR LEAF", "NA6C", 0.78f, 0.5f, 0.6f), false, false, true, 30, "SUETSUGU.adx"),
-        E(9, "kawai", R("kawai", "ATSURO KAWAI", "SEVEN STAR LEAF", "ER34", 0.84f, 0.5f, 0.45f), true, false, true, 31, "ATSUO.adx"),
-        E(10, "daiki", R("daiki", "DAIKI NINOMIYA", "TODO SCHOOL", "EK9", 0.82f, 0.6f, 0.2f), false, false, true, 32, "DAIKI.adx"),
-        E(10, "sakai", R("sakai", "SMILEY SAKAI", "TODO SCHOOL", "INTGR", 0.86f, 0.55f, 0.2f), true, false, true, 33, "SAKAI.adx"),
+        E(6, "shingo", R("shingo", "SHINGO SHOJI", "MYOGI NIGHTKIDS", "EG6", 0.55f, 0.95f, 0.2f), false, false, true, 26, "SHINGO.adx"),
+        E(6, "takeshi", R("takeshi", "TAKESHI NAKAZATO", "MYOGI NIGHTKIDS", "R32", 0.55f, 0.55f, 0.1f), true, false, true, 27, "NAKAZATO.adx"),
+        E(7, "mako", R("mako", "MAKO SATO & SAYUKI", "IMPACT BLUE", "SIL80", 0.6f, 0.5f, 0.6f), false, false, true, 28, "MAKO.adx"),
+        E(8, "wataru", R("wataru", "WATARU AKIYAMA", "SAITAMA", "AE86L", 0.7f, 0.55f, 0.7f), false, false, true, 29, "WATARU.adx"),
+        E(9, "suetsugu", R("suetsugu", "TORU SUETSUGU", "SEVEN STAR LEAF", "NA6C", 0.6f, 0.5f, 0.6f), false, false, true, 30, "SUETSUGU.adx"),
+        E(9, "kawai", R("kawai", "ATSURO KAWAI", "SEVEN STAR LEAF", "ER34", 0.65f, 0.5f, 0.45f), true, false, true, 31, "ATSUO.adx"),
+        E(10, "daiki", R("daiki", "DAIKI NINOMIYA", "TODO SCHOOL", "EK9", 0.65f, 0.6f, 0.2f), false, false, true, 32, "DAIKI.adx"),
+        E(10, "sakai", R("sakai", "SMILEY SAKAI", "TODO SCHOOL", "INTGR", 0.7f, 0.55f, 0.2f), true, false, true, 33, "SAKAI.adx"),
         // AKINA's fifth: Bunta (row 33 of 0x2A2D90, figure 25)
         E(3, "bunta", R("bunta", "BUNTA FUJIWARA", "FUJIWARA TOFU", "IMP3", 1f, 0.4f, 0.7f), false, false, true, 25, "BUNTA.adx", true),
     ]);
@@ -94,9 +97,9 @@ public static class Legend
     /// <summary>
     ///     Engine torque of the rival's car by its rung on a main course's ladder (the remake's own balance, in the spirit of
     ///     the original's per-course AI speed table 0x2C7930): the first rivals run detuned so the starter car (Trueno) can
-    ///     beat them, from the fourth on the cars are stock; the additions and the secret rivals are always stock.
+    ///     beat them, the fourth at 92 %; the additions and the secret rivals are always stock.
     /// </summary>
-    public static float[] RungPower => [0.6f, 0.72f, 0.85f]; // a property: All (above) is initialised first
+    public static float[] RungPower => [0.6f, 0.72f, 0.85f, 0.92f]; // a property: All (above) is initialised first
 
     /// <summary><see cref="RungPower"/> applied to the main courses' regulars.</summary>
     private static Entry[] Tiered(Entry[] all) =>
@@ -163,5 +166,5 @@ public static class Legend
     /// <summary>Difficulty stars 1–5 from the AI's skill.</summary>
     public static int Stars(Entry e) => Stars(e.Rival.Style.Skill);
 
-    public static int Stars(float skill) => Math.Clamp((int)MathF.Round((skill - 0.3f) / 0.16f) + 1, 1, 5);
+    public static int Stars(float skill) => Math.Clamp((int)MathF.Round(skill / 0.22f) + 1, 1, 5);
 }

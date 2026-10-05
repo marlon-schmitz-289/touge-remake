@@ -30,8 +30,11 @@ public class LegendTests
         Assert.Equal(3, Legend.Find("AKAGI/kyoko")!.Rival.Paint);
         Assert.True(Legend.Find("USUI0/sakamoto") is { Wet: true, Night: true, Reverse: true });
         Assert.True(Legend.Find("AKAGI/kenta") is { Wet: true, Night: false });
-        // the first three rungs of a main course run detuned, the rest stock; the rival's spec carries it
-        Assert.Equal([0.6f, 0.72f, 0.85f, 1, 1], Legend.Of(3).Select(e => e.Rival.Power));
+        // the first four rungs of a main course run detuned, the secret one stock; the rival's spec carries it
+        Assert.Equal([0.6f, 0.72f, 0.85f, 0.92f, 1], Legend.Of(3).Select(e => e.Rival.Power));
+        // every main course opens with a rival a beginner beats (EASY's skill, detuned), the secret ones are the strongest
+        Assert.All(Enumerable.Range(0, Legend.MainCourses), s => Assert.InRange(Legend.Of(s)[0].Rival.Style.Skill, 0, 0.2f));
+        Assert.All(Legend.All.Where(e => e.Secret), e => Assert.True(e.Rival.Style.Skill >= Legend.All.Where(x => !x.Secret).Max(x => x.Rival.Style.Skill)));
         Assert.Equal([1f, 1], Legend.Of(6).Select(e => e.Rival.Power));
         var kenji = Legend.Find("AKINA/kenji")!.Rival;
         Assert.Equal(CarSpecs.All["ONE80"].TorqueNm.Max() * 0.6f, kenji.Spec.TorqueNm.Max(), 3);

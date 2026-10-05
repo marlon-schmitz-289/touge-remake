@@ -7,7 +7,8 @@ namespace Touge.Race;
 ///     --legend-sim: Legend of the Streets without a window. The autopilot (<see cref="BattleRun.Autopilot"/>) drives the
 ///     player's car up every course's ladder as a player would — only rivals the progress has unlocked, a lost battle ends
 ///     that course's run — with each battle's conditions (<see cref="Legend.Conditions"/>), the result counted into the
-///     progress (saved to a JSON file for the menus: --legend-progress) and the unlocks printed as they happen.
+///     progress (saved to a JSON file for the menus: --legend-progress) and the unlocks printed as they happen. LEGEND_ALL=1
+///     (calibration) races every rival once, locked or not.
 /// </summary>
 public static class LegendSim
 {
@@ -19,6 +20,7 @@ public static class LegendSim
         var times = Legend.CourseIds.ToDictionary(id => id, id => new[] { "DAY", "NIT", "RIN" }.Where(t => models.Find($"{id}_{t}.PAC") != null).ToArray());
         int battles = 0, wins = 0;
         var lost = new HashSet<string>(); // a rerun of a lost battle would end the same (deterministic)
+        var every = Environment.GetEnvironmentVariable("LEGEND_ALL") != null; // calibration: every rival once, unlocked or not
         for (var pass = 0; pass < 3; pass++) // secret rivals and the additions open only after other courses
         {
             var progressed = false;
@@ -26,7 +28,8 @@ public static class LegendSim
                 foreach (var e in Legend.Of(slot))
                 {
                     if (p.Beaten(e.Key)) continue;
-                    if (!Legend.Unlocked(e, p) || lost.Contains(e.Key)) break;
+                    if (!every && (!Legend.Unlocked(e, p) || lost.Contains(e.Key))) break;
+                    if (every && (pass > 0 || lost.Contains(e.Key))) continue;
                     var (courseTime, wet) = Legend.Conditions(e, times[e.CourseId], p);
                     var drive = new Drive(iso, courseTime, e.Reverse, CarSpecs.All[car]);
                     var race = BattleRun.Create(drive, Legend.Setup(e), new AiDriver(new RivalPilot(drive.Line, BattleRun.Autopilot)), car + " (AUTO)");
@@ -45,6 +48,7 @@ public static class LegendSim
                     if (b.Outcome != BattleOutcome.Win)
                     {
                         lost.Add(e.Key);
+                        if (every) continue;
                         break; // the ladder stops at a loss, as for a player
                     }
                     progressed = true;
