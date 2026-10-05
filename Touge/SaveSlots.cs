@@ -23,6 +23,9 @@ public sealed class SaveSlots(string root)
         public List<string> Files { get; set; } = [];
         /// <summary>Records (best runs) in its settings.json.</summary>
         public int Records { get; set; }
+        /// <summary>Story chapters cleared and Legend rivals beaten in its progress.json (<see cref="Progress.Summary"/>).</summary>
+        public int Story { get; set; }
+        public int Legend { get; set; }
     }
 
     public sealed class State
@@ -67,8 +70,10 @@ public sealed class SaveSlots(string root)
         var files = ProgressFiles();
         foreach (var f in files) File.Copy(Path.Combine(root, f), Path.Combine(tmp, f));
         foreach (var d in Folders) CopyDir(Path.Combine(root, d), Path.Combine(tmp, d));
+        var (story, legend) = Progress.Load(Path.Combine(tmp, "progress.json")).Summary();
         WriteJson(Path.Combine(tmp, "slot.json"), new Meta
         {
+            Story = story, Legend = legend,
             Name = name, PlaySeconds = playSeconds, Saved = DateTime.Now, Files = [.. files.Select(Path.GetFileNameWithoutExtension).OfType<string>()],
             Records = RecordsIn(Path.Combine(root, "settings.json")),
         });
@@ -122,7 +127,7 @@ public sealed class SaveSlots(string root)
     public static readonly string[] MachineSettings =
     [
         nameof(Ui.Settings.Controls), nameof(Ui.Settings.Display), nameof(Ui.Settings.Width), nameof(Ui.Settings.Height), nameof(Ui.Settings.VSync),
-        nameof(Ui.Settings.FrameCap), nameof(Ui.Settings.RenderScale),
+        nameof(Ui.Settings.FrameCap), nameof(Ui.Settings.RenderScale), nameof(Ui.Settings.NetPort), nameof(Ui.Settings.JoinAddress),
     ];
 
     /// <summary>A loaded profile's settings into the live object (others hold references to it): all but <see cref="MachineSettings"/>.</summary>

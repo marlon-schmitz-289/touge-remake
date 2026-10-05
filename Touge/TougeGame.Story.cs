@@ -36,10 +36,9 @@ public sealed partial class TougeGame
             Console.WriteLine($"[Story] Kapiteltabelle nicht lesbar ({e.Message}), STORY aus");
             return;
         }
-        var progress = _persist ? Progress.Load() : new Progress();
         if (_persist && StoryProgress > 0) Console.WriteLine("[Story] --progress gilt nur für Testläufe ohne gespeicherten Fortschritt, ignoriert");
-        else for (var n = 0; n < StoryProgress; n++) progress.Clear(StoryMode.Key(n));
-        _story = new StoryMode(_catalog!) { Sound = n => _menuAudio?.Play(n), Progress = progress };
+        else for (var n = 0; n < StoryProgress; n++) _progress.Clear(StoryMode.Key(n)); // the progress Legend loaded (one store)
+        _story = new StoryMode(_catalog!) { Sound = n => _menuAudio?.Play(n), Progress = _progress };
     }
 
     private void OpenStory(int? chapter = null)
@@ -89,7 +88,7 @@ public sealed partial class TougeGame
                 StoryRace();
                 break;
             case StoryMode.Action.Save:
-                if (_persist) s.Progress.Save();
+                SaveProgress();
                 break;
             case StoryMode.Action.Leave:
                 EndBattle();

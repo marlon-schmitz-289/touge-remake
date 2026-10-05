@@ -13,7 +13,7 @@ namespace Touge.Ui;
 ///     <see cref="Progress"/>. Unlock news (rivals, courses, the secret car) shows on the ladder after a battle.
 ///     Sounds by SYSSE name (SYS005 move, SYS006 decide, BEEP001 back/locked).
 /// </summary>
-public sealed class LegendScreen(Catalog catalog, Legend.Progress progress)
+public sealed class LegendScreen(Catalog catalog, Progress progress)
 {
     public enum Step { Course, Rivals, Card }
 
@@ -22,7 +22,12 @@ public sealed class LegendScreen(Catalog catalog, Legend.Progress progress)
 
     public const float Fade = 30 / 60f, NewsHold = 5;
 
-    public Legend.Progress Progress { get; set; } = progress;
+    /// <summary>The career progress; a new one (a loaded save slot) is taken as it is, without unlock news.</summary>
+    public Progress Progress
+    {
+        get => progress;
+        set => (progress, _seen, _seenCourses, _seenCar) = (value, [], 0, true);
+    }
     public bool Active { get; private set; }
     public Step Current { get; private set; }
     public Action<string>? Sound { get; set; }

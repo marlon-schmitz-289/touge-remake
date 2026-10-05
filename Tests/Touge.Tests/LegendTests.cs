@@ -7,9 +7,9 @@ namespace Touge.Tests;
 
 public class LegendTests
 {
-    private static Legend.Progress Beat(params IEnumerable<Legend.Entry>[] groups)
+    private static Progress Beat(params IEnumerable<Legend.Entry>[] groups)
     {
-        var p = new Legend.Progress();
+        var p = new Progress();
         foreach (var e in groups.SelectMany(g => g)) p.Add(e.Key, BattleOutcome.Win, 1);
         return p;
     }
@@ -42,7 +42,7 @@ public class LegendTests
     [Fact]
     public void Ladder_OpensOneRivalAfterAnother()
     {
-        var p = new Legend.Progress();
+        var p = new Progress();
         var akina = Legend.Of(3);
         Assert.Equal(["kenji", "iketani", "wataru", "takumi", "bunta"], akina.Select(e => e.Rival.Id));
         Assert.True(Legend.Unlocked(akina[0], p));
@@ -105,7 +105,7 @@ public class LegendTests
     public void Conditions_PickTheCourseVariant()
     {
         string[] all = ["DAY", "NIT", "RIN"], night = ["NIT"];
-        var p = new Legend.Progress();
+        var p = new Progress();
         Assert.Equal(("USUI0_RIN", true), Legend.Conditions(Legend.Find("USUI0/sakamoto")!, all, p));
         Assert.Equal(("AKAGI_RIN", true), Legend.Conditions(Legend.Find("AKAGI/kenta")!, all, p));
         Assert.Equal(("AKINA_NIT", false), Legend.Conditions(Legend.Find("AKINA/wataru")!, all, p));
@@ -122,18 +122,18 @@ public class LegendTests
         var path = Path.Combine(Path.GetTempPath(), $"legend_{Guid.NewGuid():N}.json");
         try
         {
-            var p = new Legend.Progress();
+            var p = new Progress();
             p.Add("AKINA/kenji", BattleOutcome.Win, -2.25f);
             p.Add("AKINA/iketani", BattleOutcome.Lose, -1);
-            p.Rivals["NOWHERE/ghost"] = new Legend.Progress.Record { Wins = 5 };
+            p.Rivals["NOWHERE/ghost"] = new Progress.Record { Wins = 5 };
             p.Save(path);
-            var q = Legend.Progress.Load(path);
+            var q = Progress.Load(path);
             Assert.True(q.Beaten("AKINA/kenji"));
             Assert.Equal(2.25f, q.Get("AKINA/kenji").BestGap);
             Assert.Equal(1, q.Get("AKINA/iketani").Losses);
             Assert.False(q.Rivals.ContainsKey("NOWHERE/ghost"));
             File.WriteAllText(path, "{ not json");
-            Assert.Empty(Legend.Progress.Load(path).Rivals);
+            Assert.Empty(Progress.Load(path).Rivals);
         }
         finally
         {
@@ -162,7 +162,7 @@ public class LegendTests
     {
         var sounds = new List<string>();
         var actions = new List<LegendScreen.Action>();
-        var l = new LegendScreen(TestCatalog(), new Legend.Progress()) { Sound = sounds.Add };
+        var l = new LegendScreen(TestCatalog(), new Progress()) { Sound = sounds.Add };
         void Run(float seconds, (int, int, bool, bool) k = default)
         {
             actions.Add(l.Update(k, 1 / 60f));

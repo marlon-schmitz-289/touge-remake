@@ -10,23 +10,43 @@ namespace Touge;
 ///     (the rival's car loaded and shown turning, its theme playing) → the usual car select, loading, telop with VS and
 ///     3-2-1-GO → battle (<see cref="TougeGame.Battle"/> set per rival) → finish banner and battle sheet, whose RIVAL SELECT,
 ///     the pause's Exit and backing out of the car select return to the ladder (<see cref="Menu.Legend"/>). Each decided
-///     battle is counted into <see cref="Legend.Progress"/> (legend.json next to the settings, or --legend-progress).
+///     battle is counted into the game's one <see cref="Progress"/> (progress.json next to the settings, shared with Story and
+///     SAVE &amp; LOAD; or --legend-progress).
 /// </summary>
 public sealed partial class TougeGame
 {
-    /// <summary>--legend-progress: progress file to read and write (test runs otherwise keep it in memory only).</summary>
+    /// <summary>--legend-progress: progress file (Legend and Story) to read and write; test runs otherwise keep it in memory only (or in --data-dir).</summary>
     public string? LegendProgressPath { get; init; }
     /// <summary>--flow with --legend: the Legend of the Streets flow script (<see cref="LegendFlowScript"/>).</summary>
     public bool LegendFlow { get; init; }
 
     private LegendScreen? _legend;
-    private Legend.Progress _progress = new();
+    /// <summary>The career progress of Legend and Story (one object: SAVE &amp; LOAD swaps it via <see cref="LoadProgress"/>).</summary>
+    private Progress _progress = new();
+    /// <summary>The progress is read from and written to a file: with the menus, --data-dir or --legend-progress.</summary>
+    private bool ProgressSaved => LegendProgressPath != null || SavesRuns;
     /// <summary>The rival of the battle set up from the ladder (null: no Legend battle).</summary>
     private Legend.Entry? _legendRival;
 
+    /// <summary>(Re)reads the progress (start, a loaded save slot) and hands it to every mode that shows it.</summary>
+    private void LoadProgress()
+    {
+        _progress = ProgressSaved ? Progress.Load(LegendProgressPath) : new();
+        if (_legend != null) _legend.Progress = _progress;
+        if (_story != null) _story.Progress = _progress;
+    }
+
+    /// <summary>Writes the progress and autosaves it into the active SAVE &amp; LOAD slot.</summary>
+    private void SaveProgress()
+    {
+        if (!ProgressSaved) return;
+        _progress.Save(LegendProgressPath);
+        Autosave();
+    }
+
     private void LoadLegend()
     {
-        _progress = LegendProgressPath != null || _persist ? Legend.Progress.Load(LegendProgressPath) : new();
+        LoadProgress();
         _legend = new LegendScreen(_catalog!, _progress) { Sound = n => _menuAudio?.Play(n) };
         _menu!.CarLocked = id => _menu.Legend && Legend.CarLocked(id, _progress); // the reward car only in Legend; time attack keeps every car
     }
@@ -123,7 +143,7 @@ public sealed partial class TougeGame
         if (_legendRival is not { } e) return;
         _progress.Add(e.Key, report.Outcome, report.Gap);
         Console.WriteLine($"\n[Legend] {e.Key}: {report.Outcome} ({report.Reason}, {report.Gap:+0.00;-0.00} s), Bilanz {_progress.Get(e.Key).Wins}:{_progress.Get(e.Key).Losses}");
-        if (LegendProgressPath != null || _persist) _progress.Save(LegendProgressPath);
+        SaveProgress();
     }
 
     /// <summary>

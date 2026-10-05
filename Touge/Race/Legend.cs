@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Kansei.Physics;
 
 namespace Touge.Race;
@@ -156,75 +155,4 @@ public static class Legend
 
     /// <summary>Difficulty stars 1–5 from the AI's skill.</summary>
     public static int Stars(Entry e) => Math.Clamp((int)MathF.Round((e.Rival.Style.Skill - 0.3f) / 0.16f) + 1, 1, 5);
-
-    /// <summary>
-    ///     Saved progress (its own JSON next to settings.json, so SAVE &amp; LOAD can carry it as one file): per rival key the
-    ///     wins, losses and best winning gap. A rival counts as beaten after one win.
-    /// </summary>
-    public sealed class Progress
-    {
-        public sealed class Record
-        {
-            public int Wins { get; set; }
-            public int Losses { get; set; }
-            /// <summary>Largest winning gap in seconds (0: none yet).</summary>
-            public float BestGap { get; set; }
-        }
-
-        public int Version { get; set; } = 1;
-        public Dictionary<string, Record> Rivals { get; set; } = [];
-
-        public static string FilePath { get; } = Path.Combine(Path.GetDirectoryName(Touge.Ui.Settings.FilePath)!, "legend.json");
-
-        public bool Beaten(string key) => Rivals.TryGetValue(key, out var r) && r.Wins > 0;
-
-        public Record Get(string key) => Rivals.GetValueOrDefault(key) ?? new Record();
-
-        /// <summary>Counts a decided battle against <paramref name="key"/> (a draw counts as neither).</summary>
-        public void Add(string key, BattleOutcome outcome, float gap)
-        {
-            if (outcome is not (BattleOutcome.Win or BattleOutcome.Lose)) return;
-            if (!Rivals.TryGetValue(key, out var r)) Rivals[key] = r = new Record();
-            if (outcome == BattleOutcome.Lose) r.Losses++;
-            else
-            {
-                r.Wins++;
-                r.BestGap = MathF.Max(r.BestGap, MathF.Abs(gap));
-            }
-        }
-
-        private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
-
-        public static Progress Load(string? path = null)
-        {
-            path ??= FilePath;
-            try
-            {
-                var p = File.Exists(path) ? JsonSerializer.Deserialize<Progress>(File.ReadAllText(path), Json) ?? new() : new();
-                p.Rivals = p.Rivals.Where(kv => kv.Value != null && Find(kv.Key) != null).ToDictionary(); // drop unknown keys
-                return p;
-            }
-            catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException)
-            {
-                Console.WriteLine($"[Legend] Fortschritt nicht lesbar ({e.Message}), neu");
-                return new();
-            }
-        }
-
-        public void Save(string? path = null)
-        {
-            path ??= FilePath;
-            try
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-                var tmp = path + ".tmp";
-                File.WriteAllText(tmp, JsonSerializer.Serialize(this, Json));
-                File.Move(tmp, path, true);
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-            {
-                Console.WriteLine($"[Legend] Fortschritt nicht gespeichert: {e.Message}");
-            }
-        }
-    }
 }

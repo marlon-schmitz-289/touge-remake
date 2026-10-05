@@ -871,6 +871,9 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             case Menu.Action.Replay:
                 _menuAudio?.Play("BEEP001");
                 break;
+            case Menu.Action.Photo when _vsRace != null: // an online race runs on: no photo mode in versus
+                _menuAudio?.Play("BEEP001");
+                break;
             case Menu.Action.Photo:
                 OpenPhoto();
                 break;

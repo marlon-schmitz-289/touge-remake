@@ -310,11 +310,19 @@ public sealed class SaveLoadScreen(SaveSlots slots)
             c.Text(PlayTime(m.PlaySeconds), 168, y + 68, 14, Canvas.White, 0, 0.15f, 0, 0.3f);
             c.Text("RECORDS", 262, y + 50, 9, Grey, 0, 0.1f);
             c.Text($"{m.Records}", 262, y + 68, 14, Canvas.White, 0, 0.15f, 0, 0.3f);
-            var extra = m.Files.Where(f => f != "settings").Select(f => f.ToUpperInvariant()).ToArray();
             c.Text("PROGRESS", 330, y + 50, 9, Grey, 0, 0.1f);
-            c.Fit(extra.Length > 0 ? string.Join("  ", extra) : "TIME ATTACK", 330, y + 68, 116, 0, Canvas.White, 0.15f, 0, 12);
+            c.Fit(ProgressText(m), 330, y + 68, 116, 0, Canvas.White, 0.15f, 0, 12);
         }
         if (i == Row && _action < 0 && _name == null) c.Glow(50, y - 6, 462, y + 86, Canvas.Pulse(Theta));
+    }
+
+    /// <summary>A slot's career at a glance: "STORY 5/31  LEGEND 12/34", or TIME ATTACK when it has none.</summary>
+    public static string ProgressText(SaveSlots.Meta m)
+    {
+        var parts = new List<string>();
+        if (m.Story > 0) parts.Add($"STORY {m.Story}/{Touge.Story.StoryText.Chapters.Length}");
+        if (m.Legend > 0) parts.Add($"LEGEND {m.Legend}/{Touge.Race.Legend.All.Length}");
+        return parts.Count > 0 ? string.Join("  ", parts) : "TIME ATTACK";
     }
 
     private void ActionBar(Canvas c)

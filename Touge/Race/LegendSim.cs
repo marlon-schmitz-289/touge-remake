@@ -14,7 +14,7 @@ public static class LegendSim
     /// <summary>Returns false if a battle's simulation blew up.</summary>
     public static bool Run(Iso9660 iso, string car, string? progressPath, float seconds = 600)
     {
-        var p = progressPath != null && File.Exists(progressPath) ? Legend.Progress.Load(progressPath) : new Legend.Progress();
+        var p = progressPath != null && File.Exists(progressPath) ? Progress.Load(progressPath) : new Progress();
         var models = iso.OpenAfs("CDVD/DATA/MODEL/COURSE.AFS");
         var times = Legend.CourseIds.ToDictionary(id => id, id => new[] { "DAY", "NIT", "RIN" }.Where(t => models.Find($"{id}_{t}.PAC") != null).ToArray());
         int battles = 0, wins = 0;

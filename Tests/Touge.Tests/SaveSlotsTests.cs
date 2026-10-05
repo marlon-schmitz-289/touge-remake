@@ -56,6 +56,32 @@ public class SaveSlotsTests : IDisposable
         Assert.DoesNotContain("saves.json", slots.ProgressFiles());
     }
 
+    /// <summary>One progress store: Story and Legend in progress.json (v1's legend.json taken over), the slot shows both.</summary>
+    [Fact]
+    public void SlotShowsStoryAndLegend_LegacyLegendMigrates()
+    {
+        var p = new Progress();
+        p.Clear("story/00");
+        p.Clear("story/01");
+        p.Save(P("progress.json"));
+        File.WriteAllText(P("legend.json"), """{ "Version": 1, "Rivals": { "AKINA/kenji": { "Wins": 1, "Losses": 2, "BestGap": 1.5 }, "NOWHERE/x": { "Wins": 3 } } }""");
+        var slots = new SaveSlots(_root);
+        slots.Save(0, "TAKUMI", 10);
+        var meta = slots.Read(0)!;
+        Assert.Equal((2, 1), (meta.Story, meta.Legend));
+        Assert.Equal("STORY 2/31  LEGEND 1/34", Touge.Ui.SaveLoadScreen.ProgressText(meta));
+        Assert.Equal("TIME ATTACK", Touge.Ui.SaveLoadScreen.ProgressText(new SaveSlots.Meta()));
+
+        var q = Progress.Load(P("progress.json"));
+        Assert.True(q.Beaten("AKINA/kenji"));
+        Assert.Equal(2, q.Get("AKINA/kenji").Losses);
+        Assert.True(q.IsCleared("story/01"));
+        Assert.Single(q.Rivals); // unknown rival dropped
+        q.Save(P("progress.json"));
+        Assert.False(File.Exists(P("legend.json")), "taken over into progress.json");
+        Assert.True(Progress.Load(P("progress.json")).Beaten("AKINA/kenji"));
+    }
+
     [Fact]
     public void LoadedProfileKeepsThisMachinesControlsAndDisplay()
     {

@@ -199,7 +199,7 @@ public sealed partial class TougeGame
     /// <summary>Before each physics tick of the race: a fresh recording when none runs (or the course/direction changed), keyframe on teleports.</summary>
     private void RecordBefore()
     {
-        if (_probe != null || _sheet != null) return;
+        if (_probe != null || _sheet != null || _vsRace != null) return; // versus races are not recorded (other players' cars)
         var cars = LiveCars();
         if (_rec is not { Valid: true } || _recDrive != _drive || _recReverse != _drive.Reverse || _recLast.Length != cars.Length) StartRecording(cars);
         var rec = _rec!;
@@ -315,6 +315,7 @@ public sealed partial class TougeGame
         _playSeconds = SaveSlots.Default.ReadState().PlaySeconds;
         ApplySettings();
         _hud = NewHud(); // the records of the loaded profile
+        LoadProgress(); // Legend and Story of the loaded profile
     }
 
     // ---------------------------------------------------------------- extra cars (replayed rival, ghost)
