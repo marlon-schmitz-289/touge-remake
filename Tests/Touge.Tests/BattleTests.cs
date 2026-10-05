@@ -152,4 +152,22 @@ public class BattleTests
         Assert.All(race.Cars, c => Assert.NotNull(c.FinishedAt));
         Assert.All(race.Cars, c => Assert.True(c.Vehicle.Velocity.Length() < 0.5f && c.Along < 1700, $"{c.Name} parked at {c.Along:F0} m"));
     }
+
+    [Fact]
+    public void Session_auto_run_never_runs_into_a_finisher_stopping_on_a_short_run_out()
+    {
+        // lead/chase on a 1 km straight with a 25 m run-out: the leader stops hard behind the goal, the chaser right
+        // behind it coasts after the decision — it is held behind the stopping car (SHIONA/SHOMARU: 23–33 km/h knocks, here 148 km/h without)
+        Vector3[] line = [.. Enumerable.Range(0, 201).Select(i => new Vector3(0, 0, i * 5))];
+        Vector3[] runOut = [.. Enumerable.Range(0, 6).Select(i => new Vector3(0, 0, 1000 + i * 5))];
+        var race = new RaceSession(new Plane(), line, runOut, new Battle(BattleRule.LeadChase, 1000 - Touge.Ui.LapTimer.Gate, 0) { Breakaway = 1000 });
+        var style = new RivalStyle(0.8f, 1, 0);
+        race.Add("A", new Vehicle(CarSpec.AE86), new AiDriver(new RivalPilot(line, style)));
+        race.Add("B", new Vehicle(CarSpec.AE86), new AiDriver(new RivalPilot(line, style)));
+        race.Grid(BattleRule.LeadChase, 0, 0);
+        for (var t = 0f; t < 90; t += Dt) race.Tick(Dt);
+        Assert.NotEqual(BattleOutcome.None, race.Battle!.Outcome);
+        Assert.True(race.MaxImpact * 3.6f < 5, $"hardest contact {race.MaxImpact * 3.6f:F1} km/h");
+        Assert.All(race.Cars, c => Assert.True(c.Vehicle.Velocity.Length() < 0.5f, $"{c.Name} parked"));
+    }
 }

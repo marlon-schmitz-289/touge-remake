@@ -102,7 +102,7 @@ public static class BattleRun
                 Console.WriteLine($"[Battle] Entschieden nach {b.DecidedAt:F1} s: {b.Outcome} ({b.Reason}), Abstand {b.Gap:+0.00;-0.00} s / {b.GapMetres:+0;-0} m");
             }
             if (Environment.GetEnvironmentVariable("BATTLE_TRACE") is { } tr && race.Time < float.Parse(tr, System.Globalization.CultureInfo.InvariantCulture) && n % 15 == 0)
-                Console.WriteLine($"[Trace] {race.Time:F2} P {p.Along:F1}/{p.Lateral:+0.00;-0.00} {((AiDriver)p.Driver).Pilot.State}  R {r.Along:F1}/{r.Lateral:+0.00;-0.00} {((AiDriver)r.Driver).Pilot.State} off {((AiDriver)r.Driver).Pilot.Offset:F2}");
+                Console.WriteLine($"[Trace] {race.Time:F2} P {p.Along:F1}/{p.Lateral:+0.00;-0.00} {((AiDriver)p.Driver).Pilot.State} off {((AiDriver)p.Driver).Pilot.Offset:F2} {p.Vehicle.SpeedKmh:F0}  R {r.Along:F1}/{r.Lateral:+0.00;-0.00} {((AiDriver)r.Driver).Pilot.State} off {((AiDriver)r.Driver).Pilot.Offset:F2} {r.Vehicle.SpeedKmh:F0}");
             if (Environment.GetEnvironmentVariable("BATTLE_DRIFTS") != null && n % 12 == 0 && r.Driver is AiDriver { Pilot.Drifting: true } rd)
                 Console.WriteLine($"[Drift] {race.Time:F1} {r.Name} {rd.Pilot.Drift.State} β {r.Vehicle.SlipAngle * 57.3f:+0;-0}° bei {r.Along:F0} m, {r.Along - p.Along:+0.0;-0.0} m vor dem Spieler");
             if (Environment.GetEnvironmentVariable("BATTLE_WALLS") != null && n % 30 == 0)

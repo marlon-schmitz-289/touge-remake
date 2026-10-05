@@ -255,6 +255,7 @@ public sealed class RaceSession
             }
             if (car.Coast == null && (car.FinishedAt != null || Over)) car.Coast = MakeCoast(car);
             var input = car.Coast?.Drive(v) ?? car.Driver.Drive(this, car, dt);
+            if (car.Coast != null) KeepBehind(car);
             car.Input = input;
             v.Step(input, Ground, dt);
         }
@@ -288,6 +289,25 @@ public sealed class RaceSession
             if (car.StuckFor > 3) Respawn(car);
         }
         if (Battle != null && Cars.Count >= 2) Battle.Update(dt, Cars[0].Along, Cars[1].Along);
+    }
+
+    /// <summary>
+    ///     The auto-run never runs into a car stopping ahead (a finisher braking on a short run-out): speed held to where a
+    ///     braking of 8 m/s² stops it 6 m behind that car.
+    /// </summary>
+    private void KeepBehind(RaceCar car)
+    {
+        var v = car.Vehicle;
+        var fwd = Vector3.Transform(Vector3.UnitZ, v.Orientation);
+        foreach (var o in Cars)
+        {
+            if (o == car) continue;
+            var rel = o.Vehicle.Position - v.Position;
+            var ahead = Vector3.Dot(rel, fwd);
+            if (ahead <= 0 || ahead > 60 || (rel - fwd * ahead).Length() > 2.5f) continue;
+            var vo = MathF.Max(Vector3.Dot(o.Vehicle.Velocity, fwd), 0);
+            v.LimitSpeed(MathF.Sqrt(vo * vo + 2 * 8 * MathF.Max(ahead - 6, 0)));
+        }
     }
 
     /// <summary>Back onto the line where the car was, a little further back if that spot is taken (another car) or walled.</summary>
