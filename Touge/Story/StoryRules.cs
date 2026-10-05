@@ -63,39 +63,69 @@ public static class StoryRules
     public const float ThrillPoints = 10000;
 
     /// <summary>
-    ///     Rival skill per chapter on the one skill scale (<see cref="Kansei.Physics.RivalPilot.Pace"/>). <c>--story-check
-    ///     calibrate --player-skill 0.55</c> measures the highest skill a NORMAL player (the autopilot at 0.55 with its
-    ///     mistakes, in the chapter's car, with the game's rubber band) still beats; the story takes that minus a margin
-    ///     shrinking from 0.15 to 0 over the chapters (early ones forgive more), within 0.1…1. Where even 0.1 is too strong
-    ///     for the hero's car the rival's car runs detuned instead (<see cref="RivalPower"/>). Never above the character's own
-    ///     skill (<see cref="StoryRivals.Find"/>). Not checked with human players yet.
+    ///     Rival skill per chapter on the one skill scale (<see cref="Kansei.Physics.RivalPilot.Pace"/>), from two calibrations
+    ///     (<c>--story-check calibrate --player-skill k</c>: the highest skill the autopilot as a player of skill k — with his
+    ///     mistakes, in the chapter's car, with the game's rubber band — still beats): a beginner (0.2, EASY) for the first chapters
+    ///     shading into a NORMAL player (0.55) for the last (weight (chapter / 30)²: part 1 stays a beginner's), less 0.03. Where even 0.1 is too strong for the hero's
+    ///     car the rival's car runs detuned (<see cref="RivalPower"/>); the last battle is a strong driver in a detuned car
+    ///     (<see cref="Finale"/>). Never above the character's own skill (<see cref="StoryRivals.Find"/>). Not checked with
+    ///     human players yet.
     /// </summary>
-    public static float RivalSkill(int chapter) =>
-        Calibrated.TryGetValue(chapter, out var s) ? Math.Clamp(s - 0.15f * (1 - chapter / 30f), 0.1f, 1) : 0.2f + 0.4f * chapter / 30;
-
-    /// <summary>Engine torque of the rival's car per chapter (1 = stock): below where even the weakest driver outruns a NORMAL player.</summary>
-    public static float RivalPower(int chapter) => Power.GetValueOrDefault(chapter, 1);
-
-    /// <summary>Measured with --story-check calibrate --player-skill 0.55 (README): chapter → highest rival skill the player beats.</summary>
-    private static readonly Dictionary<int, float> Calibrated = new()
+    public static float RivalSkill(int chapter)
     {
-        [2] = 0.128f, [3] = 0.297f, [6] = 0.423f, [7] = 0.691f, [8] = 0.409f, [9] = 0.269f, [10] = 0.395f, [11] = 0.395f, [12] = 0.381f,
-        [13] = 0.719f, [15] = 0.986f, [16] = 0.1f, [17] = 0.381f, [19] = 0.888f, [20] = 0.986f, [21] = 0.733f, [22] = 0.663f, [23] = 0.817f,
-        [24] = 0.409f, [25] = 0.986f, [26] = 0.606f, [27] = 0.508f, [28] = 0.986f, [29] = 0.986f, [30] = 0.353f,
-    };
-
-    /// <summary>The same calibration where 0.1 is still too strong: chapter → highest torque factor the player beats at 0.1 (less a margin).</summary>
-    private static readonly Dictionary<int, float> Power = new() { [16] = 0.65f };
+        if (chapter == Finale.Chapter) return Finale.Skill;
+        if (!Normal.TryGetValue(chapter, out var n)) return 0.1f + 0.4f * chapter / 30;
+        var w = chapter / 30f;
+        return Math.Clamp(float.Lerp(Beginner.GetValueOrDefault(chapter, 0.1f), n, w * w) - 0.03f, 0, 1);
+    }
 
     /// <summary>
-    ///     Time limit of a run alone. The original's seconds (220/210/190) are for its own pace; ours: a NORMAL player's time on
-    ///     the course alone in the chapter's car (<c>--story-check calibrate --player-skill 0.55</c>: Akina downhill 4'56, uphill
-    ///     5'14 in the AE86) times the original's limit / 200 s, at least 3 % over it (chapter 18's 190 s: nearly as fast as him).
+    ///     Engine torque of the rival's car per chapter (1 = stock): where even 0.1 outruns a beginner his calibrated torque
+    ///     less 0.05, shading to stock like the skill; the finale's.
+    /// </summary>
+    public static float RivalPower(int chapter)
+    {
+        if (chapter == Finale.Chapter) return Finale.Power;
+        var w = chapter / 30f;
+        return Power.TryGetValue(chapter, out var p) ? float.Lerp(p - 0.05f, 1, w * w) : 1;
+    }
+
+    /// <summary>Calibrated with --player-skill 0.2 (README): chapter → highest rival skill the beginner beats (missing: not even 0.1, see <see cref="Power"/>; 7: 0.269 measured, but Shingo at 0.26 won the story run, not monotonic).</summary>
+    private static readonly Dictionary<int, float> Beginner = new()
+    {
+        [6] = 0.114f, [7] = 0.2f, [10] = 0.1f, [11] = 0.1f, [12] = 0.114f, [13] = 0.311f, [15] = 0.297f, [16] = 0.283f, [17] = 0.17f,
+        [19] = 0.339f, [20] = 0.297f, [21] = 0.297f, [22] = 0.255f, [23] = 0.339f, [24] = 0.17f, [25] = 0.198f, [26] = 0.17f, [27] = 0.17f,
+        [28] = 0.353f, [29] = 0.986f,
+    };
+
+    /// <summary>Calibrated with --player-skill 0.55 (README): chapter → highest rival skill the NORMAL player beats.</summary>
+    private static readonly Dictionary<int, float> Normal = new()
+    {
+        [2] = 0.325f, [3] = 0.367f, [6] = 0.438f, [7] = 0.564f, [8] = 0.438f, [9] = 0.367f, [10] = 0.297f, [11] = 0.339f, [12] = 0.297f,
+        [13] = 0.719f, [15] = 0.986f, [16] = 0.522f, [17] = 0.466f, [19] = 0.845f, [20] = 0.719f, [21] = 0.592f, [22] = 0.648f, [23] = 0.986f,
+        [24] = 0.578f, [25] = 0.48f, [26] = 0.536f, [27] = 0.48f, [28] = 0.986f, [29] = 0.986f, [30] = 0.325f,
+    };
+
+    /// <summary>Where 0.1 is still too strong for the beginner: chapter → torque factor he beats at 0.1 (--player-skill 0.2).</summary>
+    private static readonly Dictionary<int, float> Power = new() { [2] = 0.75f, [3] = 0.925f, [8] = 0.988f, [9] = 0.9f, [30] = 0.85f };
+
+    /// <summary>
+    ///     The last battle (Bunta): a driver of skill 0.6 (clean lines, drifts) in a detuned car, calibrated with STORY_CAL_AT=0.65
+    ///     --player-skill 0.55 (torque 0.625 beaten): the NORMAL player wins it, but only just.
+    /// </summary>
+    public static readonly (int Chapter, float Skill, float Power) Finale = (30, 0.6f, 0.62f);
+
+    /// <summary>
+    ///     Time limit of a run alone. The original's seconds (220/210/190) are for its own pace; ours: the player's time on the
+    ///     course alone in the chapter's car (<c>--story-check calibrate</c>, AE86: Akina downhill 5'27 a beginner / 4'56 NORMAL,
+    ///     uphill 5'42 / 5'14), from the beginner's for the first chapter to NORMAL's for the last, times the original's limit /
+    ///     200 s, at least 3 % over it (chapter 18's 190 s: nearly as fast as NORMAL).
     /// </summary>
     public static int Limit(StoryScript.Chapter c) =>
-        Of(c.Rule, c.Rival >= 0) == Goal.TimeLimit && Par.TryGetValue((StoryScript.Courses[c.Course], c.Reverse), out var par) ? (int)MathF.Round(par * MathF.Max(1.03f, c.Param / 200f)) : c.Param;
+        Of(c.Rule, c.Rival >= 0) == Goal.TimeLimit && Par.TryGetValue((StoryScript.Courses[c.Course], c.Reverse), out var par)
+            ? (int)MathF.Round(float.Lerp(par.Beginner, par.Normal, c.Index / 30f) * MathF.Max(1.03f, c.Param / 200f)) : c.Param;
 
-    private static readonly Dictionary<(string, bool), float> Par = new() { [("AKINA", false)] = 296, [("AKINA", true)] = 314 };
+    private static readonly Dictionary<(string, bool), (float Beginner, float Normal)> Par = new() { [("AKINA", false)] = (326.6f, 296), [("AKINA", true)] = (341.8f, 314) };
 
     public static Goal Of(int rule, bool rival) => (rule, rival) switch
     {

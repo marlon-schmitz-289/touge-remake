@@ -188,7 +188,7 @@ public static class StoryHeadless
         }
         Console.WriteLine($"[Story] {lines} Zeilen auf der Disc übersetzt, {bad} Abweichungen");
 
-        Console.WriteLine("[Story] Durchlauf mit dem Autopiloten (Fähigkeit 0,8):");
+        Console.WriteLine($"[Story] Durchlauf mit dem Autopiloten (Fähigkeit {BattleRun.Autopilot.Skill:0.00}):");
         var results = new List<(int, BattleOutcome)>();
         foreach (var c in chapters)
         {
@@ -208,6 +208,7 @@ public static class StoryHeadless
     ///     not strictly monotonic in skill, so this is a guide), and where even 0.1 is too strong (a car that outclasses the
     ///     hero's) the highest engine torque 0.6…1 of the rival's car at 0.1; per time-limit chapter its time without a limit.
     ///     The numbers behind <see cref="StoryRules.RivalSkill"/>, <see cref="StoryRules.RivalPower"/> and <see cref="StoryRules.Limit"/>.
+    ///     STORY_CAL_AT=k: instead the highest engine torque 0.5…1 the player beats with the rival at skill k.
     /// </summary>
     public static void Calibrate(Iso9660 iso)
     {
@@ -224,6 +225,21 @@ public static class StoryHeadless
                 continue;
             }
             float lo = 0.1f, hi = 1;
+            if (Environment.GetEnvironmentVariable("STORY_CAL_AT") is { } at && float.TryParse(at, System.Globalization.CultureInfo.InvariantCulture, out var atSkill))
+            {
+                // the engine torque at a given skill (a strong driver in a detuned car: the story's last battle)
+                (lo, hi) = (0.5f, 1);
+                if (Play(drive, c, out _, skill: atSkill, power: hi) == BattleOutcome.Win) lo = hi;
+                else
+                    for (var i = 0; i < 6; i++)
+                    {
+                        var mid = (lo + hi) / 2;
+                        if (Play(drive, c, out _, skill: atSkill, power: mid) == BattleOutcome.Win) lo = mid;
+                        else hi = mid;
+                    }
+                Console.WriteLine($"[Kalibrierung] {c.Index,2} {goal,-11} höchstes Motormoment bei {atSkill:0.00}, das der Spieler schlägt: {lo:0.000}");
+                continue;
+            }
             if (Play(drive, c, out _, skill: lo) != BattleOutcome.Win)
             {
                 // even the weakest driver is too fast in that car: detune it (engine torque) instead of a skill below the scale
