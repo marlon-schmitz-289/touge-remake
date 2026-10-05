@@ -3,7 +3,7 @@
 #   Touge-osx-arm64.zip                       (Touge.app, ad-hoc signiert; nur auf macOS baubar)
 #     osx-x64 (Intel-Mac) baut auch, stürzt unter Rosetta aber beim Fensterstart ab (ohne Fenster läuft es) – daher nur auf Wunsch
 #   Touge-win-x64.zip                         (Ordner mit Touge.exe, ohne Konsolenfenster)
-#   Touge-linux-x64.tar.gz                    (Ordner mit Touge, touge.desktop, install-desktop.sh)
+#   Touge-linux-x64.tar.gz                    (Ordner mit Touge, touge.png, install-desktop.sh)
 # Aufruf: Tools/publish.sh [rid …]   (Standard: alle; auf Linux ohne osx-*)
 # Spieldaten sind NICHT dabei: das Spiel liest sie zur Laufzeit aus der ISO des Spielers.
 set -eu
@@ -21,7 +21,7 @@ for rid in "$@"; do
     pub="$dist/$rid"
     rm -rf "$pub"
     dotnet publish "$root/Touge/Touge.csproj" -c Release -r "$rid" --self-contained -o "$pub" \
-        -p:DebugType=none -p:Version="$version" --nologo -v quiet
+        -p:DebugType=none -p:Version="$version" --nologo -v quiet -warnaserror
     case "$rid" in
     osx-*)
         app="$dist/$rid-app/Touge.app"
@@ -61,21 +61,24 @@ EOF
         cat > "$pub/install-desktop.sh" <<'EOF'
 #!/bin/sh
 # Trägt Touge ins Anwendungsmenü ein (~/.local/share/applications), Pfad = dieser Ordner.
+set -eu
 here=$(cd "$(dirname "$0")" && pwd)
+# .desktop-Escaping: Strings \ -> \\; in Exec zusätzlich "-Quoting (\ " ` $) und % -> %%
+str=$(printf '%s' "$here" | sed 's/\\/\\\\/g')
+exe=$(printf '%s' "$here" | sed -e 's/\\/\\\\\\\\/g' -e 's/["`$]/\\\\&/g' -e 's/%/%%/g')
 mkdir -p ~/.local/share/applications
-sed "s|@DIR@|$here|g" "$here/touge.desktop" > ~/.local/share/applications/touge.desktop
-echo "Touge im Anwendungsmenü eingetragen ($here)"
-EOF
-        cat > "$pub/touge.desktop" <<'EOF'
+cat > ~/.local/share/applications/touge.desktop <<DESKTOP
 [Desktop Entry]
 Type=Application
 Name=Touge
 Comment=Initial D Special Stage remake
-Exec="@DIR@/Touge" %f
-Path=@DIR@
-Icon=@DIR@/touge.png
+Exec="$exe/Touge" %f
+Path=$str
+Icon=$str/touge.png
 Terminal=false
 Categories=Game;
+DESKTOP
+echo "Touge im Anwendungsmenü eingetragen ($here)"
 EOF
         chmod +x "$pub/install-desktop.sh" "$pub/Touge"
         (cd "$dist" && mv "$rid" Touge && tar -czf "Touge-$rid.tar.gz" Touge && mv Touge "$rid")

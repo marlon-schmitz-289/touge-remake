@@ -30,7 +30,7 @@ Ohne Argument (Doppelklick) öffnet das Spiel den Launcher zur ISO-Auswahl. Unte
 Kommandozeilen-Flags gelten wie unten.
 Wird das Spiel so gestartet (ohne Argument oder nur mit der ISO), schreibt es seine Ausgabe zusätzlich nach `touge.log` im
 Profilordner (macOS `~/Library/Application Support/InitialDRemake/`, Windows `%APPDATA%\InitialDRemake\`, Linux
-`~/.config/InitialDRemake/`) – dort nachsehen, wenn etwas nicht startet. Schriften/Assets liegen neben dem Programm
+`~/.config/InitialDRemake/`; der vorige Lauf bleibt als `touge.prev.log`) – dort nachsehen, wenn etwas nicht startet. Schriften/Assets liegen neben dem Programm
 (`AppContext.BaseDirectory`), das Arbeitsverzeichnis ist egal.
 
 ## Projekte
