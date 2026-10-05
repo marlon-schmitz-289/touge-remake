@@ -16,7 +16,7 @@ public sealed class ReplayInfo
     public bool Reverse { get; set; }
     public bool Fog { get; set; }
     public DateTime Date { get; set; }
-    /// <summary>"TIME ATTACK" or "BATTLE".</summary>
+    /// <summary>"TIME ATTACK", "BATTLE" or "FREE BATTLE vs &lt;rival&gt;".</summary>
     public string Mode { get; set; } = "TIME ATTACK";
     /// <summary>Run time (time attack: the timer at the goal; battle: the player's goal time), null if unfinished.</summary>
     public float? Time { get; set; }

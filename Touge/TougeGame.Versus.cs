@@ -241,6 +241,7 @@ public sealed partial class TougeGame
             _vsLoadPending = false;
             LoadVersusRace();
         }
+        FreeBattleLoadStep();
         if (!ui.Active) return false;
         // from here the frame's keys are the versus screens' (a BACK that leaves them must not also act on the main menu)
         var split = ui.Split && ui.Current == Versus.Screen.Lobby;
@@ -256,7 +257,9 @@ public sealed partial class TougeGame
             if (!_net.IsHost && !ui.Seats[0].Ready) ui.ForceReady();
             if (_net.IsHost && _net.CanStart && _net.Players.Count(p => p.Connected) >= VersusPlayers) _net.StartRace();
         }
-        switch (ui.Update(k1, k2, text, dt))
+        var action = ui.Update(k1, k2, text, dt);
+        if (FreeBattleAction(action)) return true; // VS CPU (TougeGame.FreeBattle)
+        switch (action)
         {
             case Versus.Action.Split:
                 ui.OpenSplit(_settings.Car, _settings.Paint);

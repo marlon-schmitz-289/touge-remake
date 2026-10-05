@@ -6,7 +6,11 @@ namespace Touge.Race;
 /// <summary>A quick battle as chosen on the command line (--battle &lt;rival&gt; [--rule race|chase] [--lead player|rival]) or a story chapter.</summary>
 /// <param name="Leader">Lead/chase: who leads off, 0 the player, 1 the rival.</param>
 /// <param name="Terms">Other limits than the rule's defaults (story chapters).</param>
-public sealed record BattleSetup(Rivals.Rival Rival, BattleRule Rule, int Leader = 1, BattleTerms? Terms = null);
+public sealed record BattleSetup(Rivals.Rival Rival, BattleRule Rule, int Leader = 1, BattleTerms? Terms = null)
+{
+    /// <summary>The AI eases off ahead / pushes behind against a human player (free battle HARD: off).</summary>
+    public bool RubberBand { get; init; } = true;
+}
 
 /// <summary>Limits of a <see cref="Battle"/> other than its rule's defaults (null = the default).</summary>
 public sealed record BattleTerms(float? Breakaway = null, float? DrawGap = null, float TimeLimit = 0, int TimeLimitWinner = 1);

@@ -154,5 +154,7 @@ public static class Legend
     public static BattleSetup Setup(Entry e) => new(e.Rival, BattleRule.Race);
 
     /// <summary>Difficulty stars 1–5 from the AI's skill.</summary>
-    public static int Stars(Entry e) => Math.Clamp((int)MathF.Round((e.Rival.Style.Skill - 0.3f) / 0.16f) + 1, 1, 5);
+    public static int Stars(Entry e) => Stars(e.Rival.Style.Skill);
+
+    public static int Stars(float skill) => Math.Clamp((int)MathF.Round((skill - 0.3f) / 0.16f) + 1, 1, 5);
 }

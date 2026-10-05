@@ -15,14 +15,23 @@ namespace Touge.Ui;
 /// </summary>
 public sealed class Versus(Catalog catalog)
 {
-    public enum Screen { None, Mode, Online, Connecting, Lobby, Loading, Result, Message }
+    public enum Screen { None, Mode, Online, Connecting, Lobby, Loading, Result, Message, Cpu }
 
     /// <summary>
     ///     Split: open the split-screen lobby (<see cref="OpenSplit"/>); Host/Join: open a session (<see cref="JoinAddress"/>/<see cref="JoinLan"/> for the target); Start: start the race (split:
     ///     load it; host: <see cref="NetSession.StartRace"/>); Rematch/ToLobby from the result; Leave: close the session (back to
     ///     ONLINE); Exit: back to the main menu.
     /// </summary>
-    public enum Action { None, Split, Host, Join, Start, Rematch, ToLobby, Leave, Exit }
+    public enum Action { None, Split, Host, Join, Start, Rematch, ToLobby, Leave, Exit, Cpu, CpuStart, CpuLeave }
+
+    // ---- VS CPU (Ui/FreeBattle): Cpu = open its lobby (the game fills it via OpenCpu), CpuStart = load the battle, CpuLeave = back to the tiles
+    public FreeBattle CpuLobby { get; } = new(catalog);
+
+    public void OpenCpu(FreeBattleChoice saved, string car, int paint, bool manual)
+    {
+        CpuLobby.Open(saved, car, paint, manual);
+        Enter(Screen.Cpu);
+    }
 
     /// <summary>A local player's choice in the lobby.</summary>
     public sealed class Seat
@@ -250,13 +259,14 @@ public sealed class Versus(Catalog catalog)
             case Screen.Mode:
                 if (k1.X != 0 || k1.Y != 0)
                 {
-                    _mode = 1 - _mode;
+                    _mode = Wrap(_mode + (k1.X != 0 ? k1.X : k1.Y), Tiles);
                     Sound?.Invoke("SYS005");
                 }
                 else if (k1.Ok)
                 {
                     Sound?.Invoke("SYS006");
                     if (_mode == 0) return Action.Split; // the game opens the split lobby (it knows the pads)
+                    if (_mode == 2) return Action.Cpu;
                     Enter(Screen.Online);
                 }
                 else if (k1.Back)
@@ -276,6 +286,15 @@ public sealed class Versus(Catalog catalog)
                 break;
             case Screen.Lobby:
                 return LobbyInput(k1, k2);
+            case Screen.Cpu:
+                switch (CpuLobby.Update(k1, Sound))
+                {
+                    case FreeBattle.Result.Start: return Action.CpuStart;
+                    case FreeBattle.Result.Back:
+                        Enter(Screen.Mode);
+                        return Action.CpuLeave;
+                }
+                break;
             case Screen.Result:
                 if (_t < 1) break;
                 var buttons = ResultButtons;
@@ -493,7 +512,7 @@ public sealed class Versus(Catalog catalog)
     /// <summary>Menu BGM.AFS track: the course flow's "LIVE IN TOKYO" in the lobby, silence while loading, "JOY" on the result.</summary>
     public string? Music => Current switch
     {
-        Screen.None => null, Screen.Loading => null, Screen.Result => "JOY.adx", _ => "TOKYO.adx",
+        Screen.None => null, Screen.Loading => null, Screen.Result => "JOY.adx", Screen.Cpu => CpuLobby.Music, _ => "TOKYO.adx",
     };
 
     private bool P2Keyboard => P2Device >= Pads;
@@ -540,6 +559,11 @@ public sealed class Versus(Catalog catalog)
                 LobbyScreen(c);
                 c.Marquee(Split ? "SPLIT SCREEN" : "LOBBY", false, _clock);
                 break;
+            case Screen.Cpu:
+                c.Backdrop(_clock);
+                CpuLobby.Draw(c, _clock);
+                c.Marquee("VS CPU", false, _clock);
+                break;
             case Screen.Loading:
                 c.Fill(Canvas.White);
                 c.Text("Now Loading...", 476, 428, 15, Overlay.Rgba(0.92f, 0.08f, 0.06f), 1, 0.22f, 0, 0.4f);
@@ -562,23 +586,29 @@ public sealed class Versus(Catalog catalog)
         c.Fade(1 - Math.Clamp(_t / Fade, 0, 1));
     }
 
+    private const int Tiles = 3;
+
     private void ModeScreen(Canvas c)
     {
-        string[] titles = ["SPLIT SCREEN", "ONLINE"];
-        string[] subs = ["Two players on this screen", "2 to 4 players over the network"];
-        for (var i = 0; i < 2; i++)
+        string[] titles = ["SPLIT SCREEN", "ONLINE", "VS CPU"];
+        string[] subs = ["Two on this screen", "2 to 4 over the network", "Battle an AI rival"];
+        uint[] tops = [Overlay.Rgba(1, 0.55f, 0.3f), Overlay.Rgba(0.45f, 0.6f, 1), Overlay.Rgba(1, 0.85f, 0.3f)], bottoms = [Canvas.WordRed, Canvas.WordBlue, Overlay.Rgba(1, 0.38f, 0)];
+        for (var i = 0; i < Tiles; i++)
         {
-            var x = 46 + i * 216;
+            var x = 22 + i * 160;
             var sel = i == _mode;
-            c.Plate(x, 150, 204, 120, sel ? 1 : 0.62f);
-            c.Carbon(x + 14, 164, x + 190, 224, 1, false);
-            c.Lettering(titles[i], x + 102, 206, MathF.Min(24, 160 * c.Kx / c.O.Font!.Measure(titles[i], c.Ky)),
-                i == 0 ? Overlay.Rgba(1, 0.55f, 0.3f) : Overlay.Rgba(0.45f, 0.6f, 1), i == 0 ? Canvas.WordRed : Canvas.WordBlue, 0.5f, 0.15f, false, true, sel ? 1 : 0.6f);
-            c.Fit(subs[i], x + 102, 250, 180, 0.5f, Canvas.Shade(0.08f, 0.08f, 0.09f, 1), 0.1f, 0, 12);
-            if (sel) c.Glow(x - 6, 144, x + 210, 276, Canvas.Pulse(Theta));
+            c.Plate(x, 150, 148, 120, sel ? 1 : 0.62f);
+            c.Carbon(x + 12, 164, x + 136, 224, 1, false);
+            c.Lettering(titles[i], x + 74, 206, MathF.Min(24, 110 * c.Kx / c.O.Font!.Measure(titles[i], c.Ky)), tops[i], bottoms[i], 0.5f, 0.15f, false, true, sel ? 1 : 0.6f);
+            c.Fit(subs[i], x + 74, 250, 130, 0.5f, Canvas.Shade(0.08f, 0.08f, 0.09f, 1), 0.1f, 0, 12);
+            if (sel) c.Glow(x - 6, 144, x + 154, 276, Canvas.Pulse(Theta));
         }
-        c.Text(_mode == 0 ? "Player 1: keyboard, wheel or pad   -   Player 2: a second pad or the arrow keys"
-            : "Host a game for your friends, or join one on your network or by address", 256, 316, 12, Canvas.White, 0.5f, 0.12f, 0.08f);
+        c.Text(_mode switch
+        {
+            0 => "Player 1: keyboard, wheel or pad   -   Player 2: a second pad or the arrow keys",
+            1 => "Host a game for your friends, or join one on your network or by address",
+            _ => "Any rival, any course: a race or the lead / chase of the legends",
+        }, 256, 316, 12, Canvas.White, 0.5f, 0.12f, 0.08f);
         Menu.Hint(c, "LEFT/RIGHT: Select    DECIDE: OK    BACK: Main menu");
     }
 
@@ -692,7 +722,7 @@ public sealed class Versus(Catalog catalog)
             : "UP/DOWN: Select    LEFT/RIGHT: Change    READY: tell the host    BACK: Leave");
     }
 
-    private static void Swatch(Canvas c, float x, float y, uint bgr)
+    internal static void Swatch(Canvas c, float x, float y, uint bgr)
     {
         c.O.Disc(c.P(x, y), 7 * c.S, Overlay.Rgba(0, 0, 0, 0.9f));
         c.O.Disc(c.P(x, y), 5.5f * c.S, Catalog.Swatch(bgr));

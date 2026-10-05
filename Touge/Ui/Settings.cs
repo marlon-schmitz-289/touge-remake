@@ -90,6 +90,8 @@ public sealed class Settings
     public int NetPort { get; set; } = Touge.Net.NetSession.DefaultPort;
     public string JoinAddress { get; set; } = "";
     public bool SplitVertical { get; set; }
+    /// <summary>VERSUS → VS CPU: the last free battle lobby (Ui/FreeBattle).</summary>
+    public FreeBattleChoice FreeBattle { get; set; } = new();
 
     /// <summary>Best run per course and direction (<see cref="BestKey"/>): cumulative sector splits, last = total.</summary>
     public Dictionary<string, float[]> Best { get; set; } = [];
@@ -223,6 +225,7 @@ public sealed class Settings
         PlayerName = name.Length == 0 ? "PLAYER" : name[..Math.Min(16, name.Length)];
         if (NetPort is < 1024 or > 65535) NetPort = Touge.Net.NetSession.DefaultPort;
         JoinAddress ??= "";
+        FreeBattle ??= new();
         Version = CurrentVersion;
     }
 

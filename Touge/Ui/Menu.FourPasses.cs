@@ -21,7 +21,7 @@ public sealed partial class Menu
     private bool OnFourSlot => _slot == FourSlot && FourPassStages != null;
     private bool InFourPass => FourPass != null && _slot == FourSlot;
 
-    private string[] Buttons => FourPass is { Done: false } ? FourPasses.StageButtons : ResultButtons;
+    private string[] Buttons => FreeBattle ? FreeBattleButtons : FourPass is { Done: false } ? FourPasses.StageButtons : ResultButtons;
 
     /// <summary>Course slot 12 decided: a fresh run, on to the weather (route and time of day are the original's, fixed).</summary>
     private void StartFourPass()

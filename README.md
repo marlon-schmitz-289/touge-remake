@@ -58,6 +58,8 @@ dotnet run --project Touge -- "<iso>" --flow out/proof/story --story --progress 
 dotnet run --project Touge -- "<iso>" --story-check [n|calibrate]   # ohne Fenster: Kapiteltabelle + Szenen der Disc gegen die Übersetzung, dann jedes Kapitel mit dem Autopiloten (Durchlauf-Log); calibrate = Rivalenstärke/Zeitgrenzen messen
 dotnet run --project Touge -- "<iso>" AKINA_NIT --versus split [--bot] [--split vertical] [--car FD3S --car2 AE86T] [--net-rule battle|race] [--autodrive 25 --shot out/proof/s.png]   # geteilter Bildschirm direkt (Lobby; --bot: beide Autopiloten, Rennen startet sofort)
 dotnet run --project Touge -- "<iso>" AKINA_DAY --versus host|join:<ip[:port]>|online|menu [--bot] [--port 47860] [--name TAKUMI] [--players 2] [--net-sim 80:5%:20] [--menu pause] [--shot-after 40 --shot out/proof/o.png]   # online im Fenster (--bot: Lobby läuft von selbst, Autopilot fährt; --menu pause: Pause über dem laufenden Rennen fürs Bild)
+dotnet run --project Touge -- "<iso>" --menu freebattle --shot out/proof/freebattle/lobby.png   # VERSUS → VS CPU: Lobby des freien Battles gegen die KI als Bild
+dotnet run --project Touge -- "<iso>" --flow out/proof/freebattle/flow --freebattle   # freies Battle per Skript: Hauptmenü → VERSUS → VS CPU → Lobby (LEAD/CHASE, du führst, Ryosuke) → Battle (Autopilot, 16×) → Ergebnis → RETRY → Pause-Exit → Lobby → RACE → Battle → EXIT
 dotnet run --project Touge -- "<iso>" AKINA_NIT --flow out/proof/vs --versus flow   # Versus-Ablauf per Skript: Hauptmenü → VERSUS → SPLIT → Lobby (START gesperrt bis READY) → Rennen → Pause → RETRY → EXIT → Lobby → Hauptmenü, PNG je Schritt
 dotnet run --project Touge -- "<iso>" IROHA_DAY --headless --host [--bot] [--port 47860] [--players 2] [--races 2] [--net-rule race] [--seconds 600]   # Host ohne Fenster
 dotnet run --project Touge -- "<iso>" --headless --join 127.0.0.1[:47860] --bot [--car FD3S] [--net-sim 80:5%:20]   # Bot-Client ohne Fenster (wartet, bis der Host da ist), Log je Sekunde + Zusammenfassung je Rennen
@@ -114,7 +116,16 @@ Kontakte – eine Berührung zählt neu erst nach 0,25 s Abstand) → Retry / Co
 
 VERSUS (`Ui/Versus`, `TougeGame.Versus`, `Touge/Net`; im Original gibt es keinen Mehrspielermodus, Menüs im Stil der anderen:
 Logo-Kachelwand, roter Laufschrift-Kopf, Chromplatten, Karbonpaneele, Original-SE, BGM „LIVE IN TOKYO“ in den Lobbys, „JOY“ beim
-Ergebnis, WIN/LOSE-Jingle beim Entscheid): SPLIT SCREEN oder ONLINE.
+Ergebnis, WIN/LOSE-Jingle beim Entscheid): SPLIT SCREEN, ONLINE oder VS CPU.
+- **VS CPU** (freies Battle gegen die KI, `Ui/FreeBattle`, `TougeGame.FreeBattle`): Lobby links das Battle (Kurs, Route, Bedingungen
+  wie im Versus/Time Attack, Regel RACE = Battle des Originals mit 8-s-Vorsprungssieg oder LEAD / CHASE = Anime-Runde mit Führendem und
+  Jäger, WHO LEADS YOU/RIVAL nur bei LEAD / CHASE, AI LEVEL EASY/NORMAL/HARD = Können −0,2 / wie die Figur / +0,1 und ohne Gummiband),
+  rechts die Rivalenkarte (einer der 14 aus `--battle`: Team, Auto, Stufe in Sternen, kurze Notiz zum Fahrstil; ◀ ▶ blättert) und das
+  eigene Auto mit Lack und AT/MT. In der Lobby läuft das Thema des Rivalen aus `MG_BGM.AFS` (wie auf Legends VS-Karte). START → Laden
+  (gleicher Kurs: nur die Autos) → Telop „VS …“, 3-2-1-GO → Battle → YOU WIN/LOSE (WIN/LOSE.adx) → Battle-Blatt mit `R_WIN01`/`R_LOSE`
+  → RETRY / REPLAY / CHANGE SETTINGS (zur Lobby) / EXIT (Hauptmenü). Pause → Exit führt zur Lobby. Replays heißen „FREE BATTLE vs
+  <Rivale>“. Die letzte Wahl merkt sich `settings.json` (`FreeBattle`, Auto/Lack/Getriebe wie überall). Tastatur, Pad und Lenkrad über
+  die Menütasten.
 - **Geteilter Bildschirm** (2 Spieler): Lobby links das Rennen (Kurs, Route, Bedingungen DAY/NIGHT/WET/DAY FOG/NIGHT FOG, Regel
   BATTLE = Battle des Originals mit 8-s-Vorsprungssieg bzw. RACE = beide bis ins Ziel, Bildschirm oben/unten oder links/rechts, Gerät von
   Spieler 2), rechts je Spieler Auto und Lackfarbe; Spieler 2 hat einen eigenen (blauen) Cursor auf seiner Karte und muss READY drücken,

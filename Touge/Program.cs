@@ -47,6 +47,7 @@ using Touge;
 // --headless [--host | --join <ip[:port]>] [--bot] [--port n] [--name X] [--players n] [--races n] [--seconds s] [--net-sim ms[:verlust[:jitter]]] [--net-rule battle|race]:
 //   Mehrspieler-Teilnehmer ohne Fenster (Touge/Net/Headless): Host oder Client einer echten UDP-Sitzung, Auto per Autopilot (--bot), Log je Sekunde + Zusammenfassung.
 // --flow <dir> --versus flow: Versus-Ablauf (geteilter Bildschirm) per Skript statt des Time-Attack-Ablaufs.
+// --menu freebattle: VERSUS → VS CPU-Lobby beim Start; --flow <dir> --freebattle: freies Battle gegen die KI per Skript (Lobby → LEAD/CHASE → Ergebnis → RETRY → Pause-Exit → RACE → EXIT).
 // --versus split|host|join[:ip[:port]]|online [--bot] [--split vertical] [--car2 X] [--players n] [--net-rule battle|race]: Versus direkt (Testläufe/Bilder):
 //   geteilter Bildschirm bzw. Online-Host/-Client im Fenster; --bot: Autopilot fährt, Lobby läuft von selbst (Host startet bei --players Spielern).
 // --shot-after <s>: --shot erst nach so vielen Sekunden (statt sofort), das Spiel läuft bis dahin normal.
@@ -228,7 +229,7 @@ KanseiApp.Run(new TougeGame(iso, course.ToUpperInvariant(), shot, at, orbit, aut
       SaveRuns = Arg("--data-dir") != null, ReplayFile = Arg("--replay"), GhostFile = Arg("--ghost"), ReplayAt = Arg("--replay-at") is { } ra ? float.Parse(ra, CultureInfo.InvariantCulture) : 0,
       ReplayCam = Enum.TryParse<Touge.Ui.ReplayViewer.Camera>(Arg("--replay-cam") ?? "tv", true, out var rc) ? rc : Touge.Ui.ReplayViewer.Camera.Tv,
       UseMenus = plain, StartMenu = Arg("--menu"), Flow = Arg("--flow"), Offscreen = args.Contains("--offscreen"),
-      StoryFlow = args.Contains("--story"), FourPassFlow = args.Contains("--fourpasses") || args.Contains("--fourpasses-wet"), FourPassWet = args.Contains("--fourpasses-wet"), StoryProgress = int.TryParse(Arg("--progress"), out var progress) ? progress : 0,
+      StoryFlow = args.Contains("--story"), FreeBattleFlow = args.Contains("--freebattle"), FourPassFlow = args.Contains("--fourpasses") || args.Contains("--fourpasses-wet"), FourPassWet = args.Contains("--fourpasses-wet"), StoryProgress = int.TryParse(Arg("--progress"), out var progress) ? progress : 0,
       ShotSize = Arg("--shot-size") is { } size && size.Split('x') is [var sw, var sh] ? (int.Parse(sw), int.Parse(sh)) : (1280, 720) }, new WindowSettings
 {
     Title = $"Touge – {course}",

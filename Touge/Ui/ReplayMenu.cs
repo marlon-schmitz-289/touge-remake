@@ -188,7 +188,7 @@ public sealed class ReplayMenu(Catalog catalog, Settings settings)
             if (sel) c.Diamond(200, y + 15, 4);
             c.Fit(Where(info), 210, y + 19, 186, 0, sel ? Canvas.Yellow : Canvas.White, 0.15f, 0.06f, 14);
             var cars = string.Join("  VS  ", info.Cars.Select(x => CarName(x.Car)));
-            c.Fit($"{(info.Mode == "BATTLE" ? $"BATTLE {info.Result}" : info.Mode)}   {cars}", 210, y + 37, 186, 0, Overlay.Rgba(0.75f, 0.78f, 0.8f), 0.12f, 0, 11);
+            c.Fit($"{(info.Mode.Contains("BATTLE") ? $"{info.Mode} {info.Result}" : info.Mode)}   {cars}", 210, y + 37, 186, 0, Overlay.Rgba(0.75f, 0.78f, 0.8f), 0.12f, 0, 11);
             if (Tab == 0 && ReplayStore.IsKept(path)) c.Text("KEPT", 400, y + 37, 10, Canvas.Yellow, 0, 0.12f);
             c.Text(Style.Time(info.Time), 484, y + 19, 15, Canvas.White, 1, 0.15f, 0, 0.3f);
             c.Text(info.Date.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture), 484, y + 37, 10, Overlay.Rgba(0.75f, 0.78f, 0.8f), 1, 0.1f);
