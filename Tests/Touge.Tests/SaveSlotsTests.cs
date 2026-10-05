@@ -82,6 +82,79 @@ public class SaveSlotsTests : IDisposable
         Assert.True(Progress.Load(P("progress.json")).Beaten("AKINA/kenji"));
     }
 
+    /// <summary>Two profiles in one session: save → progress → save → load the first (nothing of the second) → load the second (all back) → delete.</summary>
+    [Fact]
+    public void TwoProfilesRoundTrip_ProgressSettingsAndBestRuns()
+    {
+        var slots = new SaveSlots(_root);
+        var best = Path.Combine(_root, SaveSlots.Folders[0]);
+        new Touge.Ui.Settings { Car = "AE86T" }.Save(P("settings.json"));
+        slots.Save(0, "TAKUMI", 10);
+        Assert.Equal(["settings"], slots.Read(0)!.Files);
+
+        // a Legend win, a record and its best run
+        var p = new Progress();
+        p.Add("AKINA/kenji", Touge.Race.BattleOutcome.Win, 4.5f);
+        p.Save(P("progress.json"));
+        new Touge.Ui.Settings { Car = "FD3S", Best = { ["AKINA_R_A"] = [100, 200, 300, 366.1f] } }.Save(P("settings.json"));
+        Directory.CreateDirectory(best);
+        File.WriteAllText(Path.Combine(best, "AKINA_R_A.rpl"), "run");
+        slots.Save(1, "RYOSUKE", 200);
+        Assert.Equal((1, 1, 1), (slots.Read(1)!.Legend, slots.Read(1)!.Records, slots.ReadState().Active));
+
+        Assert.True(slots.Load(0));
+        Assert.False(File.Exists(P("progress.json")), "slot 1 had no progress");
+        Assert.False(Progress.Load(P("progress.json")).Beaten("AKINA/kenji"));
+        var s = Touge.Ui.Settings.Load(P("settings.json"));
+        Assert.Equal(("AE86T", 0), (s.Car, s.Best.Count));
+        Assert.False(Directory.Exists(best) && Directory.GetFiles(best).Length > 0, "no best runs in slot 1");
+        Assert.Equal((0, 10.0), (slots.ReadState().Active, slots.ReadState().PlaySeconds));
+
+        Assert.True(slots.Load(1));
+        Assert.True(Progress.Load(P("progress.json")).Beaten("AKINA/kenji"));
+        s = Touge.Ui.Settings.Load(P("settings.json"));
+        Assert.Equal(("FD3S", 366.1f), (s.Car, s.Best["AKINA_R_A"][^1]));
+        Assert.Equal("run", File.ReadAllText(Path.Combine(best, "AKINA_R_A.rpl")));
+        Assert.Equal(1, slots.ReadState().Active);
+        Assert.Empty(Directory.GetDirectories(Path.Combine(_root, "Saves"), "*.tmp"));
+
+        slots.Delete(0);
+        Assert.Equal(1, slots.ReadState().Active); // deleting another slot keeps the one in use
+        slots.Delete(1);
+        Assert.Equal(-1, slots.ReadState().Active);
+    }
+
+    /// <summary>A load that cannot finish leaves the progress as it was: an unreadable slot changes nothing, a file that cannot be replaced is rolled back.</summary>
+    [Fact]
+    public void FailedLoadLeavesNoPartialCopy()
+    {
+        if (OperatingSystem.IsWindows()) return; // file modes below are Unix
+        var slots = new SaveSlots(_root);
+        File.WriteAllText(P("progress.json"), "slot");
+        File.WriteAllText(P("settings.json"), "slot");
+        slots.Save(0, "A", 1);
+        File.WriteAllText(P("progress.json"), "now");
+        File.WriteAllText(P("settings.json"), "now");
+
+        var locked = Path.Combine(slots.SlotDir(0), "settings.json");
+        File.SetUnixFileMode(locked, UnixFileMode.None);
+        try
+        {
+            Assert.ThrowsAny<UnauthorizedAccessException>(() => slots.Load(0));
+        }
+        finally
+        {
+            File.SetUnixFileMode(locked, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
+        Assert.Equal(("now", "now"), (File.ReadAllText(P("progress.json")), File.ReadAllText(P("settings.json"))));
+
+        // progress.json goes first, settings.json then fails (its temp name is taken by a folder): progress.json is put back
+        Directory.CreateDirectory(P("settings.json.tmp"));
+        Assert.ThrowsAny<SystemException>(() => slots.Load(0)); // IOException or UnauthorizedAccessException, by platform
+        Assert.Equal(("now", "now"), (File.ReadAllText(P("progress.json")), File.ReadAllText(P("settings.json"))));
+        Assert.Empty(Directory.GetDirectories(Path.Combine(_root, "Saves"), "*.tmp"));
+    }
+
     [Fact]
     public void LoadedProfileKeepsThisMachinesControlsAndDisplay()
     {

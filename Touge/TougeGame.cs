@@ -1108,7 +1108,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     /// <summary>--flow: the scripted key of this frame; asks for the step's PNG first (written next frame), quits after the last step (with --bench: races on).</summary>
     private (int X, int Y, bool Ok, bool Back) FlowKeys(float dt)
     {
-        var script = bench != null ? FlowBenchScript : LegendFlow ? LegendFlowScript : StoryFlow ? StoryFlowScript : VersusStart == "flow" ? VersusFlowScript : FlowScript;
+        var script = bench != null ? FlowBenchScript : SaveLoadFlow ? SaveLoadFlowScript : LegendFlow ? LegendFlowScript : StoryFlow ? StoryFlowScript : VersusStart == "flow" ? VersusFlowScript : FlowScript;
         if (_flowStep >= script.Length)
         {
             if (bench == null) Window.ShouldClose = true;
@@ -1131,6 +1131,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         }
         if (_shotState != 0) return default;
         (_flowStep, _flowT, _flowShotTaken) = (_flowStep + 1, 0, false);
+        if (SaveLoadFlow) SaveLoadFlowDo(_flowStep - 1); // --saveload: typing and state checks of the step
         Console.WriteLine($"\n[Flow] {_menuTime:0.00} s {s.At}: {(s.Ok ? "DECIDE" : s.Back ? "BACK" : s.X != 0 || s.Y != 0 ? $"x {s.X} y {s.Y}" : "-")}");
         return (s.X, s.Y, s.Ok, s.Back);
     }

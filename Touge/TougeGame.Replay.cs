@@ -44,7 +44,7 @@ public sealed partial class TougeGame
     {
         if (_menu == null || _catalog == null) return;
         _replayMenu = new ReplayMenu(_catalog, _settings) { Sound = n => _menuAudio?.Play(n) };
-        _saveMenu = new SaveLoadScreen(SaveSlots.Default) { Sound = n => _menuAudio?.Play(n), PlaySeconds = () => _playSeconds };
+        _saveMenu = new SaveLoadScreen(SaveSlots.Default) { Sound = n => _menuAudio?.Play(n), PlaySeconds = () => _playSeconds, Flush = FlushProfile };
         _playSeconds = SavesRuns ? SaveSlots.Default.ReadState().PlaySeconds : 0;
         _menu.Options.Find("GAME SETTING")?.Rows.Add(Options.Row.Toggle("GHOST", () => _settings.Ghost, v => _settings.Ghost = v,
             "Time attack: your best run on this course and route", "drives along as a see-through car."));
@@ -286,6 +286,14 @@ public sealed partial class TougeGame
 
     // ---------------------------------------------------------------- save & load
 
+    /// <summary>What lives in memory onto disk before a slot copies the files (a test run's settings never were).</summary>
+    private void FlushProfile()
+    {
+        if (!SavesRuns) return;
+        _settings.Save();
+        if (ProgressSaved) _progress.Save(LegendProgressPath);
+    }
+
     /// <summary>Autosave into the active slot (SAVE &amp; LOAD) after a finished run, with the menus.</summary>
     private void Autosave()
     {
@@ -295,7 +303,7 @@ public sealed partial class TougeGame
         if (!s.Autosave || s.Active < 0 || slots.Read(s.Active) is not { } meta) return;
         try
         {
-            _settings.Save();
+            FlushProfile();
             slots.Save(s.Active, meta.Name, _playSeconds);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
