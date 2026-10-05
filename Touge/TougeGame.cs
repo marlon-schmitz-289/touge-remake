@@ -36,6 +36,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     private EffectsRenderer _fxRenderer = null!;
     private OverlayRenderer _overlayRenderer = null!;
     private TextRenderer _textRenderer = null!;
+    private SpriteRenderer _sprites = null!;
     private readonly Overlay _overlay = new();
     private Hud _hud = null!;
     private string _courseTime = courseTime;
@@ -191,6 +192,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             Style.Glyphs);
         _overlayRenderer = new OverlayRenderer(Device);
         _textRenderer = new TextRenderer(Device, _overlay.Font);
+        _sprites = new SpriteRenderer(Device);
         if (UseMenus)
         {
             _settings = Settings.Load();
@@ -352,6 +354,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             if (_menu != null) _menuAudio = new MenuAudio(iso, _audioDevice) { Volume = _settings.MenuVolume, Clock = () => _menuTime };
             _jukebox = new Jukebox(iso, _audioDevice, _settings) { Clock = () => _menuTime };
             if (_guide != null) _guideVoice = new GuideVoice(iso, _audioDevice);
+            if (_story?.Media is { } media) media.Audio = _audioDevice;
             StartAudio(iso);
         }
         StartVersusCli();
@@ -847,7 +850,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             // the music steps back while Iketani talks
             _voice = _guide!.Voice;
             _audioDevice.Music = MusicLevel;
-            _guide.VoiceSeconds = _guideVoice.Play(_voice, _settings.MenuVolume);
+            _guide.VoiceSeconds = _guideVoice.Play(_voice, _settings.VoiceVolume);
         }
         var want = !_settings.MusicOn ? null : front ? _front!.Music : _legend is { Active: true } ? _legend.Music : guide ? _guide!.Music : versus ? _versusUi!.Music : _story is { Active: true } ? _story.Music : ReplayMusic ?? VersusMusic(_menu!.Music(_music));
         if (want == _music) return;
@@ -972,6 +975,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         if (_persist) ApplyDisplay();
         if (_audioDevice != null) (_audioDevice.Music, _audioDevice.Master) = (MusicLevel, s.MasterVolume);
         if (_menuAudio != null) _menuAudio.Volume = s.MenuVolume;
+        if (_story?.Media is { } media) media.Volume = s.VoiceVolume;
         if (_audio != null) _audio.EngineLevel = s.EngineVolume;
         (_hud.Visible, _hud.Mode, _hud.Scale, _hud.Mph, _camView) = (s.HudOn, s.MapMode, s.HudScale, s.Mph, s.Camera);
         if (s.Livery != _carLivery) SwitchCar(Array.IndexOf(CarPaint.Cars, _carName), _paint);
@@ -1629,6 +1633,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
 
     private void DrawOverlay(Penelope.ICommandEncoder encoder, Overlay overlay, Penelope.TextureViewHandle target, int w, int h)
     {
+        _sprites.Draw(encoder, target, w, h); // the story's pictures, queued with the overlay that goes over them
         _overlayRenderer.Draw(encoder, overlay, target, w, h);
         _textRenderer.Draw(encoder, overlay, target, w, h);
     }
@@ -1654,6 +1659,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         _fxRenderer.Dispose();
         _overlayRenderer.Dispose();
         _textRenderer.Dispose();
+        _sprites.Dispose();
         _capture?.Dispose();
         _offscreen?.Dispose();
         _renderer.Dispose();

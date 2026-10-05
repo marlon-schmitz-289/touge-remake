@@ -50,6 +50,8 @@ public sealed class Settings
     public float EngineVolume { get; set; } = 1;
     /// <summary>Menu sounds (cursor, decide, countdown).</summary>
     public float MenuVolume { get; set; } = 1;
+    /// <summary>Voices: the story's manga dramas and scenes, Iketani in the car guide.</summary>
+    public float VoiceVolume { get; set; } = 1;
 
     // ------------------------------------------------------------ gameplay (Options: GAME SETTING)
     public bool Mph { get; set; }
@@ -249,8 +251,8 @@ public sealed class Settings
     public void Sanitize()
     {
         static float Unit(float v) => float.IsFinite(v) ? Math.Clamp(v, 0, 1) : 1;
-        (MasterVolume, MusicVolume, SoundVolume, EngineVolume, MenuVolume, CameraShake) =
-            (Unit(MasterVolume), Unit(MusicVolume), Unit(SoundVolume), Unit(EngineVolume), Unit(MenuVolume), Unit(CameraShake));
+        (MasterVolume, MusicVolume, SoundVolume, EngineVolume, MenuVolume, VoiceVolume, CameraShake) =
+            (Unit(MasterVolume), Unit(MusicVolume), Unit(SoundVolume), Unit(EngineVolume), Unit(MenuVolume), Unit(VoiceVolume), Unit(CameraShake));
         if (!Enum.IsDefined(Display)) Display = DisplayMode.Window;
         if (!Enum.IsDefined(MapMode)) MapMode = Hud.MapMode.Rotating;
         if (!Enum.IsDefined(Camera)) Camera = CameraView.Chase;

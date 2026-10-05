@@ -275,6 +275,68 @@ public sealed unsafe class AudioDevice : IDisposable
         }
     }
 
+    /// <summary>A clip played once on its own voice (story voice tracks): start anywhere, pause, position; gain not scaled by <see cref="Sfx"/>.</summary>
+    public Track CreateTrack(Clip clip) => new(this, clip);
+
+    public sealed class Track : IDisposable
+    {
+        private readonly AudioDevice _o;
+        private readonly uint _src;
+
+        internal Track(AudioDevice owner, Clip clip)
+        {
+            _o = owner;
+            if (!owner.Enabled) return;
+            _src = owner._al.GenSource();
+            owner._al.SetSourceProperty(_src, SourceInteger.Buffer, (int)clip.Buffer);
+        }
+
+        public float Gain { set { if (_o.Enabled) _o._al.SetSourceProperty(_src, SourceFloat.Gain, value); } }
+
+        /// <summary>Playing (false when paused, never started, played out or without a device).</summary>
+        public bool Playing
+        {
+            get
+            {
+                if (!_o.Enabled) return false;
+                _o._al.GetSourceProperty(_src, GetSourceInteger.SourceState, out var st);
+                return (SourceState)st == SourceState.Playing;
+            }
+        }
+
+        /// <summary>Playback position in seconds while <see cref="Playing"/>.</summary>
+        public float Seconds
+        {
+            get
+            {
+                if (!_o.Enabled) return 0;
+                _o._al.GetSourceProperty(_src, SourceFloat.SecOffset, out var s);
+                return s;
+            }
+        }
+
+        /// <summary>Plays from <paramref name="seconds"/> on.</summary>
+        public void Play(float seconds)
+        {
+            if (!_o.Enabled) return;
+            _o._al.SourceStop(_src); // rewound: the offset applies to the next play
+            _o._al.SetSourceProperty(_src, SourceFloat.SecOffset, Math.Max(0, seconds));
+            _o._al.SourcePlay(_src);
+        }
+
+        public void Pause()
+        {
+            if (Playing) _o._al.SourcePause(_src);
+        }
+
+        public void Dispose()
+        {
+            if (!_o.Enabled) return;
+            _o._al.SourceStop(_src);
+            _o._al.DeleteSource(_src);
+        }
+    }
+
     /// <summary>Looping voice in the SFX group with real-time gain and pitch.</summary>
     public sealed class LoopVoice : IDisposable
     {

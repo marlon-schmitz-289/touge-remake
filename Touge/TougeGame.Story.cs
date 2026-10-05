@@ -39,6 +39,15 @@ public sealed partial class TougeGame
         if (_persist && StoryProgress > 0) Console.WriteLine("[Story] --progress gilt nur für Testläufe ohne gespeicherten Fortschritt, ignoriert");
         else for (var n = 0; n < StoryProgress; n++) _progress.Clear(StoryMode.Key(n)); // the progress Legend loaded (one store)
         _story = new StoryMode(_catalog!) { Sound = n => _menuAudio?.Play(n), Progress = _progress };
+        try
+        {
+            _story.MangaChapters = StoryHeadless.MangaChapters(iso);
+            _story.Media = new StoryMedia(isoPath, _sprites) { Volume = _settings.VoiceVolume };
+        }
+        catch (Exception e) when (e is InvalidDataException or FileNotFoundException or ArgumentOutOfRangeException)
+        {
+            Console.WriteLine($"[Story] Manga-Tabellen nicht lesbar ({e.Message}), Szenen als Textpanels");
+        }
     }
 
     private void OpenStory(int? chapter = null)
@@ -62,6 +71,7 @@ public sealed partial class TougeGame
         {
             StoryLoad();
             if (p[2] == "race") StoryRace();
+            else if (p[2] == "show") _story!.ShowShow(p.Length > 3 ? int.Parse(p[3]) : 0, p.Length > 4 ? double.Parse(p[4], System.Globalization.CultureInfo.InvariantCulture) : 0);
             else _story!.ShowScene(p.Length > 3 ? int.Parse(p[3]) : 0, p.Length > 4 ? int.Parse(p[4]) : 0);
         }
         if (shotPath != null)
@@ -180,9 +190,10 @@ public sealed partial class TougeGame
 
     /// <summary>
     ///     --flow … --story (with --progress 7): title → STORY → chapter select (parts, a locked part) → chapter 7, GT-R VS
-    ///     HACHI-ROKU → loading → scene lines → telop and countdown → the battle (autopilot, 16×) → banner → result → the scene
-    ///     after it → select (cleared, chapter 8 open); then chapter 3, THE GHOST OF AKINA (the autopilot does not pass within
-    ///     120 s) → TIME UP → RETRY → again → CHAPTER SELECT → main menu. Scenes end with BACK (skip) so typing speed cannot shift the script.
+    ///     HACHI-ROKU → loading → the manga sequence (DECIDE: next line, RIGHT: skip) → the portrait scene (AUTO off holds a line,
+    ///     DECIDE, AUTO on, RIGHT) → telop and countdown → the battle (autopilot, 16×) → banner → result → the scene after it
+    ///     (BACK skips) → select (cleared, chapter 8 open); then chapter 3, THE GHOST OF AKINA (the autopilot does not pass
+    ///     within 120 s) → TIME UP → RETRY → again → CHAPTER SELECT → main menu.
     /// </summary>
     private static readonly (string At, float Wait, string? Shot, int X, int Y, bool Ok, bool Back)[] StoryFlowScript =
     [
@@ -192,24 +203,25 @@ public sealed partial class TougeGame
         ("StorySelect", 0.8f, "select_part2_locked", -1, 0, false, false), ("StorySelect", 0.5f, null, 0, -1, false, false),
         ("StorySelect", 0.6f, null, 0, 0, true, false),
         ("StoryLoading", 0.4f, "loading", 0, 0, false, false),
-        ("StoryScene", 3, "scene_title", 0, 0, false, false), ("StoryScene", 2.5f, "scene_line1", 0, 0, true, false),
-        ("StoryScene", 2.5f, null, 0, 0, true, false), ("StoryScene", 2.5f, "scene_line3", 0, 0, true, false),
-        ("StoryScene", 2.5f, "scene_line4", 1, 0, false, false),
+        // the manga sequence with its drama: panels, a subtitle, DECIDE on to the next line, RIGHT skips it
+        ("StoryShow", 9, "manga", 0, 0, false, false), ("StoryShow", 0.2f, null, 0, 0, true, false), ("StoryShow", 2.5f, "manga_next_line", 0, 0, true, false),
+        ("StoryShow", 3, "manga_later", 1, 0, false, false),
+        // the portrait scene: lip sync to the voices; AUTO off holds at the end of a line until DECIDE
+        ("StoryShow", 5, "scene_portrait", 0, 1, false, false), ("StoryShow", 7, "scene_held", 0, 0, true, false),
+        ("StoryShow", 2.5f, "scene_next", 0, -1, false, false), ("StoryShow", 3, "scene_auto", 1, 0, false, false),
         ("Intro", 1, "telop_vs", 0, 0, false, false), ("Intro", 2, "countdown", 0, 0, false, false), ("Race", 1.5f, "race", 0, 0, false, false),
         ("StoryBanner", 1.2f, "banner", 0, 0, true, false), ("StoryResult", 2, "result", 0, 0, true, false),
-        ("StoryScene", 1, "after_title", 0, 0, false, false), ("StoryScene", 3, "after_line1", 0, 0, true, false),
-        ("StoryScene", 2.5f, null, 0, 0, true, false), ("StoryScene", 2.5f, null, 0, 0, true, false), ("StoryScene", 2.5f, null, 0, 0, true, false),
-        ("StoryScene", 2.5f, "after_line5", 0, 0, false, true),
+        ("StoryShow", 8, "after_scene", 0, 0, false, false), ("StoryShow", 6, "after_scene_later", 0, 0, false, true),
         ("StorySelect", 1.5f, "select_cleared", 0, -5, false, false), ("StorySelect", 0.8f, "select_ch3", 0, 0, true, false),
-        ("StoryLoading", 0.4f, null, 0, 0, false, false), ("StoryScene", 1, null, 0, 0, false, false), ("StoryScene", 4, "ghost_scene", 1, 0, false, false),
+        ("StoryLoading", 0.4f, null, 0, 0, false, false), ("StoryShow", 1.5f, null, 1, 0, false, false), ("StoryShow", 4, "ghost_scene", 1, 0, false, false),
         ("Intro", 1, "ghost_telop", 0, 0, false, false), ("Race", 1.5f, "ghost_race", 0, 0, false, false),
         ("StoryBanner", 1.2f, "ghost_lose", 0, 0, true, false), ("StoryResult", 2, "ghost_result", 0, 0, true, false),
         ("Intro", 1, null, 0, 0, false, false), ("StoryBanner", 1, null, 0, 0, true, false), ("StoryResult", 1, null, 1, 0, false, false),
         ("StoryResult", 0.6f, "ghost_result_select", 0, 0, true, false), ("StorySelect", 1.2f, "select_after", 0, 0, true, false),
         // chapter 3 again: BACK in the scene returns to the select; then into the race and out through Pause → Exit
-        ("StoryLoading", 0.4f, null, 0, 0, false, false), ("StoryScene", 2, "ghost_scene_back", 0, 0, false, true),
+        ("StoryLoading", 0.4f, null, 0, 0, false, false), ("StoryShow", 2, "ghost_manga_back", 0, 0, false, true),
         ("StorySelect", 1.2f, "select_from_scene", 0, 0, true, false), ("StoryLoading", 0.4f, null, 0, 0, false, false),
-        ("StoryScene", 1, null, 1, 0, false, false), ("Intro", 1, null, 0, 0, false, false), ("Race", 1.5f, "ghost_race2", 0, 0, false, true),
+        ("StoryShow", 1.5f, null, 1, 0, false, false), ("StoryShow", 1.5f, null, 1, 0, false, false), ("Intro", 1, null, 0, 0, false, false), ("Race", 1.5f, "ghost_race2", 0, 0, false, true),
         ("Pause", 0.6f, null, 1, 0, false, false), ("Pause", 0.4f, null, 1, 0, false, false), ("Pause", 0.4f, null, 1, 0, false, false), ("Pause", 0.4f, "pause_exit", 1, 0, false, false), ("Pause", 0.4f, null, 0, 0, true, false),
         ("StorySelect", 1.5f, "select_from_pause", 0, 0, false, true),
         ("Modes", 1.2f, "modes_back", 0, 0, false, false),

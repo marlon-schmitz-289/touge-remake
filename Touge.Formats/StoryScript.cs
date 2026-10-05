@@ -66,7 +66,7 @@ public static class StoryScript
     ///     wait, N new page, K_ page style, Q_ effect, U_ shake, F_ speaker of the next balloon, E_ fade (end of a part).
     ///     Text tokens are balloons ('\n' = line break); the balloons up to the next wait, page break or speaker are one utterance.
     /// </summary>
-    public static List<List<Line>> ParseScript(ReadOnlySpan<byte> robj) => Parse(robj, null);
+    public static List<List<Line>> ParseScript(ReadOnlySpan<byte> robj) => Parse(robj, null, null);
 
     /// <summary>
     ///     For each utterance of <see cref="ParseScript" /> the time in s on the part's voice track (<see cref="Manga.SceneVoice" />)
@@ -76,23 +76,57 @@ public static class StoryScript
     public static List<List<double>> Times(ReadOnlySpan<byte> robj)
     {
         var times = new List<List<double>>();
-        Parse(robj, times);
+        Parse(robj, times, null);
         return times;
     }
 
-    private static List<List<Line>> Parse(ReadOnlySpan<byte> robj, List<List<double>>? times)
+    /// <summary>What a scene's staging step does (<see cref="Staging" />).</summary>
+    public enum Step
+    {
+        /// <summary>P_n: show portrait n (MG_STR <c>nn.ICP</c>).</summary>
+        Picture,
+        /// <summary>C_k: face k talks (lip sync on).</summary>
+        Talk,
+        /// <summary>K_k: face k stops talking.</summary>
+        Quiet,
+        /// <summary>The first balloon of page n (after N): its lip string (<see cref="Manga.Lips" />) starts here.</summary>
+        Page,
+        /// <summary>Utterance n of <see cref="ParseScript" /> appears.</summary>
+        Line,
+        /// <summary>E_: the part fades out.</summary>
+        End,
+    }
+
+    public readonly record struct Stage(double Time, Step Step, int Value);
+
+    /// <summary>
+    ///     Per part (as <see cref="ParseScript" />) the staging on the part's voice track in s: portraits, who talks, pages and
+    ///     utterances at the cue in effect (A_/WF_, 1/30 s) when their token comes.
+    /// </summary>
+    public static List<List<Stage>> Staging(ReadOnlySpan<byte> robj)
+    {
+        var stage = new List<List<Stage>>();
+        Parse(robj, null, stage);
+        return stage;
+    }
+
+    private static List<List<Line>> Parse(ReadOnlySpan<byte> robj, List<List<double>>? times, List<List<Stage>>? staging)
     {
         if (robj.Length < 0x20 || !robj[..4].SequenceEqual("ROBJ"u8)) throw new InvalidDataException("no ROBJ script");
         var at = BinaryPrimitives.ReadInt32LittleEndian(robj[0x18..]) + 12;
         var parts = new List<List<Line>> { new() };
         var cues = new List<List<double>> { new() };
+        var stage = new List<List<Stage>> { new() };
         var text = new StringBuilder();
         var speaker = "";
-        int cue = 0, start = 0;
+        int cue = 0, start = 0, page = 0;
+        var paged = false;
+        void Add(Step step, int value) => stage[^1].Add(new Stage(cue / 30.0, step, value));
         void Flush()
         {
             if (text.Length > 0)
             {
+                stage[^1].Add(new Stage(start / 30.0, Step.Line, parts[^1].Count));
                 parts[^1].Add(new Line(speaker, text.ToString()));
                 cues[^1].Add(start / 30.0);
             }
@@ -117,17 +151,27 @@ public static class StoryScript
                 else if (name == "E")
                 {
                     Flush();
-                    cue = 0; // every part has its own voice track
+                    Add(Step.End, 0);
+                    (cue, page, paged) = (0, 0, false); // every part has its own voice track
                     if (parts[^1].Count > 0)
                     {
                         parts.Add([]);
                         cues.Add([]);
+                        stage.Add([]);
                     }
+                    else stage[^1].Clear();
                 }
                 else if (name is "W" or "WF" or "N") Flush();
-                if (name is "A" or "WF" && int.TryParse(tok[(name.Length + 1)..], out var n)) cue = n;
+                if (name == "N") (page, paged) = (page + 1, false); // pages are counted by N (lip strings are numbered so)
+                var arg = int.TryParse(tok[Math.Min(tok.Length, name.Length + 1)..], out var n) ? n : -1;
+                if (name is "A" or "WF" && arg >= 0) cue = Math.Max(cue, arg); // waits for that time: an earlier one (STR06) passes at once
+                else if (name == "P" && arg >= 0) Add(Step.Picture, arg);
+                else if (name == "C" && arg >= 0) Add(Step.Talk, arg);
+                else if (name == "K" && arg >= 0) Add(Step.Quiet, arg);
                 continue;
             }
+            if (!paged) Add(Step.Page, page);
+            paged = true;
             if (text.Length == 0) start = cue;
             text.Append(tok.Replace("\n", "")); // '\n' breaks lines inside a balloon
         }
@@ -136,8 +180,10 @@ public static class StoryScript
         {
             parts.RemoveAt(parts.Count - 1);
             cues.RemoveAt(cues.Count - 1);
+            stage.RemoveAt(stage.Count - 1);
         }
         times?.AddRange(cues);
+        staging?.AddRange(stage);
         return parts;
     }
 

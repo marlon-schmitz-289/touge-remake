@@ -104,8 +104,9 @@ dotnet run --project Touge -- "<iso>" AKINA_NIT --menu options:playlist --hint-d
 dotnet run --project Touge -- "<iso>" AKINA_NIT --battle keisuke [--rule race|chase] [--lead player|rival] [--car AE86T]   # Schnellbattle gegen die KI: Telop „VS …“, 3-2-1-GO, Battle, YOU WIN/LOSE, Ergebnis
 dotnet run --project Touge -- "<iso>" IROHA_DAY --battle takumi --autodrive 420   # ohne Fenster: Autopilot (Spielerauto) gegen die KI, Log je Sekunde (Abstand s/m, Führung, KI-Modus, Kontakte) + Ergebnis
 dotnet run --project Touge -- "<iso>" IROHA_DAY --battle itsuki --autodrive 110 --shot out/proof/b.png [--battle-result]   # Bild nach dem Battle: Zielbanner bzw. Ergebnisblatt
-dotnet run --project Touge -- "<iso>" --menu story[:n[:scene[:teil[:zeile]]|:race|:end]] [--progress 12] --shot out/proof/s.png   # STORY: Kapitelwahl, Szene, Rennstart von Kapitel n oder THE END (--progress: Kapitel 0…n−1 geschafft, nur Testlauf; mit gespeichertem Fortschritt ignoriert)
+dotnet run --project Touge -- "<iso>" --menu story[:n[:scene[:teil[:zeile]]|:show[:i[:sek]]|:race|:end]] [--progress 12] --shot out/proof/s.png   # STORY: Kapitelwahl, Szene, Rennstart von Kapitel n oder THE END (--progress: Kapitel 0…n−1 geschafft, nur Testlauf; mit gespeichertem Fortschritt ignoriert)
 dotnet run --project Touge -- "<iso>" --flow out/proof/story --story --progress 7   # STORY-Ablauf im Fenster: Wahl → Szene → Battle (Pilot) → Ergebnis → Szene danach; verlorenes Kapitel mit RETRY
+dotnet run --project Touge -- "<iso>" --story-check media[:n]   # ohne Fenster: jede Manga-Sequenz/Szene wie im Spiel laden und prüfen, Untertitel mit Zeiten
 dotnet run --project Touge -- "<iso>" --story-check [n|calibrate]   # ohne Fenster: Kapiteltabelle + Szenen der Disc gegen die Übersetzung, dann jedes Kapitel mit dem Autopiloten (Durchlauf-Log); calibrate = Rivalenstärke/Zeitgrenzen messen
 dotnet run --project Touge -- "<iso>" AKINA_NIT --versus split [--bot] [--split vertical] [--car FD3S --car2 AE86T] [--net-rule battle|race] [--autodrive 25 --shot out/proof/s.png]   # geteilter Bildschirm direkt (Lobby; --bot: beide Autopiloten, Rennen startet sofort)
 dotnet run --project Touge -- "<iso>" AKINA_DAY --versus host|join:<ip[:port]>|online|menu [--bot] [--port 47860] [--name TAKUMI] [--players 2] [--net-sim 80:5%:20] [--menu pause] [--shot-after 40 --shot out/proof/o.png]   # online im Fenster (--bot: Lobby läuft von selbst, Autopilot fährt; --menu pause: Pause über dem laufenden Rennen fürs Bild)
@@ -286,11 +287,16 @@ Nacht, Fahrer und Auto (Takumi im AE86, in einigen Kapiteln Keisuke im FD, Ryosu
 Autos und Ziel liest das Spiel aus der Kapiteltabelle im ELF. Ablauf: Laden → Szene vor dem Rennen → Telop „VS …“, Countdown → Battle (bzw. Lauf
 allein) → eigenes Banner (YOU WIN/LOSE bzw. CLEAR!!/TIME UP/FAILED mit WIN/LOSE/TIMEUP.adx) → Ergebnis (Battle-Blatt + Story-Tafel) →
 gewonnen: CONTINUE → Szene danach → nächstes Kapitel frei und gewählt; verloren: RETRY / CHAPTER SELECT. Nach dem letzten Kapitel „THE END“ mit
-THERACEISOVER. Szenen: Textpanels im Stil der Menüs über dem Flug entlang der Straße, Sprecherplatte mit Teamfarbe, Schreibmaschinentext
-(Gedanken hellblau kursiv), Titelkarte; Entscheiden = weiter (erst Zeile fertig), → = Szene überspringen; Zurück: vor dem Rennen zur Kapitelwahl, danach Szene überspringen. Text: die Zeilen der Original-Szenen
-(`MG_OBJ` `STRnn.BIN`, 585 Äußerungen) in eigener englischer Übersetzung, Zeile für Zeile in Reihenfolge und Teilen des Originals (Kapitel 1/2 ohne Szene auf
-der Disc: eigener kurzer Text). Musik der Szenen aus ST_BGM_N (STORY_STnn). Das Original zeigt stattdessen Manga-Panels mit Hörspiel und
-Farb-Porträts mit Lippensync zu japanischen Stimmspuren; Formate entschlüsselt (FORMATS.md „Story – Manga“, `Touge.Formats/Manga`), im Spiel noch nicht genutzt. Ziele (Code aus dem ELF): Rennen; vorne bleiben bis ins Ziel; hinterher
+THERACEISOVER. Szenen wie im Original (Daten zur Laufzeit aus der ISO, FORMATS.md „Story – Manga“): erst die Manga-Sequenz des Kapitels
+(Schwarzweiß-Panels aus dem Heft, die ein-/ausblenden und einfliegen, über ziehendem Himmel, Titelkarte der Folge) mit dem japanischen
+Hörspiel, dann (Kapitel 2–30) die Szene mit Farb-Porträts, deren Mund sich zur japanischen Stimmspur bewegt (Lippen-Ziffern der Disc)
+und die blinzeln; nach dem Sieg die Szene danach (Kapitel 30 dazu der Epilog, Kapitel 9 eine zweite Manga-Sequenz). Englische Untertitel
+je Zeile zur Stimme: Szenen = die 585 Äußerungen der Disc in eigener Übersetzung an ihren Zeiten auf der Spur, im nachgebauten
+Sprechfenster mit Namensplatte; Manga-Hörspiele (kein Text auf der Disc) = eigene Übersetzung des Gehörten (`MangaText`), als Band unten;
+englische Titel unter den Titelkarten. Steuerung: Entscheiden = nächste Zeile (springt in der Spur weiter), ↑/↓ = AUTO an/aus (aus: hält
+am Ende jeder Zeile, ▼), → = Szene überspringen, Zurück: vor dem Rennen zur Kapitelwahl, danach überspringen. Lautstärke: Optionen →
+SOUND → VOICE (auch Iketani im Car Guide). Bilder werden je Szene im Hintergrund dekodiert, verteilt hochgeladen und danach freigegeben.
+Ohne die Medien (Manga-Tabellen nicht lesbar) Textpanels über dem Flug wie bisher (ST_BGM_N-Musik). Ziele (Code aus dem ELF): Rennen; vorne bleiben bis ins Ziel; hinterher
 und überholen (auch: in 120 s); 100 s dranbleiben; allein mit Zeitgrenze, Tofu bergauf mit höchstens 3 Wandtreffern, Mitfahrer mit 10.000 Driftpunkten –
 im Rennen oben rechts eine Tafel mit Restzeit/Wandtreffern/Drift. Rivalenstärke je Kapitel aus einer Kalibrierung gegen den Autopiloten, am Anfang
 mit Spielraum. Pause → Exit führt zur Kapitelwahl zurück. Regen bei Nacht (Kapitel 11, MYOGI) gibt es auf der Disc nicht: der Nachtkurs bekommt

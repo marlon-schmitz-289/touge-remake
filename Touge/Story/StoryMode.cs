@@ -8,17 +8,20 @@ namespace Touge.Story;
 
 /// <summary>
 ///     STORY (main menu), after the original's story mode: 31 chapters in three parts (ELF 0x2A2990), each a scene before the
-///     battle, the battle (or a run alone) with the chapter's goal, and a scene after it. Rebuilt with <see cref="Canvas"/>
-///     (no original textures, the original's manga panels and kanji pages are not drawn): chapter select (part tabs, list,
-///     info panel), the scenes as text panels with the speaker's name and a typewriter line over the course at night, the
-///     story's own finish banner/result with RETRY on a loss, progress (<see cref="Progress"/>, "story/nn") unlocking the
-///     next chapter, and an ending after the last. Music: chapter select WORRY.adx as the original, scenes the story tracks
-///     (SOUND/ST_BGM_N STORY_STnn), the race's Eurobeat, WIN/LOSE/TIMEUP.adx, JOY on a clear, THERACEISOVER at the end.
+///     battle, the battle (or a run alone) with the chapter's goal, and a scene after it. The menus are rebuilt with
+///     <see cref="Canvas"/> (no original textures): chapter select (part tabs, list, info panel), the story's own finish
+///     banner/result with RETRY on a loss, progress (<see cref="Progress"/>, "story/nn") unlocking the next chapter, and an
+///     ending after the last. The scenes are the original's (<see cref="StoryMedia"/>, <see cref="Shows"/>): manga panels
+///     with the audio drama and portraits with lip sync to the voices, English subtitles in a rebuilt talk window; without
+///     the disc's media they fall back to text panels over the course at night. Music: chapter select WORRY.adx as the
+///     original, the voice tracks' own in the shows (text panels: ST_BGM_N STORY_STnn), the race's Eurobeat,
+///     WIN/LOSE/TIMEUP.adx, JOY on a clear, THERACEISOVER at the end.
 ///     The game (<see cref="TougeGame"/>) loads the chapter, runs the race and reports the outcome.
 /// </summary>
 public sealed class StoryMode(Catalog catalog)
 {
-    public enum Phase { Select, Loading, Scene, Racing, Banner, Result, Ending }
+    /// <summary>Scene: the text panels (no disc media); Show: the original's manga sequences and portrait scenes (<see cref="StoryMedia" />).</summary>
+    public enum Phase { Select, Loading, Scene, Show, Racing, Banner, Result, Ending }
     /// <summary>
     ///     Load: load <see cref="Chapter"/> (course, cars, battle); Race: the scene is over, start the race (telop, countdown);
     ///     Retry: same chapter again from the grid; Leave: the run is over (back on the chapter select); Exit: to the main menu;
@@ -45,6 +48,10 @@ public sealed class StoryMode(Catalog catalog)
     public bool Mutes => Active && !(Current == Phase.Banner && _coast);
 
     public Action<string>? Sound { get; set; }
+    /// <summary>The original's manga sequences and portrait scenes (null: the text panels).</summary>
+    public StoryMedia? Media { get; set; }
+    /// <summary>The ELF's manga tables per chapter (<see cref="Shows" />).</summary>
+    public Manga.Chapter[] MangaChapters { get; set; } = [];
     public Progress Progress { get; set; } = new();
     public StoryScript.Chapter[] Chapters { get; private set; } = [];
     public int Chapter { get; private set; }
@@ -99,7 +106,7 @@ public sealed class StoryMode(Catalog catalog)
     public void Loaded()
     {
         InRun = true;
-        StartScene(0);
+        if (!StartShows(false)) StartScene(0);
     }
 
     /// <summary>The run alone of this chapter is judged by <paramref name="judge"/> (the game feeds it; the HUD panel shows it).</summary>
@@ -142,6 +149,7 @@ public sealed class StoryMode(Catalog catalog)
         Phase.Select => "WORRY.adx",
         Phase.Loading => null,
         Phase.Scene => SceneTrack(_sceneChapter),
+        Phase.Show => null, // the voice tracks carry their own music
         Phase.Banner or Phase.Result when _outcome != BattleOutcome.Win => _reason is "TIME UP" or "TIME" ? "TIMEUP.adx" : "LOSE.adx",
         Phase.Banner => "WIN.adx",
         Phase.Result => "JOY.adx",
@@ -186,6 +194,8 @@ public sealed class StoryMode(Catalog catalog)
                 break;
             case Phase.Scene:
                 return Scene(k);
+            case Phase.Show:
+                return ShowStep(k, dt);
             case Phase.Banner:
                 if (_t >= BannerHold || (k.Ok && _t > 1)) Go(Phase.Result);
                 break;
@@ -287,12 +297,171 @@ public sealed class StoryMode(Catalog catalog)
             StartScene(_scenePart + 1);
             return Action.None;
         }
-        // chapter done: the next one is selected; the last one ends the story
+        ChapterDone();
+        return Action.None;
+    }
+
+    /// <summary>Chapter done: the next one is selected; the last one ends the story.</summary>
+    private void ChapterDone()
+    {
         InRun = false;
         var last = Chapter == Chapters.Length - 1;
         if (!last) _nextChapter = Chapter + 1; // switched once faded out (the scene still draws this chapter's lines)
         Leave(last && _firstClear ? Phase.Ending : Phase.Select, Action.Leave);
+    }
+
+    // ---------------------------------------------------------------- shows (the original's manga and portrait scenes)
+
+    /// <summary>
+    ///     The shows of a chapter as the original plays them (ELF code driving the story scenes): before the race the manga
+    ///     sequence KOMATC[c], then (chapters 2–30) the portrait scene slot 0; after a won race slot 3, chapter 30's
+    ///     epilogue slot 4, and chapter 9's second manga sequence (KOMATC32).
+    /// </summary>
+    public static List<ShowRequest> Shows(Manga.Chapter c, bool after)
+    {
+        var list = new List<ShowRequest>();
+        if (!after)
+        {
+            if (c.Before >= 0) list.Add(new ShowRequest(c.Index, true, c.Before));
+            if (c.Scene) list.Add(new ShowRequest(c.Index, false, 0));
+            return list;
+        }
+        if (c.Scene) list.Add(new ShowRequest(c.Index, false, 3));
+        if (c.Scene && StoryText.Chapters[c.Index].Scene.Length > 2) list.Add(new ShowRequest(c.Index, false, 4));
+        if (c.After >= 0) list.Add(new ShowRequest(c.Index, true, c.After));
+        return list;
+    }
+
+    private List<ShowRequest> _shows = [];
+    private List<Task<ShowMedia>> _loads = [];
+    private int _show, _lastLine = -2;
+    private bool _afterRace, _auto = true;
+    private ShowMedia? _media;
+    private float _out = -1, _shownFor;
+
+    /// <summary>The chapter's shows before (or after) the race, all decoding at once; false = none or no media (text panels).</summary>
+    private bool StartShows(bool after)
+    {
+        if (Media == null || Chapter >= MangaChapters.Length) return false;
+        var shows = Shows(MangaChapters[Chapter], after);
+        if (shows.Count == 0 && !after) return false;
+        DropShows();
+        (_shows, _afterRace, _show) = (shows, after, 0);
+        _loads = [.. shows.Select(Media.Load)];
+        if (shows.Count == 0)
+        {
+            ChapterDone(); // chapters 0/1: nothing after the race in the original
+            return true;
+        }
+        StartShow();
+        return true;
+    }
+
+    private void StartShow()
+    {
+        (_media, _out, _shownFor, _lastLine) = (null, -1, 0, -2);
+        Go(Phase.Show);
+    }
+
+    /// <summary>Frees the show on screen (pictures, voice); shows still decoding are dropped when done.</summary>
+    private void DropShows()
+    {
+        DropShowMedia();
+        _loads = [];
+    }
+
+    /// <summary>The show in progress at the given time (screenshots): --menu story:n:show:i[:seconds], i over the before and after shows.</summary>
+    public void ShowShow(int index, double seconds)
+    {
+        InRun = true;
+        var c = MangaChapters[Chapter];
+        var before = Shows(c, false);
+        var after = index >= before.Count;
+        if (!StartShows(after) || _shows.Count == 0) return;
+        _show = Math.Clamp(after ? index - before.Count : index, 0, _shows.Count - 1);
+        var m = _loads[_show].Result;
+        Media!.Upload(m, all: true);
+        (_media, _shownFor) = (m, 99);
+        m.Show.Auto = _auto;
+        m.Show.Seek(seconds);
+        Media.Play(m, 0, true);
+    }
+
+    private Action ShowStep((int X, int Y, bool Ok, bool Back) k, float dt)
+    {
+        var task = _loads[_show];
+        if (_media == null)
+        {
+            if (!task.IsCompleted) return Action.None; // still decoding: black screen, "Now Loading"
+            if (task.IsFaulted)
+            {
+                Console.WriteLine($"[Story] {_shows[_show]} nicht ladbar: {task.Exception?.InnerException?.Message}");
+                return NextShow();
+            }
+            _media = task.Result;
+            _media.Show.Auto = _auto;
+            Console.WriteLine($"[Story] {_shows[_show]}: Stimme {_media.Voice} ({_media.VoiceSeconds:0.0} s), {_media.Show.Lines.Count} Untertitel");
+        }
+        var m = _media;
+        if (!Media!.Upload(m)) return Action.None;
+        _shownFor += dt;
+        var s = m.Show;
+        if (_out >= 0)
+        {
+            Media.Play(m, dt, false);
+            return (_out += dt) < Fade ? Action.None : NextShow();
+        }
+        if (k.Back && !_afterRace)
+        {
+            // before the race BACK leaves the chapter (RIGHT skips the show)
+            Sound?.Invoke("BEEP001");
+            DropShows();
+            InRun = false;
+            Leave(Phase.Select, Action.Leave);
+            return Action.None;
+        }
+        if (k.Ok) s.Next();
+        if (k.Y != 0)
+        {
+            Sound?.Invoke("SYS005");
+            s.Auto = _auto = !_auto;
+        }
+        if (k.X > 0 || k.Back)
+        {
+            Sound?.Invoke("SYS006");
+            s.End();
+        }
+        Media.Play(m, dt, true);
+        if (s.Line != _lastLine && s.Line >= 0 && !s.Done)
+            Console.WriteLine($"[Story]   {m.Voice} {s.Lines[s.Line].Time,7:0.00} s (Uhr {s.Time:0.00} s): {s.Lines[s.Line].Line}");
+        _lastLine = s.Line;
+        if (s.Done) _out = 0;
         return Action.None;
+    }
+
+    /// <summary>The show is over: the next one, or the race (before it) / the chapter's end (after it).</summary>
+    private Action NextShow()
+    {
+        DropShowMedia();
+        if (++_show < _shows.Count)
+        {
+            StartShow();
+            return Action.None;
+        }
+        _loads = [];
+        if (_afterRace)
+        {
+            ChapterDone();
+            return Action.None;
+        }
+        BeginRace();
+        return Action.Race;
+    }
+
+    private void DropShowMedia()
+    {
+        if (_media != null) Media?.Free(_media);
+        _media = null;
     }
 
     private bool _firstClear;
@@ -315,7 +484,7 @@ public sealed class StoryMode(Catalog catalog)
         {
             _firstClear = Progress.Clear(Key(Chapter));
             Progress.Add(Key(Chapter) + "/wins");
-            StartScene(1);
+            if (!StartShows(true)) StartScene(1);
             return Action.Save;
         }
         if (k.Ok && _row == 0)
@@ -355,6 +524,9 @@ public sealed class StoryMode(Catalog catalog)
             case Phase.Scene:
                 SceneScreen(c);
                 break;
+            case Phase.Show:
+                ShowScreen(c);
+                break;
             case Phase.Banner:
                 Banner(c);
                 break;
@@ -365,8 +537,9 @@ public sealed class StoryMode(Catalog catalog)
                 EndingScreen(c);
                 break;
         }
-        var fadeIn = Current is Phase.Select or Phase.Loading or Phase.Ending || (Current == Phase.Scene && _line == 0) ? 1 - Math.Clamp(_t / Fade, 0, 1) : 0;
-        c.Fade(_leave >= 0 ? Math.Clamp(_leave / Fade, 0, 1) : fadeIn);
+        var fadeIn = Current is Phase.Select or Phase.Loading or Phase.Ending || (Current == Phase.Scene && _line == 0) || (Current == Phase.Show && _media is { Uploaded: true })
+            ? 1 - Math.Clamp((Current == Phase.Show ? _shownFor : _t) / Fade, 0, 1) : 0;
+        c.Fade(_leave >= 0 ? Math.Clamp(_leave / Fade, 0, 1) : _out >= 0 ? Math.Clamp(_out / Fade, 0, 1) : fadeIn);
     }
 
     private void SelectScreen(Canvas c)
@@ -509,6 +682,77 @@ public sealed class StoryMode(Catalog catalog)
         c.Text($"{_line + 1} / {Lines.Length}", 472, 318, 9, Grey, 1, 0.12f);
         Menu.Hint(c, _scenePart == 0 ? "DECIDE: Next    RIGHT: Skip to the race    BACK: Chapter select" : "DECIDE: Next    RIGHT/BACK: Skip");
     }
+
+    /// <summary>
+    ///     A show: the original's pictures (<see cref="StoryMedia.Draw" />, below the overlay), the chapter's English title under
+    ///     the Japanese title card, the subtitle of the line being spoken (manga: a band at the bottom; portraits: the talk
+    ///     window with the speaker's plate), AUTO and the controls.
+    /// </summary>
+    private void ShowScreen(Canvas c)
+    {
+        var m = _media;
+        if (m == null || !m.Uploaded)
+        {
+            Media?.Draw(c, m ?? EmptyShow);
+            c.Text("Now Loading...", 476, 428, 15, Grey, 1, 0.22f, 0, 0.4f);
+            return;
+        }
+        Media!.Draw(c, m);
+        var s = m.Show;
+        if (m.Koma?.BackdropAt(s.Time * 60) is var (b, _, ba) && MangaText.Card(b.Name) is { } card)
+        {
+            // a title card (the episode's title, a part or a date, in Japanese): its English below
+            var size = MathF.Min(26, 440 * c.Kx / c.O.Font!.Measure(card, c.Ky));
+            c.Lettering(card, 256, 300, size, Overlay.Rgba(1, 0.35f, 0.3f), Overlay.Rgba(0.75f, 0, 0), 0.5f, 0.2f, true, true, ba);
+        }
+        var i = s.Line;
+        // a balloon of the scenes stays until the next; a drama line goes after a while when the next is far off
+        if (i >= 0 && (m.Scene != null || s.Held || s.Time - s.Lines[i].Time < 3 + s.Lines[i].Line.Length / 12.0))
+        {
+            var (who, line) = StoryText.Split(s.Lines[i].Line);
+            var shown = (int)((s.Time - s.Lines[i].Time) * TypeRate * 1.5f + 1);
+            if (s.Held) shown = line.Length;
+            var thought = line.StartsWith('(');
+            var color = thought ? Thought : Canvas.White;
+            if (m.Scene != null)
+            {
+                // the talk window (TALKWIN of the original, rebuilt): carbon panel, speaker plate with the team colour
+                c.Carbon(28, 318, 484, 418);
+                c.Plate(40, 304, 150, 26, 1);
+                c.O.Rect(Vector2.Round(c.P(46, 309)), Vector2.Round(c.P(50, 325)), Tint(who));
+                c.Fit(who, 118, 323, 128, 0.5f, Ink, 0.15f, 0, 14);
+                var y = 352f;
+                foreach (var l in CarGuide.Wrap(c.O.Font!, line, 15, 420))
+                {
+                    if (shown <= 0) break;
+                    c.Text(l.Length <= shown ? l : l[..shown], 50, y, 15, color, 0, thought ? 0.22f : 0.1f);
+                    shown -= l.Length + 1;
+                    y += 21;
+                }
+                if (s.Held) c.Arrow(458, 402, 472, 402, 465, 413, Canvas.Pulse(Theta)); // ▼ waiting for DECIDE
+            }
+            else
+            {
+                // manga: subtitles in a band at the bottom, the speaker in the team colour
+                var wrapped = CarGuide.Wrap(c.O.Font!, line, 14, 440);
+                var top = 412 - 19 * wrapped.Count;
+                c.O.Rect(c.P(c.Left, top - 20), c.P(c.Right, 422), Overlay.Rgba(0, 0, 0, 0.62f));
+                if (who != "") c.Text(who, 256, top - 4, 10, Tint(who), 0.5f, 0.15f, 0.1f);
+                var y = top + 13f;
+                foreach (var l in wrapped)
+                {
+                    c.Text(l, 256, y, 14, color, 0.5f, thought ? 0.22f : 0.1f, 0.1f);
+                    y += 19;
+                }
+                if (s.Held) c.Arrow(476, 412, 490, 412, 483, 423, Canvas.Pulse(Theta));
+            }
+        }
+        c.Text(s.Auto ? "AUTO" : "AUTO OFF", 498, 30, 10, s.Auto ? Amber : Grey, 1, 0.15f, 0.1f);
+        Menu.Hint(c, _afterRace ? "DECIDE: Next line    UP/DOWN: Auto    RIGHT/BACK: Skip"
+            : "DECIDE: Next line    UP/DOWN: Auto    RIGHT: Skip    BACK: Chapter select");
+    }
+
+    private static readonly ShowMedia EmptyShow = new() { Request = new ShowRequest(0, true, 0), Show = new Show([], 0) };
 
     private void Banner(Canvas c)
     {

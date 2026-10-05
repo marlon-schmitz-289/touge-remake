@@ -284,7 +284,8 @@ KOMATCn: identisch außer 22↔23, 25→28, 26→25, 27→26, 28→29, 29→27; 
   u8 ?, Mips, CLUT-Typ 3 = CT32, Bildtyp 5 = 8 bit, u16 w, h), dann Indizes, dann 256er-CLUT CSM1 (Bits 3/4 vertauscht), Alpha 0x80 = deckend.
 
 **Manga-Sequenz (KOMA)** – Bilder in Schwarzweiß wie im Heft, japanische Sprechblasen im Bild
-- Panels `MG_KOMAF/KOMA<ep>.FPK`: `kk_nn.ICP` 256×256 oder 256×512 (Panel mit weißem Rand und Schlagschatten, Rest transparent), 344 Stück.
+- Panels `MG_KOMAF/KOMA<ep>.FPK` (ep = KOMABG-Nummer der Zeitleiste, nicht das Präfix des Namens: KOMATC24 holt `31_12…31_21` aus
+  `KOMA24.FPK`): `kk_nn.ICP` 256×256 oder 256×512 (Panel mit weißem Rand und Schlagschatten, Rest transparent), 344 Stück.
 - Hintergründe `MG_KOMAF/KOMABG<ep>.PAC` (GIM): Himmel `summer_d/_n`, `autumn_d`, `winter_n`, `rain_n` (512×512, 64 px unten weiß),
   Titelkarte `MTnn` 512×512 (schwarz mit Kapiteltitel, z. B. „ハチロク買おーぜ 2“), Sonderbilder `M00A`, `M19A`, `M23A`, `M24A`, `M31A/B`.
   `KOMABG26` (KOMATC27) hat nur die Titelkarte, kein `KOMA26.FPK`. `KOMABG31`/`KDUMMY` nicht referenziert.
@@ -295,7 +296,9 @@ KOMATCn: identisch außer 22↔23, 25→28, 26→25, 27→26, 28→29, 29→27; 
   Einflug: Start bei P+(dx,dy), linear in n Frames nach P, `M_(dx,dy,n)` Wegflug nach Standzeit-Ende, `F_kk_nn` Panel starten (bis 6
   gleichzeitig; gleicher Name = gleicher Platz), `BORNDARK_` wie F, dunkel; `BG_name` Hintergrund, `BS_(dx,dy,n)` Hintergrund scrollen
   (fast immer `(512,0,8000)`), `BI_(x,y)` Hintergrundlage (Titelkarte `(96,0)`), `BO_n` Hintergrund ausblenden; selten/unbenutzt `BG2_`,
-  `BS2_`, `CI_`, `CO_`, `K_`, `KCLR_`, `KGRAY_`, `KFADE_`, `CLR`, `GO_`, `GI_`; `QUIT` Ende. Panel-Zustand 2 in `sub_1D4080` dunkelt ab (Farbe
+  `BS2_`, `CI_`, `CO_`, `K_`, `KCLR_`, `KGRAY_`, `KFADE_`, `CLR`, `GO_`, `GI_`; `QUIT` Ende. Auf der Disc benutzt nur P/I/L/O/S/F,
+  BG/BS/BI/BO, QUIT, einmal `GI_30` (KOMATC00) und `CLR` (KOMATC27). `BI_n` (eine Zahl) = Hintergrund in n Frames einblenden. Hintergründe
+  512² liegen 448 hoch (so sitzt die Titelkarte bei `BI_(96,0)` mittig im 640er-Bild); Himmel werden waagrecht gekachelt. Panel-Zustand 2 in `sub_1D4080` dunkelt ab (Farbe
   128→64 in 40 Frames; Auslöser nicht verfolgt).
 - Ton: `MANGAV/MG_KOMAS` `(n+1)_00.adx` (Stereo 48 kHz, fertig gemischtes Hörspiel: Stimmen + Musik + Geräusche), KOMATC32 → `10_03.adx`,
   KOMATC27 ohne Ton (der Code überspringt n = 27). Die Zeitleiste läuft ~5–8 s über das Tonende hinaus (Titelkarte).
@@ -321,10 +324,16 @@ KOMATCn: identisch außer 22↔23, 25→28, 26→25, 27→26, 28→29, 29→27; 
 - Ton je Slot: `MG_KOMAS` `(c+1)_01.adx` (Slot 0), `_02` (Slot 3), `_03` (Slot 4) – eine durchgehende Stereo-Spur je Teil mit allen
   Stimmen (+ Musik); `StoryScript.Times` liefert je Äußerung die Startzeit (letztes A_/WF_ davor, s), also genau der Text-Takt zur
   Stimme – die englische Zeile lässt sich 1:1 an die Äußerungen aus `ParseScript` hängen.
-- **Lippensync**: Seitenliste je Slot hat genau so viele Einträge wie die Seiten (`N`); Ziffernfolge 0–5 = Mundbild je 60-Hz-Frame ab
+- `A_n` kleiner als ein früheres (STR06 Slot 3: `A_392`, dann `A_354`) wartet nicht: die Zeit bleibt beim größeren.
+  `P_n` ohne Bild im FPK (STR21 `P_11`, STR22 `P_17`): das vorige Porträt bleibt.
+- **Lippensync**: der Seiten-Eintrag nennt die Seitennummer (alle `N` des Slots gezählt, auch leere Seiten; Seiten ohne Sprechen, z. B.
+  Gedanken, haben keinen Eintrag – STR13 Slot 0: Seiten 0–3, 8–12); Ziffernfolge 0–5 = Mundbild je 60-Hz-Frame ab
   der Tonzeit, zu der die erste Blase der Seite erscheint, für das Gesicht aus `C_k`. Belegt mit der Stimm-Aktivität (Mitte−Seite-
   Energie) der Spuren: r = 0,25–0,69 bei Versatz ≈ 0, gegen ≈ 0,05 bei ±5/10 s (`out/proof/story_research/lipsync_check.log`).
   Augen blinzeln (Bild 1/2 bzw. 4/5) – Takt aus dem Code nicht verfolgt (zufällig).
+- Im Remake (`Touge/Story`): Gesichts-Sprites werden beim Laden auf das Porträt gelegt (Flicken je Mund-/Augenbild in voller Auflösung),
+  gefiltert und skaliert sonst Naht am Lochrand. Das Hörspiel der Manga-Sequenzen hat keinen Text auf der Disc: englische Untertitel
+  (`MangaText`) sind eine eigene Übersetzung des Gehörten mit Zeiten auf der Spur; Titelkarten `MTnn` = Titel der Manga-Folgen.
 - Ungeklärt: Pfade [2], die Lippen-Sätze ohne Seiteneintrag (STR02: 2 von 8), genaue Blasenlage (Felder in [1]), `Q_`/`U_`-Stile.
 
 ## Netzprotokoll (Versus online) – eigenes Format des Remakes

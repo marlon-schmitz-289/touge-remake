@@ -219,7 +219,7 @@ public sealed class Options
                     Row.Toggle("RAIN REFLECTIONS", () => s.Ssr, v => s.Ssr = v, "Screen-space reflections on the wet road (WET)."),
                 },
             },
-            new Page("SOUND", "Volume of music, effects, engine and menus.")
+            new Page("SOUND", "Volume of music, effects, engine, menus and voices.")
             {
                 Rows =
                 {
@@ -229,6 +229,7 @@ public sealed class Options
                     Row.Slider("SE VOLUME", () => s.SoundVolume, v => s.SoundVolume = v, "Tyres, walls, wind and engine in the race."),
                     Row.Slider("ENGINE", () => s.EngineVolume, v => s.EngineVolume = v, "Engine on top of the SE volume."),
                     Row.Slider("MENU SE", () => s.MenuVolume, v => s.MenuVolume = v, "Cursor, decide and countdown sounds."),
+                    Row.Slider("VOICE", () => s.VoiceVolume, v => s.VoiceVolume = v, "Story voices and dramas, Iketani in the car guide."),
                 },
             },
             Playlist.Page(s),

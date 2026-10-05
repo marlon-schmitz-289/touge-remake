@@ -128,7 +128,8 @@ public static class Manga
 
     /// <summary>
     ///     Resource 4: per slot (u32 list, u32 count) a list of pages (u32 page, i32 −1, u32 → lip record (u32 0, u32 length,
-    ///     u32 → digits)). One digit per 60-Hz frame from the page's A_ time on = mouth frame 0–5 of the speaking face (C_n).
+    ///     u32 → digits)). One digit per 60-Hz frame from the page's first balloon on = mouth frame 0–5 of the speaking face
+    ///     (C_n). Indexed by page number (pages counted by N in the slot; pages without speech have none: "").
     /// </summary>
     public static string[][] Lips(ReadOnlySpan<byte> robj)
     {
@@ -137,12 +138,15 @@ public static class Manga
         for (var s = 0; s < Slots; s++)
         {
             int list = BinaryPrimitives.ReadInt32LittleEndian(robj[(at + 8 * s)..]), n = BinaryPrimitives.ReadInt32LittleEndian(robj[(at + 8 * s + 4)..]);
-            slots[s] = new string[list == 0 ? 0 : n];
-            for (var i = 0; i < slots[s].Length; i++)
+            var pages = new SortedDictionary<int, string>();
+            for (var i = 0; list != 0 && i < n; i++)
             {
-                var rec = BinaryPrimitives.ReadInt32LittleEndian(robj[(list + 12 * i + 8)..]);
-                slots[s][i] = CStr(robj, BinaryPrimitives.ReadInt32LittleEndian(robj[(rec + 8)..]));
+                int page = BinaryPrimitives.ReadInt32LittleEndian(robj[(list + 12 * i)..]), rec = BinaryPrimitives.ReadInt32LittleEndian(robj[(list + 12 * i + 8)..]);
+                if (page is >= 0 and < 1000) pages[page] = CStr(robj, BinaryPrimitives.ReadInt32LittleEndian(robj[(rec + 8)..]));
             }
+            slots[s] = new string[pages.Count == 0 ? 0 : pages.Keys.Max() + 1];
+            Array.Fill(slots[s], "");
+            foreach (var (page, digits) in pages) slots[s][page] = digits;
         }
         return slots;
     }

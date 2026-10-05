@@ -41,6 +41,58 @@ public static class StoryHeadless
         return errors;
     }
 
+    /// <summary>The shows of a chapter (<see cref="StoryMode.Shows" />) from the ELF's manga tables.</summary>
+    public static Manga.Chapter[] MangaChapters(Iso9660 iso) => Manga.ReadChapters(iso.ReadFile(StoryScript.ElfPath));
+
+    /// <summary>
+    ///     --story-check media: every show of every chapter decoded as the game loads it (pictures, voice track), checked (all
+    ///     pictures found, one lip string per page, subtitles in time order and one per utterance) and its subtitles listed at
+    ///     their times on the voice track. Returns false on a problem.
+    /// </summary>
+    public static bool Media(string isoPath, int? only = null)
+    {
+        using var iso = new Iso9660(isoPath);
+        var bad = 0;
+        foreach (var c in MangaChapters(iso))
+        {
+            if (only is { } o && c.Index != o) continue;
+            foreach (var r in StoryMode.Shows(c, false).Concat(StoryMode.Shows(c, true)))
+            {
+                var m = StoryMedia.Decode(isoPath, r);
+                var problems = new List<string>();
+                if (m.Koma is { } k)
+                {
+                    var missing = k.Panels.Select(p => p.Name).Concat(k.Backdrops.Select(b => b.Name)).Distinct().Where(n => !m.Decoded.ContainsKey(n)).ToList();
+                    if (missing.Count > 0) problems.Add($"fehlt {string.Join(' ', missing)}");
+                }
+                if (m.Scene is { } s)
+                {
+                    var obj = iso.OpenAfs("CDVD/DATA/MANGA/MG_OBJ.AFS");
+                    var lips = Manga.Lips(obj.Read(obj.Find($"STR{c.Index:00}.BIN")!.Value))[r.Number];
+                    var talk = s.Stages.Where(x => x.Step == StoryScript.Step.Page).Select(x => x.Value).ToHashSet();
+                    var mute = talk.Count(p => p >= lips.Length || lips[p] == "");
+                    if (talk.Count - mute == 0) problems.Add("keine Seite mit Lippensync");
+                    Console.WriteLine($"[Story]    {talk.Count} Seiten mit Text, {mute} ohne Lippen-Ziffern");
+                    var missing = s.Pictures.Where(n => !m.Decoded.ContainsKey($"P{n:00}") || !m.Backdrops.ContainsKey(n)).ToList();
+                    if (missing.Count > 0) problems.Add($"Bild fehlt {string.Join(' ', missing)}");
+                    var english = StoryText.Chapters[c.Index].Scene;
+                    var part = StoryMedia.Part(Manga.Lips(obj.Read(obj.Find($"STR{c.Index:00}.BIN")!.Value)), r.Number);
+                    if (part >= english.Length || english[part].Length != m.Show.Lines.Count) problems.Add("Untertitel ≠ Äußerungen");
+                }
+                var lines = m.Show.Lines;
+                for (var i = 1; i < lines.Count; i++)
+                    if (lines[i].Time < lines[i - 1].Time) problems.Add($"Zeile {i} vor Zeile {i - 1}");
+                if (lines.Count > 0 && lines[^1].Time > m.Show.Length) problems.Add("letzte Zeile nach dem Ende");
+                Console.WriteLine($"[Story] Kapitel {c.Index,2} {r}: Stimme {m.Voice} {m.VoiceSeconds:0.0} s, Länge {m.Show.Length:0.0} s, {m.Decoded.Count} Bilder, {lines.Count} Untertitel" +
+                                  (problems.Count > 0 ? $"  FEHLER {string.Join("; ", problems)}" : ""));
+                bad += problems.Count;
+                foreach (var l in lines) Console.WriteLine($"[Story]    {l.Time,7:0.00} s  {l.Line}");
+            }
+        }
+        Console.WriteLine($"[Story] Medien geprüft: {bad} Fehler");
+        return bad == 0;
+    }
+
     public static bool Run(Iso9660 iso, int? only = null)
     {
         var chapters = Chapters(iso);
