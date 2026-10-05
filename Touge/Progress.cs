@@ -107,6 +107,7 @@ public sealed class Progress
         catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException)
         {
             Console.WriteLine($"[Touge] Fortschritt nicht lesbar ({e.Message}), neu");
+            Ui.Settings.KeepBroken(path);
             return new();
         }
     }

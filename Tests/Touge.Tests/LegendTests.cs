@@ -134,10 +134,12 @@ public class LegendTests
             Assert.False(q.Rivals.ContainsKey("NOWHERE/ghost"));
             File.WriteAllText(path, "{ not json");
             Assert.Empty(Progress.Load(path).Rivals);
+            Assert.Equal("{ not json", File.ReadAllText(path + ".broken")); // kept before the next save replaces it
         }
         finally
         {
             File.Delete(path);
+            File.Delete(path + ".broken");
         }
     }
 

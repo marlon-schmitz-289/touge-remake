@@ -173,7 +173,20 @@ public sealed class Settings
         catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException or InvalidOperationException or FormatException)
         {
             Console.WriteLine($"[Touge] Einstellungen nicht lesbar ({e.Message}), Standardwerte");
+            KeepBroken(path);
             return new();
+        }
+    }
+
+    /// <summary>An unreadable file is kept as <c>&lt;file&gt;.broken</c> before the next save replaces it (records stay recoverable).</summary>
+    public static void KeepBroken(string path)
+    {
+        try
+        {
+            if (File.Exists(path)) File.Copy(path, path + ".broken", true);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
         }
     }
 
