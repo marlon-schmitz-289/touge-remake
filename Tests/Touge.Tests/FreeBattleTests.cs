@@ -95,7 +95,8 @@ public class FreeBattleTests
         var takumi = Rivals.Find("takumi");
         var easy = FreeBattle.Setup(new FreeBattleChoice { Rival = "takumi", Level = AiLevel.Easy, Rule = BattleRule.LeadChase, PlayerLeads = true });
         Assert.Equal((true, 0, BattleRule.LeadChase), (easy.RubberBand, easy.Leader, easy.Rule));
-        Assert.InRange(easy.Rival.Style.Skill, 0.25f, 0.30f); // near the top of EASY: the best character
+        Assert.InRange(easy.Rival.Style.Skill, 0.17f, 0.2f); // near the top of EASY: the best character
+        Assert.Equal(FreeBattle.EasyPower, easy.Rival.Power); // and his engine detuned
         Assert.Equal((takumi.Car, takumi.Style.Drift), (easy.Rival.Car, easy.Rival.Style.Drift)); // his car and style stay
         var hard = FreeBattle.Setup(new FreeBattleChoice { Rival = "takumi", Level = AiLevel.Hard, Rule = BattleRule.Race, PlayerLeads = true });
         Assert.Equal((true, 0.015f, 0f, 1), (hard.RubberBand, hard.BandUp, hard.BandDown, hard.Leader)); // catch-up only; a race has no leader choice

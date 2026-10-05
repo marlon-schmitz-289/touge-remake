@@ -153,12 +153,13 @@ public sealed class FreeBattle(Catalog catalog)
     // ------------------------------------------------------------ the battle
 
     /// <summary>
-    ///     The skill band of an AI level on the one scale of every mode (<see cref="RivalPilot.Pace"/>): EASY 0.05–0.30 (a
-    ///     beginner can win), NORMAL 0.35–0.65, HARD 0.65–0.85, LEGEND 0.88–1 (a good player's pace).
+    ///     The skill band of an AI level on the one scale of every mode (<see cref="RivalPilot.Pace"/>): EASY 0–0.2 (a
+    ///     beginner can win, also against a stronger car: <see cref="EasyPower"/>), NORMAL 0.35–0.65, HARD 0.65–0.85, LEGEND
+    ///     0.88–1 (a good player's pace).
     /// </summary>
     public static (float Lo, float Hi) Band(AiLevel level) => level switch
     {
-        AiLevel.Easy => (0.05f, 0.30f), AiLevel.Hard => (0.65f, 0.85f), AiLevel.Legend => (0.88f, 1f), _ => (0.35f, 0.65f),
+        AiLevel.Easy => (0f, 0.2f), AiLevel.Hard => (0.65f, 0.85f), AiLevel.Legend => (0.88f, 1f), _ => (0.35f, 0.65f),
     };
 
     /// <summary>A character's skill (0.15 Itsuki … 1 Bunta) placed within the level's band.</summary>
@@ -168,8 +169,12 @@ public sealed class FreeBattle(Catalog catalog)
         return float.Lerp(lo, hi, Math.Clamp((skill - 0.15f) / 0.85f, 0, 1));
     }
 
-    /// <summary>The rival at <paramref name="level"/>: his skill within its band, the rest of his style his own.</summary>
-    public static Rivals.Rival Strength(Rivals.Rival r, AiLevel level) => r with { Style = r.Style with { Skill = SkillAt(level, r.Style.Skill) } };
+    /// <summary>Engine torque of the rival's car on EASY (as Legend's first rungs): a beginner's Trueno against an FD3S still has a chance.</summary>
+    public const float EasyPower = 0.85f;
+
+    /// <summary>The rival at <paramref name="level"/>: his skill within its band, the rest of his style his own (EASY: <see cref="EasyPower"/>).</summary>
+    public static Rivals.Rival Strength(Rivals.Rival r, AiLevel level) =>
+        r with { Style = r.Style with { Skill = SkillAt(level, r.Style.Skill) }, Power = level == AiLevel.Easy ? EasyPower : r.Power };
 
     /// <summary>
     ///     The battle of <paramref name="c"/>: the rival at its strength, the rule, who leads off; the rubber band in full on
