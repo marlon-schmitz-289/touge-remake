@@ -66,16 +66,36 @@ public static class StoryScript
     ///     wait, N new page, K_ page style, Q_ effect, U_ shake, F_ speaker of the next balloon, E_ fade (end of a part).
     ///     Text tokens are balloons ('\n' = line break); the balloons up to the next wait, page break or speaker are one utterance.
     /// </summary>
-    public static List<List<Line>> ParseScript(ReadOnlySpan<byte> robj)
+    public static List<List<Line>> ParseScript(ReadOnlySpan<byte> robj) => Parse(robj, null);
+
+    /// <summary>
+    ///     For each utterance of <see cref="ParseScript" /> the time in s on the part's voice track (<see cref="Manga.SceneVoice" />)
+    ///     when it appears: the last A_n (page) or WF_n (balloon) before it, n in 1/30 s of ADX time (the game doubles it to
+    ///     60-Hz frames, 0x1D0CD0/0x1CFC28); 0 before the first cue.
+    /// </summary>
+    public static List<List<double>> Times(ReadOnlySpan<byte> robj)
+    {
+        var times = new List<List<double>>();
+        Parse(robj, times);
+        return times;
+    }
+
+    private static List<List<Line>> Parse(ReadOnlySpan<byte> robj, List<List<double>>? times)
     {
         if (robj.Length < 0x20 || !robj[..4].SequenceEqual("ROBJ"u8)) throw new InvalidDataException("no ROBJ script");
         var at = BinaryPrimitives.ReadInt32LittleEndian(robj[0x18..]) + 12;
         var parts = new List<List<Line>> { new() };
+        var cues = new List<List<double>> { new() };
         var text = new StringBuilder();
         var speaker = "";
+        int cue = 0, start = 0;
         void Flush()
         {
-            if (text.Length > 0) parts[^1].Add(new Line(speaker, text.ToString()));
+            if (text.Length > 0)
+            {
+                parts[^1].Add(new Line(speaker, text.ToString()));
+                cues[^1].Add(start / 30.0);
+            }
             (speaker, text.Length) = ("", 0);
         }
         while (at < robj.Length)
@@ -97,15 +117,27 @@ public static class StoryScript
                 else if (name == "E")
                 {
                     Flush();
-                    if (parts[^1].Count > 0) parts.Add([]);
+                    cue = 0; // every part has its own voice track
+                    if (parts[^1].Count > 0)
+                    {
+                        parts.Add([]);
+                        cues.Add([]);
+                    }
                 }
                 else if (name is "W" or "WF" or "N") Flush();
+                if (name is "A" or "WF" && int.TryParse(tok[(name.Length + 1)..], out var n)) cue = n;
                 continue;
             }
+            if (text.Length == 0) start = cue;
             text.Append(tok.Replace("\n", "")); // '\n' breaks lines inside a balloon
         }
         Flush();
-        if (parts[^1].Count == 0) parts.RemoveAt(parts.Count - 1);
+        if (parts[^1].Count == 0)
+        {
+            parts.RemoveAt(parts.Count - 1);
+            cues.RemoveAt(cues.Count - 1);
+        }
+        times?.AddRange(cues);
         return parts;
     }
 

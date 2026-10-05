@@ -7,7 +7,7 @@ internal static class Sound
 
     private static readonly string[] AdxArchives =
     [
-        "SOUND/BGM", "SOUND/RACEBGM", "SOUND/ST_BGM_N", "SOUND/IKETANI", "SOUND/RACEVOIC", "MANGA/MG_BGM",
+        "SOUND/BGM", "SOUND/RACEBGM", "SOUND/ST_BGM_N", "SOUND/IKETANI", "SOUND/RACEVOIC", "MANGA/MG_BGM", "MANGAV/MG_KOMAS",
         .. Enumerable.Range(0, 8).Select(i => $"MANGAV/MG_VC{i:D2}"),
     ];
 

@@ -138,6 +138,7 @@ Kein Code dafür im EE-ELF außer der CRI-Middleware (`ADXF/ADXT/ADXB`, Ver. 200
 | SOUND/RACEVOIC | 1483 | ADX | 1 | 24000, 22050 | 76,3 min (0,2–15 s) | 0 |
 | MANGA/MG_BGM | 30 | ADX | 2 | 48000 | 20,8 min (31–57 s) | 30 |
 | MANGAV/MG_VC00–07 | 4770 (7 leer/Dummy) | ADX | 1 | 24000 (vereinzelt 48000) | 217 min (0,2–7,3 s) | 0 |
+| MANGAV/MG_KOMAS | 91 (1 Dummy, mono 24 kHz) | ADX | 2 | 48000 | 110 min (9–233 s) | 0 |
 | SOUND/CARSE | 50 MRG → 380 Samples (+ 50 DAT) | VAG | 1 | ≈ 22050 (SRIP 18900) | 9,3 min (0,4–3,3 s) | 376 |
 | SOUND/SYSSE.BIN | 38 | VAG | 1 | 22043, 11016, 22500 | 0,9 min (0,2–7 s) | 2 |
 
@@ -145,7 +146,7 @@ Rollen (aus Dateinamen; „?" = geraten):
 - **Renn-BGM** (RACEBGM, Eurobeat, alle mit Loop): 100, BACK ON THE ROCKS, BEAT OF THE RISING SUN, BIG IN JAPAN, BURNING DESIRE, CRAZY FOR LOVE, CRAZY FOR YOUR LOVE, CRAZY NIGHT, DONT STAND SO CLOSE, DONT STOP THE MUSIC, DONT YOU, EXPRESS LOVE, GET ME POWER, GRAND PRIX, HEART BEAT, I NEED YOUR LOVE, KILLING MY LOVE, LOVE IS IN DANGER, MIKADO, NIGHT OF FIRE, NO ONE SLEEP IN TOKYO, REMEMBER ME, ROCK ME TO THE TOP, RUNNING IN THE 90S, SAVE ME, SPACEBOY, SPEED SPEED BOY, STATION TO STATION, STAY, WEST END GUY, WHITE LIGHT. Abgespielt im Original ohne Ende per Loop-Punkt. Die ELF-Namenstabelle (0x1C59D0: SPACEBOY, NIGHT_OF_FIRE, DONT_STOP_THE_MUSIC, …, EXPRESS_LOVE) hat genau die Reihenfolge des Albums „Super Eurobeat presents Initial D Special Stage Original Soundtracks“; Interpreten stehen nirgends auf der Disc (kein Sound-Test-Text), die Anzeige im Remake (`Jukebox.Songs`) nimmt sie und die genauen Titel (HEARTBEAT, SPEEDY SPEED BOY, DON'T YOU (FORGET ABOUT MY LOVE), RUNNING IN THE 90'S …) vom Album.
 - **Menü/Ergebnis** (BGM): gam, JOY, LOSE, PANIC, THERACEISOVER, TIMEUP, TOKYO, WIN, WORRY. Aufruf im Code per Name (sub_177AD0(Kanal, "X.adx", Gruppe 0x10)): WORRY = Autowahl/Garage, Story-Auswahl, Replay & Record, Iketanis Autovorstellung; TOKYO („LIVE IN TOKYO“) = Kurswahl Time Attack; JOY = Ergebnis; WIN/LOSE/TIMEUP = Rennende (Gruppe 2, ohne Loop); THERACEISOVER = Abspann; gam („GAMBLE RUMBLE“, ohne Loop-Punkt) nur im Sound-Test; PANIC ohne Code-Verweis. Titel und Hauptmenü starten im Original keine BGM (nur der Vorspannfilm hat Ton). **Story**: ST_BGM_N (`STORY_MONO01–05`, `STORY_ST01–31`, `WIN02–04`), MG_BGM (Figurenthemen `TAKUMI01`, `RYOSUKE`, `BUNTA` …).
 - **Auto-Ansagen** IKETANI `INTRO_<AUTO>.ADX` (32 Autos, 34–66 s, Sprache?).
-- **Rennstimmen** RACEVOIC `b_<figur>_<situation>_NNN` (Situation: `start`, `front`, `rear`, `ppass`/`rpass` = überholt/wird überholt?, `fwin`/`rwin`/`pwin`, `flose`, `meter`, `special` …; ~40 Figuren). Story-Stimmen MG_VC `K<kapitel>_<szene>_NNN`.
+- **Rennstimmen** RACEVOIC `b_<figur>_<situation>_NNN` (Situation: `start`, `front`, `rear`, `ppass`/`rpass` = überholt/wird überholt?, `fwin`/`rwin`/`pwin`, `flose`, `meter`, `special` …; ~40 Figuren). MG_VC `K<rr>_<situation>_NNN` (K01–K34) sind die Stimmen von Legend of the Streets (RVL-Szenen nennen `MG_VC0n.ASF` als Ressource), nicht der Story; die Story spricht über `MANGAV/MG_KOMAS` (siehe „Story – Manga“).
 - **Motor** CARSE `<AUTO>_U` / `_D` (= Last / Schub, siehe DAT), je 8 geloopte Schichten. Autos: AE86, AL (Altezza), CP (Cappuccino), EK9, EVO, FD, GC8, GTR, MR2, MRS (MR-S), NA6, S13 – mehrere Wagen teilen sich eine Bank (Zuordnung siehe DAT/Bank je Auto). AE86: Schichten 4–7 haben tonale Grundfrequenz 65 → 237 Hz (4-Zylinder ≈ 1950 → 7100 U/min), 0–3 sind breitbandiger (Ansaug/Auspuff?); `_U` und `_D` teilen sich die Hälfte der Samples (D0=U0, D2=U1, D4=U4, D7=U6, dekodiert byte-gleich).
 - **Reifen** CARSE `SRIP_A/B` (4 Samples, 2 davon 18,9 kHz ohne Loop), `RAIN_SRIP` (nass), **Turbo** `TURBO` (1 Loop).
 - **SYSSE**: `backfire001`, `zbackfire002a–h`, `popoff`, `Blow` (Fehlzündung/Abblasventil), `cr001/002` (Crash?), `rain` (7 s, ohne Loop-Punkt; im Remake mit 0,4-s-Überblendung geloopt als Regen-Ambiente), `water`, `Steam`, `jump`, UI/System (`BEEP001`, `SKIP001`, `NAME001–003`, `CAR001–012`, `parts_ch`, `sys002`, `SYS005/006`, `alarm_01/02`). Abgespielt per Name (sub_1781D0("SYS005.vag"), Lautstärke 50); Rollen aus den Aufrufstellen und der davor geprüften Tastenmaske: `SYS005` Cursor (nur wenn sich die Auswahl ändert), `SYS006` Bestätigen (Kreis/Kreuz, im Hauptmenü auch START), `BEEP001` Zurück/gesperrt/„Nein“, `sys002` START im Titel, `alarm_02` Pause öffnet, `NAME001` Speichern ok, `NAME002/003` Freischalt-Karte nach dem Ergebnis, `parts_ch` PARTS CHANGE, `CAR010`×3 + `CAR011` Countdown 3-2-1-GO, `CAR007` letzte 6 s, `CAR008` Zeitbonus. Tastenmaske (sub_174780): LEFT 0x8000, DOWN 0x4000, RIGHT 0x2000, UP 0x1000, START 0x800, SELECT 0x100, □ 0x80, × 0x40, ○ 0x20, △ 0x10.
@@ -262,8 +263,70 @@ Aus dem Recomp (ELF-Adresse = Dateioffset + 0xFFF80); gelesen von `Touge.Formats
 - **Kapitel**: 31 (0–30), Byte `0x328154`. Auswahl in drei Teilen, Tabelle `0x2A2990` (31 × 8 B: Teil, Nummer im Teil): Teil 0 = Kapitel 0–18, 1 = 19–23, 2 = 24–30; Titelbilder `TSDATA/STYTTEX0–2.PAC` (nicht gezeichnet). Musik der Auswahl WORRY.adx.
 - **Kapitelstart** `sub_170B50(Kapitel)` kopiert: 8 B `0x2A3290 + 8·n` → `0x328154` (Kapitel, ?, Kurs (Index wie `0x24CD00`), Richtung, Wetter, Tageszeit, Figur des Gegners (s8, −1 = keiner), ?); 22 B `0x2A33C0 + 22·n` → `0x32815C` (Ziel, s. u.); 16-B-Setup des **eigenen** Autos über die Zeigertabelle `0x2A3770 + 4·n` → `0x3281B8` (Byte 1 = Auto-ID; Takumis AE86T, in Kapitel 19–21/23/25/28 Keisukes FD3S, 22 Ryosukes FC3S, 12 der 180SX); Figur ≥ 0: Setup des Gegners `0x2A2EA0 + 16·Figur` → `0x3281C8`; Byte `0x24DB10[n]` → `0x327920` (Wert 1–30, Bedeutung offen). Alle Kapitel nachts, nur Kapitel 10 mit Wetterbyte 1 (Kenta im Regen; MYOUGI gibt es auf der Disc nur als _NIT).
 - **Ziel** (22-B-Satz): +0x0E Code, +0x10 u16 Parameter. Code als Bitfeld gelesen (eigene Deutung, mit den Szenen abgeglichen): 1 Ziel erreichen, 2 Position zählt, 4 Zeitgrenze (Parameter in s), 8 Sonderlauf. Vorkommen: 1 Rennen (13 Kapitel), 2 vorne bleiben (16, 19, 23, 26 – „schaffst du es ins Ziel, ohne dass ich überhole, hast du gewonnen“), 3/9 hinterher und überholen (10, 24 / 12), 4 mit 100 dranbleiben (13 Kyoichis „Seminar“, 15, 29), 5 allein mit Zeitgrenze (1, 5, 14, 18: 220/210/220/190 s), 6 überholen in 120 s (2, Geist von Akina), 7 allein ohne Grenze (0, bergauf), 8 allein mit 100 (4, Mitfahrer), 13 (20, Parameter 1323 – keine Zeit). +0x00 = 1 mit zwei u16 bei +2/+4 (Kapitel 0–3, 12, 16, 19, 23, 26, 27, 30) passt zu den Dateien `BINARY/STORY.AFS` `STORY_REP_nn.BIN` (Replays) – vermutlich Start/Ende einer Teilstrecke oder eines vorgespielten Stücks, nicht nachgebaut; `STORY_DRV_nn.BIN` (02, 05, 10, 17, 20–22) = 1000 × xyz wie `CRS_DRV` (eigene Fahrlinien).
-- **Szenen** `MANGA/MG_OBJ.AFS` `STRnn.BIN` (nn = Kapitel 02–30; `RVL00–33.BIN` = Legend of the Streets): „ROBJ“, u32 bei 0x18 → 12-B-Block, danach NUL-getrennte Shift-JIS-Token bis zum Schriftnamen `KSTnn`/`KNJnn` (dahinter der Zeichenvorrat der Seite, gerendert aus `MG_KNJ.AFS` `MGKNJFONT`). Befehle: `P_` Bild, `C_` Panel, `A_` Bildzeit, `W_`/`WF_` warten, `N` neue Seite, `K_` Seitenstil, `Q_`/`U_` Effekte, `F_<Name>` Sprecher der nächsten Blase (nur manchmal gesetzt), `E_60` Blende = Ende eines Teils. Text-Token sind Blasen (`\n` = Zeilenumbruch); bis zur nächsten Wartezeit/Seite/Sprecher eine Äußerung. Jede Szene: Teil vor und Teil nach dem Rennen (Kapitel 30 dazu ein Epilog), zusammen 585 Äußerungen; Kapitel 0/1 ohne Datei. Die Manga-Panels (`MG_KOMAF`/`MG_BGP`/`MG_KOMAM`) und die Sprachspuren `MANGAV/MG_KOMAS` (01_00 … 31_03, Stereo) werden im Remake nicht verwendet.
+- **Szenen** `MANGA/MG_OBJ.AFS` `STRnn.BIN` (nn = Kapitel 02–30; `RVL00–33.BIN` = Legend of the Streets): „ROBJ“, u32 bei 0x18 → 12-B-Block, danach NUL-getrennte Shift-JIS-Token bis zum Schriftnamen `KSTnn`/`KNJnn` (dahinter der Zeichenvorrat der Seite, gerendert aus `MG_KNJ.AFS` `MGKNJFONT`). Befehle: `P_` Bild, `C_` Panel, `A_` Bildzeit, `W_`/`WF_` warten, `N` neue Seite, `K_` Seitenstil, `Q_`/`U_` Effekte, `F_<Name>` Sprecher der nächsten Blase (nur manchmal gesetzt), `E_60` Blende = Ende eines Teils. Text-Token sind Blasen (`\n` = Zeilenumbruch); bis zur nächsten Wartezeit/Seite/Sprecher eine Äußerung. Jede Szene: Teil vor und Teil nach dem Rennen (Kapitel 30 dazu ein Epilog), zusammen 585 Äußerungen; Kapitel 0/1 ohne Datei. Bilder, Zeitleisten, Gesichter, Lippensync und Sprachspuren dazu: „Story – Manga“.
 - **Musik**: `SOUND/ST_BGM_N.AFS` (= `MANGA/ST_BGM.AFS`) `STORY_ST01–31` (ohne 13, 19 in zwei Hälften) + `STORY_MONO01–05`, `WIN02–04`; Zuordnung zu den Kapiteln nicht verfolgt (Remake: Kapitel n → `STORY_ST{n+1}`).
+## Story – Manga (Panels, Porträts, Stimmen) – geknackt
+Aus dem Recomp (Story-Steuerung `sub_1CC4B0`/`sub_1CC960`, Manga-Panels `sub_1D55B0` ff., Szenen-Interpreter `sub_1CF940`); gelesen
+von `Touge.Formats/Manga` und `StoryScript.Times`, Export `idss manga <ISO> <outDir> <kapitel>`.
+
+**Ablauf eines Kapitels c** (Tabellen je Kapitel ein s8, `Manga.ReadChapters`): Start → Manga-Sequenz `KOMATC[0x2CF380[c]]` (= c) →
+Szene `STRc` Slot 0 (vorhanden, wenn `0x2CF3C0[c]` = c, also 2–30) → Rennen → gewonnen: Szene Slot 3 (Kapitel 30 danach Slot 4 =
+Epilog) → Manga-Sequenz `0x2CF3A0[c]` (nur Kapitel 9: `KOMATC32`). Kapitel 0/1 haben nur die Manga-Sequenz. Zwei Nummerierungen:
+STR/KOMATC/Stimmen nach Kapitel, Bilder nach Manga-Folge („Episode“, `0x299F30[c]` für BGSTR bzw. `0x299FD0[n]` für KOMABG/KOMA je
+KOMATCn: identisch außer 22↔23, 25→28, 26→25, 27→26, 28→29, 29→27; KOMATC31 gibt es nicht, KOMATC32 → 9).
+
+**Container**
+- **FPK** (MG_KOMAF `KOMAnn.FPK`, MG_STR `STORYnn.FPK`, MG_RVLF `RVLrrnn.FPK`, MG_KOMAM `KOMABIN.FPK`): 24-B-Einträge name[16],
+  u32 Offset/16, u32 Größe, bis Name leer. Bilder `name.ICP` = LZ Typ 2, KOMATC roh.
+- **LZ Typ 2** (Byte 3 des LZ-Kopfs = 2): u32 Kennung, u32 entpackte Größe, Daten ab +8 (keine gepackte Größe). Klassisches LZSS:
+  4-KB-Fenster ab 0xFEE genullt, Flag-Byte LSB zuerst (1 = Literal), Match 2 B: Position `lo | (hi & 0xF0) << 4`, Länge `(hi & 0xF) + 3`.
+- **TIM2** (alle 862 ICP gleich): „TIM2“, v4, 1 Bild; Bildkopf 0x30 ab +0x10 (u32 Gesamt, CLUT-Größe, Bildgröße, u16 Kopfgröße, Farben,
+  u8 ?, Mips, CLUT-Typ 3 = CT32, Bildtyp 5 = 8 bit, u16 w, h), dann Indizes, dann 256er-CLUT CSM1 (Bits 3/4 vertauscht), Alpha 0x80 = deckend.
+
+**Manga-Sequenz (KOMA)** – Bilder in Schwarzweiß wie im Heft, japanische Sprechblasen im Bild
+- Panels `MG_KOMAF/KOMA<ep>.FPK`: `kk_nn.ICP` 256×256 oder 256×512 (Panel mit weißem Rand und Schlagschatten, Rest transparent), 344 Stück.
+- Hintergründe `MG_KOMAF/KOMABG<ep>.PAC` (GIM): Himmel `summer_d/_n`, `autumn_d`, `winter_n`, `rain_n` (512×512, 64 px unten weiß),
+  Titelkarte `MTnn` 512×512 (schwarz mit Kapiteltitel, z. B. „ハチロク買おーぜ 2“), Sonderbilder `M00A`, `M19A`, `M23A`, `M24A`, `M31A/B`.
+  `KOMABG26` (KOMATC27) hat nur die Titelkarte, kein `KOMA26.FPK`. `KOMABG31`/`KDUMMY` nicht referenziert.
+- Zeitleiste `MG_KOMAM/KOMABIN.FPK` `KOMATCnn.BIN` (n = 0–30, 32): Blöcke i32 Zeit (−1 = Ende), NUL-getrennte ASCII-Befehle, leerer
+  Befehl, Auffüllen auf 4 B. **Zeit = Wiedergabeposition der ADX in 60-Hz-Frames** (`sub_177E30`: ADXT-Zeit·60/Skala). Befehle (Präfixtabelle
+  `0x299F70`, Sprungtabelle `0x2CFA00`), Panel-Parameter gelten für das nächste `F_`: `P_(x,y)` Lage (Bildschirm vermutlich 640×448, ohne P zufällig),
+  `I_n` Einblenden n Frames (Alpha 0→128), `L_n` Standzeit ab Start, `O_n` Ausblenden n Frames nach Standzeit-Ende, `S_(dx,dy,n)`
+  Einflug: Start bei P+(dx,dy), linear in n Frames nach P, `M_(dx,dy,n)` Wegflug nach Standzeit-Ende, `F_kk_nn` Panel starten (bis 6
+  gleichzeitig; gleicher Name = gleicher Platz), `BORNDARK_` wie F, dunkel; `BG_name` Hintergrund, `BS_(dx,dy,n)` Hintergrund scrollen
+  (fast immer `(512,0,8000)`), `BI_(x,y)` Hintergrundlage (Titelkarte `(96,0)`), `BO_n` Hintergrund ausblenden; selten/unbenutzt `BG2_`,
+  `BS2_`, `CI_`, `CO_`, `K_`, `KCLR_`, `KGRAY_`, `KFADE_`, `CLR`, `GO_`, `GI_`; `QUIT` Ende. Panel-Zustand 2 in `sub_1D4080` dunkelt ab (Farbe
+  128→64 in 40 Frames; Auslöser nicht verfolgt).
+- Ton: `MANGAV/MG_KOMAS` `(n+1)_00.adx` (Stereo 48 kHz, fertig gemischtes Hörspiel: Stimmen + Musik + Geräusche), KOMATC32 → `10_03.adx`,
+  KOMATC27 ohne Ton (der Code überspringt n = 27). Die Zeitleiste läuft ~5–8 s über das Tonende hinaus (Titelkarte).
+
+**Szene (STR) – Farb-Porträts mit Lippensync**
+- `MG_OBJ/STRnn.BIN` „ROBJ“: Kopf = u32-Offsets der Ressourcen (`sub_1D7100` verschiebt sie beim Laden): [1] 24 Slots × 32 B (+0 → Zeiger
+  in die Token-Zeigerliste ab 0x1C; Slot 0 vor dem Rennen, 3 nach dem Sieg, 4 Epilog von Kapitel 30), [2] (Zeiger, Anzahl) 3-Punkt-Pfade
+  (`(x, 110, 0)`-Tripel, Sinn offen), [3] Schriftname `KSTnn`/`KNJnn`, Zeichenvorrat, Lippen-Sätze (u32 0, u32 Länge, u32 → Ziffern),
+  [4] je Slot (Zeiger, Anzahl) Seitenliste (u32 Seite, i32 −1, u32 → Lippen-Satz), [5] 6 Dateinamen (STR: [0] Bild-FPK, z. B. STR22 →
+  `STORY23.FPK`, [2] `MG_KOMAS.AFS`; RVL: FPK, `VSnn.PAC`, `MG_VC0n.ASF`, Thema, `R_LOSE`, `R_WINnn`), [6] 3 Zeiger auf Gesichtstabellen.
+- Bilder `MG_STR/<FPK>`: `nn.ICP` (nn = P_-Nummer) 512×1024 (512×2048 bei drei Gesichtern, 512×512/768 = Standbilder ohne Gesicht).
+  Oben das Porträt (Zeile 0–511), **mit Loch an Mund und Augen**; Gesicht k hat Sprites in den Zeilen 512+256k (Mund, 6 Bilder) und
+  640+256k (Augen: Bild 0–2 erstes Auge offen/halb/zu, 3–5 zweites) in 80×128-Zellen bei x = 80·Bild (`sub_1CEC00`). Lage aus Ressource 6:
+  Tabelle k, Eintrag P_-Nummer, 6 × i32 Mund-x/y, Auge1-x/y, Auge2-x/y = linke obere Ecke der Zelle im Porträt; x ≤ 0 = nicht zeichnen.
+  Geprüft: Sprite-Bild 0 deckt sich pixelgenau mit dem Umfeld (Versatz 0/0 bester Treffer).
+- Hintergrund `MG_BGP/BGSTR<ep>.PAC` (GIM 256×256): `STRnn` zur P_-Nummer, sonst `STR00` (Farbverlauf). `MGCOMMON/MGPARTS.PAC`:
+  `TALKWIN` (Sprechfenster 64×64, 9-Slice), `SKIPMSG` („STARTボタンでスキップ“), `MASK`, `RAIN` (Regen-Overlay). `MG_KNJ` = je Szene
+  gerenderte Glyphen (nur für Japanisch nötig).
+- Token (Interpreter `sub_1CF940`, `atoi` = `func_122AC8`): `P_n` Bild n zeigen, `C_k` Gesicht k spricht (Lippensync an), `K_k` Gesicht k
+  verstummt, `A_n` warten bis Tonzeit **2n Frames** (n in 1/30 s), `WF_n` ebenso, dann nächste Blase, `W_n` Pause (n > 0, vermutlich 2n Frames), `W_0` Seite
+  zu Ende, `N` neue Seite, `F_name` Sprecher der nächsten Blase, `Q_n`/`U_a,b` Blasenstil/Wackeln, `E_60` Abblende = Ende des Slots,
+  Text-Token = Blasen.
+- Ton je Slot: `MG_KOMAS` `(c+1)_01.adx` (Slot 0), `_02` (Slot 3), `_03` (Slot 4) – eine durchgehende Stereo-Spur je Teil mit allen
+  Stimmen (+ Musik); `StoryScript.Times` liefert je Äußerung die Startzeit (letztes A_/WF_ davor, s), also genau der Text-Takt zur
+  Stimme – die englische Zeile lässt sich 1:1 an die Äußerungen aus `ParseScript` hängen.
+- **Lippensync**: Seitenliste je Slot hat genau so viele Einträge wie die Seiten (`N`); Ziffernfolge 0–5 = Mundbild je 60-Hz-Frame ab
+  der Tonzeit, zu der die erste Blase der Seite erscheint, für das Gesicht aus `C_k`. Belegt mit der Stimm-Aktivität (Mitte−Seite-
+  Energie) der Spuren: r = 0,25–0,69 bei Versatz ≈ 0, gegen ≈ 0,05 bei ±5/10 s (`out/proof/story_research/lipsync_check.log`).
+  Augen blinzeln (Bild 1/2 bzw. 4/5) – Takt aus dem Code nicht verfolgt (zufällig).
+- Ungeklärt: Pfade [2], die Lippen-Sätze ohne Seiteneintrag (STR02: 2 von 8), genaue Blasenlage (Felder in [1]), `Q_`/`U_`-Stile.
+
 ## Netzprotokoll (Versus online) – eigenes Format des Remakes
 Das Original hat keinen Mehrspielermodus (Hauptmenü-Trommel ohne VS-Eintrag, s. o.); VERSUS ist eine Ergänzung (`Touge/Net/Protocol.cs`).
 UDP, Standardport 47860, höchstens 1200 Byte je Paket, little-endian. Kopf: `'I' 'D'`, Version (u8, derzeit 2), Typ (u8). Strings: Länge (u8) +

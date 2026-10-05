@@ -11,6 +11,7 @@ using Touge.Formats;
 // idss road <CRS_ROAD_*.BIN> [CRS_ENV_*.BIN] [CRS_FLR_*.BIN] – i x y z [top bottom left right] [flare]
 // idss sound <ISO>                       – alle Audio-Assets: Format, Kanäle, Rate, Dauer, Loop, Rolle
 // idss wav <ISO> <filter> <outDir>       – Assets, deren Id <filter> enthält, als WAV + RMS/Peak
+// idss manga <ISO> <outDir> <chapter>   – Story-Kapitel wie im Original: Manga-Panels, Porträts (+ Gesichter), Hintergründe, Zeitleisten, Stimmen
 switch (args)
 {
     case ["list", var path]:
@@ -108,6 +109,10 @@ switch (args)
             }
         break;
 
+    case ["manga", var isoPath, var outDir, var chapter]:
+        MangaDump.Run(isoPath, outDir, int.Parse(chapter));
+        break;
+
     case ["check", .. var paths]:
         int good = 0, bad = 0;
         foreach (var path in paths)
@@ -132,7 +137,7 @@ switch (args)
         return bad == 0 ? 0 : 1;
 
     default:
-        Console.Error.WriteLine("usage: idss list <AFS|PAC> | extract <AFS> <outDir> | textures <PAC> <outDir> | car <PAC> <outDir> [<CAR_ENV.BIN> [n]] | check <PAC...> | course <PAC> <outDir> | drv <CRS_DRV> | road <CRS_ROAD> [CRS_ENV] [CRS_FLR] | coli <BIN> <out.obj> | sound <ISO> | wav <ISO> <filter> <outDir>");
+        Console.Error.WriteLine("usage: idss list <AFS|PAC> | extract <AFS> <outDir> | textures <PAC> <outDir> | car <PAC> <outDir> [<CAR_ENV.BIN> [n]] | check <PAC...> | course <PAC> <outDir> | drv <CRS_DRV> | road <CRS_ROAD> [CRS_ENV] [CRS_FLR] | coli <BIN> <out.obj> | sound <ISO> | wav <ISO> <filter> <outDir> | manga <ISO> <outDir> <chapter>");
         return 1;
 }
 return 0;
