@@ -31,9 +31,18 @@ public sealed class ShowMedia
     internal (short[] Pcm, int Channels, int Rate)? Pcm { get; set; }
     /// <summary>Length of the voice track (0 = none).</summary>
     public double VoiceSeconds { get; init; }
+    /// <summary>
+    ///     The voice track's music without the voices (ST_BGM_N, <see cref="StoryMedia.MusicOf" />; "" = none): plays on from
+    ///     the same spot while a line is held, at its level in the drama mix there (<see cref="MusicGain" />).
+    /// </summary>
+    public string Music { get; init; } = "";
+    /// <summary>Level of <see cref="Music" /> in the drama per <see cref="StoryMedia.GainBlock" /> of the music (<see cref="StoryMedia.MixGains" />).</summary>
+    public float[] MusicGains { get; init; } = [];
+    public float MusicGain(double seconds) => MusicGains.Length == 0 ? 0 : MusicGains[Math.Clamp((int)(seconds * 48000 / StoryMedia.GainBlock), 0, MusicGains.Length - 1)];
+    internal short[]? MusicPcm { get; set; }
     public Dictionary<string, (int Id, int W, int H)> Textures { get; } = [];
-    internal AudioDevice.Clip? Clip;
-    internal AudioDevice.Track? Track;
+    internal AudioDevice.Clip? Clip, MusicClip;
+    internal AudioDevice.Track? Track, MusicTrack;
     public bool Uploaded => _uploaded;
     internal bool _uploaded;
 }
@@ -42,6 +51,9 @@ public sealed class ShowMedia
 ///     Loads, plays and draws the story's manga sequences and portrait scenes for <see cref="StoryMode" />: pictures through
 ///     <see cref="SpriteRenderer" /> (the original's art at runtime from the ISO), the voice track on its own
 ///     <see cref="AudioDevice.Track" /> at <see cref="Volume" />. Without an audio device the show runs on the frame clock.
+///     The voice tracks are the finished drama mix (voices, music, noises in one stereo stream): as in the original the
+///     track runs on (DECIDE only jumps it ahead, skipping fades it out); a held line (AUTO off) hands over to the same
+///     music without the voices (<see cref="ShowMedia.Music" />), a show without one does not hold.
 /// </summary>
 public sealed class StoryMedia(string isoPath, SpriteRenderer? sprites)
 {
@@ -75,6 +87,58 @@ public sealed class StoryMedia(string isoPath, SpriteRenderer? sprites)
         return (adx.DecodeAll(), adx.Channels, adx.SampleRate);
     }
 
+    /// <summary>The no-voice mix lags the drama by 150 frames (3 ms; measured on every pair).</summary>
+    public const int MusicLag = 150;
+
+    /// <summary>
+    ///     The music of a drama track without its voices: ST_BGM_N (the options' sound test) holds the scenes' music beds as
+    ///     STORY_STnn/WIN0n/STORY_MONOnn, each as long as the tracks it is under (same ADX size), found by size and checked by
+    ///     <see cref="MixGains" />. 34 of the 59 scene parts and 2 manga dramas have one.
+    /// </summary>
+    public static (string Name, short[] Pcm, float[] Gains)? MusicOf(Iso9660 iso, Afs voices, string voice, short[] drama)
+    {
+        if (voices.Find(voice) is not { } v) return null;
+        var bgm = iso.OpenAfs(Dir + "SOUND/ST_BGM_N.AFS");
+        foreach (var e in bgm.Entries.Where(e => e.Size == v.Size))
+        {
+            var pcm = new Adx(bgm.Read(e)).DecodeAll();
+            if (MixGains(drama, pcm) is { } g) return (e.Name, pcm, g);
+        }
+        return null;
+    }
+
+    /// <summary>Frames per gain step of the music (0.25 s).</summary>
+    public const int GainBlock = 12000;
+
+    /// <summary>
+    ///     Level of the stereo <paramref name="music" /> in the <paramref name="drama" /> (at <see cref="MusicLag" />) per
+    ///     <see cref="GainBlock" />: the mix rides the music (fades, lower under the voices), so measured where the drama is the
+    ///     music alone (correlation ≥ 0.9, no voice on top), the blocks between keep the last such level (those before the first
+    ///     take its). Null when fewer than 3 blocks match: not this drama's music.
+    /// </summary>
+    public static float[]? MixGains(short[] drama, short[] music)
+    {
+        var n = Math.Min(drama.Length / 2 - MusicLag, music.Length / 2) / GainBlock;
+        var gains = new float[Math.Max(n, 0)];
+        var found = 0;
+        for (var b = 0; b < n; b++)
+        {
+            double xy = 0, xx = 0, yy = 0;
+            for (var i = b * GainBlock * 2; i < (b + 1) * GainBlock * 2; i++)
+            {
+                double x = drama[i + MusicLag * 2], y = music[i];
+                (xy, xx, yy) = (xy + x * y, xx + x * x, yy + y * y);
+            }
+            var good = yy > 0 && xy / Math.Sqrt(xx * yy) >= 0.9;
+            gains[b] = good ? (float)(xy / yy) : float.NaN;
+            if (good) found++;
+        }
+        if (found < 3) return null;
+        var last = gains.First(g => !float.IsNaN(g));
+        for (var b = 0; b < n; b++) last = gains[b] = float.IsNaN(gains[b]) ? last : gains[b];
+        return gains;
+    }
+
     private static double Seconds((short[] Pcm, int Channels, int Rate)? v) => v is var (p, c, rate) ? p.Length / (double)c / rate : 0;
 
     private static ShowMedia DecodeKoma(Iso9660 iso, byte[] elf, Afs voices, ShowRequest r, Dictionary<string, (int, int, byte[])> images)
@@ -105,11 +169,13 @@ public sealed class StoryMedia(string isoPath, SpriteRenderer? sprites)
         }
         var voice = Manga.KomaVoice(r.Number);
         var pcm = r.Number == 27 ? null : Voice(voices, voice); // KOMATC27: the game plays none
+        var music = pcm is var (p, _, _) ? MusicOf(iso, voices, voice, p) : null;
         var lines = MangaText.Lines(r.Number);
         return new ShowMedia
         {
             Request = r, Koma = koma, Decoded = images, Pcm = pcm, Voice = pcm == null ? "-" : voice, VoiceSeconds = Seconds(pcm),
-            Show = new Show(lines, Math.Max(koma.Quit / 60.0, Seconds(pcm)), [.. koma.Steps]),
+            Music = music?.Name ?? "", MusicPcm = music?.Pcm, MusicGains = music?.Gains ?? [],
+            Show = new Show(lines, Math.Max(koma.Quit / 60.0, Seconds(pcm)), [.. koma.Steps]) { Holds = pcm == null || music != null },
         };
     }
 
@@ -150,6 +216,7 @@ public sealed class StoryMedia(string isoPath, SpriteRenderer? sprites)
         }
         var voice = Manga.SceneVoice(r.Chapter, r.Number);
         var pcm = Voice(voices, voice);
+        var music = pcm is var (p, _, _) ? MusicOf(iso, voices, voice, p) : null;
         var times = StoryScript.Times(robj, lips)[part];
         var english = StoryText.Chapters[r.Chapter].Scene;
         var text = part < english.Length ? english[part] : [];
@@ -158,7 +225,8 @@ public sealed class StoryMedia(string isoPath, SpriteRenderer? sprites)
         return new ShowMedia
         {
             Request = r, Scene = scene, Faces = Manga.Faces(robj), Backdrops = backdrops, Decoded = images, Pcm = pcm, Voice = pcm == null ? "-" : voice, VoiceSeconds = Seconds(pcm),
-            Show = new Show(lines, length),
+            Music = music?.Name ?? "", MusicPcm = music?.Pcm, MusicGains = music?.Gains ?? [],
+            Show = new Show(lines, length) { Holds = pcm == null || music != null },
         };
     }
 
@@ -243,6 +311,12 @@ public sealed class StoryMedia(string isoPath, SpriteRenderer? sprites)
             m.Clip = audio.CreateClip(pcm, ch, rate);
             m.Track = audio.CreateTrack(m.Clip);
             m.Pcm = null; // in the audio device now
+            if (m.MusicPcm is { } music)
+            {
+                m.MusicClip = audio.CreateClip(music, ch, rate);
+                m.MusicTrack = audio.CreateTrack(m.MusicClip);
+                m.MusicPcm = null;
+            }
         }
         m._uploaded = true;
         return true;
@@ -253,33 +327,44 @@ public sealed class StoryMedia(string isoPath, SpriteRenderer? sprites)
     {
         m.Track?.Dispose();
         m.Clip?.Dispose();
-        (m.Track, m.Clip) = (null, null);
+        m.MusicTrack?.Dispose();
+        m.MusicClip?.Dispose();
+        (m.Track, m.Clip, m.MusicTrack, m.MusicClip) = (null, null, null, null);
         sprites?.Free(m.Textures.Values.Select(t => t.Id));
         m.Textures.Clear();
     }
 
     /// <summary>
-    ///     Per frame: the clock follows the voice track (restarted where the show seeked, paused while it holds or is
-    ///     paused); <paramref name="run" /> false holds both.
+    ///     Per frame: the clock follows the voice track, which plays on to its end (moved where the show seeked). A held
+    ///     line pauses it and the music without the voices goes on from the same spot until DECIDE. <paramref name="run" />
+    ///     false (the show fading out, skipped or left) holds the clock, the sound plays on at <paramref name="gain" />.
     /// </summary>
-    public void Play(ShowMedia m, double dt, bool run)
+    public void Play(ShowMedia m, double dt, bool run, float gain = 1)
     {
         var s = m.Show;
         var t = m.Track;
-        if (t != null) t.Gain = Volume;
         if (t == null)
         {
             if (run) s.Tick(dt, null);
             s.Seeked = false;
             return;
         }
-        if (!run || s.Held || s.Done) t.Pause();
-        else if (s.Seeked || !t.Playing)
+        t.Gain = Volume * gain;
+        if (m.MusicTrack is { } bed) bed.Gain = Volume * gain * m.MusicGain(bed.Seconds);
+        if (!run) return;
+        if (s.Seeked || (!t.Playing && !s.Held && !s.Done && s.Time < m.VoiceSeconds - 0.05))
         {
-            if (s.Time < m.VoiceSeconds - 0.05) t.Play((float)s.Time);
+            m.MusicTrack?.Pause();
+            if (s.Time < m.VoiceSeconds - 0.05) t.Play((float)s.Time); // past the end: it plays on under the fade
         }
         s.Seeked = false;
-        if (run) s.Tick(dt, t.Playing ? t.Seconds : null);
+        s.Tick(dt, t.Playing ? t.Seconds : null);
+        if (s.Held && t.Playing)
+        {
+            // the line is over: the voices stop, the music goes on where it was
+            m.MusicTrack?.Play(t.Seconds - MusicLag / 48000f);
+            t.Pause();
+        }
     }
 
     // ---------------------------------------------------------------- drawing (640 × 448 screen of the original in the 4:3 frame)

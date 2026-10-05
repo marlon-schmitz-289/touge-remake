@@ -45,6 +45,7 @@ using Touge;
 //   als geschafft (nur Testläufe); --flow <dir> --story: Ablauf durch STORY (Wahl, Szene, Battle, Ergebnis, Szene danach, ein verlorenes Kapitel).
 // --story-check [n]: Kapiteltabelle und Szenen der Disc gegen die Übersetzung prüfen, dann jedes Kapitel (oder nur n) mit dem Autopiloten fahren (ohne Fenster).
 // --story-check media[:n]: jede Manga-Sequenz und Porträt-Szene (oder nur Kapitel n) wie im Spiel laden und prüfen, Untertitel mit Zeiten auf der Stimmspur.
+// --story-check audio:n: die Shows von Kapitel n headless über ein Loopback-Gerät abspielen (AUTO aus/an, DECIDE, Überspringen), Pegel und Spuren je 0,5 s, stille Blöcke zählen.
 // --headless [--host | --join <ip[:port]>] [--bot] [--port n] [--name X] [--players n] [--races n] [--seconds s] [--net-sim ms[:verlust[:jitter]]] [--net-rule battle|race]:
 //   Mehrspieler-Teilnehmer ohne Fenster (Touge/Net/Headless): Host oder Client einer echten UDP-Sitzung, Auto per Autopilot (--bot), Log je Sekunde + Zusammenfassung.
 // --flow <dir> --versus flow: Versus-Ablauf (geteilter Bildschirm) per Skript statt des Time-Attack-Ablaufs.
@@ -133,6 +134,8 @@ if (args.Contains("--story-check"))
     using var isoFile = new Touge.Formats.Iso9660(iso);
     if (Arg("--story-check") is { } media && media.StartsWith("media"))
         return Touge.Story.StoryHeadless.Media(iso, int.TryParse(media.Split(':').Last(), out var ch) ? ch : null) ? 0 : 2;
+    if (Arg("--story-check") is { } audio && audio.StartsWith("audio:"))
+        return Touge.Story.StoryHeadless.Audio(iso, int.Parse(audio[6..])) ? 0 : 2;
     if (Arg("--story-check") == "calibrate")
     {
         Touge.Story.StoryHeadless.Calibrate(isoFile);

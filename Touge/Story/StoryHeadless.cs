@@ -83,7 +83,7 @@ public static class StoryHeadless
                 for (var i = 1; i < lines.Count; i++)
                     if (lines[i].Time <= lines[i - 1].Time) problems.Add($"Zeile {i} nicht nach Zeile {i - 1}");
                 if (lines.Count > 0 && lines[^1].Time > m.Show.Length) problems.Add("letzte Zeile nach dem Ende");
-                Console.WriteLine($"[Story] Kapitel {c.Index,2} {r}: Stimme {m.Voice} {m.VoiceSeconds:0.0} s, Länge {m.Show.Length:0.0} s, {m.Decoded.Count} Bilder, {lines.Count} Untertitel" +
+                Console.WriteLine($"[Story] Kapitel {c.Index,2} {r}: Stimme {m.Voice} {m.VoiceSeconds:0.0} s, Musik {(m.Music != "" ? $"{m.Music} ×{m.MusicGains.Min():0.00}–{m.MusicGains.Max():0.00}" : "-")}, Länge {m.Show.Length:0.0} s, {m.Decoded.Count} Bilder, {lines.Count} Untertitel" +
                                   (problems.Count > 0 ? $"  FEHLER {string.Join("; ", problems)}" : ""));
                 bad += problems.Count;
                 foreach (var l in lines) Console.WriteLine($"[Story]    {l.Time,7:0.00} s  {l.Line}");
@@ -91,6 +91,77 @@ public static class StoryHeadless
         }
         Console.WriteLine($"[Story] Medien geprüft: {bad} Fehler");
         return bad == 0;
+    }
+
+    /// <summary>
+    ///     --story-check audio:n: the shows of chapter n played headless through a loopback device (48 kHz) as the game does,
+    ///     DECIDE/AUTO/skip scripted: AUTO off (each held line waits 1.5 s for DECIDE), then from 30 s AUTO on with DECIDE every
+    ///     4 s, the skip at 45 s (fade out). Per 0.5 s: level of the mix, show clock, which track plays (V drama, M music), held.
+    ///     Counts the 0.1-s blocks without sound (no track playing or &lt; −80 dBFS) while a line is held, the drama is not over,
+    ///     or it fades out after the skip (the music stopping).
+    /// </summary>
+    public static bool Audio(string isoPath, int chapter)
+    {
+        const int Rate = 48000, Hz = 60;
+        using var dev = new Kansei.Audio.AudioDevice(Rate);
+        if (!dev.Enabled) return false;
+        using var iso = new Iso9660(isoPath);
+        var media = new StoryMedia(isoPath, null) { Audio = dev };
+        var c = MangaChapters(iso)[chapter];
+        int silentHeld = 0, silentRun = 0, silentFade = 0;
+        foreach (var r in StoryMode.Shows(c, false).Concat(StoryMode.Shows(c, true)))
+        {
+            var m = StoryMedia.Decode(isoPath, r);
+            media.Upload(m, all: true);
+            var s = m.Show;
+            s.Auto = false;
+            var pcm = new short[Rate / Hz * 2];
+            double sq = 0, held = 0, nextOk = 0;
+            float fade = -1;
+            var skippedAt = double.MaxValue;
+            int heldBlocks = 0, n = 0;
+            Console.WriteLine($"[Story] {r}: Spur {m.Voice} {m.VoiceSeconds:0.0} s" + (m.Music != "" ? $", Musik {m.Music} ×{m.MusicGains.Min():0.00}–{m.MusicGains.Max():0.00}" : ", keine Musikspur (hält nicht)"));
+            for (var tick = 0; fade < StoryMode.Fade; tick++)
+            {
+                var t = tick / (double)Hz;
+                if (fade >= 0) media.Play(m, 1.0 / Hz, false, 1 - fade / StoryMode.Fade);
+                else
+                {
+                    held = s.Held ? held + 1.0 / Hz : 0;
+                    if (t >= 30 && !s.Auto) s.Auto = true;
+                    if ((s.Held && held >= 1.5) || (s.Auto && t >= nextOk + 4 && t < 45))
+                    {
+                        s.Next();
+                        (nextOk, held) = (t, 0);
+                    }
+                    if (t >= 45)
+                    {
+                        skippedAt = s.Time;
+                        s.End();
+                    }
+                    media.Play(m, 1.0 / Hz, true);
+                    if (s.Done) fade = 0;
+                }
+                if (fade >= 0) fade += 1f / Hz;
+                dev.Render(pcm);
+                foreach (var v in pcm) sq += (double)v * v;
+                if (s.Held) heldBlocks++;
+                if (++n % (Hz / 10) != 0) continue;
+                var db = 10 * Math.Log10(sq / (pcm.Length * n) / (32768.0 * 32768) + 1e-12);
+                var running = m.Track?.Playing == true || m.MusicTrack?.Playing == true;
+                var still = (!running || db < -80) && m.VoiceSeconds > 0;
+                if (still && fade >= 0 && fade < StoryMode.Fade * 0.8f && skippedAt < m.VoiceSeconds - 0.2) silentFade++;
+                else if (still && fade < 0 && heldBlocks > 0) silentHeld++;
+                else if (still && fade < 0 && s.Time < m.VoiceSeconds - 0.2) silentRun++;
+                if (tick % (Hz / 2) == Hz / 2 - 1 || still)
+                    Console.WriteLine($"[Story]   {t,6:0.0} s  Uhr {s.Time,6:0.00}  {db,6:0.0} dBFS  {(m.Track?.Playing == true ? "V" : "-")}{(m.MusicTrack?.Playing == true ? "M" : "-")}" +
+                                      $"{(s.Held ? "  gehalten" : "")}{(fade >= 0 ? $"  Ausblende {1 - fade / StoryMode.Fade:0.00}" : "")}{(still ? "  STILL" : "")}");
+                (sq, n, heldBlocks) = (0, 0, 0);
+            }
+            media.Free(m);
+        }
+        Console.WriteLine($"[Story] Ton Kapitel {chapter}: stille 0,1-s-Blöcke {silentHeld} beim Halten, {silentRun} vor dem Spurende, {silentFade} beim Ausblenden");
+        return silentHeld + silentRun + silentFade == 0;
     }
 
     public static bool Run(Iso9660 iso, int? only = null)

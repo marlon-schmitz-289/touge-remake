@@ -158,7 +158,8 @@ public sealed class StoryMode(Catalog catalog)
     };
 
     /// <summary>
-    ///     Story track of a chapter: ST_BGM_N holds STORY_ST01–31 (no 13; 19 in two halves) - one per chapter, numbered from 1
+    ///     Story track of a chapter: ST_BGM_N holds STORY_ST01–31 (no 13; 19 in two halves), the music of each chapter's scene
+    ///     before the race without the voices (<see cref="StoryMedia.MusicOf" />), numbered from 1
     ///     (our reading; the code picks them by a table we have not traced).
     /// </summary>
     public static string SceneTrack(int chapter) => (chapter + 1) switch
@@ -178,7 +179,11 @@ public sealed class StoryMode(Catalog catalog)
         _clock += dt;
         if (_leave >= 0)
         {
-            if ((_leave += dt) < Fade) return Action.None;
+            if ((_leave += dt) < Fade)
+            {
+                if (Current == Phase.Show && _media != null) Media?.Play(_media, dt, false, 1 - _leave / Fade);
+                return Action.None;
+            }
             _leave = -1;
             if (Current == Phase.Show) DropShows();
             if (_nextChapter is { } n) (Chapter, _part, _nextChapter) = (n, PartOf(n), null);
@@ -409,14 +414,14 @@ public sealed class StoryMode(Catalog catalog)
         var s = m.Show;
         if (_out >= 0)
         {
-            Media.Play(m, dt, false);
+            Media.Play(m, dt, false, 1 - _out / Fade); // the sound fades out with the picture
             return (_out += dt) < Fade ? Action.None : NextShow();
         }
         if (k.Back && !_afterRace)
         {
             // before the race BACK leaves the chapter (RIGHT skips the show)
             Sound?.Invoke("BEEP001");
-            Media.Play(m, 0, false); // the picture fades out with the leave, freed after it (Update)
+            // the picture and the sound fade out with the leave, freed after it (Update)
             InRun = false;
             Leave(Phase.Select, Action.Leave);
             return Action.None;
@@ -432,7 +437,9 @@ public sealed class StoryMode(Catalog catalog)
             Sound?.Invoke("SYS006");
             s.End();
         }
+        var held = s.Held;
         Media.Play(m, dt, true);
+        if (s.Held && !held) Console.WriteLine($"[Story]   hält bei {s.Time:0.00} s, Musik läuft weiter ohne Stimmen ({m.Music})");
         if (s.Line != _lastLine && s.Line >= 0 && !s.Done)
             Console.WriteLine($"[Story]   {m.Voice} {s.Lines[s.Line].Time,7:0.00} s (Uhr {s.Time:0.00} s): {s.Lines[s.Line].Line}");
         _lastLine = s.Line;

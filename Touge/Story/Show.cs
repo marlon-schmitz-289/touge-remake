@@ -22,6 +22,8 @@ public sealed class Show(IReadOnlyList<ShowLine> lines, double length, IReadOnly
     public bool Held { get; private set; }
     public bool Done => Time >= length;
     public bool Seeked { get; set; }
+    /// <summary>AUTO off may hold at a line's end (false: the show runs through, its music would stop with it).</summary>
+    public bool Holds { get; init; } = true;
     /// <summary>Where DECIDE jumps to: line starts, or (no subtitles) the given steps (panel starts).</summary>
     private readonly double[] _steps = (lines.Count > 0 ? lines.Select(l => l.Time) : steps ?? []).Order().ToArray();
     private double _holdAt;
@@ -42,7 +44,7 @@ public sealed class Show(IReadOnlyList<ShowLine> lines, double length, IReadOnly
         if (Held || Done) return;
         var before = Time;
         Time = audio is { } a ? Math.Max(Time, a) : Time + dt; // a track just restarted may report a hair before where it was put
-        if (Auto) return;
+        if (Auto || !Holds) return;
         // AUTO off: stop right before the next step a line was shown before
         var next = _steps.FirstOrDefault(s => s > before, double.MaxValue);
         if (Time < next || (LineAt(before) < 0 && lines.Count > 0)) return;

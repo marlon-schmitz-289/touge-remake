@@ -188,6 +188,109 @@ public class StoryShowTests
         Assert.Equal(4, panels.Time);
         panels.End();
         Assert.True(panels.Done);
+        // a drama without its music alone does not hold (it would stop the music): it runs through
+        var through = new Show(Lines, 10) { Auto = false, Holds = false };
+        for (var i = 0; i < 240; i++) through.Tick(1 / 60.0, null);
+        Assert.False(through.Held);
+        Assert.Equal(1, through.Line);
+    }
+
+    /// <summary>
+    ///     A drama of 4 s at 48 kHz stereo: a 440-Hz music bed (amplitude 8000) mixed at 0.5 (0–2 s) and 0.8 (2–4 s),
+    ///     <see cref="StoryMedia.MusicLag" /> frames late, voices (noise) at 0.5–1 s and 2–2.5 s; and the bed alone.
+    /// </summary>
+    private static (short[] Drama, short[] Music) Drama()
+    {
+        const int n = 4 * 48000;
+        var rnd = new Random(1);
+        var music = new short[n * 2];
+        var drama = new short[n * 2];
+        for (var i = 0; i < n; i++)
+        {
+            music[2 * i] = music[2 * i + 1] = (short)(8000 * Math.Sin(2 * Math.PI * 440 * i / 48000));
+            var j = i - StoryMedia.MusicLag;
+            var bed = j < 0 ? 0 : (j < 2 * 48000 ? 0.5 : 0.8) * music[2 * j];
+            var t = i / 48000.0;
+            var voice = t is >= 0.5 and < 1 or >= 2 and < 2.5 ? rnd.Next(-8000, 8000) : 0;
+            drama[2 * i] = drama[2 * i + 1] = (short)(bed + voice);
+        }
+        return (drama, music);
+    }
+
+    /// <summary>The music bed's level in the drama, block by block where no voice is on top (the voice blocks keep the last level); another music is not it.</summary>
+    [Fact]
+    public void MixGains_FindTheMusicUnderTheVoices()
+    {
+        var (drama, music) = Drama();
+        var g = StoryMedia.MixGains(drama, music)!;
+        Assert.Equal(15, g.Length); // whole 0.25-s blocks of the music
+        Assert.All(g[..10], x => Assert.Equal(0.5, x, 0.02)); // under the voices (0.5–1 s, 2–2.5 s) the level before them
+        Assert.All(g[10..], x => Assert.Equal(0.8, x, 0.02));
+        var other = music.Select((_, i) => (short)(8000 * Math.Sin(2 * Math.PI * 300 * (i / 2) / 48000))).ToArray();
+        Assert.Null(StoryMedia.MixGains(drama, other));
+    }
+
+    /// <summary>
+    ///     The sound of a show through a loopback device: the drama plays; at a held line (AUTO off) its voices stop but the
+    ///     music goes on (the bed at its level in the mix); DECIDE takes the drama up again at the next line; a skip fades it
+    ///     out instead of cutting it. A show without its music does not hold, the drama runs on.
+    /// </summary>
+    [Fact]
+    public void Media_HeldLineKeepsTheMusicAndSkipFades()
+    {
+        using var dev = new Kansei.Audio.AudioDevice(48000);
+        if (!dev.Enabled) return; // no OpenAL Soft loopback here
+        var (drama, music) = Drama();
+        var media = new StoryMedia("", null) { Audio = dev };
+        ShowMedia Make(bool bed) => new()
+        {
+            Request = new ShowRequest(2, false, 0), Pcm = (drama, 2, 48000), VoiceSeconds = 4,
+            Music = bed ? "BED" : "", MusicPcm = bed ? music : null, MusicGains = bed ? StoryMedia.MixGains(drama, music)! : [],
+            Show = new Show([new(0, "A|one"), new(2, "B|two")], 4) { Auto = false, Holds = bed },
+        };
+        var pcm = new short[800 * 2];
+        double Run(ShowMedia m, double seconds, bool run = true, Func<double, float>? gain = null)
+        {
+            double sq = 0;
+            var ticks = (int)Math.Round(seconds * 60);
+            for (var k = 0; k < ticks; k++)
+            {
+                media.Play(m, 1 / 60.0, run, gain?.Invoke(k / (double)ticks) ?? 1);
+                dev.Render(pcm);
+                foreach (var v in pcm) sq += (double)v * v;
+            }
+            return Math.Sqrt(sq / (ticks * pcm.Length));
+        }
+        var bedRms = 8000 / Math.Sqrt(2);
+
+        var m = Make(true);
+        media.Upload(m, all: true);
+        Run(m, 2.2);
+        Assert.True(m.Show.Held);
+        Assert.False(m.Track!.Playing);
+        Assert.True(m.MusicTrack!.Playing);
+        Assert.Equal(0.5 * bedRms, Run(m, 0.25), 0.02 * bedRms); // the music on at its level in the mix (0.5 until 2.5 s), no voice
+        Assert.True(m.Show.Held);
+        m.Show.Next();
+        Run(m, 0.25);
+        Assert.Equal((true, false), (m.Track.Playing, m.MusicTrack.Playing)); // the next line
+        Assert.InRange(m.Track.Seconds, 2.2, 2.3); // from where it was held, not where the music got to
+        m.Show.End();
+        Run(m, 1 / 60.0);
+        var first = Run(m, 0.1, false, f => 1 - (float)f);
+        Assert.True(m.Track.Playing);
+        Assert.True(first > 0.2 * bedRms); // fading, not cut
+        Run(m, 0.1, false, _ => 0); // (OpenAL ramps the gain over a few ms)
+        Assert.True(Run(m, 0.1, false, _ => 0) < 0.01 * bedRms); // faded out
+        media.Free(m);
+
+        var plain = Make(false);
+        media.Upload(plain, all: true);
+        Run(plain, 3);
+        Assert.False(plain.Show.Held);
+        Assert.True(plain.Track!.Playing);
+        Assert.InRange(plain.Show.Time, 2.9, 3.1);
+        media.Free(plain);
     }
 
     /// <summary>
