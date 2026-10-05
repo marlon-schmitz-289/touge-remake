@@ -58,7 +58,8 @@ using Touge;
 // --shot-after <s>: --shot erst nach so vielen Sekunden (statt sofort), das Spiel läuft bis dahin normal.
 // --replay-test <s> [--battle <rivale>] [--drift] [--save <datei.rpl>]: Lauf ohne Fenster aufnehmen, Datei schreiben/lesen, auf frischen Autos abspielen,
 //   Positionsfehler je Tick (mit Keyframes) und nur aus Eingaben (Determinismus), Sprünge; optional die Replay-Datei.
-// --replay <datei.rpl> [--replay-at <s>] [--replay-cam tv|chase|far|hood|cockpit|bumper|free]: Replay im Viewer öffnen (z. B. mit --shot).
+// --replay <datei.rpl> [--replay-at <s>] [--replay-cam tv|chase|far|hood|cockpit|bumper|free] [--replay-focus 1]: Replay im Viewer öffnen (z. B. mit
+//   --shot), --replay-focus: welchem Auto die Kameras folgen (1 = der Rivale eines Battles).
 // --ghost <datei.rpl>: dieser Lauf fährt als Geist mit (sonst mit Menüs der Bestzeit-Lauf); --data-dir <ordner>: anderer App-Daten-Ordner (Einstellungen samt Rekorden, Fortschritt, Replays, Spielstände, Fotos) wie ein echtes Profil, auch in Testläufen;
 //   ohne --data-dir schreibt nur ein schlichter Start (ISO [--menu x]) ins echte Profil, jeder andere Lauf in einen Wegwerf-Ordner im Temp-Verzeichnis.
 // --menu replay|replay-best|replay-records|replay-delete|saveload|saveload-actions|saveload-name|photo: REPLAY & RECORD, SAVE & LOAD, Fotomodus (Bilder).
@@ -81,7 +82,7 @@ var launcher = iso == "";
 string[] launcherFlags = ["--launcher", "--menu", "--shot", "--shot-size", "--data-dir", "--backend", "--drop", "--browse", "--input-debug", "--sim-wheel", "--hint-device"];
 string[] valueFlags = ["--drop", "--browse", "--story-check", "--progress", "--battle", "--rule", "--lead", "--flow", "--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--hud-scale", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture", "--lights", "--render-scale", "--jukebox", "--legend-progress",
     "--join", "--port", "--name", "--net-sim", "--players", "--races", "--seconds", "--net-rule", "--versus", "--split", "--car2", "--shot-after",
-    "--replay-test", "--ai-bench", "--replay", "--replay-at", "--replay-cam", "--save", "--data-dir", "--ghost", "--hint-device", "--cam", "--player-skill"];
+    "--replay-test", "--ai-bench", "--replay", "--replay-at", "--replay-cam", "--replay-focus", "--save", "--data-dir", "--ghost", "--hint-device", "--cam", "--player-skill"];
 string? Arg(string flag) { var i = Array.IndexOf(args, flag); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
 if (launcher ? badIso == null && !args.Where((a, i) => i == 0 || !valueFlags.Contains(args[i - 1])).All(launcherFlags.Contains) : !File.Exists(iso))
 {
@@ -275,6 +276,7 @@ TougeGame NewGame(string isoPath, Action? changeDisc) => new TougeGame(isoPath, 
       InputDebug = args.Contains("--input-debug"), SimWheel = args.Contains("--sim-wheel"),
       SaveRuns = Arg("--data-dir") != null, ReplayFile = Arg("--replay"), GhostFile = Arg("--ghost"), ReplayAt = Arg("--replay-at") is { } ra ? float.Parse(ra, CultureInfo.InvariantCulture) : 0,
       ReplayCam = Enum.TryParse<Touge.Ui.ReplayViewer.Camera>(Arg("--replay-cam") ?? "tv", true, out var rc) ? rc : Touge.Ui.ReplayViewer.Camera.Tv,
+      ReplayFocus = int.Parse(Arg("--replay-focus") ?? "0"),
       UseMenus = plain || changeDisc != null, StartMenu = changeDisc != null && Arg("--menu") == "browse" ? null : Arg("--menu"), ChangeDisc = changeDisc, Flow = Arg("--flow"), Offscreen = args.Contains("--offscreen"),
       StoryFlow = args.Contains("--story"), SaveLoadFlow = args.Contains("--saveload"), FreeBattleFlow = args.Contains("--freebattle"), FourPassFlow = args.Contains("--fourpasses") || args.Contains("--fourpasses-wet"), FourPassWet = args.Contains("--fourpasses-wet"), StoryProgress = int.TryParse(Arg("--progress"), out var progress) ? progress : 0,
       ShotSize = shotSize };

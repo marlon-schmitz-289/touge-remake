@@ -156,6 +156,12 @@ public sealed class RivalPilot
     /// <summary>Slower corners (m/s at the apex) are not drifted: the tail cannot be held under ~40 km/h (IROHA's tightest hairpins).</summary>
     public const float MinDriftSpeed = 40 / 3.6f;
 
+    /// <summary>
+    ///     Nor faster ones than the car holds a drift at (<see cref="GripLimit.DriftSpeed"/>, +15 %), at most this (m/s): a
+    ///     heavy, powerful car sliding a fast bend runs wide (FD3S: 2–3 wall hits per run more).
+    /// </summary>
+    public const float MaxDriftSpeed = 65 / 3.6f;
+
     /// <summary>Following distance (m, centre to centre) behind a car at <paramref name="speed"/>: a metre plus 0.8 … 0.4 s by aggression, 0.12 … 0.02 s when pressing (on its bumper).</summary>
     public static float FollowGap(float speed, float aggression, bool pressure = false) =>
         CarLength + 1 + speed * (pressure ? 0.12f - 0.1f * aggression : 0.8f - 0.4f * aggression);
@@ -225,7 +231,7 @@ public sealed class RivalPilot
         _drift = new DriftController.Entry?[cs.Count];
         for (var i = 0; i < cs.Count; i++) _drift[i] = DriftPlan(cs[i], Style, car.Spec, Hash(Seed, 1, i));
         var beta = DriftController.StyleBeta(Style.Drift, car.Spec);
-        var holds = GripLimit.DriftSpeed(car.Spec) * 1.15f;
+        var holds = MathF.Min(GripLimit.DriftSpeed(car.Spec) * 1.15f, MaxDriftSpeed);
         for (var pass = 0; pass < 2; pass++)
         {
             // drift corners: room for the swung-out tail

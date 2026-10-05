@@ -24,6 +24,8 @@ public sealed partial class TougeGame
     public string? ReplayFile { get; init; }
     public float ReplayAt { get; init; }
     public ReplayViewer.Camera ReplayCam { get; init; } = ReplayViewer.Camera.Tv;
+    /// <summary>--replay-focus: the car the viewer follows first (1 = the rival of a battle).</summary>
+    public int ReplayFocus { get; init; }
     /// <summary>--ghost: a replay file to drive as the ghost (test runs; with the menus the best run of the course).</summary>
     public string? GhostFile { get; init; }
     /// <summary>--data-dir: finished runs, best runs and autosaves are written also in a test run (into that folder).</summary>
@@ -75,7 +77,7 @@ public sealed partial class TougeGame
         }
         if (ReplayFile == null) return false;
         OpenReplay(Replay.Load(ReplayFile), Back.Menu);
-        _viewer.Open(ReplayCam);
+        _viewer.Open(ReplayCam, ReplayFocus);
         if (ReplayCam == ReplayViewer.Camera.Free) _viewerCam.Place(_pos, _camLook);
         if (ReplayAt > 0) SeekReplay((int)(ReplayAt / Drive.Dt));
         return true;

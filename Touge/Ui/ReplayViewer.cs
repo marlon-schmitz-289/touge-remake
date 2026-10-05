@@ -38,9 +38,10 @@ public sealed class ReplayViewer
     private float _clock, _flash;
     private string _flashText = "";
 
-    public void Open(Camera cam = Camera.Tv)
+    /// <param name="focus">The car the cameras follow first (0 = the player's).</param>
+    public void Open(Camera cam = Camera.Tv, int focus = 0)
     {
-        (Active, Paused, SpeedIndex, Cam, OverlayHidden, Focus, Scrub, _flash) = (true, false, 2, cam, false, 0, 0, 0);
+        (Active, Paused, SpeedIndex, Cam, OverlayHidden, Focus, Scrub, _flash) = (true, false, 2, cam, false, focus, 0, 0);
     }
 
     public void Close() => Active = false;
