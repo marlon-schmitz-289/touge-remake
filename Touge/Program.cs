@@ -38,6 +38,8 @@ using Touge;
 // --sim-wheel: virtuelles Lenkrad (Lenkung pendelt, Pedale pumpen) für Bilder/Tests ohne Hardware; --menu controls:keyboard|pad|wheel öffnet die Steuerungsseite.
 // --battle <rivale|auto> [--rule race|chase] [--lead player|rival]: Schnellbattle gegen die KI (Telop, Countdown, Battle-HUD, Ergebnis);
 //   mit --autodrive <s> ohne Fenster: Autopilot gegen die KI, Log je Sekunde (Abstand, Führung, Kontakte) + Zusammenfassung.
+// --ai-bench solo|drift|battle|corners[:KURS,…] [--car X] bzw. human:<datei.rpl>: KI ohne Fenster vermessen (Touge/Race/AiBench): Zeiten je Kurs/Richtung/Auto/
+//   Können gegen eine Referenz, Wandtreffer, Schräglauf je Kurventyp, Drift-Prototyp, Battles gegen Rivalen, Straßenbreite in Kurven, ein aufgezeichneter Lauf daneben.
 // --legend-sim [--legend-progress <json>] [--autodrive <s>]: Legend of the Streets ohne Fenster, Autopilot fährt jede Rivalenleiter hoch, Freischaltungen + Fortschritt (JSON).
 // --legend-progress <json>: Legend-Fortschritt aus/in diese Datei (Testläufe sonst nur im Speicher); --flow <dir> --legend: Legend-Ablauf per Skript (2 Battles).
 // --menu legend|legend-rivals|legend-card[:KURS/rivale]: Legend-Schritt beim Start öffnen (z. B. --menu legend-card:AKINA/takumi --shot …).
@@ -78,7 +80,7 @@ var launcher = iso == "";
 string[] launcherFlags = ["--launcher", "--menu", "--shot", "--shot-size", "--data-dir", "--backend", "--drop", "--browse", "--input-debug", "--sim-wheel", "--hint-device"];
 string[] valueFlags = ["--drop", "--browse", "--story-check", "--progress", "--battle", "--rule", "--lead", "--flow", "--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--hud-scale", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture", "--lights", "--render-scale", "--jukebox", "--legend-progress",
     "--join", "--port", "--name", "--net-sim", "--players", "--races", "--seconds", "--net-rule", "--versus", "--split", "--car2", "--shot-after",
-    "--replay-test", "--replay", "--replay-at", "--replay-cam", "--save", "--data-dir", "--ghost", "--hint-device", "--cam"];
+    "--replay-test", "--ai-bench", "--replay", "--replay-at", "--replay-cam", "--save", "--data-dir", "--ghost", "--hint-device", "--cam"];
 string? Arg(string flag) { var i = Array.IndexOf(args, flag); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
 if (launcher ? badIso == null && !args.Where((a, i) => i == 0 || !valueFlags.Contains(args[i - 1])).All(launcherFlags.Contains) : !File.Exists(iso))
 {
@@ -199,6 +201,13 @@ if (Arg("--battle") is { } rivalArg)
         Console.Error.WriteLine(e.Message);
         return 1;
     }
+}
+// --ai-bench: KI ohne Fenster vermessen (siehe oben)
+if (Arg("--ai-bench") is { } bench1)
+{
+    using var isoFile = new Touge.Formats.Iso9660(iso);
+    var parts = bench1.Split(':');
+    return Touge.Race.AiBench.Run(isoFile, parts[0], parts.Length > 1 ? parts[1].Split(',') : [], Arg("--car")) ? 0 : 2;
 }
 // --legend-sim [--legend-progress <json>] [--car X] [--autodrive <s per battle>]: Legend of the Streets headless, the autopilot up every ladder
 if (args.Contains("--legend-sim"))
