@@ -25,6 +25,8 @@ public sealed class SaveLoadScreen(SaveSlots slots)
     public Action<string>? Sound { get; set; }
     /// <summary>Play time of the current profile so far (the game counts it).</summary>
     public Func<double> PlaySeconds { get; set; } = () => 0;
+    /// <summary>Before a slot is written: the game puts what it keeps in memory (settings, records) on disk, the slot copies the files.</summary>
+    public Action? Flush { get; set; }
 
     private SaveSlots.Meta?[] _meta = new SaveSlots.Meta?[SaveSlots.Count];
     private SaveSlots.State _state = new();
@@ -150,6 +152,7 @@ public sealed class SaveLoadScreen(SaveSlots slots)
             switch (action)
             {
                 case "SAVE":
+                    Flush?.Invoke();
                     slots.Save(Row, _meta[Row]?.Name ?? $"PLAYER {Row + 1}", PlaySeconds());
                     Flash("SAVED");
                     r = Result.Saved;
@@ -182,23 +185,34 @@ public sealed class SaveLoadScreen(SaveSlots slots)
         _cursor = Math.Min(name.TrimEnd().Length, SaveSlots.NameLength - 1);
     }
 
-    private Result NameEntry((int X, int Y, bool Ok, bool Back) k, InputSnapshot input)
+    /// <summary>Name entry: typed text at the cursor ('\b' = Backspace: clears, then steps back over blanks).</summary>
+    public void Type(string text)
     {
-        var name = _name!;
-        var kb = input.Keyboard;
-        foreach (var ch in input.TypedText.ToUpperInvariant())
-            if (Letters.Contains(ch) && _cursor < name.Length)
+        if (_name is not { } name) return;
+        foreach (var ch in text.ToUpperInvariant())
+            if (ch == '\b')
+            {
+                if (name[_cursor] == ' ' && _cursor > 0) _cursor--;
+                name[_cursor] = ' ';
+            }
+            else if (Letters.Contains(ch))
             {
                 name[_cursor] = ch;
                 _cursor = Math.Min(_cursor + 1, name.Length - 1);
             }
-        var typing = input.TypedText.Length > 0;
+    }
+
+    private Result NameEntry((int X, int Y, bool Ok, bool Back) k, InputSnapshot input)
+    {
+        var name = _name!;
+        var kb = input.Keyboard;
         if (kb.IsKeyPressed(Key.Backspace))
         {
-            if (name[_cursor] == ' ' && _cursor > 0) _cursor--;
-            name[_cursor] = ' ';
+            Type("\b");
             return Result.None;
         }
+        Type(input.TypedText);
+        var typing = input.TypedText.Length > 0;
         if (k.Y != 0 && !typing)
         {
             var i = Letters.IndexOf(name[_cursor]);
@@ -230,6 +244,7 @@ public sealed class SaveLoadScreen(SaveSlots slots)
                 if (_meta[Row] is { } meta) Rename(meta, text);
                 else
                 {
+                    Flush?.Invoke();
                     slots.Save(Row, text, PlaySeconds());
                     Flash("SAVED");
                     Refresh();
@@ -273,7 +288,7 @@ public sealed class SaveLoadScreen(SaveSlots slots)
         c.Text("AUTOSAVE", 66, ay + 21, 14, Canvas.White, 0, 0.18f, 0.06f, 0.2f);
         c.Plate(212, ay, 120, 30, Row == SaveSlots.Count ? 1 : 0.62f);
         c.Text(_state.Autosave ? "ON" : "OFF", 272, ay + 21, 15, Canvas.Shade(0.08f, 0.08f, 0.1f, 1), 0.5f, 0.18f, 0, 0.3f);
-        c.Text(_state.Active >= 0 ? $"After every run into slot {_state.Active + 1}" : "Save to a slot first", 342, ay + 20, 10, Grey, 0, 0.1f);
+        c.Text(!_state.Autosave ? "Save by hand" : _state.Active >= 0 ? $"After every run into slot {_state.Active + 1}" : "Save to a slot first", 342, ay + 20, 10, Grey, 0, 0.1f);
         if (Row == SaveSlots.Count && _action < 0 && _name == null) c.Glow(50, ay - 5, 338, ay + 35, Canvas.Pulse(Theta));
         if (_action >= 0) ActionBar(c);
         if (_name != null) NameBox(c);

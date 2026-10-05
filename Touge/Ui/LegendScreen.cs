@@ -22,11 +22,11 @@ public sealed class LegendScreen(Catalog catalog, Progress progress)
 
     public const float Fade = 30 / 60f, NewsHold = 5;
 
-    /// <summary>The career progress; a new one (a loaded save slot) is taken as it is, without unlock news.</summary>
+    /// <summary>The career progress; a new one (a loaded save slot) is taken as it is, without unlock news (nor the last profile's NEW! tags).</summary>
     public Progress Progress
     {
         get => progress;
-        set => (progress, _seen, _seenCourses, _seenCar) = (value, [], 0, true);
+        set => (progress, _seen, _seenCourses, _seenCar, _fresh, _news) = (value, [], 0, true, [], 99);
     }
     public bool Active { get; private set; }
     public Step Current { get; private set; }

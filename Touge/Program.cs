@@ -231,7 +231,7 @@ KanseiApp.Run(new TougeGame(iso, course.ToUpperInvariant(), shot, at, orbit, aut
       SaveRuns = Arg("--data-dir") != null, ReplayFile = Arg("--replay"), GhostFile = Arg("--ghost"), ReplayAt = Arg("--replay-at") is { } ra ? float.Parse(ra, CultureInfo.InvariantCulture) : 0,
       ReplayCam = Enum.TryParse<Touge.Ui.ReplayViewer.Camera>(Arg("--replay-cam") ?? "tv", true, out var rc) ? rc : Touge.Ui.ReplayViewer.Camera.Tv,
       UseMenus = plain, StartMenu = Arg("--menu"), Flow = Arg("--flow"), Offscreen = args.Contains("--offscreen"),
-      StoryFlow = args.Contains("--story"), FreeBattleFlow = args.Contains("--freebattle"), FourPassFlow = args.Contains("--fourpasses") || args.Contains("--fourpasses-wet"), FourPassWet = args.Contains("--fourpasses-wet"), StoryProgress = int.TryParse(Arg("--progress"), out var progress) ? progress : 0,
+      StoryFlow = args.Contains("--story"), SaveLoadFlow = args.Contains("--saveload"), FreeBattleFlow = args.Contains("--freebattle"), FourPassFlow = args.Contains("--fourpasses") || args.Contains("--fourpasses-wet"), FourPassWet = args.Contains("--fourpasses-wet"), StoryProgress = int.TryParse(Arg("--progress"), out var progress) ? progress : 0,
       ShotSize = Arg("--shot-size") is { } size && size.Split('x') is [var sw, var sh] ? (int.Parse(sw), int.Parse(sh)) : (1280, 720) }, new WindowSettings
 {
     Title = $"Touge – {course}",

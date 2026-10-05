@@ -63,35 +63,76 @@ public sealed class SaveSlots(string root)
     /// <summary>Copies the progress files into slot <paramref name="i"/> (replacing what it held) with its name and play time; makes it the active slot.</summary>
     public void Save(int i, string name, double playSeconds)
     {
-        var dir = SlotDir(i);
-        var tmp = dir + ".tmp";
-        if (Directory.Exists(tmp)) Directory.Delete(tmp, true);
-        Directory.CreateDirectory(tmp);
-        var files = ProgressFiles();
-        foreach (var f in files) File.Copy(Path.Combine(root, f), Path.Combine(tmp, f));
-        foreach (var d in Folders) CopyDir(Path.Combine(root, d), Path.Combine(tmp, d));
+        string dir = SlotDir(i), tmp = dir + ".tmp", old = dir + ".old";
+        Fresh(tmp);
+        Snapshot(tmp);
         var (story, legend) = Progress.Load(Path.Combine(tmp, "progress.json")).Summary();
         WriteJson(Path.Combine(tmp, "slot.json"), new Meta
         {
-            Story = story, Legend = legend,
-            Name = name, PlaySeconds = playSeconds, Saved = DateTime.Now, Files = [.. files.Select(Path.GetFileNameWithoutExtension).OfType<string>()],
-            Records = RecordsIn(Path.Combine(root, "settings.json")),
+            Story = story, Legend = legend, Name = name, PlaySeconds = playSeconds, Saved = DateTime.Now,
+            Files = [.. Directory.GetFiles(tmp, "*.json").Select(Path.GetFileNameWithoutExtension).OfType<string>().Where(f => f != "slot").Order()],
+            Records = RecordsIn(Path.Combine(tmp, "settings.json")),
         });
-        // the old slot goes only once the new one is complete
-        if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        // the old slot goes only once the new one is in place
+        if (Directory.Exists(old)) Directory.Delete(old, true);
+        if (Directory.Exists(dir)) Directory.Move(dir, old);
         Directory.Move(tmp, dir);
+        if (Directory.Exists(old)) Directory.Delete(old, true);
         var s = ReadState();
         (s.Active, s.PlaySeconds) = (i, playSeconds);
         WriteState(s);
     }
 
-    /// <summary>Copies slot <paramref name="i"/>'s progress files back (progress files it did not have are removed); false if the slot is empty.</summary>
+    /// <summary>
+    ///     Copies slot <paramref name="i"/>'s progress files back (progress files it did not have are removed); false if the slot
+    ///     is empty. All or nothing: the slot is read into a staging folder first (a locked or unreadable slot file changes
+    ///     nothing), and if a file here cannot be replaced, the progress as it was before is put back and the error rethrown.
+    /// </summary>
     public bool Load(int i)
     {
         var meta = Read(i);
         if (meta == null) return false;
-        var dir = SlotDir(i);
-        var files = Directory.GetFiles(dir, "*.json").Select(Path.GetFileName).OfType<string>().Where(f => f != "slot.json").ToHashSet();
+        string stage = Path.Combine(Dir, "load.tmp"), undo = Path.Combine(Dir, "undo.tmp");
+        try
+        {
+            Fresh(stage);
+            CopyTree(SlotDir(i), stage);
+            File.Delete(Path.Combine(stage, "slot.json"));
+            Fresh(undo);
+            Snapshot(undo);
+            try
+            {
+                Restore(stage);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                Restore(undo);
+                throw;
+            }
+        }
+        finally
+        {
+            foreach (var d in new[] { stage, undo })
+                if (Directory.Exists(d)) Directory.Delete(d, true);
+        }
+        var s = ReadState();
+        (s.Active, s.PlaySeconds) = (i, meta.PlaySeconds);
+        WriteState(s);
+        Loaded?.Invoke();
+        return true;
+    }
+
+    /// <summary>The progress files and folders now into <paramref name="dir"/>.</summary>
+    private void Snapshot(string dir)
+    {
+        foreach (var f in ProgressFiles()) File.Copy(Path.Combine(root, f), Path.Combine(dir, f));
+        foreach (var d in Folders) CopyTree(Path.Combine(root, d), Path.Combine(dir, d));
+    }
+
+    /// <summary>Makes the progress files and folders exactly those of <paramref name="dir"/> (a <see cref="Snapshot"/>).</summary>
+    private void Restore(string dir)
+    {
+        var files = Directory.GetFiles(dir, "*.json").Select(Path.GetFileName).OfType<string>().Order(StringComparer.Ordinal).ToList();
         foreach (var f in ProgressFiles().Where(f => !files.Contains(f))) File.Delete(Path.Combine(root, f));
         foreach (var f in files)
         {
@@ -103,13 +144,14 @@ public sealed class SaveSlots(string root)
         {
             var dst = Path.Combine(root, d);
             if (Directory.Exists(dst)) Directory.Delete(dst, true);
-            CopyDir(Path.Combine(dir, d), dst);
+            CopyTree(Path.Combine(dir, d), dst);
         }
-        var s = ReadState();
-        (s.Active, s.PlaySeconds) = (i, meta.PlaySeconds);
-        WriteState(s);
-        Loaded?.Invoke();
-        return true;
+    }
+
+    private static void Fresh(string dir)
+    {
+        if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        Directory.CreateDirectory(dir);
     }
 
     public void Delete(int i)
@@ -139,11 +181,12 @@ public sealed class SaveSlots(string root)
                 p.SetValue(to, p.GetValue(from));
     }
 
-    private static void CopyDir(string from, string to)
+    private static void CopyTree(string from, string to)
     {
         if (!Directory.Exists(from)) return;
         Directory.CreateDirectory(to);
         foreach (var f in Directory.GetFiles(from)) File.Copy(f, Path.Combine(to, Path.GetFileName(f)), true);
+        foreach (var d in Directory.GetDirectories(from)) CopyTree(d, Path.Combine(to, Path.GetFileName(d)));
     }
 
     private static int RecordsIn(string settings)

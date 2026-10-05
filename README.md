@@ -71,6 +71,7 @@ dotnet run --project Touge -- "<iso>" --data-dir out/proof/data --menu replay|re
 dotnet run --project Touge -- "<iso>" AKINA_NIT --flow out/proof/fourpasses/flow --fourpasses|--fourpasses-wet [--data-dir out/proof/fourpasses/flow_data]   # FOUR PASSES per Skript: 12. Feld → DRY bzw. WET → Auto → alle vier Etappen mit Pilot in 16× (Telop, Rennen, STAGE n CLEAR, Etappenblatt, Pause in Etappe 2) → Endergebnis → REPLAY & RECORD (Replays, RECORDS)
 dotnet run --project Touge -- "<iso>" AKINA_NIT --menu fourpasses|fourpasses-weather|fourpasses-stage|fourpasses-finish|fourpasses-result --shot out/proof/fourpasses/m.png   # FOUR PASSES als Bild (Etappenblatt/Ziel/Endergebnis mit erfundenen Zeiten)
 dotnet run --project Touge -- "<iso>" --flow out/proof/flow --data-dir out/proof/flow_data   # --flow mit echtem Speichern: Ergebnis → EXIT legt Replay + Bestzeit-Lauf in out/proof/flow_data/Replays ab, REPLAY & RECORD zeigt ihn
+dotnet run --project Touge -- "<iso>" --flow out/proof/saveload --saveload --data-dir out/proof/saveload_data   # SAVE & LOAD in einer Sitzung: Platz 1 (Name) → Legend-Sieg → Time-Attack-Rekord → Platz 2 → Platz 1 laden → Platz 2 laden → RENAME/DELETE → AUTOSAVE; Log [SaveLoadCheck] … PASS|FAIL, am Ende SUMMARY
 dotnet run --project Touge -- "<iso>" AKINA_DAY --menu photo --shot out/proof/photo.png   # Fotomodus über dem pausierten Rennen
 ```
 
@@ -94,6 +95,7 @@ SAVE & LOAD (`SaveSlots`, `Ui/SaveLoadScreen`): 3 Spielstände (Name, Spielzeit,
 `*.json` direkt im App-Data-Ordner (settings.json, progress.json – der eine Fortschritt von Story und Legend – und was sonst dort liegt) in
 `Saves/Slot<n>/`, dazu die Bestzeit-Läufe `Replays/Best/` (Geister und BEST RUNS gehören zum Profil); Laden kopiert sie zurück (fehlende Fortschrittsdateien werden entfernt), übernimmt alles außer Steuerung, Bildschirm und Netz-Port/Join-Adresse dieses
 Rechners, liest den Fortschritt neu ein (Legend-Leiter, Story-Kapitel und das Legend-Auto zeigen sofort den geladenen Stand) und meldet `SaveSlots.Loaded`.
+Speichern schreibt vorher Einstellungen und Fortschritt aus dem Speicher; Laden ist alles oder nichts (Bereitstellen, bei einer gesperrten Datei zurückrollen) und nimmt der Legend-Leiter die NEW!-Marken des vorigen Profils.
 Ein gewonnenes Battle oder geschafftes Kapitel speichert den Fortschritt und sichert ihn bei AUTOSAVE gleich in den aktiven Platz. Entscheiden auf einem Platz: SAVE / LOAD / RENAME / DELETE / CANCEL
 (Überschreiben, Laden, Löschen fragen JA/NEIN), ein leerer Platz fragt nach dem Namen (Arcade-Eingabe ↑/↓ Buchstabe, ←/→ Stelle, oder tippen).
 AUTOSAVE (an/aus) speichert nach jedem fertigen Lauf und beim Beenden in den Platz in Benutzung (zuletzt gespeichert/geladen).
