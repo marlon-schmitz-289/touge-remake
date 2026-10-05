@@ -4,6 +4,37 @@ Privater Nachbau (eigene C#-Engine). Plan: [PLAN.md](PLAN.md), Formate: [FORMATS
 
 Assets kommen zur Laufzeit aus der eigenen ISO (SLPM-65268), nie ins Repo.
 
+## Installieren (ohne Terminal)
+
+Fertige Pakete baut `Tools/publish.sh` (self-contained, kein .NET nötig) nach `out/dist/`:
+
+```sh
+Tools/publish.sh                    # alle: auf macOS osx-arm64 + win-x64 + linux-x64, auf Linux win-x64 + linux-x64
+Tools/publish.sh osx-arm64          # nur eins (osx-x64 = Intel-Mac auf Wunsch; stürzt unter Rosetta beim Fensterstart ab, ungetestet auf echtem Intel)
+python3 Tools/Icon/make_icon.py     # Icon neu erzeugen (eigene Grafik, Pillow; .icns nur auf macOS)
+```
+
+Die Pakete enthalten **keine Spieldaten** – jeder braucht seine eigene ISO.
+
+- **macOS** (`Touge-osx-arm64.zip`): entpacken, `Touge.app` nach Programme ziehen, doppelklicken. Die App ist nur ad-hoc signiert
+  (keine Apple-ID); eine heruntergeladene Kopie blockiert Gatekeeper beim ersten Start: Rechtsklick → Öffnen → Öffnen, bzw. ab
+  macOS 15 Systemeinstellungen → Datenschutz & Sicherheit → „Dennoch öffnen“. Oder einmal im Terminal:
+  `xattr -dr com.apple.quarantine /Applications/Touge.app`. Beim ersten Start fragt macOS, ob Touge auf Downloads/Schreibtisch/
+  Dokumente zugreifen darf (Suche nach der ISO) – erlauben, die Liste füllt sich danach; ad hoc signiert fragt es nach jedem Neubau erneut.
+- **Windows** (`Touge-win-x64.zip`): entpacken, `Touge\Touge.exe` starten (kein Konsolenfenster). SmartScreen „Unbekannter
+  Herausgeber“: Weitere Informationen → Trotzdem ausführen. Braucht einen Vulkan-fähigen Grafiktreiber.
+- **Linux** (`Touge-linux-x64.tar.gz`): `tar xzf Touge-linux-x64.tar.gz`, dann `Touge/Touge` starten; `Touge/install-desktop.sh`
+  trägt es ins Anwendungsmenü ein (`~/.local/share/applications/touge.desktop`). Braucht Vulkan (`libvulkan1` + Mesa/Treiber).
+
+Ohne Argument (Doppelklick) öffnet das Spiel den Launcher zur ISO-Auswahl (siehe [Starten](#starten)), danach startet es die
+gemerkte ISO direkt. Unter Windows/Linux kann die ISO auch auf `Touge.exe`/`Touge` gezogen werden (ist sie verschoben oder die
+falsche, zeigt der Launcher den Grund); als erstes Argument geht sie überall (`Touge.app/Contents/MacOS/Touge "<iso>"`), alle
+Kommandozeilen-Flags gelten wie unten.
+Wird das Spiel so gestartet (ohne Argument oder nur mit der ISO), schreibt es seine Ausgabe zusätzlich nach `touge.log` im
+Profilordner (macOS `~/Library/Application Support/InitialDRemake/`, Windows `%APPDATA%\InitialDRemake\`, Linux
+`~/.config/InitialDRemake/`; der vorige Lauf bleibt als `touge.prev.log`) – dort nachsehen, wenn etwas nicht startet. Schriften/Assets liegen neben dem Programm
+(`AppContext.BaseDirectory`), das Arbeitsverzeichnis ist egal.
+
 ## Projekte
 
 | Projekt | Inhalt |
@@ -17,14 +48,7 @@ Assets kommen zur Laufzeit aus der eigenen ISO (SLPM-65268), nie ins Repo.
 
 ## Starten
 
-**Zum Doppelklicken** (ohne installiertes .NET, ohne Spieldaten – die ISO kommt im Launcher dazu): `Tools/package.sh` baut nach `out/dist/`
-- `Touge.app` (macOS, Apple Silicon): in den Programme-Ordner ziehen, doppelklicken. Beim ersten Start fragt macOS, ob Touge auf Downloads/
-  Schreibtisch/Dokumente zugreifen darf (für die Suche nach der ISO) – erlauben, die Liste füllt sich danach. Weitergegeben (Download/AirDrop)
-  verlangt Gatekeeper einmal Rechtsklick → Öffnen (oder `xattr -dr com.apple.quarantine Touge.app`).
-- `Touge-win-x64.zip`: entpacken, `Touge.exe` doppelklicken (SmartScreen: „Weitere Informationen“ → „Trotzdem ausführen“).
-- `Touge-linux-x64.tar.gz`: entpacken, `./Touge` starten (braucht Vulkan- bzw. OpenGL-Treiber).
-
-`Tools/package.sh osx-arm64` baut nur eine davon. Ohne Paket: `dotnet run --project Touge`. (Das gebaute `Touge` aus `Touge/bin/…` ist nicht
+Zum Doppelklicken: Pakete aus [Installieren](#installieren-ohne-terminal). Ohne Paket: `dotnet run --project Touge`. (Das gebaute `Touge` aus `Touge/bin/…` ist nicht
 eigenständig und findet ein .NET unter `~/.dotnet` ohne `DOTNET_ROOT` nicht.) Ohne Argumente öffnet sich der **Launcher** (`Touge/Launcher.cs`, `Ui/LauncherScreen.cs`) im Stil des Front-Ends – ohne Daten der Disc, also noch ohne Original-Sounds:
 - Er sucht im Hintergrund (höchstens 4 s, je Ort nur eine Ordnerebene tief) in Downloads, Schreibtisch, Dokumente, Home, aktuellem und App-Ordner
   sowie auf eingehängten Laufwerken (`/Volumes`, `/media`, `/run/media`, `/mnt`, Laufwerksbuchstaben) nach `*.iso` und zeigt nur passende Discs
@@ -43,6 +67,7 @@ eigenständig und findet ein .NET unter `~/.dotnet` ohne `DOTNET_ROOT` nicht.) O
 dotnet run --project Touge [-- --launcher]   # Launcher (ohne --launcher startet die gemerkte Disc direkt)
 dotnet run --project Touge -- --shot out/proof/launcher/discs.png | --menu browse [--browse <ordner>] --shot … | --drop <datei.iso> --shot …   # Launcher-Bilder: Liste nach der Suche, Dateibrowser, gezogene Datei (Fehler bzw. Start)
 dotnet run --project Touge -- --data-dir <ordner> [--menu options:gamedisc] --shot out/proof/l.png   # gemerkte Disc aus <ordner>/last-disc.txt: Bild des Front-Ends bzw. der Optionsseite GAME DISC
+TOUGE_AUTOPICK=1|change out/dist/osx-arm64-app/Touge.app/Contents/MacOS/Touge   # Ende-zu-Ende ohne Argumente (wie Finder): wählt nach der Suche die erste gefundene Disc; change verlässt das Spiel nach 8 s wie GAME DISC (Ablauf in touge.log)
 dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso"   # Front-End (Hinweis, Karten, Titel, Hauptmenü) → Kurs, Auto, Rennen, Ergebnis, Rekorde, Optionen
 dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso" [AKINA_DAY|AKINA_NIT|USUI_NIT|…]   # direkt fahren, ohne Menü
 dotnet run --project Touge -- "<iso>" AKINA_NIT --menu boot|logo|disclaimer|title|mode|quit|course|route|time|weather|maker[:n]|car|gearbox|intro|pause|records|guide|guide-list|guide-talk|options[:gamesetting|hud|screen|graphics|sound|playlist|controller] --shot out/proof/ui_car.png [--shot-size 3200x1800]   # Menü-Bild (options:<seite> öffnet eine Optionsseite, maker:<n> die Modellliste mit Zeile n, z. B. --car IMP --menu maker:2 = das gesperrte IMP3)

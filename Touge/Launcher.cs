@@ -236,6 +236,12 @@ public sealed class LauncherGame(Func<string, Action, TougeGame> newGame, bool p
     private FrameCapture? _capture;
     private int _shotState;
     private float _shotWait;
+    // TOUGE_AUTOPICK=1|change (end-to-end checks of a start without arguments; synthetic key presses need macOS accessibility rights):
+    // once the scan is done, the first found disc is chosen as if picked in the list; "change" also leaves the game after 8 s
+    // the way Options → GAME DISC does
+    private bool _autoPick = Environment.GetEnvironmentVariable("TOUGE_AUTOPICK") is "1" or "change";
+    private bool _autoChange = Environment.GetEnvironmentVariable("TOUGE_AUTOPICK") == "change";
+    private float _autoT;
 
     public override void Load()
     {
@@ -292,6 +298,11 @@ public sealed class LauncherGame(Func<string, Action, TougeGame> newGame, bool p
         {
             _game.Update(time);
             FrameCap = _game.FrameCap;
+            if (_autoChange && (_autoT += time.DeltaTime) > 8)
+            {
+                Console.WriteLine("[Launcher] TOUGE_AUTOPICK=change: leaving the game as Options → GAME DISC does");
+                (_autoChange, _back) = (false, true);
+            }
             if (!_back) return;
             // Options → GAME DISC: the game goes, the launcher comes back
             Device.WaitIdle();
@@ -316,6 +327,12 @@ public sealed class LauncherGame(Func<string, Action, TougeGame> newGame, bool p
             return;
         }
         if (Input.DroppedFile is { } dropped) _screen.Picked = dropped;
+        if (_autoPick && _screen.Scan.Done && _screen.Scan.Found is [var first, ..])
+        {
+            _autoPick = false;
+            Console.WriteLine($"[Launcher] TOUGE_AUTOPICK: {first.Path}");
+            _screen.Picked = first.Path;
+        }
         var s = Window.DpiScale;
         var r = _screen.Update(Input, time.DeltaTime, (Input.Mouse.X * s, Input.Mouse.Y * s));
         if (r == LauncherScreen.Result.Quit) Window.ShouldClose = true;

@@ -2,11 +2,13 @@
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
-        <!-- Tools/package.sh for Windows: a GUI exe, no console window behind the game -->
-        <OutputType Condition="'$(TougeGui)' == 'true'">WinExe</OutputType>
         <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <!-- eigenes Icon (Tools/Icon/make_icon.py), landet in Touge.exe -->
+        <ApplicationIcon>..\Tools\Icon\icon.ico</ApplicationIcon>
+        <!-- Windows-Release (Tools/publish.sh): ohne Konsolenfenster, Ausgabe dann nur in touge.log -->
+        <OutputType Condition="'$(Configuration)' == 'Release' And $(RuntimeIdentifier.StartsWith('win'))">WinExe</OutputType>
     </PropertyGroup>
 
     <ItemGroup>

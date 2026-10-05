@@ -63,21 +63,28 @@ using Touge;
 //   sonst Disc-Liste (Suche in Downloads, Schreibtisch, Dokumente, Home, Laufwerken), BROWSE, Systemdialog, Drag & Drop, Pfad einfügen.
 //   --launcher: die gemerkte Disc nicht starten; --menu browse [--browse <ordner>]: gleich im Dateibrowser; --drop <datei>: wie hineingezogen;
 //   --shot <png> [--shot-size WxH]: ein Bild des Launchers (nach der Suche), dann Ende – mit --data-dir und gemerkter Disc ein Bild des Front-Ends.
+// started from Finder/Explorer/launcher (no args = launcher, or just the ISO): no console to read, so everything also goes to touge.log in the profile folder
+// ponytail: "desktop start" guessed from the arguments, not from the console; an explicit --log flag if that ever guesses wrong
+if (args.All(a => a.EndsWith(".iso", StringComparison.OrdinalIgnoreCase)))
+    Touge.LogFile.Start(Path.Combine(Path.GetDirectoryName(Touge.Ui.Settings.FilePath)!, "touge.log"));
 var iso = args.Where((a, i) => i == 0 || args[i - 1] is not ("--drop" or "--browse")).FirstOrDefault(a => a.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
           ?? Environment.GetEnvironmentVariable("INITIALD_ISO") ?? "";
+// double-click/drag & drop with only a moved or wrong ISO: the launcher shows why (as if dropped there) instead of a silent exit
+string? badIso = null;
+if (args is [var isoArg] && isoArg == iso && !Disc.Check(iso).Ok) (badIso, iso) = (iso, "");
 var launcher = iso == "";
 string[] launcherFlags = ["--launcher", "--menu", "--shot", "--shot-size", "--data-dir", "--backend", "--drop", "--browse", "--input-debug", "--sim-wheel", "--hint-device"];
 string[] valueFlags = ["--drop", "--browse", "--story-check", "--progress", "--battle", "--rule", "--lead", "--flow", "--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--hud-scale", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture", "--lights", "--render-scale", "--jukebox", "--legend-progress",
     "--join", "--port", "--name", "--net-sim", "--players", "--races", "--seconds", "--net-rule", "--versus", "--split", "--car2", "--shot-after",
     "--replay-test", "--replay", "--replay-at", "--replay-cam", "--save", "--data-dir", "--ghost", "--hint-device", "--cam"];
 string? Arg(string flag) { var i = Array.IndexOf(args, flag); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
-if (launcher ? !args.Where((a, i) => i == 0 || !valueFlags.Contains(args[i - 1])).All(launcherFlags.Contains) : !File.Exists(iso))
+if (launcher ? badIso == null && !args.Where((a, i) => i == 0 || !valueFlags.Contains(args[i - 1])).All(launcherFlags.Contains) : !File.Exists(iso))
 {
     Console.Error.WriteLine("usage: touge <Initial D Special Stage (SLPM-65268).iso> [KURS_ZEIT, z. B. AKINA_DAY]  (oder INITIALD_ISO setzen; ohne ISO: Launcher)");
     return 1;
 }
 // menus (and the saved settings) only when started plainly: any course or test flag means a scripted run
-var plain = args.Where((a, i) => a != iso && a != "--backend" && (i == 0 || args[i - 1] != "--backend")).All(a => a is "--menu" or "--launcher" or "--input-debug" or "--sim-wheel" or "--hint-device" || a == Arg("--menu") || a == Arg("--hint-device"));
+var plain = args.Where((a, i) => a != iso && a != badIso && a != "--backend" && (i == 0 || args[i - 1] != "--backend")).All(a => a is "--menu" or "--launcher" or "--input-debug" or "--sim-wheel" or "--hint-device" || a == Arg("--menu") || a == Arg("--hint-device"));
 // app data (settings, records, progress, replays, save slots, photos): --data-dir, the real profile for a plain start, a throwaway folder for any other run
 Touge.Ui.Settings.FilePath = Touge.Ui.Settings.RunFile(Arg("--data-dir"), plain);
 // --car: HCAR name (AE86T, FD3S, R32, EVO3, …) or index 0–31 in that list (Touge.Formats.CarPaint.Cars)
@@ -249,7 +256,7 @@ TougeGame NewGame(string isoPath, Action? changeDisc) => new TougeGame(isoPath, 
       UseMenus = plain || changeDisc != null, StartMenu = changeDisc != null && Arg("--menu") == "browse" ? null : Arg("--menu"), ChangeDisc = changeDisc, Flow = Arg("--flow"), Offscreen = args.Contains("--offscreen"),
       StoryFlow = args.Contains("--story"), SaveLoadFlow = args.Contains("--saveload"), FreeBattleFlow = args.Contains("--freebattle"), FourPassFlow = args.Contains("--fourpasses") || args.Contains("--fourpasses-wet"), FourPassWet = args.Contains("--fourpasses-wet"), StoryProgress = int.TryParse(Arg("--progress"), out var progress) ? progress : 0,
       ShotSize = shotSize };
-KanseiApp.Run(launcher ? new LauncherGame(NewGame, args.Contains("--launcher"), shot, shotSize, Arg("--menu"), Arg("--drop"), Arg("--browse")) : NewGame(iso, null), new WindowSettings
+KanseiApp.Run(launcher ? new LauncherGame(NewGame, args.Contains("--launcher"), shot, shotSize, Arg("--menu"), Arg("--drop") ?? badIso, Arg("--browse")) : NewGame(iso, null), new WindowSettings
 {
     Title = launcher ? "Touge" : $"Touge – {course}",
     WindowPixelWidth = saved.Width,
