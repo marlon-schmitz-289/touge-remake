@@ -155,7 +155,7 @@ public sealed class ReplayMenu(Catalog catalog, Settings settings)
         _confirm.Draw(c, Theta);
         c.Marquee("REPLAY & RECORD", true, _clock);
         Menu.Hint(c, Tab == 2 ? "UP/DOWN: Tab    BACK: Main menu"
-            : InList ? $"UP/DOWN: Select    DECIDE: Watch    {(Tab == 0 ? "Y / K: Keep    " : "")}X / DELETE: Delete    BACK: Tabs"
+            : InList ? $"UP/DOWN: Select    DECIDE: Watch    {(Tab == 0 ? Hints.Pick("K: Keep    ", "Y: Keep    ", "") : "")}{Hints.Pick("DELETE: Delete    ", "X: Delete    ", "")}    BACK: Tabs"
             : "UP/DOWN: Tab    DECIDE / RIGHT: List    BACK: Main menu");
         c.Fade(1 - Math.Clamp(_t / Menu.Fade, 0, 1));
     }

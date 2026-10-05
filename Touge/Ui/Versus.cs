@@ -686,8 +686,9 @@ public sealed class Versus(Catalog catalog)
         if (Split) SplitCards(c);
         else OnlineCards(c);
         if (!Split && Net?.IsHost == true && HostInfo.Length > 0) c.Text($"HOSTING  {HostInfo}", 270, 420, 10, Canvas.White, 0, 0.12f, 0.08f);
-        Menu.Hint(c, Split ? P2Keyboard ? "P1: WASD + SPACE    P2: ARROWS + ENTER    START when both are ready    BACK: Return"
-                : "P1: ARROWS + ENTER    P2: D-PAD + (A)    START when both are ready    BACK: Return"
+        // player 1 drives the menus with the device used last (only the keyboard's other half or a wheel while player 2 has a pad)
+        var p1 = Hints.Device == DeviceKind.Wheel ? $"HAT + {Hints.Of(Control.MenuOk)}" : P2Keyboard ? Hints.Pick("WASD + SPACE", "D-PAD + A", "") : "ARROWS + ENTER";
+        Menu.Hint(c, Split ? $"P1: {p1}    P2: {(P2Keyboard ? "ARROWS + ENTER" : "D-PAD + A")}    START when both are ready    BACK: Return"
             : host ? "UP/DOWN: Select    LEFT/RIGHT: Change    START when everyone is ready    BACK: Leave"
             : "UP/DOWN: Select    LEFT/RIGHT: Change    READY: tell the host    BACK: Leave");
     }

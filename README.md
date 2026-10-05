@@ -50,6 +50,7 @@ dotnet run --project Touge -- "<iso>" AKINA_NIT --fog [--autodrive 25 --shot out
 dotnet run --project Touge -- "<iso>" AKINA_RIN --render-scale 50 [--bench 15 --offscreen|--shot …]   # 3D-Auflösung in % des Fensters (Option RENDER SCALE), HUD bleibt scharf
 dotnet run --project Touge -- "<iso>" [--input-debug] [--sim-wheel]   # Eingabe-Overlay (Geräte, Rohachsen/-tasten, gelesene Lenkung/Pedale, FFB-Anteile); virtuelles Lenkrad ohne Hardware (beide auch beim normalen Start mit Menüs)
 dotnet run --project Touge -- "<iso>" AKINA_DAY --menu controls:keyboard|pad|gamepad|wheel [--sim-wheel] --shot out/proof/input_controls_wheel.png   # Steuerungsseite als Bild
+dotnet run --project Touge -- "<iso>" AKINA_NIT --menu options:playlist --hint-device pad|wheel|keys --shot out/proof/hints/playlist_pad.png   # Tastenhinweise eines Geräts erzwingen (sonst: zuletzt benutztes Gerät)
 dotnet run --project Touge -- "<iso>" AKINA_NIT --battle keisuke [--rule race|chase] [--lead player|rival] [--car AE86T]   # Schnellbattle gegen die KI: Telop „VS …“, 3-2-1-GO, Battle, YOU WIN/LOSE, Ergebnis
 dotnet run --project Touge -- "<iso>" IROHA_DAY --battle takumi --autodrive 420   # ohne Fenster: Autopilot (Spielerauto) gegen die KI, Log je Sekunde (Abstand s/m, Führung, KI-Modus, Kontakte) + Ergebnis
 dotnet run --project Touge -- "<iso>" IROHA_DAY --battle itsuki --autodrive 110 --shot out/proof/b.png [--battle-result]   # Bild nach dem Battle: Zielbanner bzw. Ergebnisblatt
@@ -234,7 +235,7 @@ des Gehäuses; Gehäuse Hutze/Nissan-Keil/Einzelrohre/LCD, Strich-/Block-/Ring-/
 Skala/roter Bereich/Farben/Nachtbeleuchtung je Auto; Zahlen am Rand außerhalb der Zeigerspitze, Beschriftungen im zeigerfreien unteren Bogen,
 kleine Instrumente nur mit Beschriftung + rotem Bereich; Gehäuse höchstens 400×190 px bei 1080p (mit der Höhe skaliert); km/h im
 Kilometerzähler-Fenster, Gang + AT/MT unter dem Drehzahlmesser; Tests prüfen Überdeckung, Größe/Lage bei 720p/1080p/4:3/21:9 und dass keine Schrift
-im Zeigerbereich liegt). Alles in einem gemeinsamen Sicherheitsrahmen (`Style.Safe`: 44/900 Rand, ab 2:1 mittig begrenzt). Falschfahrt-Warnung, Hinweis „R“ zum Zurücksetzen, wenn das Auto feststeckt.
+im Zeigerbereich liegt). Alles in einem gemeinsamen Sicherheitsrahmen (`Style.Safe`: 44/900 Rand, ab 2:1 mittig begrenzt). Falschfahrt-Warnung, Hinweis mit der Zurücksetzen-Belegung des zuletzt benutzten Geräts (Standard R / Pad Y), wenn das Auto feststeckt.
 Schrift: Rajdhani Bold (SIL Open Font License, `Touge/Assets/Fonts/OFL.txt`), zur Laufzeit als Distanzfeld-Atlas.
 Ton: Rennmusik als Jukebox über alle 31 Eurobeat-Titel, unabhängig von der Strecke: jeder Titel einmal bis zum Ende, dann zufällig der nächste (keine Wiederholung, bis alle eingeschalteten liefen), läuft über Retry/Kurswechsel weiter (Menümusik hält ihn an). M (Pad: D-Pad rechts) nächster Titel, F3 Musik an/aus. Beim Titelstart fährt oben rechts „NOW PLAYING“ mit Titel und Interpret ein (5 s, in der Pause dauerhaft; im Battle unter der Battle-Tafel). Optionen → PLAYLIST: jeden Titel ON/OFF schalten (ALL SONGS für alle; alle aus = Stille).
 Auto (nur im Stand, < 3 km/h): 1/2 voriges/nächstes Auto, 3 nächste Lackfarbe. Autos (`--car`, Index in Klammern):
@@ -258,6 +259,10 @@ FORCE FEEDBACK (Stärke, DECIDE = Test rechts→links) und FFB DIRECTION. Rechts
 Rohachsen, Knöpfe, Kraft). Standardbelegung Lenkrad nach Logitech G29/G920 unter Windows (Achse 1 Lenkung, 2 Gas, 3 Bremse, 4 Kupplung, Wippen
 Knopf 5/6, Schaltkulisse 13–19, OPTIONS = Pause), andere Räder (Thrustmaster T300/T150/TMX, Fanatec …) per Drücken belegen. Menüs am Lenkrad: Hat =
 Pfeile, Wippen = links/rechts, MENU DECIDE/BACK.
+Menüs mit jedem Gerät: Tastatur, jedes angeschlossene Pad (nicht nur das erste) und Lenkrad. Gehaltenes D-Pad, gehaltener linker Stick (> 60 %), gehaltener
+Hat und gehaltene Wippen wiederholen wie gehaltene Pfeiltasten (0,35 s, dann alle 0,035 s; `HoldRepeat`). Tastenhinweise (rote Hinweiszeile, Replay-Viewer,
+Fotomodus, Versus-Lobby, „zurück auf die Straße“) folgen dem zuletzt benutzten Gerät (`Ui/Hints`): Tastatur ENTER/ESC/Tasten, Pad A/B/X/Y, LB/RB,
+BACK/START, D-PAD, L-STICK/R-STICK, Lenkrad die belegten MENU-DECIDE/BACK-Knöpfe und HAT; umbelegbare Aktionen zeigen die aktuelle Belegung.
 Lenkung: vom zuletzt gelenkten Gerät (`DriverInput`; das Lenkrad übernimmt erst, wenn es 10 % des Einschlags von seiner Stellung beim
 Gerätewechsel weggedreht wird, der Pad-Stick schon jenseits der Totzone): Lenkrad 1:1 und ungeglättet (`VehicleInput.DirectSteer`: Radeinschlag = Eingabe ×
 `MaxSteer`, ohne die Pad/Tastatur-Hilfen Tempo-Lenkreduktion, Gegenlenkhilfe, Schräglaufgrenze, Lenkrate), Pad-Stick wie bisher, Tasten mit

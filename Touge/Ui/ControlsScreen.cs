@@ -77,7 +77,7 @@ public sealed class ControlsScreen(ControlSettings cfg, InputSnapshot input, Dri
                 rows.Add(new("INVERT THROTTLE", "Reads the throttle axis the other way round.", Value: () => OnOff(s.InvertThrottle), Change: _ => s.InvertThrottle = !s.InvertThrottle));
                 rows.Add(new("INVERT BRAKE", "Reads the brake axis the other way round.", Value: () => OnOff(s.InvertBrake), Change: _ => s.InvertBrake = !s.InvertBrake));
                 rows.Add(new("INVERT CLUTCH", "Reads the clutch axis the other way round.", Value: () => OnOff(s.InvertClutch), Change: _ => s.InvertClutch = !s.InvertClutch));
-                rows.Add(new("FORCE FEEDBACK", "Tyre forces, kerbs and impacts on the wheel.  DECIDE: test (right, then left).",
+                rows.Add(new("FORCE FEEDBACK", "Tyre forces, kerbs and impacts on the wheel. The test pushes right, then left.",
                     Value: () => s.FfbStrength <= 0 ? "OFF" : Pct(s.FfbStrength), Change: d => s.FfbStrength = Step(s.FfbStrength, d, 0.1f, 0, 1), Activate: () => _test = 0));
                 rows.Add(new("FFB DIRECTION", "REVERSED if the test pushes left first.", Value: () => s.FfbInvert ? "REVERSED" : "NORMAL", Change: _ => s.FfbInvert = !s.FfbInvert));
                 break;
@@ -335,16 +335,27 @@ public sealed class ControlsScreen(ControlSettings cfg, InputSnapshot input, Dri
                 DeviceKind.Keyboard => "press the new key.",
                 DeviceKind.Pad => "press a button or move a stick/trigger.",
                 _ => "press a button or the hat, or move an axis (wheel, pedal) past half its travel.",
-            }, $"ESC: cancel ({MathF.Ceiling(CaptureTimeout - _capture):0} s)"];
-        if (_calib == 1) return ["CALIBRATE 1/2: centre the wheel and release every pedal, then DECIDE.", "BACK: cancel"];
-        if (_calib == 2) return ["CALIBRATE 2/2: turn the wheel to both locks and press every pedal fully, then DECIDE.", "BACK: cancel"];
-        if (_row < 0) return ["LEFT/RIGHT: device    DOWN: settings and bindings    BACK: options", ""];
+            }, $"{(Hints.Device == DeviceKind.Keyboard ? "ESC: cancel, else c" : "C")}ancels in {MathF.Ceiling(CaptureTimeout - _capture):0} s"];
+        if (_calib == 1) return [$"CALIBRATE 1/2: centre the wheel and release every pedal, then {Hints.Key("DECIDE")}.", ""];
+        if (_calib == 2) return [$"CALIBRATE 2/2: turn the wheel to both locks and press every pedal fully, then {Hints.Key("DECIDE")}.", ""];
+        if (_row < 0) return ["Choose the device to set up, then go down to its settings and bindings.", ""];
         var row = _rows[_row];
-        var nav = row.Control != null ? "DECIDE: bind    LEFT/RIGHT: slot    DELETE / pad X: clear    BACK: options" : "LEFT/RIGHT: change    BACK: options";
         if (_page == DeviceKind.Keyboard && row.Help == "")
-            return [nav, "Fixed: F1 free camera, F2 graphics, F3 music, F4 HUD, M track, N map, T AT/MT, B direction, 1-3 car/colour."];
-        return [nav, row.Help];
+            return ["Fixed: F1 free camera, F2 graphics, F3 music, F4 HUD, M track, N map, T AT/MT, B direction, 1-3 car/colour.", ""];
+        return [row.Help, ""];
     }
+
+    /// <summary>The hint line for the selected row (tabs, a binding, a value), in the keys of the device used last (<see cref="Hints"/>).</summary>
+    public string Footer => Hints.Menu(_capture >= 0 ? Hints.Device == DeviceKind.Keyboard ? "ESC: Cancel" : $"Cancels after {CaptureTimeout:0} s without input"
+        : _calib > 0 ? "DECIDE: Next step    BACK: Cancel"
+        : _rows.ElementAtOrDefault(_row) switch
+        {
+            null => "LEFT/RIGHT: Device    DOWN: Settings and bindings    BACK: Options",
+            { Control: not null } => "UP/DOWN: Select    LEFT/RIGHT: Slot    DECIDE: Bind    " + Hints.Pick("DELETE: Clear    ", "X: Clear    ", "") + "BACK: Options",
+            { Activate: not null, Change: not null } => "UP/DOWN: Select    LEFT/RIGHT: Change    DECIDE: Test    BACK: Options",
+            { Activate: not null } => "UP/DOWN: Select    DECIDE: OK    BACK: Options",
+            _ => "UP/DOWN: Select    LEFT/RIGHT: Change    BACK: Options",
+        });
 
     private static void Cell(Canvas c, float x, float y, float w)
     {

@@ -35,8 +35,8 @@ public sealed class Hud
     public bool Mph;
     /// <summary>Options HUD SIZE (0.8..1.3): scales every HUD element.</summary>
     public float Scale = 1;
-    /// <summary>Key named by the stuck/wrong-way hint (split screen: player 2's own reset binding).</summary>
-    public string ResetKey = "R";
+    /// <summary>Key named by the stuck/wrong-way hint (split screen: player 2's own reset binding); null: the binding on the device used last (<see cref="Hints"/>).</summary>
+    public string? ResetKey;
 
     /// <summary>Dash row (course dial + cluster) at 100 %, relative to <see cref="Cluster.Box"/> (400×190 px at 1080p → 640×304).</summary>
     public const float DashSize = 1.6f;
@@ -237,7 +237,7 @@ public sealed class Hud
             // under the wrong-way banner, clear of the cluster on narrow screens
             var y = height * 0.34f + 74 * u;
             var a = Style.Ease(_hintA);
-            var key = ResetKey;
+            var key = ResetKey ?? Hints.Of(Control.ResetCar);
             const string action = "RESET TO ROAD";
             var w = MathF.Max(o.Font!.Measure(key, 17 * u) + 12 * u, 26 * u) + 8 * u + o.Font.Measure(action, 17 * u);
             Style.Slanted(o, new Vector2(cx - w / 2 - 30 * u, y - 22 * u), new Vector2(cx + w / 2 + 30 * u, y + 22 * u), Style.Fade(Style.Panel, a), 0.2f);

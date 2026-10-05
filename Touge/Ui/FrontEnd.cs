@@ -28,7 +28,7 @@ public sealed class FrontEnd
         .. QuitPrompt.Available ? new[] { "QUIT GAME" } : [],
     ];
 
-    /// <summary>What each mode leads to in this build (None: not rebuilt yet, deciding it beeps; Quit asks first).</summary>
+    /// <summary>What each mode leads to (Quit asks first).</summary>
     private static readonly Result[] ModeResults =
         [Result.Legend, Result.TimeAttack, Result.Versus, Result.Story, Result.Replay, Result.Guide, Result.SaveLoad, Result.Options, Result.Quit];
 
@@ -50,7 +50,7 @@ public sealed class FrontEnd
     /// </summary>
     public string? Music => Active && Current is Step.Title or Step.Modes ? "gam.adx" : null;
 
-    private float _t, _idle, _leave = -1, _roll = -1, _blocked = -1, _theta;
+    private float _t, _idle, _leave = -1, _roll = -1, _theta;
     private int _rollDir;
     private bool _fast;
     private Step _next;
@@ -74,7 +74,7 @@ public sealed class FrontEnd
     public void Settle() => _t = 10;
 
     private void Enter(Step step) =>
-        (Current, _t, _idle, _leave, _roll, _blocked, _fast, _result) = (step, 0, 0, -1, -1, -1, false, Result.None);
+        (Current, _t, _idle, _leave, _roll, _fast, _result) = (step, 0, 0, -1, -1, false, Result.None);
 
     private void Leave(Step next, Result result = Result.None) => (_leave, _next, _result) = (0, next, result);
 
@@ -85,7 +85,6 @@ public sealed class FrontEnd
         dt = MathF.Min(dt, 1 / 20f);
         _t += dt;
         _theta = (_theta + dt * 60 * (_fast ? 40 : 5)) % 360;
-        if (_blocked >= 0) _blocked += dt;
         if (_leave >= 0)
         {
             if ((_leave += dt) < Fade) return Result.None;
@@ -133,16 +132,11 @@ public sealed class FrontEnd
                     Sound?.Invoke("SYS006");
                     _quit.Show();
                 }
-                else if (k.Ok && ModeResults[Index] is var r and not Result.None)
+                else if (k.Ok)
                 {
                     Sound?.Invoke("SYS006");
                     _fast = true;
-                    Leave(Step.Modes, r);
-                }
-                else if (k.Ok)
-                {
-                    Sound?.Invoke("BEEP001");
-                    _blocked = 0;
+                    Leave(Step.Modes, ModeResults[Index]);
                 }
                 else if (k.Back)
                 {
@@ -292,8 +286,6 @@ public sealed class FrontEnd
         c.Glow(138, 328, 374, 375, Canvas.Pulse(_theta));
         c.Arrow(393, 348, 407, 348, 400, 333); // ▲
         c.Arrow(393, 354, 407, 354, 400, 369); // ▼
-        if (_blocked is >= 0 and < 1.6f)
-            c.Text("NOT IN THIS BUILD YET", 256, 425, 13, Style.Fade(Canvas.White, Math.Clamp((1.6f - _blocked) * 3, 0, 1)), 0.5f, Style.Slant, 0.04f);
     }
 }
 

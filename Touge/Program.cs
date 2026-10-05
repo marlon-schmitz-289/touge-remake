@@ -65,7 +65,7 @@ if (iso == null || !File.Exists(iso))
 }
 string[] valueFlags = ["--story-check", "--progress", "--battle", "--rule", "--lead", "--flow", "--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--hud-scale", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture", "--lights", "--render-scale", "--jukebox", "--legend-progress",
     "--join", "--port", "--name", "--net-sim", "--players", "--races", "--seconds", "--net-rule", "--versus", "--split", "--car2", "--shot-after",
-    "--replay-test", "--replay", "--replay-at", "--replay-cam", "--save", "--data-dir", "--ghost"];
+    "--replay-test", "--replay", "--replay-at", "--replay-cam", "--save", "--data-dir", "--ghost", "--hint-device"];
 string? Arg(string flag) { var i = Array.IndexOf(args, flag); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
 // --car: HCAR name (AE86T, FD3S, R32, EVO3, …) or index 0–31 in that list (Touge.Formats.CarPaint.Cars)
 var carArg = Arg("--car") ?? "AE86T";
@@ -213,7 +213,9 @@ if (Arg("--ground") is { } groundPng)
 // --data-dir: another app-data folder (settings, replays, save slots, photos), finished runs are saved there also in test runs
 if (Arg("--data-dir") is { } dataDir) Touge.Ui.Settings.FilePath = Path.Combine(Path.GetFullPath(dataDir), "settings.json");
 // menus (and the saved settings) only when started plainly: any course or test flag means a scripted run
-var plain = args.Where((a, i) => a != iso && a != "--backend" && (i == 0 || args[i - 1] != "--backend")).All(a => a is "--menu" or "--input-debug" or "--sim-wheel" || a == Arg("--menu"));
+var plain = args.Where((a, i) => a != iso && a != "--backend" && (i == 0 || args[i - 1] != "--backend")).All(a => a is "--menu" or "--input-debug" or "--sim-wheel" or "--hint-device" || a == Arg("--menu") || a == Arg("--hint-device"));
+// --hint-device pad|wheel|keys: button hints of that device whatever is pressed (screenshots)
+Touge.Ui.Hints.Forced = Arg("--hint-device") switch { "pad" => Touge.DeviceKind.Pad, "wheel" => Touge.DeviceKind.Wheel, "keys" => Touge.DeviceKind.Keyboard, _ => null };
 // a plain start opens the window as saved (Options: SCREEN), test runs always in a 1600×900 window
 var saved = plain ? Touge.Ui.Settings.Load() : new Touge.Ui.Settings();
 KanseiApp.Run(new TougeGame(iso, course.ToUpperInvariant(), shot, at, orbit, autodrive, bench, Arg("--quality") != "off", args.Contains("--drift"), Arg("--flicker"))
