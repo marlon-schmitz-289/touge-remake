@@ -73,8 +73,8 @@ dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).
 dotnet run --project Touge -- "<iso>" AKINA_NIT --menu boot|logo|disclaimer|title|mode|quit|course|route|time|weather|maker[:n]|car|gearbox|intro|pause|records|guide|guide-list|guide-talk|options[:gamesetting|hud|screen|graphics|sound|playlist|controller] --shot out/proof/ui_car.png [--shot-size 3200x1800]   # Menü-Bild (options:<seite> öffnet eine Optionsseite, maker:<n> die Modellliste mit Zeile n, z. B. --car IMP --menu maker:2 = das gesperrte IMP3)
 dotnet run --project Touge -- "<iso>" --flow out/proof   # ganzer Ablauf per Skript im Fenster (Titel → Auswahl → Laden → Countdown → Rennen mit Pilot in 16× → Pause → Ziel → Ergebnis → Rekorde → Optionen → Car Guide), PNG je Schritt
 dotnet run --project Touge -- "<iso>" --flow out/proof/legend/flow --legend [--car FD3S]   # Legend of the Streets per Skript: Akina, zwei Battles (Autopilot, 16×), Leiter danach, PNG je Schritt
-dotnet run --project Touge -- "<iso>" --legend-sim [--legend-progress out/progress.json] [--car FD3S]   # Legend ohne Fenster: Autopilot fährt jede Rivalenleiter hoch (Niederlage beendet den Kurs), Freischaltungen + Bilanz, Fortschritt als JSON
-dotnet run --project Touge -- "<iso>" --ai-bench solo|drift|battle|corners[:AKINA,IROHA] [--car R34]   # KI ohne Fenster vermessen: Zeit gegen Referenz je Kurs/Richtung/Auto/Können, Wandtreffer (wo), Schräglauf je Kurventyp, Drift-Prototyp, Battles gegen fünf Rivalen, Straßenbreite in Kurven; human:<datei.rpl> misst einen aufgezeichneten Lauf daneben (AIBENCH_TRACE=von:bis loggt eine Strecke)
+dotnet run --project Touge -- "<iso>" --legend-sim [--legend-progress out/progress.json] [--car FD3S] [--player-skill 0.5]   # Legend ohne Fenster: Autopilot (als Spieler mit Können k, sonst 0,8; mit Gummiband) fährt jede Rivalenleiter hoch (Niederlage beendet den Kurs), Freischaltungen + Bilanz, Fortschritt als JSON
+dotnet run --project Touge -- "<iso>" --ai-bench solo|drift|battle|corners[:AKINA,IROHA] [--car R34]   # KI ohne Fenster vermessen (~40 s je Matrix): solo = Zeit gegen H (der Pilot mit Können 1 und dem Driftstil des Autos, „guter Spieler“) je Kurs/Richtung/Auto/Können, Wandtreffer (wo), Schräglauf je Kurventyp, Fehler je 5 km; drift = jeder Driftstil gegen Grip (gehalten/abgebrochen/verblasst, β, Kurvenzeit, Ausgangstempo, Treffer je Drift, Dreher); battle = Autopilot 0,8 gegen fünf Figuren und den AE86 mit 0,5/0,65/1, Race und Lead/Chase, Tempo-Delta je Paarung aus Solo-Läufen, Überholquote nach Delta, Führungswechsel, Kontakte; corners = Kurvenarten, Straßenbreite, Überholzonen; human:<datei.rpl> misst einen aufgezeichneten Lauf daneben. Umgebung: AIBENCH_TRACE=von:bis (Strecke loggen), AIBENCH_SKILLS/AIBENCH_DRIFTS/AIBENCH_MISTAKES/AIBENCH_NOH (Matrix), AIBENCH_HITS (jeden Wandtreffer mit Zustand), AIBENCH_RIVALS/AIBENCH_RULES (z. B. LeadChase1), AIBENCH_BTRACE=von:bis, AIBENCH_ATTEMPTS, AIBENCH_CONTACTS (Battles)
 dotnet run --project Touge -- "<iso>" --menu legend|legend-rivals|legend-card[:AKINA/takumi] [--legend-progress <json>|--data-dir <ordner>] --shot out/proof/l.png   # Legend-Schritt als Bild (Fortschritt aus der Datei bzw. dem Ordner, sonst leer)
 dotnet run --project Touge -- "<iso>" --jukebox 720   # Rennmusik-Jukebox offline ohne Fenster: Zufallsfolge, M, Menüpause, Titelende → nächster, Log
 dotnet run --project Touge -- "<iso>" --frontend-capture out/proof/fe.wav   # ganzer Menüablauf per Skript offline: Original-SE/BGM als WAV + Log aller Auslöser
@@ -102,13 +102,13 @@ dotnet run --project Touge -- "<iso>" AKINA_RIN --render-scale 50 [--bench 15 --
 dotnet run --project Touge -- "<iso>" [--input-debug] [--sim-wheel]   # Eingabe-Overlay (Geräte, Rohachsen/-tasten, gelesene Lenkung/Pedale, FFB-Anteile); virtuelles Lenkrad ohne Hardware (beide auch beim normalen Start mit Menüs)
 dotnet run --project Touge -- "<iso>" AKINA_DAY --menu controls:keyboard|pad|gamepad|wheel [--sim-wheel] --shot out/proof/input_controls_wheel.png   # Steuerungsseite als Bild
 dotnet run --project Touge -- "<iso>" AKINA_NIT --menu options:playlist --hint-device pad|wheel|keys --shot out/proof/hints/playlist_pad.png   # Tastenhinweise eines Geräts erzwingen (sonst: zuletzt benutztes Gerät)
-dotnet run --project Touge -- "<iso>" AKINA_NIT --battle keisuke [--rule race|chase] [--lead player|rival] [--car AE86T]   # Schnellbattle gegen die KI: Telop „VS …“, 3-2-1-GO, Battle, YOU WIN/LOSE, Ergebnis
-dotnet run --project Touge -- "<iso>" IROHA_DAY --battle takumi --autodrive 420   # ohne Fenster: Autopilot (Spielerauto) gegen die KI, Log je Sekunde (Abstand s/m, Führung, KI-Modus, Kontakte) + Ergebnis
+dotnet run --project Touge -- "<iso>" AKINA_NIT --battle keisuke[@0.9] [--rule race|chase] [--lead player|rival] [--car AE86T]   # Schnellbattle gegen die KI (@: Können des Rivalen): Telop „VS …“, 3-2-1-GO, Battle, YOU WIN/LOSE, Ergebnis
+dotnet run --project Touge -- "<iso>" IROHA_DAY --battle takumi --autodrive 420 [--player-skill 0.5] [--rubber-band]   # ohne Fenster: Autopilot (Spielerauto, Können k, mit Gummiband wie gegen einen Menschen) gegen die KI, Log je Sekunde (Abstand s/m, Führung, KI-Modus, Kontakte) + Ergebnis; BATTLE_DRIFTS=1 loggt die Drifts des Rivalen, BATTLE_ATTEMPTS=1 die Überholversuche
 dotnet run --project Touge -- "<iso>" IROHA_DAY --battle itsuki --autodrive 110 --shot out/proof/b.png [--battle-result]   # Bild nach dem Battle: Zielbanner bzw. Ergebnisblatt
 dotnet run --project Touge -- "<iso>" --menu story[:n[:scene[:teil[:zeile]]|:show[:i[:sek]]|:race|:end]] [--progress 12] --shot out/proof/s.png   # STORY: Kapitelwahl, Szene, Rennstart von Kapitel n oder THE END (--progress: Kapitel 0…n−1 geschafft, nur Testlauf; mit gespeichertem Fortschritt ignoriert)
 dotnet run --project Touge -- "<iso>" --flow out/proof/story --story --progress 7   # STORY-Ablauf im Fenster: Wahl → Szene → Battle (Pilot) → Ergebnis → Szene danach; verlorenes Kapitel mit RETRY
 dotnet run --project Touge -- "<iso>" --story-check media[:n]   # ohne Fenster: jede Manga-Sequenz/Szene wie im Spiel laden und prüfen, Untertitel mit Zeiten
-dotnet run --project Touge -- "<iso>" --story-check [n|calibrate]   # ohne Fenster: Kapiteltabelle + Szenen der Disc gegen die Übersetzung, dann jedes Kapitel mit dem Autopiloten (Durchlauf-Log); calibrate = Rivalenstärke/Zeitgrenzen messen
+dotnet run --project Touge -- "<iso>" --story-check [n|calibrate] [--player-skill 0.55]   # ohne Fenster: Kapiteltabelle + Szenen der Disc gegen die Übersetzung, dann jedes Kapitel mit dem Autopiloten (Durchlauf-Log); calibrate = Rivalenstärke (Können 0,1…1, sonst Motormoment)/Zeitgrenzen gegen einen Spieler mit Können k messen
 dotnet run --project Touge -- "<iso>" AKINA_NIT --versus split [--bot] [--split vertical] [--car FD3S --car2 AE86T] [--net-rule battle|race] [--autodrive 25 --shot out/proof/s.png]   # geteilter Bildschirm direkt (Lobby; --bot: beide Autopiloten, Rennen startet sofort)
 dotnet run --project Touge -- "<iso>" AKINA_DAY --versus host|join:<ip[:port]>|online|menu [--bot] [--port 47860] [--name TAKUMI] [--players 2] [--net-sim 80:5%:20] [--menu pause] [--shot-after 40 --shot out/proof/o.png]   # online im Fenster (--bot: Lobby läuft von selbst, Autopilot fährt; --menu pause: Pause über dem laufenden Rennen fürs Bild)
 dotnet run --project Touge -- "<iso>" --menu freebattle --shot out/proof/freebattle/lobby.png   # VERSUS → VS CPU: Lobby des freien Battles gegen die KI als Bild
@@ -117,7 +117,7 @@ dotnet run --project Touge -- "<iso>" AKINA_NIT --flow out/proof/vs --versus flo
 dotnet run --project Touge -- "<iso>" IROHA_DAY --headless --host [--bot] [--port 47860] [--players 2] [--races 2] [--net-rule race] [--seconds 600]   # Host ohne Fenster
 dotnet run --project Touge -- "<iso>" --headless --join 127.0.0.1[:47860] --bot [--car FD3S] [--net-sim 80:5%:20]   # Bot-Client ohne Fenster (wartet, bis der Host da ist), Log je Sekunde + Zusammenfassung je Rennen
 dotnet run --project Touge -- "<iso>" AKINA_DAY --replay-test 380 [--battle keisuke] [--drift] [--save out/proof/r.rpl]   # ohne Fenster: Lauf aufnehmen, Datei schreiben/lesen, auf frischen Autos abspielen, Positionsfehler je Tick (mit Keyframes) und nur aus Eingaben, 20 Sprünge
-dotnet run --project Touge -- "<iso>" --replay out/proof/r.rpl [--replay-at 30] [--replay-cam tv|chase|far|hood|cockpit|bumper|free] [--shot out/proof/rv.png]   # Replay im Viewer
+dotnet run --project Touge -- "<iso>" --replay out/proof/r.rpl [--replay-at 30] [--replay-cam tv|chase|far|hood|cockpit|bumper|free] [--replay-focus 1] [--shot out/proof/rv.png]   # Replay im Viewer (--replay-focus 1: die Kameras folgen dem Rivalen)
 dotnet run --project Touge -- "<iso>" AKINA_NIT --cam far|hood|cockpit|chase|bumper [--autodrive 5] --shot out/proof/cams/c.png   # Startkamera wählen (sonst Einstellung)
 dotnet run --project Touge -- "<iso>" AKINA_DAY --ghost out/proof/r.rpl --autodrive 9 --drift --shot out/proof/ghost.png   # Geist aus einer Replay-Datei (mit Menüs: der Bestzeit-Lauf)
 dotnet run --project Touge -- "<iso>" --data-dir out/proof/data --menu replay|replay-best|replay-records|replay-delete|saveload|saveload-actions|saveload-name --shot out/proof/m.png   # REPLAY & RECORD / SAVE & LOAD als Bild (anderer App-Daten-Ordner: die echten Daten bleiben unberührt)
@@ -160,11 +160,23 @@ Rivalen (`--battle <id>` oder ein Auto): itsuki, iketani, kenji, takeshi, shingo
 wer zuerst im Ziel ist, gewinnt; dazu Sieg vorzeitig ab 8 s Vorsprung) und `chase` (Lead/Chase wie im Anime: der Verfolger gewinnt, wenn er
 überholt und 1,5 s vorne bleibt – erst nach 10 s, ein Überholen gleich nach dem Start zählt nicht, die KI
 versucht es dann auch nicht; der Führende mit 4 s Vorsprung oder ≥ 1 s Vorsprung im Ziel; klebt der Verfolger am Ziel dran: DRAW;
-`--lead player|rival` wer vorne startet, Standard der Rivale). KI (`Kansei.Physics/RivalPilot`): fährt die Fahrlinie des Kurses (CRS_DRV _I/_O)
-mit Bremspunkten nach Kurvenradius und Können, folgt mit Abstand, überholt innen vor Kurven oder auf der freien Seite (nur wo die Straße breit
-genug ist), verteidigt die Innenseite vor Kurven, fährt nie in ein Auto daneben (wird die Straße zu schmal: hält
-ihre Seite und lupft, um sich dahinter einzureihen), Drift-Stil mit kurzem Handbremsimpuls in Haarnadeln; dezentes Gummiband (±5 % Tempo ab
-30 m Abstand zum Spieler). Auto gegen Auto: Kastenkollision (SAT, über den Tick abgetastet – kein Durchtunneln), Impulse mit Drall, Funken,
+`--lead player|rival` wer vorne startet, Standard der Rivale). KI (`Kansei.Physics/RivalPilot` als Dirigent):
+`CourseMap` (je Fahrlinie einmal: Kurven nach Art, freie voll griffige Straße links/rechts alle 2 m, Überholzonen = Bremszonen vor engen
+Kurven mit ≥ 5 m Straße und Geraden ≥ 80 m), eigene Ideallinie `RacingLine` (geringste Krümmung in der Straßenbreite minus 1,3 m, in
+Driftkurven mehr für das Heck, außen-innen-außen mit spätem Scheitel) mit Tempoplan (Querbeschleunigung des Könnens, Motor-/Luftwiderstand
+vorwärts, Bremsen rückwärts). Eine Könnensskala 0…1 für alle Modi: Kurven 0,67 g (Anfänger) bis 1,45 g (AE86 am Haftlimit, ein guter Spieler),
+Bremsen 0,6–0,95 g, je Auto nach seiner Haftgrenze auf der Kreisbahn (`GripLimit`). Driften (`DriftController`) je Stil und Kurve, einmal je
+Kurve aus dem Renn-Seed entschieden: FR in Haarnadeln und engen Kurven (Takumi/Keisuke fast immer, Ryosuke gut die Hälfte, Takeshi nie), 4WD
+kurzer Powerslide in Haarnadeln (≤ 15°), FF nur ein Handbremsen-Einlenken (~9°); Einleitung per Handbremse, Bremsdrift (Takumi) oder Finte
+(Stil ≥ 0,8, nur mit Platz außen), Halten über einen Schräglauf-Sollwert aus der Bahnkrümmung, weiches Ausleiten, Abfangen bei zu viel
+Schräglauf/Innenkante/Wand; nicht unter 40 km/h, nicht über 65 km/h im Scheitel, nicht mit einem Auto daneben. Renntaktik: folgt mit
+0,4–0,8 s, macht als schnellerer Verfolger Druck (am Heck), zieht in Bremszonen vor dem Bremspunkt des Vordermanns auf die Innenseite,
+bremst 3–6 m später und überholt nur, wenn er bis zum Einlenken daneben ist (sonst reiht er sich wieder ein – kein Hineinstechen), auf
+Geraden mit Tempoüberschuss; verteidigt je Zone höchstens einmal die Innenseite (nie gegen ein Auto schon daneben), Abstandsbremse nach Zeit
+bis zum Kontakt, hält neben einem Auto seine Seite, im Lead/Chase in der Startphase hinten, nach Wandtreffer/Dreher kein Einscheren vor
+einen Nachfolger. Kleine Fehler je Kurve aus dem Seed (Bremspunkt daneben, weiter Ausgang, Blockieren, früh am Gas, Drift-Wackler/-Überdreher),
+nach Können gestaffelt (EASY 6–10, LEGEND 0–1 je 5 km), nie Richtung Wand. Gummiband nur auf dem Plan-Grip (± 3–4 %, ab 1 s Zeitabstand, voll
+bei 4 s, nicht im Lead/Chase und auf den letzten 10 %). Messen ohne Fenster: `--ai-bench` (siehe oben, Ergebnisse PLAN.md). Auto gegen Auto: Kastenkollision (SAT, über den Tick abgetastet – kein Durchtunneln), Impulse mit Drall, Funken,
 Kamerawackeln und Crash-Ton. HUD oben rechts: VS + Rivale, Position 1ST/2ND, LEAD/CHASE, ADVANTAGE (Zeitabstand), Abstandsbalken bis zur
 Vorsprungsgrenze, OVERTAKE!/OVERTAKEN; roter Punkt auf der Streckenuhr. Ton des Rivalen (Motor, Reifen, Wand) nach Entfernung, mit Doppler
 und Stereo. Ende: YOU WIN!!/YOU LOSE/DRAW mit WIN.adx/LOSE.adx (DRAW: WIN.adx wie das Zieljingle), Ergebnisblatt (Rivale, Auto, entschieden durch, Abstand, Zeiten, Führungswechsel,
@@ -175,7 +187,8 @@ Logo-Kachelwand, roter Laufschrift-Kopf, Chromplatten, Karbonpaneele, Original-S
 Ergebnis, WIN/LOSE-Jingle beim Entscheid): SPLIT SCREEN, ONLINE oder VS CPU.
 - **VS CPU** (freies Battle gegen die KI, `Ui/FreeBattle`, `TougeGame.FreeBattle`): Lobby links das Battle (Kurs, Route, Bedingungen
   wie im Versus/Time Attack, Regel RACE = Battle des Originals mit 8-s-Vorsprungssieg oder LEAD / CHASE = Anime-Runde mit Führendem und
-  Jäger, WHO LEADS YOU/RIVAL nur bei LEAD / CHASE, AI LEVEL EASY/NORMAL/HARD = Können −0,2 / wie die Figur / +0,1 und ohne Gummiband),
+  Jäger, WHO LEADS YOU/RIVAL nur bei LEAD / CHASE, AI LEVEL EASY/NORMAL/HARD/LEGEND = Können-Band 0,05–0,30 / 0,35–0,65 / 0,65–0,85 / 0,88–1, die Figur liegt nach ihrem Können darin; HARD
+  holt nur auf (halbes Gummiband), LEGEND ohne Gummiband und mit halb so vielen Fehlern; Sterne auf der Karte nach dem Können der Stufe),
   rechts die Rivalenkarte (einer der 14 aus `--battle`: Team, Auto, Stufe in Sternen, kurze Notiz zum Fahrstil; ◀ ▶ blättert) und das
   eigene Auto mit Lack und AT/MT. In der Lobby läuft das Thema des Rivalen aus `MG_BGM.AFS` (wie auf Legends VS-Karte). START → Laden
   (gleicher Kurs: nur die Autos) → Telop „VS …“, 3-2-1-GO → Battle → YOU WIN/LOSE (WIN/LOSE.adx) → Battle-Blatt mit `R_WIN01`/`R_LOSE`
@@ -275,7 +288,8 @@ CAR SELECT / EXIT. Rivalen und Bedingungen aus dem Original (34 Rivalen auf 11 K
 je Kurs eine Leiter (der nächste Rivale nach einem Sieg über den vorigen), die fünf Zusatzkurse (MYOGI+ … SHIONA) ab 3 geschafften Hauptkursen,
 Bunta (Akina) nach allen 24 Rivalen der Hauptkurse, Takumi von Project D (Irohazaka) nach allen anderen außer Bunta; ein Sieg über Bunta schaltet
 sein Impreza (IMP3) frei – wie im Original auch das Schlusskapitel von STORY; bis dahin ist es in jeder Autowahl (Time Attack, Legend, Versus-Lobby) „?????“ mit dem Hinweis, wie man es bekommt. Revanche gegen einen besiegten Rivalen im Regen (wie das Original). Die ersten drei
-Rivalen eines Hauptkurses fahren mit 80/88/95 % Motormoment (eigene Abstimmung, damit der Trueno am Anfang mithalten kann).
+Rivalen eines Hauptkurses fahren mit 60/72/85 % Motormoment (eigene Abstimmung, damit der Trueno am Anfang mithalten kann; `--legend-sim
+--player-skill 0.5`: ein NORMAL-Spieler besiegt im Trueno 13 der 34 Rivalen, im FD3S 26; mit 0,8 im FD3S 30).
 Nach einem Battle steht der Cursor auf dem nächsten Rivalen, Neues (Rivalen, Kurse, Auto) läuft unten als rotes Band ein. Fortschritt in
 `progress.json` neben `settings.json` (`Rivals`: Siege, Niederlagen, bester Abstand je Rivale; dieselbe Datei wie Story, `Progress`; ein altes
 `legend.json` wird beim Laden übernommen und beim nächsten Speichern gelöscht). Pause-Exit und Zurück aus der
@@ -299,8 +313,10 @@ am Ende jeder Zeile, ▼), → oder START am Pad (wie `SKIPMSG` im Original) = S
 SOUND → VOICE (auch Iketani im Car Guide). Bilder werden je Szene im Hintergrund dekodiert, verteilt hochgeladen und danach freigegeben.
 Ohne die Medien (Manga-Tabellen nicht lesbar) Textpanels über dem Flug wie bisher (ST_BGM_N-Musik). Ziele (Code aus dem ELF): Rennen; vorne bleiben bis ins Ziel; hinterher
 und überholen (auch: in 120 s); 100 s dranbleiben; allein mit Zeitgrenze, Tofu bergauf mit höchstens 3 Wandtreffern, Mitfahrer mit 10.000 Driftpunkten –
-im Rennen oben rechts eine Tafel mit Restzeit/Wandtreffern/Drift. Rivalenstärke je Kapitel aus einer Kalibrierung gegen den Autopiloten, am Anfang
-mit Spielraum. Pause → Exit führt zur Kapitelwahl zurück. Regen bei Nacht (Kapitel 11, MYOGI) gibt es auf der Disc nicht: der Nachtkurs bekommt
+im Rennen oben rechts eine Tafel mit Restzeit/Wandtreffern/Drift. Rivalenstärke je Kapitel aus einer Kalibrierung gegen einen NORMAL-Spieler
+(Autopilot mit Können 0,55 und seinen Fehlern, `--story-check calibrate --player-skill 0.55`), am Anfang mit Spielraum, Können 0,1…1; wo selbst
+0,1 zu stark ist (Kapitel 16) fährt der Rivale gedrosselt; Zeitgrenzen nach dessen Zeit (Akina bergab 4'56, bergauf 5'14). Der NORMAL-Spieler
+schafft 27 von 31 Kapiteln (nicht: 4 Driftpunkte, 22, 23, 26 knapp), einer mit 0,8 30 von 31. Pause → Exit führt zur Kapitelwahl zurück. Regen bei Nacht (Kapitel 11, MYOGI) gibt es auf der Disc nicht: der Nachtkurs bekommt
 Regen (Tropfen, nasse Spiegelungen, Gischt, Regen-Sound, Telop WET); die Haftung ist wie auf den _RIN-Kursen unverändert. Fortschritt in `progress.json` neben den Einstellungen (Schlüssel `story/nn`, Zähler
 `…/tries`, `…/wins`; dieselbe Datei hält Legend of the Streets); Story-Läufe zählen nicht als Time-Attack-Rekord.
 Einstellungen, letzte Wahl und Bestzeiten liegen als JSON im App-Data-Ordner (macOS `~/Library/Application Support/InitialDRemake/settings.json`,
