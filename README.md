@@ -103,7 +103,7 @@ dotnet run --project Touge -- "<iso>" [--input-debug] [--sim-wheel]   # Eingabe-
 dotnet run --project Touge -- "<iso>" AKINA_DAY --menu controls:keyboard|pad|gamepad|wheel [--sim-wheel] --shot out/proof/input_controls_wheel.png   # Steuerungsseite als Bild
 dotnet run --project Touge -- "<iso>" AKINA_NIT --menu options:playlist --hint-device pad|wheel|keys --shot out/proof/hints/playlist_pad.png   # Tastenhinweise eines Geräts erzwingen (sonst: zuletzt benutztes Gerät)
 dotnet run --project Touge -- "<iso>" AKINA_NIT --battle keisuke[@0.9] [--rule race|chase] [--lead player|rival] [--car AE86T]   # Schnellbattle gegen die KI (@: Können des Rivalen): Telop „VS …“, 3-2-1-GO, Battle, YOU WIN/LOSE, Ergebnis
-dotnet run --project Touge -- "<iso>" IROHA_DAY --battle takumi --autodrive 420 [--player-skill 0.5] [--rubber-band]   # ohne Fenster: Autopilot (Spielerauto, Können k, mit Gummiband wie gegen einen Menschen) gegen die KI, Log je Sekunde (Abstand s/m, Führung, KI-Modus, Kontakte) + Ergebnis; BATTLE_DRIFTS=1 loggt die Drifts des Rivalen, BATTLE_ATTEMPTS=1 die Überholversuche
+dotnet run --project Touge -- "<iso>" IROHA_DAY --battle takumi --autodrive 420 [--player-skill 0.5[,aggr,drift]] [--ai-level easy|normal|hard|legend] [--rubber-band]   # ohne Fenster: Autopilot (Spielerauto, Können k, mit Gummiband wie gegen einen Menschen) gegen die KI, Log je Sekunde (Abstand s/m, Führung, KI-Modus, Kontakte) + Ergebnis; BATTLE_DRIFTS=1 loggt die Drifts des Rivalen, BATTLE_ATTEMPTS=1 die Überholversuche
 dotnet run --project Touge -- "<iso>" IROHA_DAY --battle itsuki --autodrive 110 --shot out/proof/b.png [--battle-result]   # Bild nach dem Battle: Zielbanner bzw. Ergebnisblatt
 dotnet run --project Touge -- "<iso>" --menu story[:n[:scene[:teil[:zeile]]|:show[:i[:sek]]|:race|:end]] [--progress 12] --shot out/proof/s.png   # STORY: Kapitelwahl, Szene, Rennstart von Kapitel n oder THE END (--progress: Kapitel 0…n−1 geschafft, nur Testlauf; mit gespeichertem Fortschritt ignoriert)
 dotnet run --project Touge -- "<iso>" --flow out/proof/story --story --progress 7   # STORY-Ablauf im Fenster: Wahl → Szene → Battle (Pilot) → Ergebnis → Szene danach; verlorenes Kapitel mit RETRY
@@ -170,11 +170,14 @@ Kurve aus dem Renn-Seed entschieden: FR in Haarnadeln und engen Kurven (Takumi/K
 kurzer Powerslide in Haarnadeln (≤ 15°), FF nur ein Handbremsen-Einlenken (~9°); Einleitung per Handbremse, Bremsdrift (Takumi) oder Finte
 (Stil ≥ 0,8, nur mit Platz außen), Halten über einen Schräglauf-Sollwert aus der Bahnkrümmung, weiches Ausleiten, Abfangen bei zu viel
 Schräglauf/Innenkante/Wand; nicht unter 40 km/h, nicht über 65 km/h im Scheitel, nicht mit einem Auto daneben. Renntaktik: folgt mit
-0,4–0,8 s, macht als schnellerer Verfolger Druck (am Heck), zieht in Bremszonen vor dem Bremspunkt des Vordermanns auf die Innenseite,
-bremst 3–6 m später und überholt nur, wenn er bis zum Einlenken daneben ist (sonst reiht er sich wieder ein – kein Hineinstechen), auf
-Geraden mit Tempoüberschuss; verteidigt je Zone höchstens einmal die Innenseite (nie gegen ein Auto schon daneben), Abstandsbremse nach Zeit
-bis zum Kontakt, hält neben einem Auto seine Seite, im Lead/Chase in der Startphase hinten, nach Wandtreffer/Dreher kein Einscheren vor
-einen Nachfolger. Kleine Fehler je Kurve aus dem Seed (Bremspunkt daneben, weiter Ausgang, Blockieren, früh am Gas, Drift-Wackler/-Überdreher),
+0,4–0,8 s, macht als schnellerer Verfolger Druck (am Heck, auf der eigenen Linie – kein Versatz nach der Querlage des Vordermanns, die
+gehört zu einer anderen Stelle der Kurve), zieht in Bremszonen vor dem Bremspunkt des Vordermanns auf die Innenseite, wenn die Straße bis
+¾ zum Scheitel Platz für zwei hat, bremst 3–8 m später (mehr mit mehr Tempovorteil) und überholt nur, wenn er bis zum Einlenken wirklich
+daneben ist (sonst reiht er sich wieder ein – kein Hineinstechen), auf Geraden mit Tempoüberschuss; verteidigt je Zone höchstens einmal
+die Innenseite (nie gegen ein Auto schon daneben), Abstandsbremse nach Zeit bis zum Kontakt mit der Querbewegung beider Autos über 0,5 s,
+hält neben einem Auto seine Seite (Abstand mit Kurvenradius und Schräglauf größer, folgt einem Wackler des anderen nur langsam), im
+Lead/Chase in der Startphase hinten, nach Wandtreffer/Dreher kein Einscheren vor einen Nachfolger. Nach dem Ziel bremst der Auslauf
+hinter einem stehenden Auto (kurze Ausläufe: SHIONA/SHOMARU). Kleine Fehler je Kurve aus dem Seed (Bremspunkt daneben, weiter Ausgang, Blockieren, früh am Gas, Drift-Wackler/-Überdreher),
 nach Können gestaffelt (EASY 6–10, LEGEND 0–1 je 5 km), nie Richtung Wand. Gummiband nur auf dem Plan-Grip (± 3–4 %, ab 1 s Zeitabstand, voll
 bei 4 s, nicht im Lead/Chase und auf den letzten 10 %). Messen ohne Fenster: `--ai-bench` (siehe oben, Ergebnisse PLAN.md). Auto gegen Auto: Kastenkollision (SAT, über den Tick abgetastet – kein Durchtunneln), Impulse mit Drall, Funken,
 Kamerawackeln und Crash-Ton. HUD oben rechts: VS + Rivale, Position 1ST/2ND, LEAD/CHASE, ADVANTAGE (Zeitabstand), Abstandsbalken bis zur
@@ -187,7 +190,7 @@ Logo-Kachelwand, roter Laufschrift-Kopf, Chromplatten, Karbonpaneele, Original-S
 Ergebnis, WIN/LOSE-Jingle beim Entscheid): SPLIT SCREEN, ONLINE oder VS CPU.
 - **VS CPU** (freies Battle gegen die KI, `Ui/FreeBattle`, `TougeGame.FreeBattle`): Lobby links das Battle (Kurs, Route, Bedingungen
   wie im Versus/Time Attack, Regel RACE = Battle des Originals mit 8-s-Vorsprungssieg oder LEAD / CHASE = Anime-Runde mit Führendem und
-  Jäger, WHO LEADS YOU/RIVAL nur bei LEAD / CHASE, AI LEVEL EASY/NORMAL/HARD/LEGEND = Können-Band 0,05–0,30 / 0,35–0,65 / 0,65–0,85 / 0,88–1, die Figur liegt nach ihrem Können darin; HARD
+  Jäger, WHO LEADS YOU/RIVAL nur bei LEAD / CHASE, AI LEVEL EASY/NORMAL/HARD/LEGEND = Können-Band 0–0,2 (dazu 85 % Motormoment, damit ein Anfänger auch gegen ein stärkeres Auto gewinnt) / 0,35–0,65 / 0,65–0,85 / 0,88–1, die Figur liegt nach ihrem Können darin; HARD
   holt nur auf (halbes Gummiband), LEGEND ohne Gummiband und mit halb so vielen Fehlern; Sterne auf der Karte nach dem Können der Stufe),
   rechts die Rivalenkarte (einer der 14 aus `--battle`: Team, Auto, Stufe in Sternen, kurze Notiz zum Fahrstil; ◀ ▶ blättert) und das
   eigene Auto mit Lack und AT/MT. In der Lobby läuft das Thema des Rivalen aus `MG_BGM.AFS` (wie auf Legends VS-Karte). START → Laden
@@ -288,8 +291,11 @@ CAR SELECT / EXIT. Rivalen und Bedingungen aus dem Original (34 Rivalen auf 11 K
 je Kurs eine Leiter (der nächste Rivale nach einem Sieg über den vorigen), die fünf Zusatzkurse (MYOGI+ … SHIONA) ab 3 geschafften Hauptkursen,
 Bunta (Akina) nach allen 24 Rivalen der Hauptkurse, Takumi von Project D (Irohazaka) nach allen anderen außer Bunta; ein Sieg über Bunta schaltet
 sein Impreza (IMP3) frei – wie im Original auch das Schlusskapitel von STORY; bis dahin ist es in jeder Autowahl (Time Attack, Legend, Versus-Lobby) „?????“ mit dem Hinweis, wie man es bekommt. Revanche gegen einen besiegten Rivalen im Regen (wie das Original). Die ersten drei
-Rivalen eines Hauptkurses fahren mit 60/72/85 % Motormoment (eigene Abstimmung, damit der Trueno am Anfang mithalten kann; `--legend-sim
---player-skill 0.5`: ein NORMAL-Spieler besiegt im Trueno 13 der 34 Rivalen, im FD3S 26; mit 0,8 im FD3S 30).
+Die vier
+Rivalen eines Hauptkurses fahren mit 60/72/85/92 % Motormoment und Können je Sprosse (0,1–0,2 / ~0,3 / 0,3–0,45 / 0,3–0,5, in den starken
+Autos niedriger; Zusatzkurse 0,55–0,7, PD-Takumi 0,9, Bunta 1) – eigene Abstimmung, damit der Trueno durchkommt. `--legend-sim
+--player-skill k` (Leiter wie ein Spieler): Trueno Anfänger 0,2 12 Rivalen (jeder Hauptkurs-Erste), NORMAL 0,5 21 und 3 von 11 Kursen,
+HARD 0,8 27 und 6 von 11; FD3S 17 / 29 (9 Kurse) / 31 (10 Kurse). `LEGEND_ALL=1` fährt jeden Rivalen einmal (Kalibrierung).
 Nach einem Battle steht der Cursor auf dem nächsten Rivalen, Neues (Rivalen, Kurse, Auto) läuft unten als rotes Band ein. Fortschritt in
 `progress.json` neben `settings.json` (`Rivals`: Siege, Niederlagen, bester Abstand je Rivale; dieselbe Datei wie Story, `Progress`; ein altes
 `legend.json` wird beim Laden übernommen und beim nächsten Speichern gelöscht). Pause-Exit und Zurück aus der
@@ -313,10 +319,12 @@ am Ende jeder Zeile, ▼), → oder START am Pad (wie `SKIPMSG` im Original) = S
 SOUND → VOICE (auch Iketani im Car Guide). Bilder werden je Szene im Hintergrund dekodiert, verteilt hochgeladen und danach freigegeben.
 Ohne die Medien (Manga-Tabellen nicht lesbar) Textpanels über dem Flug wie bisher (ST_BGM_N-Musik). Ziele (Code aus dem ELF): Rennen; vorne bleiben bis ins Ziel; hinterher
 und überholen (auch: in 120 s); 100 s dranbleiben; allein mit Zeitgrenze, Tofu bergauf mit höchstens 3 Wandtreffern, Mitfahrer mit 10.000 Driftpunkten –
-im Rennen oben rechts eine Tafel mit Restzeit/Wandtreffern/Drift. Rivalenstärke je Kapitel aus einer Kalibrierung gegen einen NORMAL-Spieler
-(Autopilot mit Können 0,55 und seinen Fehlern, `--story-check calibrate --player-skill 0.55`), am Anfang mit Spielraum, Können 0,1…1; wo selbst
-0,1 zu stark ist (Kapitel 16) fährt der Rivale gedrosselt; Zeitgrenzen nach dessen Zeit (Akina bergab 4'56, bergauf 5'14). Der NORMAL-Spieler
-schafft 27 von 31 Kapiteln (nicht: 4 Driftpunkte, 22, 23, 26 knapp), einer mit 0,8 30 von 31. Pause → Exit führt zur Kapitelwahl zurück. Regen bei Nacht (Kapitel 11, MYOGI) gibt es auf der Disc nicht: der Nachtkurs bekommt
+im Rennen oben rechts eine Tafel mit Restzeit/Wandtreffern/Drift. Rivalenstärke je Kapitel aus zwei Kalibrierungen
+(Autopilot als Spieler mit seinen Fehlern, `--story-check calibrate --player-skill k`): am Anfang gegen einen Anfänger (0,2), zum Ende hin
+gegen einen NORMAL-Spieler (0,55), Gewicht (Kapitel/30)², minus 0,03; wo selbst 0,1 für den Anfänger zu stark ist (Kapitel 2, 3, 8, 9)
+fährt der Rivale gedrosselt; das Finale (Bunta) ist ein starker Fahrer (0,6) im gedrosselten Impreza (62 %, `STORY_CAL_AT=0.65`), den
+NORMAL knapp schlägt (+1,3 s). Zeitgrenzen vom Anfänger- zur NORMAL-Zeit (Akina bergab 5'27 → 4'56, bergauf 5'42 → 5'14). Anfänger (0,2)
+schafft 14 von 31 Kapiteln (0–14 außer 4 Driftpunkte und 13), 0,25 17, NORMAL 30 (nicht: 4), 0,8 30. Pause → Exit führt zur Kapitelwahl zurück. Regen bei Nacht (Kapitel 11, MYOGI) gibt es auf der Disc nicht: der Nachtkurs bekommt
 Regen (Tropfen, nasse Spiegelungen, Gischt, Regen-Sound, Telop WET); die Haftung ist wie auf den _RIN-Kursen unverändert. Fortschritt in `progress.json` neben den Einstellungen (Schlüssel `story/nn`, Zähler
 `…/tries`, `…/wins`; dieselbe Datei hält Legend of the Streets); Story-Läufe zählen nicht als Time-Attack-Rekord.
 Einstellungen, letzte Wahl und Bestzeiten liegen als JSON im App-Data-Ordner (macOS `~/Library/Application Support/InitialDRemake/settings.json`,
