@@ -41,6 +41,7 @@ using Touge;
 // --ai-bench solo|drift|battle|corners[:KURS,…] [--car X] bzw. human:<datei.rpl>: KI ohne Fenster vermessen (Touge/Race/AiBench): Zeiten je Kurs/Richtung/Auto/
 //   Können gegen eine Referenz, Wandtreffer, Schräglauf je Kurventyp, Drift-Prototyp, Battles gegen Rivalen, Straßenbreite in Kurven, ein aufgezeichneter Lauf daneben.
 // --legend-sim [--legend-progress <json>] [--autodrive <s>]: Legend of the Streets ohne Fenster, Autopilot fährt jede Rivalenleiter hoch, Freischaltungen + Fortschritt (JSON).
+// --player-skill k: der Autopilot der Testläufe (Battles, Legend-/Story-Prüfung) fährt als Spieler mit Können k (sonst 0,8).
 // --legend-progress <json>: Legend-Fortschritt aus/in diese Datei (Testläufe sonst nur im Speicher); --flow <dir> --legend: Legend-Ablauf per Skript (2 Battles).
 // --menu legend|legend-rivals|legend-card[:KURS/rivale]: Legend-Schritt beim Start öffnen (z. B. --menu legend-card:AKINA/takumi --shot …).
 // --menu story[:n[:scene[:teil[:zeile]]|:race|:end]]: STORY-Kapitelwahl, eine Szene, der Rennstart von Kapitel n oder THE END; --progress <n>: Kapitel 0…n−1 gelten
@@ -80,7 +81,7 @@ var launcher = iso == "";
 string[] launcherFlags = ["--launcher", "--menu", "--shot", "--shot-size", "--data-dir", "--backend", "--drop", "--browse", "--input-debug", "--sim-wheel", "--hint-device"];
 string[] valueFlags = ["--drop", "--browse", "--story-check", "--progress", "--battle", "--rule", "--lead", "--flow", "--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--hud-scale", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture", "--lights", "--render-scale", "--jukebox", "--legend-progress",
     "--join", "--port", "--name", "--net-sim", "--players", "--races", "--seconds", "--net-rule", "--versus", "--split", "--car2", "--shot-after",
-    "--replay-test", "--ai-bench", "--replay", "--replay-at", "--replay-cam", "--save", "--data-dir", "--ghost", "--hint-device", "--cam"];
+    "--replay-test", "--ai-bench", "--replay", "--replay-at", "--replay-cam", "--save", "--data-dir", "--ghost", "--hint-device", "--cam", "--player-skill"];
 string? Arg(string flag) { var i = Array.IndexOf(args, flag); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
 if (launcher ? badIso == null && !args.Where((a, i) => i == 0 || !valueFlags.Contains(args[i - 1])).All(launcherFlags.Contains) : !File.Exists(iso))
 {
@@ -125,6 +126,9 @@ var course = args.Where((a, i) => i == 0 || !valueFlags.Contains(args[i - 1]))
                  .FirstOrDefault(a => a.Contains('_') && !a.EndsWith(".iso", StringComparison.OrdinalIgnoreCase)) ?? "AKINA_DAY";
 float? autodrive = Arg("--autodrive") is { } ad ? float.Parse(ad, CultureInfo.InvariantCulture) : null;
 float? bench = Arg("--bench") is { } b ? float.Parse(b, CultureInfo.InvariantCulture) : null;
+// --player-skill k: the autopilot that drives the player's car in test runs (battles, Legend/Story checks) as a player of skill k (default 0.8)
+if (Arg("--player-skill") is { } playerSkill)
+    Touge.Race.BattleRun.Autopilot = Touge.Race.BattleRun.Autopilot with { Skill = float.Parse(playerSkill, CultureInfo.InvariantCulture) };
 if (Arg("--frontend-capture") is { } frontWav)
 {
     using var isoFile = new Touge.Formats.Iso9660(iso);
@@ -187,13 +191,16 @@ if (args.Contains("--headless"))
         int.Parse(Arg("--players") ?? "2"), float.Parse(Arg("--seconds") ?? "600", CultureInfo.InvariantCulture),
         Arg("--net-sim") is { } sim ? Touge.Net.NetSim.Parse(sim) : null, int.Parse(Arg("--races") ?? "1")));
 }
-// --battle <rival|car> [--rule race|chase] [--lead player|rival]: quick battle against the AI (Touge/Race)
+// --battle <rival|car>[@skill] [--rule race|chase] [--lead player|rival]: quick battle against the AI (Touge/Race), the rival's skill
+// optionally set (takumi@0.9)
 Touge.Race.BattleSetup? battle = null;
 if (Arg("--battle") is { } rivalArg)
 {
     try
     {
-        battle = new Touge.Race.BattleSetup(Touge.Race.Rivals.Find(rivalArg), Arg("--rule") is "chase" or "leadchase" ? Touge.Race.BattleRule.LeadChase : Touge.Race.BattleRule.Race,
+        var rival = Touge.Race.Rivals.Find(rivalArg.Split('@')[0]);
+        if (rivalArg.Split('@') is [_, var rivalSkill]) rival = rival with { Style = rival.Style with { Skill = float.Parse(rivalSkill, CultureInfo.InvariantCulture) } };
+        battle = new Touge.Race.BattleSetup(rival, Arg("--rule") is "chase" or "leadchase" ? Touge.Race.BattleRule.LeadChase : Touge.Race.BattleRule.Race,
             Arg("--lead") == "player" ? 0 : 1);
     }
     catch (ArgumentException e)
@@ -225,7 +232,7 @@ if (autodrive is { } battleSeconds && shot == null && battle != null)
 {
     using var isoFile = new Touge.Formats.Iso9660(iso);
     var drive = new Drive(isoFile, course.ToUpperInvariant(), args.Contains("--reverse"), Kansei.Physics.CarSpecs.All[car]);
-    return Touge.Race.BattleRun.Headless(drive, battle, battleSeconds, car) ? 0 : 2;
+    return Touge.Race.BattleRun.Headless(drive, battle, battleSeconds, car, args.Contains("--rubber-band")) ? 0 : 2;
 }
 if (autodrive is { } seconds && shot == null)
 {

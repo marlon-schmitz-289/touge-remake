@@ -96,7 +96,7 @@ public static class Legend
     ///     the original's per-course AI speed table 0x2C7930): the first rivals run detuned so the starter car (Trueno) can
     ///     beat them, from the fourth on the cars are stock; the additions and the secret rivals are always stock.
     /// </summary>
-    public static float[] RungPower => [0.8f, 0.88f, 0.95f]; // a property: All (above) is initialised first
+    public static float[] RungPower => [0.6f, 0.72f, 0.85f]; // a property: All (above) is initialised first
 
     /// <summary><see cref="RungPower"/> applied to the main courses' regulars.</summary>
     private static Entry[] Tiered(Entry[] all) =>

@@ -71,8 +71,10 @@ public sealed partial class TougeGame
     private void NewBattle()
     {
         if (Battle == null || _rivalModel == null) return;
-        ICarDriver player = autodrive != null || bench != null || Flow != null ? new AiDriver(new RivalPilot(_drive.Line, BattleRun.Autopilot)) : _playerDriver;
-        _race = BattleRun.Create(_drive, Battle, player);
+        var auto = autodrive != null || bench != null || Flow != null;
+        ICarDriver player = auto ? new AiDriver(new RivalPilot(_drive.Line, BattleRun.Autopilot)) : _playerDriver;
+        // every battle (and retry) rolls the rival's drifts and mistakes anew; scripted runs stay repeatable
+        _race = BattleRun.Create(_drive, auto ? Battle : Battle with { Seed = Random.Shared.Next() }, player);
         _race.RubberBanding = player == _playerDriver && Battle.RubberBand;
         _rivalPrevVelocity = Vector3.Zero;
         Array.Clear(_rivalSmoke);

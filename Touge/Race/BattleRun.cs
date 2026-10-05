@@ -8,8 +8,18 @@ namespace Touge.Race;
 /// <param name="Terms">Other limits than the rule's defaults (story chapters).</param>
 public sealed record BattleSetup(Rivals.Rival Rival, BattleRule Rule, int Leader = 1, BattleTerms? Terms = null)
 {
-    /// <summary>The AI eases off ahead / pushes behind against a human player (free battle HARD: off).</summary>
+    /// <summary>The AI eases off ahead / pushes behind against a human player (free battle LEGEND: off).</summary>
     public bool RubberBand { get; init; } = true;
+    /// <summary>
+    ///     How far the rubber band moves the AI's planned grip at full effect (4 s apart): up when behind, down when ahead
+    ///     (free battle HARD: catch-up only, half of it).
+    /// </summary>
+    public float BandUp { get; init; } = 0.03f;
+    public float BandDown { get; init; } = 0.04f;
+    /// <summary>The AI level's factor on the rival's mistakes (LEGEND 0.5).</summary>
+    public float Mistakes { get; init; } = 1;
+    /// <summary>Race seed: the AI's drift decisions and mistakes (the same setup and seed drive the same battle).</summary>
+    public int Seed { get; init; }
 }
 
 /// <summary>Limits of a <see cref="Battle"/> other than its rule's defaults (null = the default).</summary>
@@ -18,8 +28,8 @@ public sealed record BattleTerms(float? Breakaway = null, float? DrawGap = null,
 /// <summary>Builds a player-vs-rival <see cref="RaceSession"/> on a <see cref="Drive"/>, and runs one headless for --battle --autodrive.</summary>
 public static class BattleRun
 {
-    /// <summary>Style of the autopilot that drives the player's car in test runs: a good, fairly clean driver.</summary>
-    public static readonly RivalStyle Autopilot = new(0.8f, 0.5f, 0.3f);
+    /// <summary>Style of the autopilot that drives the player's car in test runs: a good, fairly clean driver (--player-skill sets its skill).</summary>
+    public static RivalStyle Autopilot { get; set; } = new(0.8f, 0.5f, 0.3f);
 
     /// <summary>
     ///     The player's car (<see cref="Drive.Car"/>, driven by <paramref name="player"/>) and the rival's (its HCAR car, AI) on the
@@ -36,7 +46,11 @@ public static class BattleRun
         var race = new RaceSession(drive.Ground, drive.Line, drive.RunOutLine, battle);
         race.Add(playerName, drive.Car, player);
         var rival = new Vehicle(setup.Rival.Spec) { SurfaceGrip = drive.Car.SurfaceGrip };
-        race.Add(setup.Rival.Name, rival, new AiDriver(new RivalPilot(drive.Line, setup.Rival.Style)));
+        race.Add(setup.Rival.Name, rival, new AiDriver(new RivalPilot(drive.Line, setup.Rival.Style)
+        {
+            Seed = setup.Seed, BandUp = setup.BandUp, BandDown = setup.BandDown, MistakeScale = setup.Mistakes,
+        }));
+        if (player is AiDriver auto) auto.Pilot.Seed = unchecked(setup.Seed * 31 + 7); // the autopilot of test runs rolls its own
         drive.ResetTo(0);
         var at = race.Cars[0].Track.Track(drive.Car.Position).Along;
         race.Grid(setup.Rule, at, setup.Leader);
@@ -47,9 +61,10 @@ public static class BattleRun
     ///     --battle … --autodrive: the autopilot drives the player's car against the rival for <paramref name="seconds"/> (or until
     ///     both stopped after the result), one log line per second and a summary. False if the simulation blew up.
     /// </summary>
-    public static bool Headless(Drive drive, BattleSetup setup, float seconds, string car)
+    public static bool Headless(Drive drive, BattleSetup setup, float seconds, string car, bool rubberBand = false)
     {
         var race = Create(drive, setup, new AiDriver(new RivalPilot(drive.Line, Autopilot)), car + " (AUTO)");
+        race.RubberBanding = rubberBand && setup.RubberBand; // the autopilot as a human player (--rubber-band)
         return Run(race, seconds);
     }
 
@@ -58,6 +73,9 @@ public static class BattleRun
     {
         RaceCar p = race.Cars[0], r = race.Cars[1];
         var b = race.Battle!;
+        if (Environment.GetEnvironmentVariable("BATTLE_ATTEMPTS") != null) // the racecraft's passing attempts as they happen
+            foreach (var (c, who) in new[] { (p, "P"), (r, "R") })
+                if (c.Driver is AiDriver ai) ai.Pilot.Log = m => Console.WriteLine($"[Attempt] {who} t {race.Time:F1} {m}");
         Console.WriteLine($"[Battle] {p.Name} ({p.Vehicle.Spec.Mass:F0} kg) gegen {r.Name} ({r.Vehicle.Spec.Mass:F0} kg), Regel {b.Rule}, Ziel bei {race.Goal:F0} m");
         Console.WriteLine("   t   spieler_m  kmh   rivale_m  kmh  modus   versatz  abstand_s  abstand_m  führt  kontakte");
         var ticks = (int)(seconds / Drive.Dt);

@@ -52,7 +52,6 @@ public static class AiBench
         drive.ResetTo(0);
         var car = drive.Car;
         var pilot = new RivalPilot(drive.Line, style) { Seed = seed };
-        if (Environment.GetEnvironmentVariable("LATGAIN") is { } lg) pilot.Pilot.LateralGain = float.Parse(lg, CultureInfo.InvariantCulture);
         if (Trace is var (from, to))
         {
             pilot.Prepare(car, drive.Ground);

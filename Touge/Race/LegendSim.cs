@@ -30,6 +30,7 @@ public static class LegendSim
                     var (courseTime, wet) = Legend.Conditions(e, times[e.CourseId], p);
                     var drive = new Drive(iso, courseTime, e.Reverse, CarSpecs.All[car]);
                     var race = BattleRun.Create(drive, Legend.Setup(e), new AiDriver(new RivalPilot(drive.Line, BattleRun.Autopilot)), car + " (AUTO)");
+                    race.RubberBanding = true; // as for a player in the game
                     Console.WriteLine($"\n[Legend] {e.Key}: {courseTime} {(e.Reverse ? "rückwärts" : "vorwärts")}{(wet ? " nass" : "")}, {e.Rival.Name} ({e.Rival.Car}, Stufe {Legend.Stars(e)})");
                     if (!BattleRun.Run(race, seconds)) return false;
                     var b = race.Battle!;

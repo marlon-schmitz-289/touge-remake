@@ -210,10 +210,19 @@ public sealed class RaceSession
         Console.WriteLine($"[Race] Startaufstellung versetzt: Straße bei {at:F0} m zu schmal für zwei nebeneinander");
     }
 
-    /// <summary>Rubber band for AI car <paramref name="ai"/> against car 0: 0 within 30 m, then up to ±1 at 150 m (+ = the AI is behind).</summary>
+    /// <summary>
+    ///     Rubber band for AI car <paramref name="ai"/> against car 0 (+ = the AI is behind): in a battle from the time gap, 0
+    ///     within 1 s, full at 4 s, and off in a lead/chase and over the last 10 % of the course (the finish is fair); without
+    ///     a battle by distance, 0 within 30 m, full at 150 m. It only moves the AI's planned grip (<see cref="RivalPilot.RubberBand"/>).
+    /// </summary>
     public float RubberBand(RaceCar ai)
     {
         if (!RubberBanding || ai == Cars[0]) return 0;
+        if (Battle is { } b)
+        {
+            if (b.Rule == BattleRule.LeadChase || MathF.Max(Cars[0].Along, ai.Along) > 0.9f * _goal) return 0;
+            return Math.Clamp((MathF.Abs(b.Gap) - 1) / 3, 0, 1) * MathF.Sign(b.Gap);
+        }
         var d = Cars[0].Along - ai.Along;
         return Math.Clamp((MathF.Abs(d) - 30) / 120, 0, 1) * MathF.Sign(d);
     }

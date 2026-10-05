@@ -36,7 +36,7 @@ public sealed class LinePilot
     /// <summary>Plan: seconds of look-ahead on the speed profile, and metres it is read further on (+ = brakes earlier).</summary>
     public float SpeedLead = 0.25f, PlanShift;
     /// <summary>Plan: preview distance of the lateral/heading feedback as a share of the default (smaller = stiffer).</summary>
-    public float LateralGain = 0.6f;
+    public float LateralGain = 0.5f;
     /// <summary>Plan: also cap the speed by the line's curvature at <see cref="CornerAccel"/> (a drift corner taken in grip).</summary>
     public bool CheckCurvature;
 

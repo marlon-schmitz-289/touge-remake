@@ -4,8 +4,8 @@ using Touge.Race;
 
 namespace Touge.Ui;
 
-/// <summary>AI strength of a free battle: the rival's skill moved down/up, and HARD without the rubber band.</summary>
-public enum AiLevel { Easy, Normal, Hard }
+/// <summary>AI strength of a free battle: a band of the skill scale (<see cref="FreeBattle.Band"/>), rubber band and mistakes.</summary>
+public enum AiLevel { Easy, Normal, Hard, Legend }
 
 /// <summary>The free battle lobby's choice, remembered in <see cref="Settings.FreeBattle"/> (the player's car is <see cref="Settings.Car"/>).</summary>
 public sealed class FreeBattleChoice
@@ -108,7 +108,7 @@ public sealed class FreeBattle(Catalog catalog)
             }
             case Row.Rule: c.Rule = c.Rule == BattleRule.Race ? BattleRule.LeadChase : BattleRule.Race; break;
             case Row.Lead: c.PlayerLeads = !c.PlayerLeads; break;
-            case Row.Level: c.Level = (AiLevel)Wrap((int)c.Level + d, 3); break;
+            case Row.Level: c.Level = (AiLevel)Wrap((int)c.Level + d, 4); break;
             case Row.Rival: c.Rival = Rivals.All[Wrap(RivalIndex + d, Rivals.All.Length)].Id; break;
             case Row.Car:
                 do Car = Wrap(Car + d, catalog.Cars.Count);
@@ -153,20 +153,38 @@ public sealed class FreeBattle(Catalog catalog)
     // ------------------------------------------------------------ the battle
 
     /// <summary>
-    ///     AI strength onto the rival's style and the rubber band: EASY −0.2 skill (pace and braking points, <see cref="RivalPilot.Pace"/>),
-    ///     NORMAL the character's own, HARD +0.1 skill and no easing off when ahead (rubber band off).
+    ///     The skill band of an AI level on the one scale of every mode (<see cref="RivalPilot.Pace"/>): EASY 0.05–0.30 (a
+    ///     beginner can win), NORMAL 0.35–0.65, HARD 0.65–0.85, LEGEND 0.88–1 (a good player's pace).
     /// </summary>
-    public static (Rivals.Rival Rival, bool RubberBand) Strength(Rivals.Rival r, AiLevel level)
+    public static (float Lo, float Hi) Band(AiLevel level) => level switch
     {
-        var (skill, band) = level switch { AiLevel.Easy => (-0.2f, true), AiLevel.Hard => (0.1f, false), _ => (0f, true) };
-        return (r with { Style = r.Style with { Skill = Math.Clamp(r.Style.Skill + skill, 0.05f, 1) } }, band);
+        AiLevel.Easy => (0.05f, 0.30f), AiLevel.Hard => (0.65f, 0.85f), AiLevel.Legend => (0.88f, 1f), _ => (0.35f, 0.65f),
+    };
+
+    /// <summary>A character's skill (0.15 Itsuki … 1 Bunta) placed within the level's band.</summary>
+    public static float SkillAt(AiLevel level, float skill)
+    {
+        var (lo, hi) = Band(level);
+        return float.Lerp(lo, hi, Math.Clamp((skill - 0.15f) / 0.85f, 0, 1));
     }
 
-    /// <summary>The battle of <paramref name="c"/>: the rival at its strength, the rule, who leads off.</summary>
+    /// <summary>The rival at <paramref name="level"/>: his skill within its band, the rest of his style his own.</summary>
+    public static Rivals.Rival Strength(Rivals.Rival r, AiLevel level) => r with { Style = r.Style with { Skill = SkillAt(level, r.Style.Skill) } };
+
+    /// <summary>
+    ///     The battle of <paramref name="c"/>: the rival at its strength, the rule, who leads off; the rubber band in full on
+    ///     EASY/NORMAL, catch-up only (half) on HARD, off on LEGEND, which also makes half the mistakes.
+    /// </summary>
     public static BattleSetup Setup(FreeBattleChoice c)
     {
-        var (rival, band) = Strength(Rivals.All.FirstOrDefault(r => r.Id == c.Rival) ?? Rivals.All[0], c.Level);
-        return new BattleSetup(rival, c.Rule, c.Rule == BattleRule.LeadChase && c.PlayerLeads ? 0 : 1) { RubberBand = band };
+        var rival = Strength(Rivals.All.FirstOrDefault(r => r.Id == c.Rival) ?? Rivals.All[0], c.Level);
+        return new BattleSetup(rival, c.Rule, c.Rule == BattleRule.LeadChase && c.PlayerLeads ? 0 : 1)
+        {
+            RubberBand = c.Level != AiLevel.Legend,
+            BandUp = c.Level == AiLevel.Hard ? 0.015f : 0.03f,
+            BandDown = c.Level == AiLevel.Hard ? 0 : 0.04f,
+            Mistakes = c.Level == AiLevel.Legend ? 0.5f : 1,
+        };
     }
 
     /// <summary>The rival's theme on the disc (MANGA/MG_BGM.AFS) as Legend plays it on the VS card: his Legend entry with the same car.</summary>
@@ -251,7 +269,7 @@ public sealed class FreeBattle(Catalog catalog)
         for (var i = 0; i < rule.Length; i++) c.Fit(rule[i], 30, y + 16 + i * 15, 206, 0, Grey, 0.1f, 0, 11);
 
         // the rival (right, top)
-        var (rival, _) = Strength(Rival, Choice.Level);
+        var rival = Strength(Rival, Choice.Level);
         c.Carbon(262, 72, 496, 252, 1, false);
         c.Plate(268, 78, 222, 24, 1);
         c.Text("RIVAL", 280, 95, 13, Ink, 0, 0.15f);

@@ -450,6 +450,16 @@ public sealed partial class TougeGame
 
     // ------------------------------------------------------------ the race
 
+    /// <summary>
+    ///     The --bot driver of player 2's <paramref name="car"/>: the style of the character who drives that car (a generic
+    ///     one for the others) at the free battle's NORMAL level.
+    /// </summary>
+    internal static RivalStyle BotStyle(string car)
+    {
+        var style = Rivals.All.FirstOrDefault(r => r.Car == car)?.Style ?? new RivalStyle(0.6f, 0.5f, 0.4f);
+        return style with { Skill = Ui.FreeBattle.SkillAt(Ui.AiLevel.Normal, style.Skill) };
+    }
+
     /// <summary>A fresh versus race on the grid (also RETRY): the session with every car, split's referee and player 2's HUD and camera.</summary>
     private void NewVersusRace()
     {
@@ -462,7 +472,7 @@ public sealed partial class TougeGame
             race.Add("PLAYER 1", _drive.Car, p1);
             var p2 = _vsCars[0];
             var v2 = new Vehicle(_settings.Assisted(CarSpecs.All[p2.Car])) { SurfaceGrip = _drive.Car.SurfaceGrip, AutomaticGearbox = true };
-            p2.Race = race.Add("PLAYER 2", v2, VersusBot ? new AiDriver(new RivalPilot(_drive.Line, new RivalStyle(0.75f, 0.4f, 0.5f))) : _p2);
+            p2.Race = race.Add("PLAYER 2", v2, VersusBot ? new AiDriver(new RivalPilot(_drive.Line, BotStyle(p2.Car))) : _p2);
             _drive.ResetTo(0);
             NetRace.Grid(race, race.Cars[0].Track.Track(_drive.Car.Position).Along, [0, 1]);
             _vsReferee = new Referee(_vsConfig.Rule, race.Goal);

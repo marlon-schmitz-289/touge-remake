@@ -203,12 +203,15 @@ public static class StoryHeadless
     }
 
     /// <summary>
-    ///     --story-check calibrate: per battle chapter the highest rival skill the autopilot still beats (bisection over −2…1;
-    ///     wins are not strictly monotonic in skill, so this is a guide), per time-limit chapter the autopilot's time without
-    ///     a limit. The numbers behind <see cref="StoryRules.RivalSkill"/> and <see cref="StoryRules.Limit"/>.
+    ///     --story-check calibrate [--player-skill 0.55]: the autopilot as a player (a NORMAL one with his mistakes, the
+    ///     calibration behind the table): per battle chapter the highest rival skill 0.1…1 it still beats (bisection; wins are
+    ///     not strictly monotonic in skill, so this is a guide), and where even 0.1 is too strong (a car that outclasses the
+    ///     hero's) the highest engine torque 0.6…1 of the rival's car at 0.1; per time-limit chapter its time without a limit.
+    ///     The numbers behind <see cref="StoryRules.RivalSkill"/>, <see cref="StoryRules.RivalPower"/> and <see cref="StoryRules.Limit"/>.
     /// </summary>
     public static void Calibrate(Iso9660 iso)
     {
+        Console.WriteLine($"[Kalibrierung] Spieler: Autopilot mit Können {BattleRun.Autopilot.Skill:0.00}");
         foreach (var c in Chapters(iso))
         {
             var goal = StoryRules.Of(c.Rule, c.Rival >= 0);
@@ -220,17 +223,29 @@ public static class StoryHeadless
                 Console.WriteLine($"[Kalibrierung] {c.Index,2} {goal,-11} Autopilot ohne Grenze: {solo}");
                 continue;
             }
-            // below 0 the pace keeps falling (RivalPilot.Pace is linear: −2 = 0.32 g in bends), for cars that outclass the hero's
-            float lo = -2, hi = 1;
-            if (Play(drive, c, out _, skill: lo) != BattleOutcome.Win) hi = lo;
-            else
-                for (var i = 0; i < 7; i++)
-                {
-                    var mid = (lo + hi) / 2;
-                    if (Play(drive, c, out _, skill: mid) == BattleOutcome.Win) lo = mid;
-                    else hi = mid;
-                }
-            Console.WriteLine($"[Kalibrierung] {c.Index,2} {goal,-11} höchste Fähigkeit, die der Autopilot schlägt: {(hi == lo ? "keine (auch −2 nicht)" : $"{lo:0.000}")}");
+            float lo = 0.1f, hi = 1;
+            if (Play(drive, c, out _, skill: lo) != BattleOutcome.Win)
+            {
+                // even the weakest driver is too fast in that car: detune it (engine torque) instead of a skill below the scale
+                (lo, hi) = (0.6f, 1);
+                if (Play(drive, c, out _, skill: 0.1f, power: lo) != BattleOutcome.Win) hi = lo;
+                else
+                    for (var i = 0; i < 5; i++)
+                    {
+                        var mid = (lo + hi) / 2;
+                        if (Play(drive, c, out _, skill: 0.1f, power: mid) == BattleOutcome.Win) lo = mid;
+                        else hi = mid;
+                    }
+                Console.WriteLine($"[Kalibrierung] {c.Index,2} {goal,-11} schon 0,1 zu stark; höchstes Motormoment bei 0,1, das der Spieler schlägt: {(hi == lo ? "keins (auch 0,6 nicht)" : $"{lo:0.000}")}");
+                continue;
+            }
+            for (var i = 0; i < 6; i++)
+            {
+                var mid = (lo + hi) / 2;
+                if (Play(drive, c, out _, skill: mid) == BattleOutcome.Win) lo = mid;
+                else hi = mid;
+            }
+            Console.WriteLine($"[Kalibrierung] {c.Index,2} {goal,-11} höchste Fähigkeit, die der Spieler schlägt: {lo:0.000}");
         }
     }
 
@@ -242,8 +257,8 @@ public static class StoryHeadless
 
     private static Touge.Drive Load(Iso9660 iso, StoryScript.Chapter c) => new(iso, CourseTime(c), c.Reverse, CarSpecs.All[CarPaint.Cars[c.Hero]]);
 
-    /// <param name="skill">Rival skill instead of the story's (calibration); <paramref name="limit"/>: time limit instead of the story's.</param>
-    private static BattleOutcome Play(Touge.Drive drive, StoryScript.Chapter c, out string log, float? skill = null, int? limit = null)
+    /// <param name="skill">Rival skill instead of the story's (calibration), <paramref name="power"/> his engine torque; <paramref name="limit"/>: time limit instead of the story's.</param>
+    private static BattleOutcome Play(Touge.Drive drive, StoryScript.Chapter c, out string log, float? skill = null, int? limit = null, float? power = null)
     {
         var goal = StoryRules.Of(c.Rule, c.Rival >= 0);
         if (StoryRules.Solo(goal))
@@ -266,7 +281,7 @@ public static class StoryHeadless
             return judge.Outcome;
         }
         var rival = StoryRivals.Find(StoryText.Chapters[c.Index].Rival!, CarPaint.Cars[c.Rival], c.Index);
-        if (skill is { } k) rival = rival with { Style = rival.Style with { Skill = k } };
+        if (skill is { } k) rival = rival with { Style = rival.Style with { Skill = k }, Power = power ?? 1 };
         var setup = StoryRules.Battle(goal, c.Param, rival)!;
         var race = BattleRun.Create(drive, setup, new AiDriver(new RivalPilot(drive.Line, BattleRun.Autopilot)));
         race.RubberBanding = true; // as for a player in the game

@@ -156,9 +156,9 @@ public sealed class RivalPilot
     /// <summary>Slower corners (m/s at the apex) are not drifted: the tail cannot be held under ~40 km/h (IROHA's tightest hairpins).</summary>
     public const float MinDriftSpeed = 40 / 3.6f;
 
-    /// <summary>Following distance (m, centre to centre) behind a car at <paramref name="speed"/>: a metre plus 0.8 … 0.4 s by aggression, 0.25 … 0.1 s when pressing.</summary>
+    /// <summary>Following distance (m, centre to centre) behind a car at <paramref name="speed"/>: a metre plus 0.8 … 0.4 s by aggression, 0.12 … 0.02 s when pressing (on its bumper).</summary>
     public static float FollowGap(float speed, float aggression, bool pressure = false) =>
-        CarLength + 1 + speed * (pressure ? 0.25f - 0.15f * aggression : 0.8f - 0.4f * aggression);
+        CarLength + 1 + speed * (pressure ? 0.12f - 0.1f * aggression : 0.8f - 0.4f * aggression);
 
     /// <summary>
     ///     Probability that a drift-eligible corner is drifted: 1.25 × drift − 0.15 (Takumi/Keisuke ~1, Ryosuke 0.6), less

@@ -85,18 +85,31 @@ public class FreeBattleTests
         Assert.Equal(("AKINA_DAY", false), (f.Choice.Course, f.Choice.Fog)); // no fog over the rain course
     }
 
-    /// <summary>AI level onto skill and rubber band, the leader only for lead/chase, the rival's theme as on Legend's VS card.</summary>
+    /// <summary>
+    ///     AI level onto a skill band (the character placed within it), rubber band and mistakes; the leader only for
+    ///     lead/chase; the rival's theme as on Legend's VS card.
+    /// </summary>
     [Fact]
     public void Setup_MapsLevelRuleAndLeader()
     {
         var takumi = Rivals.Find("takumi");
         var easy = FreeBattle.Setup(new FreeBattleChoice { Rival = "takumi", Level = AiLevel.Easy, Rule = BattleRule.LeadChase, PlayerLeads = true });
-        Assert.Equal((takumi.Style.Skill - 0.2f, true, 0, BattleRule.LeadChase), (easy.Rival.Style.Skill, easy.RubberBand, easy.Leader, easy.Rule));
-        Assert.Equal(takumi.Car, easy.Rival.Car);
+        Assert.Equal((true, 0, BattleRule.LeadChase), (easy.RubberBand, easy.Leader, easy.Rule));
+        Assert.InRange(easy.Rival.Style.Skill, 0.25f, 0.30f); // near the top of EASY: the best character
+        Assert.Equal((takumi.Car, takumi.Style.Drift), (easy.Rival.Car, easy.Rival.Style.Drift)); // his car and style stay
         var hard = FreeBattle.Setup(new FreeBattleChoice { Rival = "takumi", Level = AiLevel.Hard, Rule = BattleRule.Race, PlayerLeads = true });
-        Assert.Equal((1f, false, 1), (hard.Rival.Style.Skill, hard.RubberBand, hard.Leader)); // capped at 1; a race has no leader choice
+        Assert.Equal((true, 0.015f, 0f, 1), (hard.RubberBand, hard.BandUp, hard.BandDown, hard.Leader)); // catch-up only; a race has no leader choice
+        Assert.InRange(hard.Rival.Style.Skill, 0.8f, 0.85f);
+        var legend = FreeBattle.Setup(new FreeBattleChoice { Rival = "takumi", Level = AiLevel.Legend });
+        Assert.Equal((false, 0.5f), (legend.RubberBand, legend.Mistakes));
+        Assert.InRange(legend.Rival.Style.Skill, 0.98f, 1f);
         var normal = FreeBattle.Setup(new FreeBattleChoice { Rival = "itsuki" });
-        Assert.Equal((Rivals.Find("itsuki").Style, true, 1), (normal.Rival.Style, normal.RubberBand, normal.Leader));
+        Assert.Equal((0.35f, true, 1, 1f), (normal.Rival.Style.Skill, normal.RubberBand, normal.Leader, normal.Mistakes)); // the weakest: NORMAL's bottom
+        // one scale: every character's level bands meet without overlap, in order
+        foreach (var r in Rivals.All)
+            Assert.True(FreeBattle.SkillAt(AiLevel.Easy, r.Style.Skill) < FreeBattle.SkillAt(AiLevel.Normal, r.Style.Skill)
+                        && FreeBattle.SkillAt(AiLevel.Normal, r.Style.Skill) <= FreeBattle.SkillAt(AiLevel.Hard, r.Style.Skill)
+                        && FreeBattle.SkillAt(AiLevel.Hard, r.Style.Skill) < FreeBattle.SkillAt(AiLevel.Legend, r.Style.Skill), r.Id);
         Assert.Equal("TAKUMI02.adx", FreeBattle.Theme(takumi)); // his Akina Trueno
         Assert.All(Rivals.All, r => Assert.EndsWith(".adx", FreeBattle.Theme(r)));
         Assert.DoesNotContain(Rivals.All, r => FreeBattle.Theme(r) == "TOKYO.adx"); // every rival has his own theme
