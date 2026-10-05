@@ -20,7 +20,7 @@ Assets kommen zur Laufzeit aus der eigenen ISO (SLPM-65268), nie ins Repo.
 ```sh
 dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso"   # Front-End (Hinweis, Karten, Titel, Hauptmenü) → Kurs, Auto, Rennen, Ergebnis, Rekorde, Optionen
 dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso" [AKINA_DAY|AKINA_NIT|USUI_NIT|…]   # direkt fahren, ohne Menü
-dotnet run --project Touge -- "<iso>" AKINA_NIT --menu boot|logo|disclaimer|title|mode|quit|course|route|time|weather|maker|car|gearbox|intro|pause|records|guide|guide-list|guide-talk|options[:gamesetting|hud|screen|graphics|sound|playlist|controller] --shot out/proof/ui_car.png [--shot-size 3200x1800]   # Menü-Bild (options:<seite> öffnet eine Optionsseite)
+dotnet run --project Touge -- "<iso>" AKINA_NIT --menu boot|logo|disclaimer|title|mode|quit|course|route|time|weather|maker[:n]|car|gearbox|intro|pause|records|guide|guide-list|guide-talk|options[:gamesetting|hud|screen|graphics|sound|playlist|controller] --shot out/proof/ui_car.png [--shot-size 3200x1800]   # Menü-Bild (options:<seite> öffnet eine Optionsseite, maker:<n> die Modellliste mit Zeile n, z. B. --car IMP --menu maker:2 = das gesperrte IMP3)
 dotnet run --project Touge -- "<iso>" --flow out/proof   # ganzer Ablauf per Skript im Fenster (Titel → Auswahl → Laden → Countdown → Rennen mit Pilot in 16× → Pause → Ziel → Ergebnis → Rekorde → Optionen → Car Guide), PNG je Schritt
 dotnet run --project Touge -- "<iso>" --flow out/proof/legend/flow --legend [--car FD3S]   # Legend of the Streets per Skript: Akina, zwei Battles (Autopilot, 16×), Leiter danach, PNG je Schritt
 dotnet run --project Touge -- "<iso>" --legend-sim [--legend-progress out/progress.json] [--car FD3S]   # Legend ohne Fenster: Autopilot fährt jede Rivalenleiter hoch (Niederlage beendet den Kurs), Freischaltungen + Bilanz, Fortschritt als JSON
@@ -65,7 +65,7 @@ dotnet run --project Touge -- "<iso>" AKINA_DAY --replay-test 380 [--battle keis
 dotnet run --project Touge -- "<iso>" --replay out/proof/r.rpl [--replay-at 30] [--replay-cam tv|chase|bumper|free] [--shot out/proof/rv.png]   # Replay im Viewer
 dotnet run --project Touge -- "<iso>" AKINA_DAY --ghost out/proof/r.rpl --autodrive 9 --drift --shot out/proof/ghost.png   # Geist aus einer Replay-Datei (mit Menüs: der Bestzeit-Lauf)
 dotnet run --project Touge -- "<iso>" --data-dir out/proof/data --menu replay|replay-best|replay-records|replay-delete|saveload|saveload-actions|saveload-name --shot out/proof/m.png   # REPLAY & RECORD / SAVE & LOAD als Bild (anderer App-Daten-Ordner: die echten Daten bleiben unberührt)
-dotnet run --project Touge -- "<iso>" --flow out/proof/flow --data-dir out/proof/flow_data   # --flow mit echtem Speichern: Ergebnis → EXIT legt Replay + Bestzeit-Lauf in out/proof/flow_data/Replays ab, REPLAY & RECORD zeigt ihn
+dotnet run --project Touge -- "<iso>" --flow out/proof/flow --data-dir out/proof/flow_data   # --flow mit echtem Speichern: der Ordner ist ein ganzes Profil (settings.json samt Rekorden und Optionen, progress.json, Replays, Spielstände, Fotos), Ergebnis → EXIT legt Replay + Bestzeit-Lauf ab, der nächste Start mit demselben Ordner zeigt BEST RUNS und RECORDS übereinstimmend. Ohne --data-dir schreibt nur ein schlichter Start (ISO [--menu x]) ins echte Profil, jeder Test-/Skriptlauf in einen Wegwerf-Ordner im Temp-Verzeichnis
 dotnet run --project Touge -- "<iso>" AKINA_DAY --menu photo --shot out/proof/photo.png   # Fotomodus über dem pausierten Rennen
 ```
 
@@ -75,7 +75,7 @@ REPLAY & RECORD (`Touge/Replay`, `Ui/ReplayMenu`, `Ui/ReplayViewer`, BGM „WORR
 Keyframes machen Springen billig und tragen, was die Eingaben nicht haben. Fertige Läufe landen mit den Menüs (oder `--data-dir`) in `Replays/` neben settings.json,
 sobald der Lauf endet (Ergebnis/Pause → EXIT, neuer Lauf, Beenden) (die neuesten 40 plus behaltene, gzip, ~1–2,5 KiB/s), ein neuer Rekord zusätzlich als `Replays/Best/<Rekordschlüssel>.rpl`. Zuschauen: Pause → Replay (der Lauf
 bis hier, danach geht das Rennen genau dort weiter), Ergebnis → REPLAY, Hauptmenü → REPLAY & RECORD (Reiter REPLAYS, BEST RUNS, RECORDS = die
-Bestzeiten wie bisher; ↑/↓, Entscheiden ansehen, K bzw. Pad Y behalten (KEPT: nie weggekürzt), X/Entf bzw. Pad X löschen mit JA/NEIN).
+Bestzeiten wie bisher; Zeile 2 sagt, was es war: TIME ATTACK, `LEGEND vs <Rivale> WIN`, `STORY ch.<n> <Titel>`, `BATTLE vs <Rivale> LOSE` (freies Battle; ältere Dateien von Legend/Story: BATTLE); ↑/↓, Entscheiden ansehen, K bzw. Pad Y behalten (KEPT: nie weggekürzt), X/Entf bzw. Pad X löschen mit JA/NEIN).
 Zurück aus Viewer/Fotomodus steht der Cursor wieder auf REPLAY bzw. PHOTO. Viewer: blinkendes REPLAY, Auto/Tempo/Gang, Zeitleiste;
 Kameras C bzw. Pad Y: TV (die Originalkameras aus `REPLAY.AFS`/REPCAM je Kurs und Richtung, an der Strecke, Zoom und Fahrt wie im Original,
 schauen aufs Auto), Verfolger, Stoßstange, frei (WASD/QE, IJKL oder rechte Maustaste, Shift schnell; Pad Sticks + Trigger). Leertaste/Enter bzw.
@@ -128,7 +128,7 @@ Ergebnis, WIN/LOSE-Jingle beim Entscheid): SPLIT SCREEN oder ONLINE.
   optional `:port`, getippt), YOUR NAME, UDP PORT (getippt, 1024–65535, Standard 47860, gespeichert als `NetPort`, `--port` für einen Lauf), darunter die Spiele im LAN (UDP-Broadcast, Liste aktualisiert sich). Lobby: der Host wählt das
   Rennen, jeder sein Auto, Gäste melden READY, Ping je Spieler, der Host startet, wenn alle bereit sind. Laden (wartet auf alle, höchstens
   30 s), gemeinsamer Countdown (GO auf allen Rechnern zur selben Zeit: Host-Sekunden bis GO minus halbe Paketlaufzeit), Rennen, Ergebnis
-  (Plätze, Zeiten, „m BEHIND“ bei vorzeitigem Battle-Sieg, DNF) → Host REMATCH/LOBBY/LEAVE, Gäste folgen. Pause hält online nicht an (das
+  (Plätze, Zeiten; vorzeitiger Battle-Sieg: Sieger „WIN +n m“, der andere „n m BEHIND“; DNF nur, wer im Rennen nicht ins Ziel kam – Fenster und `--headless`-Log gleich) → Host REMATCH/LOBBY/LEAVE, Gäste folgen. Pause hält online nicht an (das
   Auto bremst, RETRY ist ausgegraut; Replay und Photo sind im Versus immer grau, Versus-Rennen werden nicht aufgezeichnet), EXIT des Hosts bringt alle in die Lobby, ein Gast verlässt die Sitzung. Verbindungsverlust (5 s still) → Meldung, zurück
   zu ONLINE; ein Gast, der geht, ist DNF (sein Auto verschwindet), bleibt nur einer übrig, gewinnt er.
 - Netz (`Touge/Net`, Protokoll in FORMATS.md): UDP ohne Threads, einmal je Bild abgefragt; Stern um den Host (er leitet Zustände weiter).
@@ -171,7 +171,7 @@ Original zweistufig: Abschnittsliste aus Chromplatten (OPSL) → Seite mit Zeile
 3 Werte als ◀ Wert ▶, Lautstärken als 10 Blöcke, Hilfetext unten; ↑/↓ Zeile, ←/→ bzw. Enter/A ändern, Esc/B zurück), alles wirkt sofort und wird gespeichert:
 GAME SETTING (Einheit km/h/mph im Kombiinstrument, Getriebe-Vorwahl AT/MT, Lenkhilfe OFF/LOW/FULL = `CounterSteerAssist` × 0/0,5/1, Drift-Hilfe
 LOW/NORMAL/HIGH = `DriftDamping` × 0,5/1/1,6 – beide ab dem nächsten Lauf; andere Hilfen als FULL/NORMAL fahren eigene Bestzeiten, RECORDS zeigt nur die Serienwerte –, Startkamera, Blickwinkel 50–90°, Kamerawackeln, Aufkleber
-ANIME/STOCK/NONE), HUD (an/aus, HUD SIZE 80–130 %, Navi-Karte), SCREEN (WINDOW/BORDERLESS, außer macOS auch FULLSCREEN exklusiv; Auflösung aus den Modi des
+ANIME/STOCK/NONE), HUD (an/aus, HUD SIZE 80–130 %, Navi-Karte, NOW PLAYING ON/OFF/PAUSE ONLY), SCREEN (WINDOW/BORDERLESS, außer macOS auch FULLSCREEN exklusiv; Auflösung aus den Modi des
 Bildschirms; VSync; Bildratenbegrenzung 30–240; Render-Skalierung 50–150 %), GRAPHICS (Voreinstellung LOW/MEDIUM/HIGH/ULTRA bzw. CUSTOM aus den
 Schaltern MSAA, Sonnenschatten, AO, Bloom, Regen-Spiegelungen), SOUND (Gesamt, Musik an/aus + Lautstärke, SE, Motor, Menü-SE), PLAYLIST (Renntitel einzeln an/aus), CONTROLLER
 (Steuerungsbildschirm, siehe unten; ohne Live-Eingabe nur die Belegung als Text). Andere Features hängen eigene Seiten an `Menu.Options.Pages` an (Zeilen per `Options.Row.Choice/Toggle/Slider`
@@ -194,7 +194,7 @@ Battle (Regel des Originals: wer zuerst im Ziel ist, dazu Sieg ab 8 s Vorsprung)
 CAR SELECT / EXIT. Rivalen und Bedingungen aus dem Original (34 Rivalen auf 11 Kursen, Richtung/Tageszeit/Wetter je Rivale, siehe FORMATS.md);
 je Kurs eine Leiter (der nächste Rivale nach einem Sieg über den vorigen), die fünf Zusatzkurse (MYOGI+ … SHIONA) ab 3 geschafften Hauptkursen,
 Bunta (Akina) nach allen 24 Rivalen der Hauptkurse, Takumi von Project D (Irohazaka) nach allen anderen außer Bunta; ein Sieg über Bunta schaltet
-sein Impreza (IMP3) für Legend-Battles frei (dort bis dahin „?????“; Time Attack hat es immer). Revanche gegen einen besiegten Rivalen im Regen (wie das Original). Die ersten drei
+sein Impreza (IMP3) frei – wie im Original auch das Schlusskapitel von STORY; bis dahin ist es in jeder Autowahl (Time Attack, Legend, Versus-Lobby) „?????“ mit dem Hinweis, wie man es bekommt. Revanche gegen einen besiegten Rivalen im Regen (wie das Original). Die ersten drei
 Rivalen eines Hauptkurses fahren mit 80/88/95 % Motormoment (eigene Abstimmung, damit der Trueno am Anfang mithalten kann).
 Nach einem Battle steht der Cursor auf dem nächsten Rivalen, Neues (Rivalen, Kurse, Auto) läuft unten als rotes Band ein. Fortschritt in
 `progress.json` neben `settings.json` (`Rivals`: Siege, Niederlagen, bester Abstand je Rivale; dieselbe Datei wie Story, `Progress`; ein altes
@@ -236,7 +236,7 @@ kleine Instrumente nur mit Beschriftung + rotem Bereich; Gehäuse höchstens 400
 Kilometerzähler-Fenster, Gang + AT/MT unter dem Drehzahlmesser; Tests prüfen Überdeckung, Größe/Lage bei 720p/1080p/4:3/21:9 und dass keine Schrift
 im Zeigerbereich liegt). Alles in einem gemeinsamen Sicherheitsrahmen (`Style.Safe`: 44/900 Rand, ab 2:1 mittig begrenzt). Falschfahrt-Warnung, Hinweis „R“ zum Zurücksetzen, wenn das Auto feststeckt.
 Schrift: Rajdhani Bold (SIL Open Font License, `Touge/Assets/Fonts/OFL.txt`), zur Laufzeit als Distanzfeld-Atlas.
-Ton: Rennmusik als Jukebox über alle 31 Eurobeat-Titel, unabhängig von der Strecke: jeder Titel einmal bis zum Ende, dann zufällig der nächste (keine Wiederholung, bis alle eingeschalteten liefen), läuft über Retry/Kurswechsel weiter (Menümusik hält ihn an). M (Pad: D-Pad rechts) nächster Titel, F3 Musik an/aus. Beim Titelstart fährt oben rechts „NOW PLAYING“ mit Titel und Interpret ein (5 s, in der Pause dauerhaft; im Battle unter der Battle-Tafel). Optionen → PLAYLIST: jeden Titel ON/OFF schalten (ALL SONGS für alle; alle aus = Stille).
+Ton: Rennmusik als Jukebox über alle 31 Eurobeat-Titel, unabhängig von der Strecke: jeder Titel einmal bis zum Ende, dann zufällig der nächste (keine Wiederholung, bis alle eingeschalteten liefen), läuft über Retry/Kurswechsel weiter (Menümusik hält ihn an). M (Pad: D-Pad rechts) nächster Titel, F3 Musik an/aus. Beim Titelstart fährt oben rechts „NOW PLAYING“ mit Titel und Interpret ein (5 s, in der Pause dauerhaft; unter Battle-Tafel, Story-Ziel bzw. Versus-Platzierung, schmaler oder darunter, wo Zeit-/Drift-Tafel im Weg wären; Options → HUD → NOW PLAYING: ON, OFF, PAUSE ONLY). Optionen → PLAYLIST: jeden Titel ON/OFF schalten (ALL SONGS für alle; alle aus = Stille).
 Auto (nur im Stand, < 3 km/h): 1/2 voriges/nächstes Auto, 3 nächste Lackfarbe. Autos (`--car`, Index in Klammern):
 AE86T (0), AE86L, AE85, MR2, MRS, ALTEZ, GT-4, R32, R34, ER34, S13 (10), S14Q, S14, S15, ONE80, SIL80, EK9, EG6, INTGR, S2000,
 EVO3 (20), EVO4, EVO7, FD3S, FD3SA, FC3S, NA6C, NB8C, IMP, IMP2, IMP3 (30), CAPPU. Physik je Auto: Spur/Radstand/Radradius und

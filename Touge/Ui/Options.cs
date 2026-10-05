@@ -185,6 +185,8 @@ public sealed class Options
                         i => s.HudScale = 0.8f + i / 10f, "Size of the HUD: course dial, gauges and times."),
                     Row.Choice("NAVI MAP", ["ROTATING", "NORTH UP", "WHOLE"], () => (int)s.MapMode, i => s.MapMode = (Hud.MapMode)i,
                         "Course dial: turns with the car, north up,", "or shows the whole course (N)."),
+                    Row.Choice("NOW PLAYING", ["ON", "OFF", "PAUSE ONLY"], () => (int)s.NowPlaying, i => s.NowPlaying = (Settings.Toast)i,
+                        "Song title and artist when a race song starts.", "PAUSE ONLY: just on the pause screen."),
                 },
             },
             new Page("SCREEN", "Window, resolution, frame pacing and render scale.")

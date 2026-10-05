@@ -53,7 +53,8 @@ using Touge;
 // --replay-test <s> [--battle <rivale>] [--drift] [--save <datei.rpl>]: Lauf ohne Fenster aufnehmen, Datei schreiben/lesen, auf frischen Autos abspielen,
 //   Positionsfehler je Tick (mit Keyframes) und nur aus Eingaben (Determinismus), Sprünge; optional die Replay-Datei.
 // --replay <datei.rpl> [--replay-at <s>] [--replay-cam tv|chase|bumper|free]: Replay im Viewer öffnen (z. B. mit --shot).
-// --ghost <datei.rpl>: dieser Lauf fährt als Geist mit (sonst mit Menüs der Bestzeit-Lauf); --data-dir <ordner>: anderer App-Daten-Ordner (Einstellungen, Replays, Spielstände, Fotos), Läufe werden dort auch in Testläufen gespeichert.
+// --ghost <datei.rpl>: dieser Lauf fährt als Geist mit (sonst mit Menüs der Bestzeit-Lauf); --data-dir <ordner>: anderer App-Daten-Ordner (Einstellungen samt Rekorden, Fortschritt, Replays, Spielstände, Fotos) wie ein echtes Profil, auch in Testläufen;
+//   ohne --data-dir schreibt nur ein schlichter Start (ISO [--menu x]) ins echte Profil, jeder andere Lauf in einen Wegwerf-Ordner im Temp-Verzeichnis.
 // --menu replay|replay-best|replay-records|replay-delete|saveload|saveload-actions|saveload-name|photo: REPLAY & RECORD, SAVE & LOAD, Fotomodus (Bilder).
 // --drift: Pilot reißt alle 7 s (ab 4,5 s) einen 2,5-s-Handbremsdrift (Reifenrauch/Bremsspuren testen), z. B. --autodrive 6.3 --drift --shot.
 var iso = args.FirstOrDefault(a => a.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
@@ -67,6 +68,10 @@ string[] valueFlags = ["--story-check", "--progress", "--battle", "--rule", "--l
     "--join", "--port", "--name", "--net-sim", "--players", "--races", "--seconds", "--net-rule", "--versus", "--split", "--car2", "--shot-after",
     "--replay-test", "--replay", "--replay-at", "--replay-cam", "--save", "--data-dir", "--ghost"];
 string? Arg(string flag) { var i = Array.IndexOf(args, flag); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
+// menus (and the saved settings) only when started plainly: any course or test flag means a scripted run
+var plain = args.Where((a, i) => a != iso && a != "--backend" && (i == 0 || args[i - 1] != "--backend")).All(a => a is "--menu" or "--input-debug" or "--sim-wheel" || a == Arg("--menu"));
+// app data (settings, records, progress, replays, save slots, photos): --data-dir, the real profile for a plain start, a throwaway folder for any other run
+Touge.Ui.Settings.FilePath = Touge.Ui.Settings.RunFile(Arg("--data-dir"), plain);
 // --car: HCAR name (AE86T, FD3S, R32, EVO3, …) or index 0–31 in that list (Touge.Formats.CarPaint.Cars)
 var carArg = Arg("--car") ?? "AE86T";
 var carIndex = int.TryParse(carArg, out var ci) ? ci : Array.FindIndex(Touge.Formats.CarPaint.Cars, c => c.Equals(carArg, StringComparison.OrdinalIgnoreCase));
@@ -210,10 +215,6 @@ if (Arg("--ground") is { } groundPng)
     return 0;
 }
 
-// --data-dir: another app-data folder (settings, replays, save slots, photos), finished runs are saved there also in test runs
-if (Arg("--data-dir") is { } dataDir) Touge.Ui.Settings.FilePath = Path.Combine(Path.GetFullPath(dataDir), "settings.json");
-// menus (and the saved settings) only when started plainly: any course or test flag means a scripted run
-var plain = args.Where((a, i) => a != iso && a != "--backend" && (i == 0 || args[i - 1] != "--backend")).All(a => a is "--menu" or "--input-debug" or "--sim-wheel" || a == Arg("--menu"));
 // a plain start opens the window as saved (Options: SCREEN), test runs always in a 1600×900 window
 var saved = plain ? Touge.Ui.Settings.Load() : new Touge.Ui.Settings();
 KanseiApp.Run(new TougeGame(iso, course.ToUpperInvariant(), shot, at, orbit, autodrive, bench, Arg("--quality") != "off", args.Contains("--drift"), Arg("--flicker"))

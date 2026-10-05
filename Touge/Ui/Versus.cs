@@ -42,12 +42,27 @@ public sealed class Versus(Catalog catalog)
     public static string ValueOf(float? time, int place, float along, float leaderAlong, bool decidedEarly) =>
         time is { } t ? Style.Time(t) : decidedEarly && place == 1 ? "WIN" : decidedEarly ? $"{MathF.Max(0, leaderAlong - along):0} m BEHIND" : "DNF";
 
+    /// <summary>
+    ///     What <paramref name="e"/> of <paramref name="r"/> shows (result sheet and logs): as <see cref="ValueOf(float?, int, float, float, bool)"/>,
+    ///     a breakaway winner with his lead over the next car ("WIN +312 m").
+    /// </summary>
+    public static string ValueOf(Result r, ResultEntry e)
+    {
+        float? time = e.Time >= 0 ? e.Time : null;
+        var value = ValueOf(time, e.Place, e.Along, r.Entries.Max(x => x.Along), r.Reason is "BREAKAWAY" or "OPPONENTS LEFT");
+        if (time == null && e.Place == 1 && r.Reason == "BREAKAWAY" && r.Entries.Length > 1)
+            value += $"  +{MathF.Max(0, e.Along - r.Entries.Where(x => x.Id != e.Id).Max(x => x.Along)):0} m";
+        return value;
+    }
+
     /// <summary>The finished race for the result screen; <paramref name="Title"/> e.g. YOU WIN!! / PLAYER 1 WINS!!.</summary>
     public sealed record Standings(string Title, bool Won, string Reason, Standing[] Lines);
 
     public Screen Current { get; private set; }
     public bool Active => Current != Screen.None;
     public Action<string>? Sound { get; set; }
+    /// <summary>Cars not won yet (<see cref="Race.Legend.SecretCar"/>): skipped in the lobby, as in every car select.</summary>
+    public Func<string, bool>? CarLocked { get; set; }
 
     // ---- what the lobby edits
     /// <summary>Split screen (two local players) instead of online.</summary>
@@ -114,7 +129,7 @@ public sealed class Versus(Catalog catalog)
         Split = true;
         Net = null;
         var c = CarIndex(car);
-        Seats = [new Seat { Car = c, Paint = paint, Ready = true }, new Seat { Car = (c + 1) % catalog.Cars.Count }];
+        Seats = [new Seat { Car = c, Paint = paint, Ready = true }, new Seat { Car = NextCar(c, 1) }];
         P2Device = Pads > 0 ? Pads - 1 : Pads;
         Enter(Screen.Lobby);
     }
@@ -159,7 +174,15 @@ public sealed class Versus(Catalog catalog)
 
     private void Enter(Screen s) => (Current, _t, _row, _row2, _editing) = (s, 0, s == Current ? _row : 0, 0, 0);
 
-    private int CarIndex(string id) => Math.Max(0, catalog.Cars.ToList().FindIndex(c => c.Id == id));
+    private int CarIndex(string id) => catalog.Cars.ToList().FindIndex(c => c.Id == id) is var i && i >= 0 && CarLocked?.Invoke(id) != true ? i : 0;
+
+    /// <summary>The next car from <paramref name="car"/> in direction <paramref name="d"/> (±1), past locked ones.</summary>
+    private int NextCar(int car, int d)
+    {
+        do car = Wrap(car + d, catalog.Cars.Count);
+        while (CarLocked?.Invoke(catalog.Cars[car].Id) == true);
+        return car;
+    }
 
     public string CarId(int seat) => catalog.Cars[Seats[seat].Car].Id;
 
@@ -466,7 +489,7 @@ public sealed class Versus(Catalog catalog)
         switch (row)
         {
             case Row.Car:
-                (s.Car, s.Paint) = (Wrap(s.Car + d, catalog.Cars.Count), 0);
+                (s.Car, s.Paint) = (NextCar(s.Car, d), 0);
                 break;
             case Row.Colour:
                 s.Paint = Wrap(s.Paint + d, catalog.Cars[s.Car].Paints.Length);

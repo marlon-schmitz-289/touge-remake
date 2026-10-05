@@ -165,11 +165,14 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             _persist = true;
         }
         else
-            _settings = new Settings
-            {
-                HighQuality = highQuality, HudOn = HudMode != "off" && flicker == null, HudScale = HudScale, Car = Car, Paint = Paint, Reverse = Reverse, Course = _courseTime, Fog = Fog,
-                MapMode = HudMode switch { "north" => Hud.MapMode.NorthUp, "overview" => Hud.MapMode.Overview, _ => Hud.MapMode.Rotating }, Livery = Livery, RenderScale = RenderScale,
-            };
+        {
+            // a test run: its own options over a fresh profile, or over the --data-dir profile (records, assists, progress kept and saved as in a real one)
+            _settings = SaveRuns ? Settings.Load() : new Settings();
+            (_settings.HighQuality, _settings.HudOn, _settings.HudScale, _settings.Car, _settings.Paint, _settings.Reverse, _settings.Course, _settings.Fog) =
+                (highQuality, HudMode != "off" && flicker == null, HudScale, Car, Paint, Reverse, _courseTime, Fog);
+            (_settings.MapMode, _settings.Livery, _settings.RenderScale) =
+                (HudMode switch { "north" => Hud.MapMode.NorthUp, "overview" => Hud.MapMode.Overview, _ => Hud.MapMode.Rotating }, Livery, RenderScale);
+        }
         _driver = new DriverInput(_settings.Controls);
         _frontKeys.Wheel = _settings.Controls;
         if (SimWheel) Input.AddVirtual(_simWheel = new JoystickState("Simulated wheel", 4, 20, 1, wheel: true));
@@ -208,7 +211,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
                 Kansei.Windowing.FullscreenMode.Exclusive => Settings.DisplayMode.Fullscreen,
                 _ => Settings.DisplayMode.Borderless,
             };
-            Window.FullscreenModeChanged += _ => { _applied = DisplayState; if (_persist) _settings.Save(); };
+            Window.FullscreenModeChanged += _ => { _applied = DisplayState; if (SavesRuns) _settings.Save(); };
         }
         // the front end shows Akina at night behind the title, like the original's photo; course select loads the choice
         var title = _front != null && (_persist || Flow != null);
@@ -275,6 +278,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
                 var device = start.Split(':') is [_, var d] ? d : "";
                 _menu.Controls!.Open(device.ToLowerInvariant() == "gamepad" ? DeviceKind.Pad : Enum.TryParse<DeviceKind>(device, true, out var dk) ? dk : DeviceKind.Keyboard); // --menu controls:wheel
             }
+            if (screen == Menu.Screen.Maker && start.Split(':') is [_, var row]) _menu.ShowModel(int.Parse(row)); // --menu maker:2: the model list, row 2
             _inRace = screen is Menu.Screen.Pause or Menu.Screen.Intro;
             if (shotPath != null) _menu.Settle();
         }
@@ -376,7 +380,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         {
             if (_race != null || _vsRace != null || _story is { InRun: true }) return; // a battle (rival, contacts), versus or story run is no time attack record
             _settings.Best[key] = best;
-            if (_persist) _settings.Save();
+            if (SavesRuns) _settings.Save();
         };
         return hud;
     }
@@ -821,7 +825,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         {
             case Menu.Action.Load:
                 (_settings.Course, _settings.Reverse, _settings.Car, _settings.Paint, _settings.Manual, _settings.Fog) = (menu.CourseTime, menu.Reverse, menu.CarId, menu.Paint, menu.Manual, menu.Fog);
-                if (_persist) _settings.Save();
+                if (SavesRuns) _settings.Save();
                 if (menu.CourseTime != _courseTime || menu.Reverse != _drive.Reverse || menu.Fog != _fog)
                 {
                     using var iso = new Iso9660(isoPath);
@@ -882,7 +886,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     {
         EndRecording();
         Autosave();
-        if (_persist) _settings.Save();
+        if (SavesRuns) _settings.Save();
         Window.ShouldClose = true;
     }
 
@@ -919,7 +923,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         if (_audio != null) _audio.EngineLevel = s.EngineVolume;
         (_hud.Visible, _hud.Mode, _hud.Scale, _hud.Mph, _bumperCam) = (s.HudOn, s.MapMode, s.HudScale, s.Mph, s.BumperCam);
         if (s.Livery != _carLivery) SwitchCar(Array.IndexOf(CarPaint.Cars, _carName), _paint);
-        if (_persist) s.Save();
+        if (SavesRuns) s.Save();
     }
 
     private void ApplyGraphics()
@@ -1511,9 +1515,8 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             _story.Build(_overlay, w, h);
         }
         if (_jukebox is { Playing: true, Current: { } song } && _music == Menu.RaceMusic && _front is not { Active: true } && _guide is not { Active: true } && _legend is not { Active: true }
-            && _story is not { Active: true } && _versusUi is not { Active: true } && !OverlayQuiet)
-            NowPlaying.Draw(_overlay, w, h, song, _jukebox.Since, hold: _menu?.Current == Menu.Screen.Pause,
-                below: _hud.Visible ? (_race?.Battle != null ? BattleHud.H + 14 : VersusHudBelow(split != null)) + (_story?.HudHeight(_race?.Battle) ?? 0) : 0);
+            && _story is not { Active: true } && _versusUi is not { Active: true } && !OverlayQuiet && ShowsNowPlaying(_menu?.Current == Menu.Screen.Pause))
+            NowPlaying.Draw(_overlay, w, h, song, _jukebox.Since, hold: _menu?.Current == Menu.Screen.Pause, below: NowPlayingBelow(split), clear: NowPlayingClear(w, h, split));
         if (InputDebug) InputDebugView.Build(_overlay, w, h, Input, _driver, _ffb);
         DrawOverlay(ctx.Encoder, target, w, h);
         if (shot != null)

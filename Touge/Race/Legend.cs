@@ -26,8 +26,14 @@ public static class Legend
     /// <summary>The six main courses; the additions (slots 6–10) open once this many of them are cleared.</summary>
     public const int MainCourses = 6, ExtraUnlock = 3;
 
-    /// <summary>The car a win against Bunta unlocks in every car select (his Impreza); <see cref="CarLocked"/>.</summary>
+    /// <summary>
+    ///     The car every car select keeps as ????? (Time Attack, Legend, Versus; his Impreza): the original hides it until the
+    ///     Story's last chapter is cleared (FORMATS.md), the remake also opens it with a win against Bunta; <see cref="CarLocked"/>.
+    /// </summary>
     public const string SecretCar = "IMP3";
+
+    /// <summary>The car select's hint on <see cref="SecretCar"/> while it is locked.</summary>
+    public const string SecretCarHint = "LOCKED: clear the last STORY chapter or beat BUNTA in LEGEND";
 
     private static Rivals.Rival R(string id, string name, string team, string car, float skill, float aggression, float drift, int paint = 0) =>
         new(id, name, team, car, new RivalStyle(skill, aggression, drift), paint);
@@ -136,8 +142,9 @@ public static class Legend
     /// <summary>Shown on the ladder: regulars always, a secret one once unlocked.</summary>
     public static bool Visible(Entry e, Progress p) => !e.Secret || Unlocked(e, p);
 
-    /// <summary>A car the menus keep locked until won: <see cref="SecretCar"/> until Bunta is beaten.</summary>
-    public static bool CarLocked(string car, Progress p) => car == SecretCar && !p.Beaten("AKINA/bunta");
+    /// <summary>A car the menus keep locked until won: <see cref="SecretCar"/> until the Story's last chapter is cleared or Bunta is beaten.</summary>
+    public static bool CarLocked(string car, Progress p) =>
+        car == SecretCar && !p.Beaten("AKINA/bunta") && !p.IsCleared(Story.StoryMode.Key(Story.StoryText.Chapters.Length - 1));
 
     /// <summary>
     ///     Course to load (COURSE.AFS name) for <paramref name="e"/> on a course with <paramref name="times"/>: wet → the _RIN

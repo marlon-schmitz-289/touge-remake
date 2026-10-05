@@ -250,7 +250,9 @@ public sealed partial class TougeGame
         EndRecording();
         var info = new ReplayInfo
         {
-            Course = _courseTime, Reverse = _drive.Reverse, Fog = _fog, Date = DateTime.Now, Mode = _race != null ? "BATTLE" : "TIME ATTACK",
+            Course = _courseTime, Reverse = _drive.Reverse, Fog = _fog, Date = DateTime.Now,
+            Mode = _legendRival != null ? "LEGEND" : _story is { InRun: true } ? "STORY" : _race != null ? "BATTLE" : "TIME ATTACK",
+            Chapter = _story is { InRun: true } s ? s.Chapter + 1 : null, Title = _story is { InRun: true } t ? t.Text.Title : null,
             Cars = [new ReplayCar("YOU", _carName, _paint, _settings.SteerAssist, _settings.DriftAssist)],
         };
         if (_race != null && Battle != null) info.Cars.Add(new ReplayCar(Battle.Rival.Name, Battle.Rival.Car, 0));
