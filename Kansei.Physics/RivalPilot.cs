@@ -30,6 +30,15 @@ public sealed class RivalPilot
     /// <summary>Distance kept between the car's centre line and the end of the drivable ground (half a body plus elbow room).</summary>
     public const float EdgeMargin = RacingLine.EdgeMargin;
 
+    /// <summary>
+    ///     Overlap (m, our nose past the leader's tail) that commits a pass from the inside lane under braking: alongside by
+    ///     its turn-in, the leader then has to leave room; less drops in behind again (no dive-bombs from further back).
+    /// </summary>
+    public const float CommitOverlap = 0.5f;
+
+    /// <summary>Distance from a car's centre to the end of the full-grip road when side by side (half a body, a hand's width).</summary>
+    public const float PassMargin = 1.2f;
+
     /// <summary>Lateral centre distance from which two cars are side by side (body widths ~1.7 m).</summary>
     public const float Alongside = 1.8f;
 
@@ -45,7 +54,11 @@ public sealed class RivalPilot
     private float _time, _band = float.NaN, _startS = float.NaN, _recoverUntil = -1, _lockUntil = -1, _throttleUntil = -1, _overUntil = -1, _settleUntil = -1;
     private bool _fresh = true;
     private int _passing = -1, _failedZone = -1, _defendZone = -1, _defended = -1, _rolled = -1, _driftDone = -1, _decided = -1, _gripCorner = -1;
-    private float _defendTarget;
+    private float _defendTarget, _oSpeed = float.NaN, _oDecel;
+    private int _setupZone = -1, _setupSide;
+    private float _attemptNose, _attemptMax;
+    /// <summary>Racecraft events (attempts, commits, failures) for traces.</summary>
+    public Action<string>? Log { get; set; }
     private (float Shift, float Wide, bool Lock, bool Throttle, bool Over) _err;
     // opponent's progress a few seconds ago (its measured pace against our plan)
     private readonly (float T, float S)[] _hist = new (float, float)[64];
@@ -78,6 +91,11 @@ public sealed class RivalPilot
     public Mode State { get; private set; }
     /// <summary>No passing (follow only), e.g. the chaser in the first seconds of a lead/chase.</summary>
     public bool NoPass { get; set; }
+    /// <summary>Passing attempts set up in braking zones, and how many got half a car alongside (statistics).</summary>
+    public int Attempts { get; private set; }
+    public int Commits { get; private set; }
+    /// <summary>What the racecraft saw this tick (traces).</summary>
+    public string Note { get; private set; } = "";
     /// <summary>Mistakes so far (statistics).</summary>
     public int Mistakes { get; private set; }
 
@@ -111,9 +129,9 @@ public sealed class RivalPilot
     /// <summary>Slower corners (m/s at the apex) are not drifted: the tail cannot be held under ~40 km/h (IROHA's tightest hairpins).</summary>
     public const float MinDriftSpeed = 40 / 3.6f;
 
-    /// <summary>Following distance (m, centre to centre) behind a car at <paramref name="speed"/>: 0.8 … 0.4 s by aggression, 0.3 s under pressure.</summary>
+    /// <summary>Following distance (m, centre to centre) behind a car at <paramref name="speed"/>: a metre plus 0.8 … 0.4 s by aggression, 0.25 … 0.1 s when pressing.</summary>
     public static float FollowGap(float speed, float aggression, bool pressure = false) =>
-        CarLength + 1 + speed * (pressure ? 0.3f : 0.8f - 0.4f * aggression);
+        CarLength + 1 + speed * (pressure ? 0.25f - 0.15f * aggression : 0.8f - 0.4f * aggression);
 
     /// <summary>Probability that a drift-eligible corner is drifted: 1.25 × drift − 0.15.</summary>
     public static float DriftChance(float drift) => Math.Clamp(1.25f * drift - 0.15f, 0, 1);
@@ -256,7 +274,7 @@ public sealed class RivalPilot
         var cs = map.Corners;
         var ci = map.CornerAt(s, 80, 0);
         float? target = null;
-        var cap = float.PositiveInfinity;
+        float cap = float.PositiveInfinity, ram = float.PositiveInfinity; // speed caps: traffic, and no contact
         var rate = 1.2f;
         State = Mode.Line;
         Pilot.PlanShift = 0;
@@ -273,80 +291,120 @@ public sealed class RivalPilot
         }
         var underPressure = behind >= 0 && -dsBehind < 0.5f * MathF.Max(v, 10);
         var (lo, hi) = racing.BoundsAt(s);
+        // side by side a car may use the road out to a body half plus a hand's width from its end (the racing line keeps 1.3 m)
+        var (roomL, roomR) = map.Room(s);
+        float passLo = MathF.Min(lo, PassMargin - roomR), passHi = MathF.Max(hi, roomL - PassMargin);
 
         if (ahead >= 0)
         {
             var o = others[ahead];
-            Remember(o.Along);
-            var faster = PaceAdvantage(o.Along) >= 0.02f;
+            Remember(o.Along, o.Speed, dt);
+            var adv = PaceAdvantage(o.Along);
             var zone = map.ZoneAt(s) ?? map.ZoneAt(s + 25);
             var zi = zone is { } zz ? IndexOf(map, zz) : -1;
+            var nose = s - o.Along + CarLength; // our nose past their tail (m)
             var mode = Mode.Follow;
-            if (!NoPass && dsAhead < 30 && (faster || v > o.Speed * 1.03f && zone is { Corner: < 0 }))
+            // an attack set up in a zone runs on to its corner's apex (the zone itself ends at the turn-in)
+            if (_setupZone >= 0 && (map.Zones[_setupZone] is var sz && (sz.Corner >= 0 ? s > cs[sz.Corner].Apex : zi != _setupZone) || _setupZone == _failedZone))
+                _setupZone = -1;
+            var az = _setupZone >= 0 ? _setupZone : zi; // the zone being attacked
+            var why = "";
+            if (!NoPass && dsAhead < 40 && (adv >= 0.02f || zone is { Corner: < 0 } && v > o.Speed * 1.03f))
             {
                 mode = Mode.Pressure;
-                if (zone is { } z && zi != _failedZone)
-                {
-                    // the inside of the zone's corner; on a straight the side the leader leaves open
-                    var side = z.Corner >= 0 ? cs[z.Corner].Dir : (hi - o.Lateral > o.Lateral - lo ? 1 : -1);
-                    var want = Math.Clamp(o.Lateral + side * PassGap, lo, hi);
-                    if (MathF.Abs(want - o.Lateral) >= Alongside)
-                    {
-                        target = want;
-                        rate = 2.5f;
-                        var nose = s - o.Along + CarLength; // our nose past their tail
-                        if (z.Corner >= 0)
-                        {
-                            var brakeAt = BrakePoint(z.Corner, o.Speed); // the leader's
-                            if (s >= brakeAt - 2 && nose < 1.7f && _passing != z.Corner)
-                            {
-                                // not half a car alongside at its braking point: no dive-bomb, back in behind
-                                _failedZone = zi;
-                                target = null;
-                            }
-                            else if (s >= brakeAt - 2)
-                            {
-                                mode = Mode.Pass;
-                                _passing = z.Corner;
-                            }
-                            else mode = Mode.Setup;
-                        }
-                        else mode = MathF.Abs(lat - o.Lateral) > Alongside - 0.2f ? Mode.Pass : Mode.Setup;
-                        if (mode == Mode.Pass)
-                        {
-                            // brake 3–6 m later on the inside, never above the planned braking + 0.05 g
-                            Pilot.PlanShift = -(3 + 3 * Style.Aggression);
-                            Pilot.BrakeDecel += 0.05f * G;
-                        }
-                    }
-                }
-                else if (_passing >= 0 && s < cs[_passing].To && dsAhead < 12)
+                if (_passing >= 0 && s < cs[_passing].To && nose > -3)
                 {
                     // committed: hold the inside through the corner
-                    target = Math.Clamp(o.Lateral + cs[_passing].Dir * PassGap, lo, hi);
+                    target = Math.Clamp(o.Lateral + cs[_passing].Dir * PassGap, passLo, passHi);
                     mode = Mode.Pass;
                     Pilot.BrakeDecel += 0.05f * G;
                 }
-                else if (zone is { Corner: >= 0 } z2)
+                else if (az >= 0 && az != _failedZone)
                 {
-                    // pressure: show the nose on the inside in the braking zone (and keep 0.3 s)
-                    target = Math.Clamp(o.Lateral + cs[z2.Corner].Dir * 0.8f, lo, hi);
+                    var z = map.Zones[az];
+                    // the inside of the zone's corner, else (no room there, or a straight) the side the leader leaves open
+                    var open = passHi - o.Lateral > o.Lateral - passLo ? 1 : -1;
+                    var side = _setupZone == az ? _setupSide
+                        : z.Corner >= 0 && (cs[z.Corner].Dir > 0 ? passHi - o.Lateral : o.Lateral - passLo) >= Alongside ? cs[z.Corner].Dir : open;
+                    var want = Math.Clamp(o.Lateral + side * PassGap, passLo, passHi);
+                    var close = dsAhead <= FollowGap(v, Style.Aggression, true) + 2; // pressing, right behind
+                    if (MathF.Abs(want - o.Lateral) < Alongside) why = $"room[{passLo:F1},{passHi:F1}]o{o.Lateral:F1}s{side}"; // no room for two here
+                    else if (z.Corner >= 0)
+                    {
+                        // a braking zone: pull out from close behind before the leader brakes, stay out and brake later
+                        // than it (own plan, 3–6 m later, ≤ +0.05 g); an overlap by the turn-in commits the pass,
+                        // still behind at the apex (or well back when it brakes) drops in behind again: no dive-bombs
+                        var c = cs[z.Corner];
+                        var braking = o.Along >= BrakePoint(z.Corner, o.Speed) - 1 || _oDecel > 3;
+                        // worth it: a real stop ahead (≥ 8 m of braking left for the leader), and our nose within 6–9 m of
+                        // its tail before it brakes, or on its bumper (2–4 m) while it brakes, 10 m before its turn-in
+                        var vc = racing.SpeedAt(c.Apex);
+                        var stop = (o.Speed * o.Speed - vc * vc) / (2 * Pilot.BrakeDecel) >= 8;
+                        var near = braking ? nose >= -2 - 2 * Style.Aggression : nose >= -6 - 3 * Style.Aggression;
+                        var soon = o.Along >= BrakePoint(z.Corner, o.Speed) - 25; // no long run side by side before it
+                        if (_setupZone != az && stop && near && soon && o.Along < c.From - 10)
+                        {
+                            (_setupZone, _setupSide, Attempts, _attemptNose, _attemptMax) = (az, side, Attempts + 1, nose, nose);
+                            Log?.Invoke($"attempt z{az} c{z.Corner} {cs[z.Corner].Kind} nose {nose:F1} braking {braking} v {v * 3.6f:F0}/{o.Speed * 3.6f:F0} to turn-in {c.From - o.Along:F0} m");
+                        }
+                        else if (_setupZone != az) why = !stop ? "nostop" : !near ? "far" : "late";
+                        if (_setupZone == az)
+                        {
+                            _attemptMax = MathF.Max(_attemptMax, nose);
+                            if (nose >= CommitOverlap && (braking || o.Along >= c.From - 2))
+                            {
+                                if (_passing != z.Corner) Log?.Invoke($"commit z{az} nose {nose:F1} (from {_attemptNose:F1})");
+                                (mode, _passing, Commits) = (Mode.Pass, z.Corner, Commits + (_passing == z.Corner ? 0 : 1));
+                            }
+                            else if (o.Along >= c.Apex || braking && nose < -8)
+                            {
+                                _failedZone = az;
+                                Log?.Invoke($"fail z{az} nose {nose:F1} max {_attemptMax:F1} (from {_attemptNose:F1}) {(o.Along >= c.Apex ? "apex" : "dropped back")}");
+                            }
+                            else
+                            {
+                                target = want;
+                                mode = Mode.Setup;
+                                if (braking)
+                                {
+                                    Pilot.PlanShift = -(3 + 3 * Style.Aggression);
+                                    Pilot.BrakeDecel += 0.05f * G;
+                                }
+                            }
+                        }
+                    }
+                    else if (close || _setupZone == az)
+                    {
+                        // a straight: out to the open side from close behind; alongside with the speed on it: past
+                        if (_setupZone != az) (_setupZone, _setupSide) = (az, side);
+                        target = want;
+                        mode = MathF.Abs(lat - o.Lateral) > Alongside - 0.2f ? Mode.Pass : Mode.Setup;
+                        if (v < o.Speed - 1.5f && nose < 0) _failedZone = az; // it pulls away: give up
+                    }
+                    if (mode == Mode.Pass && target == null) target = want;
                 }
+                if (mode == Mode.Pressure && zone is { Corner: >= 0 } z2)
+                    target = Math.Clamp(o.Lateral + cs[z2.Corner].Dir * 0.8f, lo, hi); // show the nose on the inside
             }
+            if (mode is Mode.Setup or Mode.Pass) rate = 2.5f;
+            Note = $"{why} adv {adv * 100:+0.0;-0.0}% zone {zi}{(zone is { } zn ? zn.Corner >= 0 ? $"→c{zn.Corner}" : "=str" : "")} setup {_setupZone} fail {_failedZone} nose {nose:+0.0;-0.0} tgt {target:+0.0;-0.0}";
             State = mode;
             if (_passing >= 0 && (s >= cs[_passing].To || mode != Mode.Pass)) _passing = -1;
-            // keep out of its boot: time-to-contact ≥ 1 s against any overlap, the following gap when in line behind it
+            // keep out of its boot: in line behind it the following gap, against any overlap a time to contact ≥ 1 s
+            // with the leader's braking taken into account (then braking at once, below)
+            var overlap = MathF.Abs(lat - o.Lateral) < Alongside + 0.1f;
             var inLine = MathF.Abs(lat - o.Lateral) < Alongside && MathF.Abs((target ?? lat) - o.Lateral) < Alongside + 0.2f;
-            if (MathF.Abs(lat - o.Lateral) < 2.0f)
-                cap = MathF.Min(cap, o.Speed + MathF.Max(dsAhead - CarLength, 0) / 1.0f);
+            var oSpeed = MathF.Max(o.Speed - _oDecel * 0.3f, 0); // where its speed is going
+            if (overlap) ram = MathF.Min(ram, oSpeed + MathF.Max(dsAhead - CarLength - 0.8f, 0) / 1.0f);
             if (inLine)
             {
                 var gap = State is Mode.Setup or Mode.Pass ? CarLength + 0.8f : FollowGap(o.Speed, Style.Aggression, State == Mode.Pressure);
-                cap = MathF.Min(cap, MathF.Max(o.Speed + 1.0f * (dsAhead - gap), 0));
+                cap = MathF.Min(cap, MathF.Max(oSpeed + 1.0f * (dsAhead - gap), 0));
             }
+            cap = MathF.Min(cap, ram);
             if (State == Mode.Follow && cap >= racing.SpeedAt(s)) State = Mode.Line;
         }
-        else _histN = 0;
+        else (_histN, _oDecel, _oSpeed) = (0, 0, float.NaN);
 
         // --- defend: once per zone, before its braking point, when the car behind is < 1 s back and on the inside
         if (behind >= 0 && target == null && State == Mode.Line)
@@ -391,13 +449,13 @@ public sealed class RivalPilot
             var t = target ?? racing.OffsetAt(s + 10);
             if ((t - keep) * side >= 0) continue;
             // where the road's room ends before our side does, hold where we are (never towards it) and drop in behind
-            var squeezed = (Math.Clamp(keep, lo, hi) - keep) * side < 0;
+            var squeezed = (Math.Clamp(keep, passLo, passHi) - keep) * side < 0;
             var aimNow = Pilot.Blend > 0 ? Pilot.Lateral : lat; // the aim, not the car: no ratchet on the tracking error
             var limit = squeezed ? side > 0 ? MathF.Min(keep, aimNow) : MathF.Max(keep, aimNow) : keep;
             target = squeezed ? side > 0 ? MathF.Max(t, limit) : MathF.Min(t, limit) : keep;
             hold = hold is { } h0 ? side > 0 ? MathF.Max(h0, limit) : MathF.Min(h0, limit) : limit;
             holdSide = side;
-            if (squeezed && ds > -3 && o.Speed > 3)
+            if (squeezed && ds > -1 && State != Mode.Pass && o.Speed > 3)
             {
                 cap = MathF.Min(cap, o.Speed - 3);
                 State = Mode.Follow;
@@ -445,7 +503,7 @@ public sealed class RivalPilot
         // --- lateral: ease the override (absolute) and its weight
         if (target is { } tg)
         {
-            var tgt = Math.Clamp(tg, lo, hi);
+            var tgt = State is Mode.Setup or Mode.Pass ? Math.Clamp(tg, passLo, passHi) : Math.Clamp(tg, lo, hi);
             if (hold is { } hl) tgt = holdSide > 0 ? MathF.Max(tgt, hl) : MathF.Min(tgt, hl);
             if (Pilot.Blend <= 0) Pilot.Lateral = lat;
             Pilot.Lateral += Math.Clamp(tgt - Pilot.Lateral, -rate * dt, rate * dt);
@@ -508,6 +566,8 @@ public sealed class RivalPilot
             else Drift.Stop();
         }
 
+        // about to touch the car ahead: brake now (the speed control alone reacts too gently for this)
+        if (v > ram + 0.3f) input = input with { Throttle = 0, Brake = MathF.Max(input.Brake, Math.Clamp((v - ram) * 0.6f, 0.3f, 1)) };
         if (_lockUntil > _time) input = input with { Brake = 1, Throttle = 0 };
         if (_throttleUntil > _time && !Drifting) input = input with { Throttle = 1, Brake = 0 };
         return input;
@@ -531,8 +591,11 @@ public sealed class RivalPilot
         return -1;
     }
 
-    private void Remember(float along)
+    private void Remember(float along, float speed, float dt)
     {
+        // the leader's deceleration (m/s², smoothed over ~0.1 s; + = braking)
+        if (!float.IsNaN(_oSpeed)) _oDecel += ((_oSpeed - speed) / dt - _oDecel) * MathF.Min(10 * dt, 1);
+        _oSpeed = speed;
         if (_histN > 0 && _time - _hist[(_histN - 1) % _hist.Length].T < 0.25f) return;
         _hist[_histN++ % _hist.Length] = (_time, along);
     }

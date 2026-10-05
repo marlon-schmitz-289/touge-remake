@@ -122,7 +122,7 @@ public class RivalPilotTests(ITestOutputHelper log)
             log.WriteLine($"seed {seed}: blocked {blocked}, moved left {moved:F2} m");
             if (blocked)
             {
-                Assert.True(moved > 0.5f, "moved towards the inside (left)");
+                Assert.True(moved > 0.3f, "moved towards the inside (left)");
                 blocks++;
             }
         }

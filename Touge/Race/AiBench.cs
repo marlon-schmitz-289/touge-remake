@@ -144,6 +144,10 @@ public static class AiBench
         return new Result(t - MathF.Max(started, 0), hits, wallTicks, maxLat, runs, false, hitsAt);
     }
 
+    /// <summary>AIBENCH_BTRACE=from:to (s): a line every 0.125 s of each battle within that time.</summary>
+    private static readonly (float, float)? BattleTrace = Environment.GetEnvironmentVariable("AIBENCH_BTRACE") is { } bt && bt.Split(':') is [var a, var b]
+        ? (float.Parse(a, CultureInfo.InvariantCulture), float.Parse(b, CultureInfo.InvariantCulture)) : null;
+
     /// <summary>AIBENCH_TRACE=from:to (m along): a line every 0.1 s of each solo run within that stretch.</summary>
     private static readonly (float, float)? Trace = Environment.GetEnvironmentVariable("AIBENCH_TRACE") is { } tr && tr.Split(':') is [var a, var b]
         ? (float.Parse(a, CultureInfo.InvariantCulture), float.Parse(b, CultureInfo.InvariantCulture)) : null;
@@ -223,10 +227,11 @@ public static class AiBench
         {
             var d = Load(iso, course, rev, "AE86T");
             var cs = Corners(d.Line);
-            Console.WriteLine($"[Corners] {course} {(rev ? "up" : "down")} {d.Pilot.Length:F0} m: " +
-                              string.Join(" ", cs.GroupBy(c => c.Kind).Select(g => $"{g.Key} {g.Count()}")));
             // road room either side of the line at the bend's middle (CourseMap.Room, 6 m at most): inside / outside
             var map = CourseMap.Of(d.Line, d.Ground, d.Car.SurfaceGrip);
+            Console.WriteLine($"[Corners] {course} {(rev ? "up" : "down")} {d.Pilot.Length:F0} m: " +
+                              string.Join(" ", cs.GroupBy(c => c.Kind).Select(g => $"{g.Key} {g.Count()}")) +
+                              $", overtaking zones: braking {map.Zones.Count(z => z.Corner >= 0)}, straights {map.Zones.Count(z => z.Corner < 0)} ({map.Zones.Where(z => z.Corner < 0).Sum(z => z.To - z.From):F0} m)");
             var rooms = cs.Select(c =>
             {
                 var (l, r) = map.Room((c.From + c.To) / 2);
@@ -355,30 +360,105 @@ public static class AiBench
         }
     }
 
+    /// <summary>
+    ///     Rivals of the battle bench: five characters (their cars and styles) and the autopilot's own car at three skills
+    ///     (pace deltas of ~5 % slower, ~2 % slower, ~1 % faster than the autopilot at 0.8).
+    /// </summary>
+    private static Rivals.Rival[] BenchRivals =>
+    [
+        .. new[] { "itsuki", "shingo", "takeshi", "keisuke", "takumi" }.Select(Rivals.Find),
+        .. new[] { 0.5f, 0.65f, 1f }.Select(k => new Rivals.Rival($"ae86@{k:0.00}", "AE86", "", "AE86T", new RivalStyle(k, 0.5f, 0.5f))),
+    ];
+
+    /// <summary>
+    ///     battle: the autopilot (<see cref="BattleRun.Autopilot"/>, AE86T) against each <see cref="BenchRivals"/> rival, race and
+    ///     lead/chase both ways, on every course and direction. Each pairing's pace delta comes from both cars alone on the course
+    ///     (+ = the rival is slower); the summary scores the racecraft against it: a chaser ≥ 3 % faster passes within 90 s, a
+    ///     slower one hardly ever, lead changes in close races, contacts (AIBENCH_CONTACTS=1 logs each).
+    /// </summary>
     private static void Battles(Iso9660 iso, string[] courses)
     {
-        string[] rivals = ["itsuki", "shingo", "takeshi", "keisuke", "takumi"];
-        Console.WriteLine("[Battle] course,dir,rival,rule,lead,outcome,reason,at_s,gap_s,overtakes,player_passes,contacts,max_impact_kmh,wall_player,wall_rival,respawns");
-        var outcomes = new List<(string Rival, BattleRule Rule, int Lead, BattleOutcome O, int Contacts, int Overtakes)>();
+        Console.WriteLine("[Battle] course,dir,rival,rule,lead,pace_delta_pct,outcome,reason,at_s,gap_s,overtakes,player_passes,first_pass_s,contacts,max_impact_kmh,wall_player,wall_rival,respawns");
+        var rows = new List<(string Rival, BattleRule Rule, int Lead, float Delta, BattleOutcome O, string Reason, float At, int Contacts, float Impact, int Overtakes, float FirstPass, int Respawns)>();
+        var logContacts = Environment.GetEnvironmentVariable("AIBENCH_CONTACTS") != null;
         foreach (var course in courses)
         foreach (var rev in new[] { false, true })
-        foreach (var id in rivals)
-        foreach (var (rule, lead) in new[] { (BattleRule.Race, 1), (BattleRule.LeadChase, 1), (BattleRule.LeadChase, 0) })
         {
             var d = Load(iso, course, rev, "AE86T");
+            var cs = Corners(d.Line);
             var quiet = Console.Out;
             Console.SetOut(TextWriter.Null);
-            var race = BattleRun.Create(d, new BattleSetup(Rivals.Find(id), rule, lead), new AiDriver(new RivalPilot(d.Line, BattleRun.Autopilot)), "AUTO");
-            var b = race.Battle!;
-            for (var n = 0; n < 600 / Dt && b.Outcome == BattleOutcome.None; n++) race.Tick(Dt);
+            var (auto, _) = Solo(d, BattleRun.Autopilot, cs);
             Console.SetOut(quiet);
-            Console.WriteLine($"[Battle] {course},{(rev ? "up" : "down")},{id},{rule},{(lead == 0 ? "player" : "rival")},{b.Outcome},{b.Reason},{b.DecidedAt:F1},{b.DecidedGap:+0.00;-0.00},{b.Overtakes},{b.PlayerPasses}," +
-                              $"{race.Contacts},{race.MaxImpact * 3.6f:F1},{race.Cars[0].WallTicks},{race.Cars[1].WallTicks},{race.Cars[0].Respawns + race.Cars[1].Respawns}");
-            outcomes.Add((id, rule, lead, b.Outcome, race.Contacts, b.Overtakes));
+            foreach (var rival in BenchRivals)
+            {
+                if (Environment.GetEnvironmentVariable("AIBENCH_RIVALS") is { } only && !only.Split(',').Contains(rival.Id)) continue;
+                Console.SetOut(TextWriter.Null);
+                d.ChangeCar(rival.Spec);
+                var (solo, _) = Solo(d, rival.Style, cs, 1);
+                d.ChangeCar(CarSpecs.All["AE86T"]);
+                Console.SetOut(quiet);
+                var delta = auto.Finished && solo.Finished ? 100 * (solo.Time / auto.Time - 1) : float.NaN;
+                foreach (var (rule, lead) in new[] { (BattleRule.Race, 1), (BattleRule.LeadChase, 1), (BattleRule.LeadChase, 0) })
+                {
+                    if (Environment.GetEnvironmentVariable("AIBENCH_RULES") is { } rules && !rules.Split(',').Contains($"{rule}{lead}")) continue;
+                    Console.SetOut(TextWriter.Null);
+                    var race = BattleRun.Create(d, new BattleSetup(rival, rule, lead), new AiDriver(new RivalPilot(d.Line, BattleRun.Autopilot)), "AUTO");
+                    Console.SetOut(quiet);
+                    var b = race.Battle!;
+                    if (Environment.GetEnvironmentVariable("AIBENCH_ATTEMPTS") != null)
+                        foreach (var (car, who) in new[] { (race.Cars[0], "P"), (race.Cars[1], "R") })
+                            ((AiDriver)car.Driver).Pilot.Log = m => Console.WriteLine($"[Attempt] {course} {(rev ? "up" : "down")} {rival.Id} {rule}{lead} {who} t {race.Time:F1} {m}");
+                    float firstPass = -1;
+                    var overtakes = 0;
+                    for (var n = 0; n < 600 / Dt && b.Outcome == BattleOutcome.None; n++)
+                    {
+                        var touches = race.Contacts;
+                        race.Tick(Dt);
+                        if (b.Overtakes != overtakes && firstPass < 0 && b.Time > b.StartGrace) firstPass = b.Time;
+                        overtakes = b.Overtakes;
+                        if (BattleTrace is var (t0, t1) && race.Time >= t0 && race.Time <= t1 && (int)(race.Time / Dt) % 15 == 0)
+                        {
+                            RaceCar p = race.Cars[0], r = race.Cars[1];
+                            string Who(RaceCar x)
+                            {
+                                var pl = ((AiDriver)x.Driver).Pilot;
+                                return $"{pl.State,-8}{(pl.Drifting ? "/d" : "  ")} {x.Along,7:F1}/{x.Lateral,5:+0.00;-0.00} {x.Vehicle.SpeedKmh,3:F0} tgt {pl.Pilot.TargetSpeed * 3.6f,3:F0} in {x.Input.Throttle:F1}/{x.Input.Brake:F1} {pl.Note}";
+                            }
+                            Console.WriteLine($"[BTrace] {race.Time,6:F2} Δs {r.Along - p.Along,6:+0.0;-0.0}  P {Who(p)}  |  R {Who(r)}");
+                        }
+                        if (logContacts && race.Contacts != touches && race.LastContact is { } c)
+                        {
+                            RaceCar p = race.Cars[0], r = race.Cars[1];
+                            string Who(RaceCar x) => $"{((AiDriver)x.Driver).Pilot.State}{(((AiDriver)x.Driver).Pilot.Drifting ? "/drift" : "")} {x.Along:F1}/{x.Lateral:+0.00;-0.00} {x.Vehicle.SpeedKmh:F0} km/h in {x.Input.Throttle:F1}/{x.Input.Brake:F1}";
+                            Console.WriteLine($"[Contact] {course} {(rev ? "up" : "down")} {rival.Id} {rule} lead {lead}: t {race.Time:F2} {c.ImpactSpeed * 3.6f:F1} km/h  P {Who(p)}  R {Who(r)}  Δs {r.Along - p.Along:+0.0;-0.0} Δlat {r.Lateral - p.Lateral:+0.00;-0.00}");
+                        }
+                    }
+                    RivalPilot pa = ((AiDriver)race.Cars[0].Driver).Pilot, ra = ((AiDriver)race.Cars[1].Driver).Pilot;
+                    Console.WriteLine($"[Battle] {course},{(rev ? "up" : "down")},{rival.Id},{rule},{(lead == 0 ? "player" : "rival")},{delta:F1},{b.Outcome},{b.Reason},{b.DecidedAt:F1},{b.DecidedGap:+0.00;-0.00},{b.Overtakes},{b.PlayerPasses},{firstPass:F1}," +
+                                      $"{race.Contacts},{race.MaxImpact * 3.6f:F1},{race.Cars[0].WallTicks},{race.Cars[1].WallTicks},{race.Cars[0].Respawns + race.Cars[1].Respawns},attempts {pa.Attempts}/{pa.Commits} {ra.Attempts}/{ra.Commits}");
+                    rows.Add((rival.Id, rule, lead, delta, b.Outcome, b.Reason, b.DecidedAt, race.Contacts, race.MaxImpact * 3.6f, b.Overtakes, firstPass, race.Cars[0].Respawns + race.Cars[1].Respawns));
+                }
+            }
         }
-        Console.WriteLine("[Battle] summary (player = autopilot 0.8 in the AE86T): wins/losses/draws, contacts, lead changes");
-        foreach (var g in outcomes.GroupBy(o => (o.Rival, o.Rule, o.Lead)))
-            Console.WriteLine($"[Battle]   {g.Key.Rival,-8} {g.Key.Rule,-9} {(g.Key.Rule == BattleRule.Race ? "" : g.Key.Lead == 0 ? "player leads" : "rival leads"),-12} " +
-                              $"W {g.Count(o => o.O == BattleOutcome.Win),2} L {g.Count(o => o.O == BattleOutcome.Lose),2} D {g.Count(o => o.O == BattleOutcome.Draw),2}  contacts {g.Sum(o => o.Contacts),3}  lead changes {g.Sum(o => o.Overtakes),3}");
+        Console.WriteLine("[Battle] summary (player = autopilot 0.8 in the AE86T; pace Δ + = rival slower alone): wins/losses/draws, contacts, lead changes");
+        foreach (var g in rows.GroupBy(o => (o.Rival, o.Rule, o.Lead)))
+            Console.WriteLine($"[Battle]   {g.Key.Rival,-9} {g.Key.Rule,-9} {(g.Key.Rule == BattleRule.Race ? "" : g.Key.Lead == 0 ? "player leads" : "rival leads"),-12} pace Δ {g.Where(o => float.IsFinite(o.Delta)).Select(o => o.Delta).DefaultIfEmpty(float.NaN).Average(),5:+0.0;-0.0}%  " +
+                              $"W {g.Count(o => o.O == BattleOutcome.Win),2} L {g.Count(o => o.O == BattleOutcome.Lose),2} D {g.Count(o => o.O == BattleOutcome.Draw),2}  contacts {g.Sum(o => o.Contacts),3} (max {g.Max(o => o.Impact):F0} km/h)  lead changes {g.Sum(o => o.Overtakes),3}  respawns {g.Sum(o => o.Respawns)}");
+        // racecraft targets: lead/chase by the chaser's pace advantage (chaser = rival when the player leads)
+        var chases = rows.Where(o => o.Rule == BattleRule.LeadChase && float.IsFinite(o.Delta))
+            .Select(o => (Adv: o.Lead == 0 ? -o.Delta : o.Delta, Passed: o.Reason == "OVERTAKE", In90: o.Reason == "OVERTAKE" && o.FirstPass >= 0 && o.FirstPass <= 100 + 1.5f, o.Contacts)).ToList();
+        void Rate(string what, Func<float, bool> sel)
+        {
+            var c = chases.Where(x => sel(x.Adv)).ToList();
+            Console.WriteLine($"[Battle] chaser {what,-22}: {c.Count,3} runs, passed {c.Count(x => x.Passed),3} ({(c.Count > 0 ? 100f * c.Count(x => x.Passed) / c.Count : 0):F0} %), within 90 s {c.Count(x => x.In90),3} ({(c.Count > 0 ? 100f * c.Count(x => x.In90) / c.Count : 0):F0} %)");
+        }
+        Rate("≥ 3 % faster", a => a >= 3);
+        Rate("1…3 % faster", a => a is >= 1 and < 3);
+        Rate("within ±1 %", a => MathF.Abs(a) < 1);
+        Rate("slower", a => a <= -1);
+        var close = rows.Where(o => o.Rule == BattleRule.Race && MathF.Abs(o.Delta) <= 2).ToList();
+        Console.WriteLine($"[Battle] races within 2 %: {close.Count}, lead changes per race {(close.Count > 0 ? close.Average(o => o.Overtakes) : 0):F2} (1–4 wanted), in 1–4: {close.Count(o => o.Overtakes is >= 1 and <= 4)}");
+        Console.WriteLine($"[Battle] contacts {rows.Sum(o => o.Contacts)} in {rows.Count} battles ({(float)rows.Sum(o => o.Contacts) / rows.Count * 5:F2} per 5), over 15 km/h {rows.Count(o => o.Impact > 15)}, respawns {rows.Sum(o => o.Respawns)}");
     }
 }

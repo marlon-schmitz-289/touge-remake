@@ -190,10 +190,10 @@ public sealed class LinePilot
             // line ahead plus pursuit feedback on the lateral and heading error (no corner cutting at the turn-in)
             aimLat = plan.OffsetAt(s + look) + Offset;
             if (Blend > 0) aimLat = float.Lerp(aimLat, Lateral, Blend);
-            aimLat = Clamp(plan, s + look, aimLat);
+            aimLat = Clamp(plan, s + look, aimLat, Blend > 0);
             var want = plan.OffsetAt(s) + Offset;
             if (Blend > 0) want = float.Lerp(want, Lateral, Blend);
-            want = Clamp(plan, s, want);
+            want = Clamp(plan, s, want, Blend > 0);
             var tangent = plan.PositionAt(s + 2) - plan.PositionAt(s - 2);
             var dir = v > 2 ? car.Velocity : Vector3.Transform(Vector3.UnitZ, car.Orientation);
             var cross = tangent.X * dir.Z - tangent.Z * dir.X;
@@ -258,14 +258,15 @@ public sealed class LinePilot
     }
 
     /// <summary>
-    ///     <paramref name="lat"/> kept on the road at <paramref name="s"/>: within the plan's bounds (+0.2 m), or the body's
-    ///     half width plus 5 cm from the road's end where that is wider (the override beside a car alongside).
+    ///     <paramref name="lat"/> kept on the road at <paramref name="s"/>: within the plan's bounds (+0.2 m); an override
+    ///     (<paramref name="wide"/>: beside a car alongside) up to 0.6 m from the end of the full-grip road (a gutter beyond).
     /// </summary>
-    static float Clamp(RacingLine plan, float s, float lat)
+    static float Clamp(RacingLine plan, float s, float lat, bool wide)
     {
         var (lo, hi) = plan.BoundsAt(s);
+        if (!wide) return Math.Clamp(lat, lo - 0.2f, hi + 0.2f);
         var (l, r) = plan.Map.Room(s);
-        return Math.Clamp(lat, MathF.Min(lo - 0.2f, 0.9f - r), MathF.Max(hi + 0.2f, l - 0.9f));
+        return Math.Clamp(lat, MathF.Min(lo - 0.2f, 0.6f - r), MathF.Max(hi + 0.2f, l - 0.6f));
     }
 
     float DistanceSq(Vector3 p, int i)
