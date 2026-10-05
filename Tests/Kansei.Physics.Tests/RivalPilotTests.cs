@@ -62,10 +62,10 @@ public class RivalPilotTests(ITestOutputHelper log)
     [Fact]
     public void Never_steers_into_a_car_alongside_where_the_road_room_ends()
     {
-        // 6 m road (room ±1.7 m), the AI starts 2.4 m right of a car that squeezes it, staying level at its pace: the
-        // room limit pulls towards that car — it holds its side and lifts instead (MYOUGI grid, review)
+        // 7 m road (racing line bounds ±2.2 m), the AI starts 2.4 m right of a car that squeezes it, staying level at its
+        // pace: the bounds pull towards that car — it holds its side and lifts instead (MYOUGI grid, review)
         var line = Straight();
-        var ground = Road(3);
+        var ground = Road(3.5f);
         var ai = new RivalPilot(line, new RivalStyle(0.8f, 0.5f, 0));
         var car = new Vehicle(CarSpec.AE86);
         car.Reset(new Vector3(-2.4f, 0, 20), 0);
@@ -79,6 +79,7 @@ public class RivalPilotTests(ITestOutputHelper log)
             car.Step(ai.Drive(car, ground, [new Opponent(s + 0.5f, 0, v)], Dt), ground, Dt);
             closest = MathF.Min(closest, MathF.Abs(ai.Pilot.Track(car.Position).Lateral));
             aim = MathF.Min(aim, -ai.Offset);
+            if (Environment.GetEnvironmentVariable("RP_DBG") != null) log.WriteLine($"t {t:F2} lat {ai.Pilot.Track(car.Position).Lateral:F2} off {ai.Offset:F2} state {ai.State} v {car.SpeedKmh:F0}");
             lifted |= ai.State == RivalPilot.Mode.Follow;
         }
         log.WriteLine($"closest lateral to the other car {closest:F2} m, offset {ai.Offset:F2}");
@@ -90,27 +91,42 @@ public class RivalPilotTests(ITestOutputHelper log)
     [Fact]
     public void Defends_the_inside_against_a_car_close_behind_before_a_bend()
     {
-        // straight, then a left-hand arc (radius 60 m); attacker 8 m behind on the left (inside)
+        // straight, then a tight left-hander (radius 35 m, a braking zone before it); attacker 8 m behind on the left
+        // (inside): with aggression 1 the AI covers the inside in ~80 % of the zones (the race seed decides), off its line
         var line = new List<Vector3>();
         for (var i = 0; i < 40; i++) line.Add(new Vector3(0, 0, i * 5));
         for (var i = 1; i < 30; i++)
         {
-            var a = i * 5 / 60f;
-            line.Add(new Vector3(60 - 60 * MathF.Cos(a), 0, 195 + 60 * MathF.Sin(a)));
+            var a = i * 5 / 35f;
+            line.Add(new Vector3(35 - 35 * MathF.Cos(a), 0, 195 + 35 * MathF.Sin(a)));
         }
-        var ai = new RivalPilot([.. line], new RivalStyle(0.8f, 1, 0));
-        var car = new Vehicle(CarSpec.AE86);
-        car.Reset(new Vector3(0, 0, 150), 0);
-        ai.Pilot.Nearest(car.Position);
         var ground = WallTests.Grid([-10, 80], [-20, 400], (_, _) => false);
-        for (var t = 0f; t < 1; t += Dt)
+        var blocks = 0;
+        for (var seed = 0; seed < 10; seed++)
         {
-            var (s, _) = ai.Pilot.Track(car.Position);
-            car.Step(ai.Drive(car, ground, [new Opponent(s - 8, 1.5f, car.Velocity.Length())], Dt), ground, Dt);
+            var ai = new RivalPilot([.. line], new RivalStyle(0.8f, 1, 0)) { Seed = seed };
+            var car = new Vehicle(CarSpec.AE86);
+            car.Reset(Vector3.Zero, 0);
+            ai.Pilot.Nearest(car.Position);
+            var blocked = false;
+            float moved = 0;
+            for (var t = 0f; t < 15; t += Dt)
+            {
+                var (s, lat) = ai.Pilot.Track(car.Position);
+                if (s > 190) break;
+                // the attacker 8 m back, a metre and a half left of us (inside)
+                car.Step(ai.Drive(car, ground, [new Opponent(s - 8, lat + 1.5f, car.Velocity.Length())], Dt), ground, Dt);
+                blocked |= ai.State == RivalPilot.Mode.Block;
+                if (blocked) moved = MathF.Max(moved, lat - ai.Racing!.OffsetAt(s)); // left of its own line
+            }
+            log.WriteLine($"seed {seed}: blocked {blocked}, moved left {moved:F2} m");
+            if (blocked)
+            {
+                Assert.True(moved > 0.5f, "moved towards the inside (left)");
+                blocks++;
+            }
         }
-        log.WriteLine($"state {ai.State}, offset {ai.Offset:F2}");
-        Assert.Equal(RivalPilot.Mode.Block, ai.State);
-        Assert.True(ai.Offset > 0.3f, "moved towards the inside (left)");
+        Assert.InRange(blocks, 5, 10);
     }
 
     [Fact]
@@ -119,6 +135,8 @@ public class RivalPilotTests(ITestOutputHelper log)
         var (c0, b0) = RivalPilot.Pace(0);
         var (c1, b1) = RivalPilot.Pace(1);
         Assert.True(c1 > c0 && b1 > b0);
-        Assert.InRange(c1 / 9.81f, 0.8f, 0.9f); // planned below the tyres' grip (~1 g): room for traffic and mistakes
+        Assert.InRange(c0 / 9.81f, 0.6f, 1.0f); // a beginner: well below the tyres' grip
+        Assert.InRange(c1 / 9.81f, 1.4f, 1.5f); // LEGEND: the AE86 at its limit (~1.45 g on the skid pad), like a good player
+        Assert.InRange(b1 / 9.81f, 0.9f, 1.0f);
     }
 }

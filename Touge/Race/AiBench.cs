@@ -3,6 +3,7 @@ using System.Numerics;
 using Kansei.Physics;
 using Touge.Formats;
 using Touge.Ui;
+using Corner = Kansei.Physics.CourseMap.Corner;
 
 namespace Touge.Race;
 
@@ -25,54 +26,8 @@ public static class AiBench
 
     public static readonly string[] Cars = ["AE86T", "R34", "EK9"];
 
-    /// <summary>A bend of the line: from/to (m along), tightest radius, heading change (rad), +1 left / −1 right.</summary>
-    public sealed record Corner(float From, float To, float Radius, float Angle, int Dir)
-    {
-        public string Kind => Radius < 25 && Angle > 1.6f ? "hairpin" : Radius < 45 ? "tight" : Radius < 90 ? "medium" : "fast";
-    }
-
-    /// <summary>
-    ///     Bends of <paramref name="line"/>: runs of points with radius under 120 m (Menger curvature over ±2 points like
-    ///     <see cref="LinePilot"/>), gaps under 12 m merged, at least 20° of heading change.
-    /// </summary>
-    public static List<Corner> Corners(Vector3[] line)
-    {
-        var n = line.Length;
-        var along = new float[n];
-        for (var i = 1; i < n; i++) along[i] = along[i - 1] + Xz(line[i] - line[i - 1]).Length();
-        var k = new float[n];
-        for (var i = 0; i < n; i++)
-        {
-            Vector2 a = Xz(line[Math.Max(i - 2, 0)]), b = Xz(line[i]), c = Xz(line[Math.Min(i + 2, n - 1)]);
-            var den = Vector2.Distance(a, b) * Vector2.Distance(b, c) * Vector2.Distance(a, c);
-            var cross = (b - a).X * (c - a).Y - (b - a).Y * (c - a).X;
-            k[i] = den < 1e-6f ? 0 : -2 * cross / den; // + = left, as LinePilot's bend
-        }
-        var corners = new List<Corner>();
-        var j = 0;
-        while (j < n)
-        {
-            if (MathF.Abs(k[j]) < 1 / 120f) { j++; continue; }
-            var dir = MathF.Sign(k[j]);
-            var start = j;
-            var end = j;
-            while (j < n && (MathF.Sign(k[j]) == dir && MathF.Abs(k[j]) >= 1 / 120f || along[j] - along[end] < 12 && MathF.Sign(k[j]) != -dir))
-            {
-                if (MathF.Abs(k[j]) >= 1 / 120f && MathF.Sign(k[j]) == dir) end = j;
-                j++;
-            }
-            float angle = 0, maxK = 0;
-            for (var i = start; i <= end; i++)
-            {
-                var ds = i + 1 < n ? along[i + 1] - along[i] : 0;
-                angle += MathF.Abs(k[i]) * ds;
-                maxK = MathF.Max(maxK, MathF.Abs(k[i]));
-            }
-            if (angle > 20 / Deg) corners.Add(new Corner(along[start], along[end], 1 / maxK, angle, (int)dir));
-            j = end + 1;
-        }
-        return corners;
-    }
+    /// <summary>Bends of <paramref name="line"/> (<see cref="CourseMap.FindCorners"/>).</summary>
+    public static List<Corner> Corners(Vector3[] line) => CourseMap.FindCorners(line);
 
     private static Vector2 Xz(Vector3 v) => new(v.X, v.Z);
 
@@ -88,100 +43,50 @@ public static class AiBench
         public string TimeText => Finished ? Time.ToString("F2", CultureInfo.InvariantCulture) : "DNF";
     }
 
-    /// <summary>Parameters of the drift overlay (<see cref="DriftOverlay"/>).</summary>
-    public sealed record DriftParams(float MaxRadius, float Handbrake, float BetaTarget, float Gain, float ExitLead, float Overspeed = 1.1f, float EntryLead = 8)
-    {
-        public override string ToString() => FormattableString.Invariant($"in{EntryLead:+0;-0}m hb{Handbrake:F2}s β{BetaTarget * Deg:F0}° k{Gain:F1} aD {Overspeed:F2}g exit{ExitLead:F0}m");
-    }
+    /// <summary>What the pilot did in a run: drifts held/aborted, mistakes, its corner plan.</summary>
+    public sealed record PilotStats(int Drifts, int Aborts, int Mistakes, DriftController.Entry?[] Plan, int[]? AbortWhy = null);
 
-    /// <summary>
-    ///     Prototype drift controller on top of the pilot (measurement only, not tuned: ~0.5–1 wall hit per drifted hairpin),
-    ///     for bends tighter than <see cref="DriftParams.MaxRadius"/>: approach = brake to the drift speed √(a·r) with a =
-    ///     <see cref="DriftParams.Overspeed"/> g; entry = handbrake (<see cref="DriftParams.Handbrake"/> s, at least 0.5 s
-    ///     under 15 m/s) with full lock towards the bend from <see cref="DriftParams.EntryLead"/> m before it; hold = the
-    ///     steering holds a body slip command (P on β, ×1.3 for the P controller's droop), the command integrates the error
-    ///     of the travel's path curvature against the line's (plus 0.01/m per metre wide, 0.05/m per rad pointing out) with
-    ///     gain <see cref="DriftParams.Gain"/>, throttle 0.45…1 on the drift speed (the drift layer needs &gt; 0.3); under 6°
-    ///     command or <see cref="DriftParams.ExitLead"/> m before the bend's end the pilot takes over (its traction aid = exit).
-    /// </summary>
-    public sealed class DriftOverlay(DriftParams p, List<Corner> corners)
-    {
-        private int _done = -1;
-        private float _hbUntil = -1, _t, _beta, _heading;
-
-        public VehicleInput Apply(VehicleInput pilot, Vehicle car, LinePilot line, float s, float lat, float target, float dt)
-        {
-            _t += dt;
-            var c = corners.FindIndex(x => s >= x.From - p.EntryLead - 80 && s < x.To + 5);
-            if (c < 0) return pilot;
-            var corner = corners[c];
-            if (corner.Radius > p.MaxRadius || corner.Angle < 0.8f) return pilot;
-            var v = car.Velocity.Length();
-            // drift speed: Overspeed = lateral grip of the drift in g (the probe: AE86 ~1.5 g at R 10–25 m)
-            var vd = MathF.Sqrt(p.Overspeed * 9.81f * corner.Radius);
-            var turnIn = corner.From - p.EntryLead;
-            if (s < turnIn)
-            {
-                // approach: brake to the drift speed at the turn-in (0.6 g), the pilot steers
-                var want = MathF.Sqrt(vd * vd + 2 * 0.6f * 9.81f * (turnIn - s));
-                if (v <= want) return pilot.Brake > 0 && v < want - 1 ? pilot with { Brake = 0, Throttle = 0.3f } : pilot;
-                return pilot with { Throttle = 0, Brake = Math.Clamp((v - want) * 0.5f + 0.3f, 0, 1) };
-            }
-            if (_done != c)
-            {
-                _done = c;
-                _hbUntil = _t + (v < 15 ? MathF.Max(p.Handbrake, 0.5f) : p.Handbrake);
-                (_beta, _heading) = (p.BetaTarget, MathF.Atan2(car.Velocity.X, car.Velocity.Z));
-            }
-            // path curvature of the travel (1/m, + = towards the bend) since the last tick
-            var h = MathF.Atan2(car.Velocity.X, car.Velocity.Z);
-            var dh = MathF.IEEERemainder(h - _heading, MathF.Tau);
-            _heading = h;
-            var kappa = dh / MathF.Max(v * dt, 0.01f) * corner.Dir; // a left turn (towards +X) raises atan2(X, Z)
-            if (s > corner.To - p.ExitLead) return pilot;
-            int dir = corner.Dir;
-            if (_t < _hbUntil) return new VehicleInput(0.5f, 0, -dir, Handbrake: true);
-            // heading error: travel direction against the line's tangent, + = pointing out of the bend
-            var tangent = line.PointAt(s + 3) - line.PointAt(s - 3);
-            var travel = car.Velocity;
-            var cross = tangent.X * travel.Z - tangent.Z * travel.X;
-            var psi = MathF.Atan2(cross, tangent.X * travel.X + tangent.Z * travel.Z);
-            var outPsi = psi * dir; // cross < 0: travel left of the tangent
-            var wide = -lat * dir; // metres outside the line
-            // curvature wanted: the line's + back towards it (wide of it / pointing out of the bend = tighter)
-            var kWant = MathF.Abs(line.BendAhead(s - 5, 10).Curvature) + 0.01f * wide + 0.05f * outPsi;
-            var err = kWant - kappa;
-            _beta = Math.Clamp(_beta + p.Gain * err * dt, 0, 40 / Deg);
-            var cmd = MathF.Min(_beta + p.Gain / 4 * err, 40 / Deg);
-            if (cmd < 6 / Deg) return pilot; // turning too tight for a drift: grip (the pilot's traction aid catches it)
-            var steer = Math.Clamp(dir * 3 * (car.SlipAngle * dir - 1.3f * cmd), -1, 1);
-            var throttle = Math.Clamp(0.75f + 0.4f * (vd - v), 0.45f, 1);
-            return new VehicleInput(throttle, 0, steer);
-        }
-    }
-
-    /// <summary>One run alone from the spawn to the goal (or 600 s) with <paramref name="style"/>, optionally with a drift overlay.</summary>
-    public static Result Solo(Drive drive, RivalStyle style, List<Corner> corners, DriftParams? drift = null)
+    /// <summary>One run alone from the spawn to the goal (or 600 s) with <paramref name="style"/>.</summary>
+    public static (Result R, PilotStats P) Solo(Drive drive, RivalStyle style, List<Corner> corners, int seed = 0)
     {
         drive.ResetTo(0);
         var car = drive.Car;
-        var pilot = new RivalPilot(drive.Line, style);
-        var overlay = drift != null ? new DriftOverlay(drift, corners) : null;
-        return Measure(drive, corners, () =>
+        var pilot = new RivalPilot(drive.Line, style) { Seed = seed };
+        if (Environment.GetEnvironmentVariable("LATGAIN") is { } lg) pilot.Pilot.LateralGain = float.Parse(lg, CultureInfo.InvariantCulture);
+        if (Trace is var (from, to))
+        {
+            pilot.Prepare(car, drive.Ground);
+            var rl = pilot.Racing!;
+            for (var i = rl.Map.Index(from); i <= rl.Map.Index(to); i++)
+                Console.WriteLine($"[Line] {i * CourseMap.Step:F0} m off {rl.Offset[i]:+0.00;-0.00} [{rl.Lo[i]:+0.0;-0.0}, {rl.Hi[i]:+0.0;-0.0}] room L {rl.Map.RoomLeft[i]:F2} R {rl.Map.RoomRight[i]:F2} " +
+                                  $"κ {rl.Curvature[i]:+0.000;-0.000} (course {rl.Map.Bend[i]:+0.000;-0.000}) v {rl.Speed[i] * 3.6f:F0} km/h" +
+                                  (Environment.GetEnvironmentVariable("AIBENCH_ROOMDBG") != null ? " ground " + string.Join(" ", Enumerable.Range(-8, 17).Select(k =>
+                                  {
+                                      var q = rl.Map.Point[i] + rl.Map.Left[i] * (k * 0.5f);
+                                      return drive.Ground.Raycast(q + Vector3.UnitY * 3, -Vector3.UnitY, 8, out var gh) ? $"{gh.Point.Y - rl.Map.Point[i].Y:+0.0;-0.0}/{gh.Surface}" : "x";
+                                  })) : ""));
+        }
+        var r = Measure(drive, corners, () =>
         {
             var input = pilot.Drive(car, drive.Ground, [], Dt);
-            var (s0, l0) = drive.Pilot.Track(car.Position);
-            if (overlay != null) input = overlay.Apply(input, car, drive.Pilot, s0, l0, pilot.Pilot.TargetSpeed, Dt);
             car.Step(input, drive.Ground, Dt);
             return input;
-        }, () => pilot.Pilot.TargetSpeed);
+        }, () => pilot.Pilot.TargetSpeed, () =>
+        {
+            var (s, _) = pilot.Pilot.Track(car.Position);
+            var rl = pilot.Racing!;
+            var (lo, hi) = rl.BoundsAt(s);
+            var (l, r) = rl.Map.Room(s);
+            return (pilot.Drifting ? $"drift {pilot.Drift.State} cmd {pilot.Drift.Command * Deg:F0} {pilot.Drift.Debug}" :pilot.State.ToString()) + $" plan {rl.OffsetAt(s):+0.00;-0.00} [{lo:+0.0;-0.0},{hi:+0.0;-0.0}] room L {l:F2} R {r:F2} κ {rl.CurvatureAt(s):+0.000;-0.000}";
+        });
+        return (r, new PilotStats(pilot.Drift.Held, pilot.Drift.Aborted, pilot.Mistakes, [.. Enumerable.Range(0, corners.Count).Select(pilot.DriftAt)], [.. pilot.Drift.AbortWhy]));
     }
 
     /// <summary>
     ///     Measures a run of <paramref name="drive"/>'s car: <paramref name="tick"/> advances it one tick and returns the input
     ///     it got (null = no more ticks); time from the start line to the goal, wall hits, widest lateral, per-corner numbers.
     /// </summary>
-    public static Result Measure(Drive drive, List<Corner> corners, Func<VehicleInput?> tick, Func<float>? target = null)
+    public static Result Measure(Drive drive, List<Corner> corners, Func<VehicleInput?> tick, Func<float>? target = null, Func<string>? note = null)
     {
         var car = drive.Car;
         var goal = drive.Pilot.Length - LapTimer.Gate;
@@ -197,7 +102,7 @@ public static class AiBench
             if (started < 0 && s >= drive.Start) started = t;
             if (Trace is var (tf, tt) && s >= tf && s <= tt && (int)(t / Dt) % 12 == 0)
                 Console.WriteLine($"[Trace] t {t:F2} s {s:F1} lat {lat:+0.0;-0.0} {car.SpeedKmh:F0} km/h tgt {(target?.Invoke() ?? 0) * 3.6f:F0} β {car.SlipAngle * Deg:+0;-0}° " +
-                                  $"in thr {input.Throttle:F2} brk {input.Brake:F2} str {input.Steer:+0.00;-0.00} hb {(input.Handbrake ? 1 : 0)} wall {car.WallContacts} g{car.Gear}");
+                                  $"in thr {input.Throttle:F2} brk {input.Brake:F2} str {input.Steer:+0.00;-0.00} hb {(input.Handbrake ? 1 : 0)} wall {car.WallContacts} g{car.Gear} {note?.Invoke()}");
             if (started < 0) continue;
             maxLat = MathF.Max(maxLat, MathF.Abs(lat));
             if (car.WallContacts > 0)
@@ -207,6 +112,12 @@ public static class AiBench
                 {
                     hits++;
                     hitsAt.Add(s);
+                    if (Environment.GetEnvironmentVariable("AIBENCH_HITS") != null)
+                    {
+                        var wn = car.WallNormal;
+                        var left = drive.Pilot.LeftAt(s);
+                        Console.WriteLine($"[Hit] s {s:F0} lat {lat:+0.00;-0.00} {car.SpeedKmh:F0} km/h β {car.SlipAngle * Deg:+0;-0}° impact {car.WallImpactSpeed * 3.6f:F0} km/h wall on the {(Vector3.Dot(wn, left) < 0 ? "left" : "right")} {note?.Invoke()}");
+                    }
                 }
                 lastHit = t;
             }
@@ -225,6 +136,11 @@ public static class AiBench
             }
             if (s >= goal) return new Result(t - started, hits, wallTicks, maxLat, runs, true, hitsAt);
         }
+        if (Environment.GetEnvironmentVariable("AIBENCH_HITS") != null)
+        {
+            var (s, lat) = drive.Pilot.Track(car.Position);
+            Console.WriteLine($"[DNF] stuck at s {s:F0} lat {lat:+0.0;-0.0} {car.SpeedKmh:F0} km/h, pos {car.Position}, {note?.Invoke()}");
+        }
         return new Result(t - MathF.Max(started, 0), hits, wallTicks, maxLat, runs, false, hitsAt);
     }
 
@@ -241,7 +157,7 @@ public static class AiBench
         switch (mode)
         {
             case "solo": SoloMatrix(iso, courses, cars); return true;
-            case "drift": DriftSweep(iso, courses, cars); return true;
+            case "drift": DriftReport(iso, courses, cars); return true;
             case "battle": Battles(iso, courses); return true;
             case "corners": CornerTable(iso, courses); return true;
             case "human": return Human(iso, filter);
@@ -280,11 +196,12 @@ public static class AiBench
             player.Seek(0);
             var human = Measure(d, cs, () => player.Step() ? replay.Input(player.Tick - 1, 0) : null);
             Console.WriteLine($"[Human] {Path.GetFileName(file)}: {info.Mode} {info.Course} {(info.Reverse ? "up" : "down")} {c.Car} assists S{c.SteerAssist}D{c.DriftAssist}, file time {info.Time:F2} s");
-            Line(info.Course, info.Reverse, c.Car, -1, 0, human, cs, null, "human");
-            foreach (var k in new[] { 0.6f, 0.8f, 1f })
+            Line(info.Course, info.Reverse, c.Car, -1, 0, human, new PilotStats(0, 0, 0, []), cs, null, "human");
+            foreach (var style in new[] { new RivalStyle(0.5f, 0.5f, 0.3f), new RivalStyle(0.8f, 0.5f, 0.3f), new RivalStyle(1f, 0.5f, 0.3f), Human(d.Car.Spec) })
             {
-                var r = Solo(d, new RivalStyle(k, 0.5f, 0.3f), cs);
-                Line(info.Course, info.Reverse, c.Car, k, 0.3f, r, cs, null, "ai");
+                var (r, ps) = Solo(d, style, cs);
+                var k = style.Skill;
+                Line(info.Course, info.Reverse, c.Car, k, style.Drift, r, ps, cs, human, style.Mistakes == 0 ? "H" : "ai");
                 // per corner kind: the human's time through the corners against the AI's (+ = human slower)
                 foreach (var g in cs.Select((x, i) => (x.Kind, i)).GroupBy(x => x.Kind))
                 {
@@ -308,11 +225,11 @@ public static class AiBench
             var cs = Corners(d.Line);
             Console.WriteLine($"[Corners] {course} {(rev ? "up" : "down")} {d.Pilot.Length:F0} m: " +
                               string.Join(" ", cs.GroupBy(c => c.Kind).Select(g => $"{g.Key} {g.Count()}")));
-            // road room either side of the line at the bend's middle (RivalPilot.Room, 4 m at most): inside / outside
-            var rp = new RivalPilot(d.Line, default);
+            // road room either side of the line at the bend's middle (CourseMap.Room, 6 m at most): inside / outside
+            var map = CourseMap.Of(d.Line, d.Ground, d.Car.SurfaceGrip);
             var rooms = cs.Select(c =>
             {
-                var (l, r) = rp.Room(d.Car, d.Ground, (c.From + c.To) / 2);
+                var (l, r) = map.Room((c.From + c.To) / 2);
                 return c.Dir > 0 ? (In: l, Out: r) : (In: r, Out: l);
             }).ToList();
             foreach (var g in cs.Select((c, i) => (c, rooms[i])).GroupBy(x => x.c.Kind))
@@ -323,50 +240,64 @@ public static class AiBench
         }
     }
 
-    /// <summary>Skills of the matrix and the reference sweep (planned grip above the AI's range).</summary>
-    private static readonly float[] Skills = Environment.GetEnvironmentVariable("AIBENCH_SKILLS") is { } sk ? [.. sk.Split(',').Select(x => float.Parse(x, CultureInfo.InvariantCulture))] : [0f, 0.3f, 0.6f, 0.8f, 1f], RefSkills = [1f, 1.5f, 2f, 2.5f, 3f, 3.5f, 4f, 4.5f, 5f];
+    /// <summary>Skills of the matrix (AIBENCH_SKILLS=a,b,… replaces them).</summary>
+    private static readonly float[] Skills = Environment.GetEnvironmentVariable("AIBENCH_SKILLS") is { } sk ? [.. sk.Split(',').Select(x => float.Parse(x, CultureInfo.InvariantCulture))] : [0.05f, 0.2f, 0.5f, 0.8f, 1f];
+
+    /// <summary>Drift styles of the matrix (AIBENCH_DRIFTS=a,b,…; default 0.3, and 0.9 from skill 0.8). AIBENCH_NOH skips H.</summary>
+    private static readonly float[]? Drifts = Environment.GetEnvironmentVariable("AIBENCH_DRIFTS") is { } dr ? [.. dr.Split(',').Select(x => float.Parse(x, CultureInfo.InvariantCulture))] : null;
+
+    /// <summary>Mistake factor of the matrix runs (AIBENCH_MISTAKES, default 1).</summary>
+    private static readonly float Mistakes = float.Parse(Environment.GetEnvironmentVariable("AIBENCH_MISTAKES") ?? "1", CultureInfo.InvariantCulture);
+
+    /// <summary>Drift style of the "good human" reference H per car: FR drifts the hairpins and tight bends, 4WD the hairpins, FF tucks.</summary>
+    public static float HumanDrift(CarSpec spec) => spec.DriveFront <= 0 ? 0.9f : spec.DriveFront < 1 ? 0.7f : 0.5f;
+
+    /// <summary>
+    ///     H = the "good human" reference: the pilot on its own line at skill 1 (planned 1.45 g FR) with the car's drift
+    ///     style, no mistakes.
+    /// </summary>
+    public static RivalStyle Human(CarSpec spec) => new(1, 0.5f, HumanDrift(spec), 0);
 
     private static void SoloMatrix(Iso9660 iso, string[] courses, string[] cars)
     {
-        Console.WriteLine("[Bench] course,dir,car,skill,drift,time_s,vs_ref_pct,wall_hits,wall_ticks,max_lat_m,hairpin_maxbeta,hairpin_slide_s,tight_maxbeta,medium_maxbeta");
-        var summary = new List<(string Car, float Skill, float Pct, int Hits)>();
+        Console.WriteLine("[Bench] tag,course,dir,car,skill,drift,time_s,vs_H_pct,wall_hits,wall_ticks,max_lat_m,hairpin_maxbeta,hairpin_slide_s,tight_maxbeta,medium_maxbeta,drifts,aborts,mistakes");
+        var summary = new List<(string Car, float Skill, float Drift, float Pct, int Hits, bool Finished, float Mistakes5Km)>();
         foreach (var course in courses)
         foreach (var rev in new[] { false, true })
         foreach (var car in cars)
         {
             var d = Load(iso, course, rev, car);
             var cs = Corners(d.Line);
-            var runs = new List<(float Skill, float Drift, Result R)>();
-            foreach (var k in Skills)
-            foreach (var drift in new[] { 0.3f, 0.9f })
-                if (drift < 0.5f || k == 0.8f)
-                    runs.Add((k, drift, Solo(d, new RivalStyle(k, 0.5f, drift), cs)));
-            var refs = RefSkills.Select(k => (Skill: k, R: Solo(d, new RivalStyle(k, 0.5f, 0.3f), cs))).ToList();
-            // the reference: fastest finished run over higher planned grip that hits the walls at most once more than the
-            // cleanest run (some lines graze a wall at any pace)
-            var minHits = runs.Select(x => x.R).Concat(refs.Select(x => x.R)).Where(r => r.Finished).Select(r => r.WallHits).DefaultIfEmpty(99).Min();
-            var (bestSkill, best) = refs.Where(x => x.R.Finished && x.R.WallHits <= minHits + 1)
-                .OrderBy(x => x.R.Time).FirstOrDefault();
-            foreach (var (k, r) in refs) Line(course, rev, car, k, 0.3f, r, cs, best, "ref");
-            Console.WriteLine($"[Ref] {course} {(rev ? "up" : "down")} {car}: {best?.TimeText ?? "-"} s (skill {bestSkill:F1}, hits {best?.WallHits})");
-            foreach (var (k, drift, r) in runs)
+            Result? h = null;
+            if (Environment.GetEnvironmentVariable("AIBENCH_NOH") == null)
             {
-                var pct = Line(course, rev, car, k, drift, r, cs, best, "run");
-                if (drift < 0.5f) summary.Add((car, k, pct, r.WallHits));
-                if (k == 0.8f && drift < 0.5f && r.HitsAt.Count > 0)
-                    Console.WriteLine($"[Hits] {course} {(rev ? "up" : "down")} {car} 0.8: " + string.Join(" ", r.HitsAt.Select(a =>
+                var (hr, hp) = Solo(d, Human(d.Car.Spec), cs);
+                Line(course, rev, car, 1, HumanDrift(d.Car.Spec), hr, hp, cs, null, "H");
+                h = hr.Finished ? hr : null;
+            }
+            var km = (d.Pilot.Length - d.Start) / 1000;
+            foreach (var k in Skills)
+            foreach (var drift in Drifts ?? [0.3f, 0.9f])
+            {
+                if (Drifts == null && drift > 0.5f && k < 0.8f) continue;
+                var (r, p) = Solo(d, new RivalStyle(k, 0.5f, drift, Mistakes), cs);
+                var pct = Line(course, rev, car, k, drift, r, p, cs, h, "run");
+                summary.Add((car, k, drift, pct, r.WallHits, r.Finished, p.Mistakes * 5 / km));
+                if (r.HitsAt.Count > 0)
+                    Console.WriteLine($"[Hits] {course} {(rev ? "up" : "down")} {car} {k:F2}/{drift:F1}: " + string.Join(" ", r.HitsAt.Select(a =>
                         $"{a:F0}m({cs.FirstOrDefault(c => a >= c.From - 15 && a <= c.To + 25)?.Kind ?? "straight"})")));
             }
         }
-        Console.WriteLine("[Summary] car skill: mean/min/max % slower than reference, wall hits per run");
-        foreach (var g in summary.GroupBy(x => (x.Car, x.Skill)))
+        Console.WriteLine("[Summary] car skill drift: % slower than H mean/min/max, wall hits per run, finished, mistakes per 5 km");
+        foreach (var g in summary.GroupBy(x => (x.Car, x.Skill, x.Drift)))
         {
             var ok = g.Where(x => float.IsFinite(x.Pct)).ToList();
-            Console.WriteLine($"[Summary] {g.Key.Car,-6} {g.Key.Skill:F1}: {ok.Average(x => x.Pct),6:F1} {ok.Min(x => x.Pct),6:F1} {ok.Max(x => x.Pct),6:F1}  ({ok.Count}/{g.Count()} runs)  hits {g.Average(x => x.Hits):F1}");
+            Console.WriteLine($"[Summary] {g.Key.Car,-6} {g.Key.Skill:F2} {g.Key.Drift:F1}: {(ok.Count > 0 ? ok.Average(x => x.Pct) : float.NaN),6:F1} {(ok.Count > 0 ? ok.Min(x => x.Pct) : float.NaN),6:F1} {(ok.Count > 0 ? ok.Max(x => x.Pct) : float.NaN),6:F1}" +
+                              $"  hits {g.Average(x => x.Hits):F2} (max {g.Max(x => x.Hits)})  finished {g.Count(x => x.Finished)}/{g.Count()}  mistakes/5km {g.Average(x => x.Mistakes5Km):F1}");
         }
     }
 
-    private static float Line(string course, bool rev, string car, float skill, float drift, Result r, List<Corner> cs, Result? best, string tag)
+    private static float Line(string course, bool rev, string car, float skill, float drift, Result r, PilotStats p, List<Corner> cs, Result? best, string tag)
     {
         var pct = best != null && r.Finished ? 100 * (r.Time / best.Time - 1) : float.NaN;
         string Beta(string kind)
@@ -375,49 +306,53 @@ public static class AiBench
             return sel.Count == 0 ? "-" : $"{sel.Average(x => x.Item2.MaxBeta):F1}";
         }
         var hpSlide = cs.Select((c, i) => (c, r.Corners[i])).Where(x => x.c.Kind == "hairpin").Sum(x => x.Item2.SlideTime);
-        Console.WriteLine($"[Bench] {tag},{course},{(rev ? "up" : "down")},{car},{skill:F1},{drift:F1},{r.TimeText},{pct:F1},{r.WallHits},{r.WallTicks},{r.MaxLateral:F1},{Beta("hairpin")},{hpSlide:F1},{Beta("tight")},{Beta("medium")}");
+        Console.WriteLine($"[Bench] {tag},{course},{(rev ? "up" : "down")},{car},{skill:F2},{drift:F1},{r.TimeText},{pct:F1},{r.WallHits},{r.WallTicks},{r.MaxLateral:F1},{Beta("hairpin")},{hpSlide:F1},{Beta("tight")},{Beta("medium")},{p.Drifts},{p.Aborts},{p.Mistakes}");
         return pct;
     }
 
-    private static void DriftSweep(Iso9660 iso, string[] courses, string[] cars)
+    /// <summary>
+    ///     drift: each drift style (Takumi 0.9, Keisuke 0.8, Ryosuke 0.6, Takeshi 0.1) at skill 0.8 against the same pilot with
+    ///     drift 0 (grip): per planned drift corner the time, max body slip, exit speed, wall hits, spins.
+    /// </summary>
+    private static void DriftReport(Iso9660 iso, string[] courses, string[] cars)
     {
-        var sets = new List<DriftParams>();
-        if (Environment.GetEnvironmentVariable("AIBENCH_DRIFT") is { } one && one.Split(',') is [var r1, var b1, var g1, var o1, var e1])
-            sets.Add(new DriftParams(float.Parse(r1), 0.3f, float.Parse(b1) / Deg, float.Parse(g1), float.Parse(e1), float.Parse(o1)));
-        else
-        foreach (var r in new[] { 30f })
-        foreach (var hb in new[] { 0.15f, 0.3f })
-        foreach (var beta in new[] { 15f, 25f })
-        foreach (var gain in new[] { 4f, 10f })
-        foreach (var g in new[] { 1.3f, 1.6f })
-        foreach (var lead in new[] { -8f, 0f, 8f })
-            sets.Add(new DriftParams(r, hb, beta / Deg, gain, 10, g, lead));
-        var totals = new Dictionary<string, List<float>>();
+        var styles = new[] { ("takumi", 0.9f), ("keisuke", 0.8f), ("ryosuke", 0.6f), ("takeshi", 0.1f) };
+        var rows = new List<(string Car, string Who, int Eligible, int Planned, int Held, float Beta, float BetaStd, float DtPct, float DExit, int Hits, int Spins, float TotalPct, int Aborts)>();
         foreach (var course in courses)
         foreach (var rev in new[] { false, true })
         foreach (var car in cars)
         {
             var d = Load(iso, course, rev, car);
             var cs = Corners(d.Line);
-            var style = new RivalStyle(0.8f, 0.5f, 0.3f);
-            var grip = Solo(d, style, cs);
-            Console.WriteLine($"[Drift] {course} {(rev ? "up" : "down")} {car} grip {grip.TimeText} s hits {grip.WallHits}");
-            foreach (var p in sets)
+            var (grip, _) = Solo(d, new RivalStyle(0.8f, 0.5f, 0, 0), cs);
+            foreach (var (who, drift) in styles)
             {
-                var r = Solo(d, style, cs, p);
-                var tight = cs.Select((c, i) => i).Where(i => cs[i].Radius < p.MaxRadius && cs[i].Angle > 0.8f && r.Corners[i].Reached).ToList();
-                var dt = tight.Sum(i => r.Corners[i].Time - grip.Corners[i].Time);
-                var beta = tight.Count > 0 ? tight.Average(i => r.Corners[i].MaxBeta) : 0;
-                var exit = tight.Count > 0 ? tight.Average(i => r.Corners[i].Exit - grip.Corners[i].Exit) : 0;
-                var pct = r.Finished && grip.Finished ? 100 * (r.Time / grip.Time - 1) : float.NaN;
-                Console.WriteLine($"[Drift]   {p,-34} {r.TimeText,8} {pct,6:+0.0;-0.0}% corners {tight.Count,2} Δt {dt,6:+0.0;-0.0} s  β̄max {beta,5:F1}°  Δexit {exit,5:+0;-0} km/h  hits {r.WallHits} lat {r.MaxLateral:F1}");
-                if (!totals.TryGetValue(p + " " + car, out var l)) totals[p + " " + car] = l = [];
-                l.Add(r.Finished ? pct + 100 * r.WallHits : 1000);
+                var (r, p) = Solo(d, new RivalStyle(0.8f, 0.5f, drift, 0), cs);
+                var planned = Enumerable.Range(0, cs.Count).Where(i => p.Plan[i] != null && r.Corners[i].Reached && grip.Corners[i].Reached).ToList();
+                var eligible = cs.Count(c => c.Hairpin);
+                var betas = planned.Select(i => r.Corners[i].MaxBeta).ToList();
+                var mean = betas.Count > 0 ? betas.Average() : 0;
+                var std = betas.Count > 1 ? MathF.Sqrt(betas.Average(b => (b - mean) * (b - mean))) : 0;
+                var tD = planned.Sum(i => r.Corners[i].Time);
+                var tG = planned.Sum(i => grip.Corners[i].Time);
+                var hits = r.HitsAt.Count(a => planned.Any(i => a >= cs[i].From - 15 && a <= cs[i].To + 25));
+                var spins = planned.Count(i => r.Corners[i].MaxBeta > 70);
+                var total = r.Finished && grip.Finished ? 100 * (r.Time / grip.Time - 1) : float.NaN;
+                rows.Add((car, who, eligible, planned.Count, p.Drifts, mean, std, tG > 0 ? 100 * (tD / tG - 1) : 0,
+                    planned.Count > 0 ? planned.Average(i => r.Corners[i].Exit - grip.Corners[i].Exit) : 0, hits, spins, total, p.Aborts));
+                Console.WriteLine($"[Drift] {course} {(rev ? "up" : "down")} {car} {who}: {r.TimeText} s ({total:+0.0;-0.0}% vs grip {grip.TimeText}), planned {planned.Count} " +
+                                  $"held {p.Drifts} aborted {p.Aborts} (slip/inside/wall/none {string.Join("/", p.AbortWhy ?? [])}), β̄max {mean:F1}±{std:F1}°, corner time {rows[^1].DtPct:+0.0;-0.0}%, Δexit {rows[^1].DExit:+0;-0} km/h, hits in drifts {hits} (run {r.WallHits}), spins {spins}");
             }
         }
-        Console.WriteLine("[Drift] best sets (mean % vs grip + 100 per wall hit; lower is better):");
-        foreach (var kv in totals.OrderBy(kv => kv.Value.Average()).Take(15))
-            Console.WriteLine($"[Drift]   {kv.Key,-42} {kv.Value.Average(),7:F1}");
+        Console.WriteLine("[Drift] summary per car/style: planned corners (hairpins on the courses), held, aborted, β̄max, corner time vs grip, Δexit, hits per drift, spins, run vs grip");
+        foreach (var g in rows.GroupBy(x => (x.Car, x.Who)))
+        {
+            var n = g.Sum(x => x.Planned);
+            var any = g.Where(x => x.Planned > 0).ToList();
+            Console.WriteLine($"[Drift]   {g.Key.Car,-6} {g.Key.Who,-8} planned {n,4} (hairpins {g.Sum(x => x.Eligible)}) held {g.Sum(x => x.Held),4} aborted {g.Sum(x => x.Aborts),3}  β̄max {(any.Count > 0 ? any.Average(x => x.Beta) : 0),5:F1}±{(any.Count > 0 ? any.Average(x => x.BetaStd) : 0):F1}°" +
+                              $"  corner time {(any.Count > 0 ? any.Average(x => x.DtPct) : 0),5:+0.0;-0.0}%  Δexit {(any.Count > 0 ? any.Average(x => x.DExit) : 0),4:+0;-0} km/h  hits/drift {(n > 0 ? g.Sum(x => x.Hits) / (float)n : 0):F3}  spins {g.Sum(x => x.Spins)}" +
+                              $"  run {g.Where(x => float.IsFinite(x.TotalPct)).Select(x => x.TotalPct).DefaultIfEmpty(float.NaN).Average():+0.0;-0.0}%");
+        }
     }
 
     private static void Battles(Iso9660 iso, string[] courses)

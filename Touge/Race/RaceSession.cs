@@ -154,7 +154,7 @@ public sealed class RaceSession
     /// <summary>
     ///     Puts <paramref name="car"/> at rest <paramref name="along"/> m along the line, <paramref name="lateral"/> m to its
     ///     left, facing along it; false where there is no ground under it, the body would touch a wall, or (AI rival) it stands
-    ///     outside the road room its <see cref="RivalPilot"/> considers drivable there (<see cref="RivalPilot.Room"/>).
+    ///     outside the road room its <see cref="RivalPilot"/> considers drivable there (<see cref="CourseMap.Room"/>).
     /// </summary>
     public bool Place(RaceCar car, float along, float lateral)
     {
@@ -165,9 +165,9 @@ public sealed class RaceSession
         // road under the spot at the line's height (beside the road the ray may reach a slope or valley far below)
         if (!Ground.Raycast(p + Vector3.UnitY * 5, -Vector3.UnitY, 20, out var hit) || MathF.Abs(hit.Point.Y - p.Y) > 1.5f) return false;
         var v = car.Vehicle;
-        if (lateral != 0 && car != Cars[0] && car.Driver is AiDriver ai)
+        if (lateral != 0 && car != Cars[0] && car.Driver is AiDriver)
         {
-            var (l, r) = ai.Pilot.Room(v, Ground, along);
+            var (l, r) = CourseMap.Of(Line, Ground, v.SurfaceGrip).Room(along);
             if (lateral < RivalPilot.EdgeMargin - r || lateral > l - RivalPilot.EdgeMargin) return false;
         }
         v.Reset(hit.Point, MathF.Atan2(dir.X, dir.Z));
