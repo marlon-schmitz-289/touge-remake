@@ -176,7 +176,7 @@ public sealed partial class TougeGame
         _rivalLights.Apply(_rivalLamps, _rivalModel.Lamp, _rivalBody, _renderer.Atmosphere.LocalLightShare, rival.Input.Brake, rival.Vehicle.Gear < 0);
         var (glow, brake, reverse) = (l.LampGlow, l.Brake, l.Reverse);
         (l.LampGlow, l.Brake, l.Reverse) = (_rivalLamps.LampGlow, _rivalLamps.Brake, _rivalLamps.Reverse);
-        var shell = RivalShell;
+        var shell = _rivalModel.ShellFor(_rivalLights.State != Headlights.Mode.Off, InCabin(_rivalBody));
         _carRenderer.Draw(pass, shell.Body, shell.Decals, _rivalModel.Wheel, _rivalBody, _rivalWheels, viewProj, _pos);
         if (shell.PopUp is { } popUp) _carRenderer.DrawPart(pass, popUp, _rivalModel.Lamp.PopUpAt(_rivalLights.Open) * _rivalBody, viewProj, _pos);
         (l.LampGlow, l.Brake, l.Reverse) = (glow, brake, reverse);

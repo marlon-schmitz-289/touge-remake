@@ -17,6 +17,15 @@ public sealed record CarModel(CarModel.Shell Day, CarModel.Shell Lit, StaticMesh
     WorldRenderer Renderer, int FirstTexture)
     : IDisposable
 {
+    /// <summary>Hood, cockpit and bumper camera mounts measured from this model (<see cref="CameraRig.Measure"/>).</summary>
+    public CameraRig.Mounts Mounts { get; init; }
+
+    /// <summary>The lit shell as the cockpit sees it (<see cref="CameraRig.CabinPart"/>: no driver card, dim mirror glass): the cockpit camera sits where he is drawn.</summary>
+    public Shell? Cabin { get; init; }
+
+    /// <summary>The shell to draw: <see cref="Cabin"/> with the camera inside, else by the light switch.</summary>
+    public Shell ShellFor(bool lit, bool cockpit) => cockpit && Cabin != null ? Cabin : lit ? Lit : Day;
+
     /// <summary>Opaque body, its alpha-blended decals (<see cref="Build"/>) and the pop-up headlamp part of this lamp state.</summary>
     public sealed record Shell(StaticMesh Body, StaticMesh Decals, StaticMesh? PopUp);
 
@@ -86,9 +95,14 @@ public sealed record CarModel(CarModel.Shell Day, CarModel.Shell Lit, StaticMesh
             var (opaque, decals) = Build(renderer.Device, body.Where(p => p.Name != part), textures, true);
             return new Shell(opaque, decals!, part == null ? null : Build(renderer.Device, [(part, parts[part])], textures, false).Opaque);
         }
+        var wheels = CarParts.Wheels(parts["body00"]);
         return new CarModel(Shell(day), Shell(lit),
             Build(renderer.Device, [("tire", tire), ("Bdisk00", parts["Bdisk00"])], textures, false).Opaque,
-            CarParts.Wheels(parts["body00"]), radius, colours.Length, lamps, renderer, firstTexture);
+            wheels, radius, colours.Length, lamps, renderer, firstTexture)
+        {
+            Cabin = Shell([.. lit.Select(p => (p.Name, CameraRig.CabinPart(p.Name, p.Mesh)))]),
+            Mounts = CameraRig.Measure(day.Select(p => p.Mesh), day.FirstOrDefault(p => p.Name.StartsWith("wind")).Mesh, wheels.Average(w => w.Translation.Y)),
+        };
     }
 
     /// <summary>
@@ -156,8 +170,9 @@ public sealed record CarModel(CarModel.Shell Day, CarModel.Shell Lit, StaticMesh
 
     public void Dispose()
     {
-        foreach (var s in new[] { Day, Lit })
+        foreach (var s in new[] { Day, Lit, Cabin })
         {
+            if (s == null) continue;
             s.Body.Dispose();
             s.Decals.Dispose();
             s.PopUp?.Dispose();

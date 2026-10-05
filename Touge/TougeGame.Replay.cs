@@ -446,7 +446,7 @@ public sealed partial class TougeGame
             lights.Apply(_showLamps, s.Model.Lamp, s.Body, _renderer.Atmosphere.LocalLightShare, s.Input.Brake, s.Vehicle.Gear < 0);
             var (glow, brake, reverse) = (l.LampGlow, l.Brake, l.Reverse);
             (l.LampGlow, l.Brake, l.Reverse) = (_showLamps.LampGlow, _showLamps.Brake, _showLamps.Reverse);
-            var shell = lights.State != Headlights.Mode.Off ? s.Model.Lit : s.Model.Day;
+            var shell = s.Model.ShellFor(lights.State != Headlights.Mode.Off, InCabin(s.Body));
             _carRenderer.Draw(pass, shell.Body, shell.Decals, s.Model.Wheel, s.Body, s.Wheels, viewProj, _pos);
             (l.LampGlow, l.Brake, l.Reverse) = (glow, brake, reverse);
         }
@@ -655,6 +655,15 @@ public sealed partial class TougeGame
         return i - 1 < _showCars.Count ? _showCars[i - 1].Pose : _carPose;
     }
 
+    /// <summary>Model matrix and model of the focused car (as <see cref="FocusPose"/>).</summary>
+    private (Matrix4x4 Body, CarModel Model) FocusModel()
+    {
+        var i = Math.Min(_viewer.Focus, _player!.Cars.Length - 1);
+        if (i == 0) return (_carBody, _car);
+        if (_race != null && _viewerBack != Back.Menu) return (_rivalBody, _rivalModel!);
+        return i - 1 < _showCars.Count ? (_showCars[i - 1].Body, _showCars[i - 1].Model) : (_carBody, _car);
+    }
+
     /// <summary>The viewer's and photo mode's camera; false when the game's own runs.</summary>
     private bool ReplayCamera(float dt)
     {
@@ -677,21 +686,15 @@ public sealed partial class TougeGame
                 // a TV operator: the aim lags a touch behind the car, cuts are hard
                 (_pos, _camLook, _fov) = (eye, snap ? look : Vector3.Lerp(_camLook, look, 1 - MathF.Exp(-14 * dt)), fov * MathF.PI / 180);
                 break;
-            case ReplayViewer.Camera.Bumper:
-                var up = Vector3.TransformNormal(Vector3.UnitY, pose);
-                var len = _player.Cars[Math.Min(_viewer.Focus, _player.Cars.Length - 1)].Spec.Length;
-                _pos = car + up * 0.15f + fwd * (len / 2 + 0.05f);
-                (_camLook, _fov) = (_pos + fwd * 10, _settings.Fov * MathF.PI / 180);
-                break;
             case ReplayViewer.Camera.Free:
                 (_pos, _camLook, _fov) = (_viewerCam.Position, _viewerCam.Position + _viewerCam.Forward, MathF.PI / 3);
                 break;
-            default:
-                var flat = Vector3.Normalize(fwd with { Y = 0 } + new Vector3(0, 0, 1e-6f));
-                float a = _camSnap ? 1 : 1 - MathF.Exp(-6 * dt), b = _camSnap ? 1 : 1 - MathF.Exp(-12 * dt);
-                _pos = Vector3.Lerp(_pos, car - flat * 5.8f + Vector3.UnitY * 1.9f, a);
-                _camLook = Vector3.Lerp(_camLook, car + flat * 4f + Vector3.UnitY * 0.6f, b);
-                _fov = _settings.Fov * MathF.PI / 180 + MathF.Min(_player.Cars[Math.Min(_viewer.Focus, _player.Cars.Length - 1)].SpeedKmh / 180, 1) * 0.2f;
+            default: // the driving cameras on the focused car
+                var view = ReplayViewer.Driving(_viewer.Cam)!.Value;
+                var (body, model) = FocusModel();
+                (_pos, _camLook, _fov) = CameraRig.Place(view, _pos, _camLook, _camSnap, dt, pose, body, model.Mounts,
+                    _player.Cars[Math.Min(_viewer.Focus, _player.Cars.Length - 1)].SpeedKmh, _settings.Fov * MathF.PI / 180);
+                _onBoard = view is CameraView.Hood or CameraView.Cockpit ? view : null;
                 break;
         }
         _camSnap = false;

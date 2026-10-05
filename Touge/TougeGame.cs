@@ -12,12 +12,12 @@ namespace Touge;
 /// <summary>
 ///     Course from the ISO with a drivable car (<see cref="Car"/>, AE86 by default) and a free-fly camera (F1).
 ///     Drive: W/S or ↑/↓ throttle/brake (automatic: hold S at standstill to reverse), A/D or ←/→ steer, Space handbrake, T auto/manual, Shift/Ctrl gear up/down (manual),
-///     R (pad Y) reset onto the driving line, B reset in the other direction (downhill/uphill), C chase/bumper camera, L lights, H high beam (pad D-pad up/down, <see cref="Headlights"/>), F2 graphics quality (MSAA, bloom, shadows) on/off,
+///     R (pad Y) reset onto the driving line, B reset in the other direction (downhill/uphill), C next camera (chase, far, hood, cockpit, bumper: <see cref="CameraRig"/>), L lights, H high beam (pad D-pad up/down, <see cref="Headlights"/>), F2 graphics quality (MSAA, bloom, shadows) on/off,
 ///     F4 HUD on/off, N minimap mode (<see cref="Hud"/>), 1/2 previous/next car and 3 next paint at standstill. Pad: left stick, triggers, A handbrake, bumpers shift.
 ///     Fly: WASD, Q/E down/up, right mouse or arrow keys look, Shift fast, Space jump along the driving line. Esc/Start pause menu (<see cref="Menu"/>; without CLI test arguments the game starts in the title menu).
 ///     <paramref name="orbit"/> (degrees, 0 = front, 90 = left, 180 = rear) puts the fly camera around the car;
 ///     <paramref name="autodrive"/> lets the line pilot drive that many seconds before the first frame (for --shot);
-///     <paramref name="bench"/> lets it drive in real time with the chase camera for that many seconds, then logs frame times and quits;
+///     <paramref name="bench"/> lets it drive in real time with the start camera (--cam, default chase) for that many seconds, then logs frame times and quits;
 ///     <paramref name="drift"/> makes the pilot throw in a scripted handbrake drift every 7 s (<see cref="Drive.ForceDrift"/>).
 ///     Tyre smoke, skid marks and sparks come from the car's wheel/wall state every tick (<see cref="TickEffects"/>), in rain
 ///     also tyre spray; falling rain is drawn around the camera.
@@ -143,7 +143,12 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     private JoystickState? _simWheel;
 
     // cameras
-    private bool _fly, _bumperCam, _camSnap = true;
+    private bool _fly, _camSnap = true;
+    /// <summary>Driving camera (C cycles, <see cref="CameraRig"/>); <see cref="_onBoard"/>: this frame's camera sits in the viewed car (hood/cockpit), else null.</summary>
+    private CameraView _camView;
+    private CameraView? _onBoard;
+    /// <summary>--cam: start camera instead of the setting.</summary>
+    public CameraView? StartCamera { get; init; }
     private Vector3 _pos, _camLook;
     private float _yaw, _pitch, _fov = MathF.PI / 3;
     private int _lastMouseX, _lastMouseY, _linePoint;
@@ -197,7 +202,8 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
                 if (shotPath != null) _front.Settle();
             }
         }
-        _bumperCam = _settings.BumperCam;
+        if (StartCamera is { } startCam) _settings.Camera = startCam;
+        _camView = _settings.Camera;
         if (_persist) ApplyDisplay();
         if (_menu != null)
         {
@@ -917,7 +923,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         if (_audioDevice != null) (_audioDevice.Music, _audioDevice.Master) = (MusicLevel, s.MasterVolume);
         if (_menuAudio != null) _menuAudio.Volume = s.MenuVolume;
         if (_audio != null) _audio.EngineLevel = s.EngineVolume;
-        (_hud.Visible, _hud.Mode, _hud.Scale, _hud.Mph, _bumperCam) = (s.HudOn, s.MapMode, s.HudScale, s.Mph, s.BumperCam);
+        (_hud.Visible, _hud.Mode, _hud.Scale, _hud.Mph, _camView) = (s.HudOn, s.MapMode, s.HudScale, s.Mph, s.Camera);
         if (s.Livery != _carLivery) SwitchCar(Array.IndexOf(CarPaint.Cars, _carName), _paint);
         if (_persist) s.Save();
     }
@@ -1336,7 +1342,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             SyncPose();
         }
         if (d.Pressed(Control.Camera))
-            (_bumperCam, _settings.BumperCam, _camSnap) = (!_bumperCam, !_bumperCam, true);
+            (_camView, _settings.Camera, _camSnap) = (CameraRig.Next(_camView), CameraRig.Next(_camView), true);
         if (k.IsKeyPressed(Key.T)) car.AutomaticGearbox = !car.AutomaticGearbox;
         if (d.Pressed(Control.Lights)) _lights.Toggle();
         if (d.Pressed(Control.HighBeam)) _lights.ToggleHigh();
@@ -1409,35 +1415,22 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         return (pose, body);
     }
 
-    /// <summary>Chase camera (spring towards a point behind/above the car, looks a bit ahead) or bumper camera.</summary>
-    private void UpdateDriveCamera(float dt) => UpdateDriveCamera(dt, _drive.Car, _carPose);
+    /// <summary>The driving camera of the player's car (<see cref="CameraRig"/>).</summary>
+    private void UpdateDriveCamera(float dt) => UpdateDriveCamera(dt, _drive.Car, _carPose, _carBody, _car);
 
-    /// <summary>The chase/bumper camera of <paramref name="car"/> at its interpolated <paramref name="carPose"/> (split screen: player 2's too).</summary>
-    private void UpdateDriveCamera(float dt, Vehicle car, Matrix4x4 carPose)
+    /// <summary>The driving camera of <paramref name="car"/> at its interpolated <paramref name="carPose"/>/<paramref name="carBody"/> (split screen: player 2's too).</summary>
+    private void UpdateDriveCamera(float dt, Vehicle car, Matrix4x4 carPose, Matrix4x4 carBody, CarModel model)
     {
-        var pos = carPose.Translation; // interpolated CoG
-        var fwd = Vector3.TransformNormal(Vector3.UnitZ, carPose);
-        if (_bumperCam)
-        {
-            var up = Vector3.TransformNormal(Vector3.UnitY, carPose);
-            _pos = pos + up * 0.15f + fwd * (car.Spec.Length / 2 + 0.05f);
-            _camLook = _pos + fwd * 10;
-            _fov = _settings.Fov * MathF.PI / 180;
-            _camSnap = false;
-            return;
-        }
-        var flat = Vector3.Normalize(fwd with { Y = 0 });
-        var desired = pos - flat * 5.8f + Vector3.UnitY * 1.9f;
-        var look = pos + flat * 4f + Vector3.UnitY * 0.6f;
-        float a = _camSnap ? 1 : 1 - MathF.Exp(-6 * dt), b = _camSnap ? 1 : 1 - MathF.Exp(-12 * dt);
-        _pos = Vector3.Lerp(_pos, desired, a);
-        _camLook = Vector3.Lerp(_camLook, look, b);
-        _fov = _settings.Fov * MathF.PI / 180 + MathF.Min(car.SpeedKmh / 180, 1) * 0.2f;
+        (_pos, _camLook, _fov) = CameraRig.Place(_camView, _pos, _camLook, _camSnap, dt, carPose, carBody, model.Mounts, car.SpeedKmh, _settings.Fov * MathF.PI / 180);
+        _onBoard = _camView is CameraView.Hood or CameraView.Cockpit ? _camView : null;
         _camSnap = false;
         // wall hits shake the camera briefly (up to 12 cm, decays in ~0.3 s)
         _shake *= MathF.Exp(-10 * dt);
         _shakeOffset = new Vector3(MathF.Sin(_simTime * 53), MathF.Sin(_simTime * 47 + 1), MathF.Sin(_simTime * 61 + 2)) * (0.12f * _shake * _settings.CameraShake);
     }
+
+    /// <summary>The cockpit camera sits in the car at <paramref name="body"/> (no other car's centre comes within 1.5 m): draw its <see cref="CarModel.Cabin"/>.</summary>
+    private bool InCabin(in Matrix4x4 body) => _onBoard == CameraView.Cockpit && Vector3.DistanceSquared(body.Translation, _pos) < 1.5f * 1.5f;
 
     /// <summary>The car a view belongs to: its lamps light the scene (the other cars only glow), the fog layer and env maps follow it.</summary>
     private readonly record struct ViewCar(CarModel Model, Matrix4x4 Body, Matrix4x4[] Wheels, Headlights Lights, float Brake, bool Reverse, Vehicle Vehicle);
@@ -1452,6 +1445,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         var frame = shot ?? _offscreen; // where the frame goes (null: the window)
         var (w, h) = frame != null ? (frame.Width, frame.Height) : (Device.SwapchainWidth, Device.SwapchainHeight);
         UpdateCarMatrices(shot != null ? 1 : ReplayAlpha(ctx.TickAlpha));
+        _onBoard = null; // set by the on-board cameras below
         if (!UpdateMenuCamera(ctx.Time.DeltaTime) && !_fly) UpdateDriveCamera(ctx.Time.DeltaTime);
         var split = SplitViews(w, h);
         if (split is var (first, second))
@@ -1481,7 +1475,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         else if (hudShown)
         {
             var (hw, hh) = split is var (v0, _) ? (v0.Width, v0.Height) : (w, h);
-            _hud.Lights = _lights.State;
+            (_hud.Lights, _hud.Dashboard) = (_lights.State, _onBoard == CameraView.Cockpit && !_fly);
             _hud.Rival = _race is { } race ? (_rivalPose.Translation, race.Cars[1].Along) : VersusRival(0);
             _hud.Build(_overlay, hw, hh, _carPose.Translation, Vector3.TransformNormal(Vector3.UnitZ, _carPose), _drive.Car, _carName, _menuTime);
             BuildBattleHud(hw, hh);
@@ -1532,7 +1526,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     {
         if (viewport is { } vp) aspect = (float)vp.Width / Math.Max(1, vp.Height);
         // Game data is right-handed (y up). Vulkan clip space is Y-down, Metal/GL Y-up.
-        var proj = WorldRenderer.Perspective(_fov, aspect, 0.3f, Device.Backend == Penelope.BackendKind.Vulkan);
+        var proj = WorldRenderer.Perspective(_fov, aspect, _onBoard is { } board ? CameraRig.Near(board) : 0.3f, Device.Backend == Penelope.BackendKind.Vulkan);
         var shake = _fly ? Vector3.Zero : _shakeOffset; // moves the view only, not the camera spring
         var view3 = Matrix4x4.CreateLookAt(_pos + shake, _camLook + shake * 0.5f, Vector3.UnitY);
         var skyView = view3; // analytic sky + sun
@@ -1544,7 +1538,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         }
 
         UpdateLights(own);
-        var shell = own.Lights.State != Headlights.Mode.Off ? own.Model.Lit : own.Model.Day;
+        var shell = own.Model.ShellFor(own.Lights.State != Headlights.Mode.Off, InCabin(own.Body));
         if (_fog) _renderer.Atmosphere.HeightFogBase = own.Body.Translation.Y; // the fog layer lies where the car drives
         var p1Shell = _lights.State != Headlights.Mode.Off ? _car.Lit : _car.Day;
         Span<(StaticMesh, Matrix4x4)> casters = _casters;

@@ -59,7 +59,8 @@ public sealed class Settings
     public int SteerAssist { get; set; } = 2;
     /// <summary>Slide stabiliser: 0 low, 1 normal, 2 high (<see cref="CarSpec.DriftDamping"/>).</summary>
     public int DriftAssist { get; set; } = 1;
-    public bool BumperCam { get; set; }
+    /// <summary>Start camera (C cycles while driving); old files' BumperCam = true maps to BUMPER (<see cref="Migrate"/>).</summary>
+    public CameraView Camera { get; set; }
     /// <summary>Time attack ghost: the best run of the course and route drives along see-through (Options → GAME SETTING → GHOST).</summary>
     public bool Ghost { get; set; } = true;
     /// <summary>Chase camera field of view at standstill in degrees (it widens with speed).</summary>
@@ -196,6 +197,12 @@ public sealed class Settings
             (o["Msaa"], o["Shadows"], o["Ao"], o["Bloom"], o["Ssr"]) = (msaa, shadows, ao, bloom, ssr);
             if (o["SoundVolume"] is { } se) o["MenuVolume"] = se.DeepClone();
         }
+        if (o["BumperCam"] is { } bumper) // before the camera list: CHASE or BUMPER
+        {
+            if (o["Camera"] == null && bumper.GetValue<bool>()) o["Camera"] = nameof(CameraView.Bumper);
+            o.Remove("BumperCam");
+        }
+        if (o["Camera"] is JsonValue cam && !(cam.TryGetValue(out string? name) && Enum.TryParse<CameraView>(name, true, out _))) o.Remove("Camera"); // a view this build lacks
         if (version > CurrentVersion) Console.WriteLine($"[Touge] Einstellungen aus neuerer Version {version}, nur bekannte Felder gelesen");
         o["Version"] = CurrentVersion;
     }
@@ -208,6 +215,7 @@ public sealed class Settings
             (Unit(MasterVolume), Unit(MusicVolume), Unit(SoundVolume), Unit(EngineVolume), Unit(MenuVolume), Unit(CameraShake));
         if (!Enum.IsDefined(Display)) Display = DisplayMode.Window;
         if (!Enum.IsDefined(MapMode)) MapMode = Hud.MapMode.Rotating;
+        if (!Enum.IsDefined(Camera)) Camera = CameraView.Chase;
         if (!Enum.IsDefined(Livery)) Livery = Touge.Formats.Livery.Rival;
         (Width, Height) = Width is >= 640 and <= 16384 && Height is >= 360 and <= 16384 ? (Width, Height) : (1600, 900);
         if (!FrameCaps.Contains(FrameCap)) FrameCap = 0;
