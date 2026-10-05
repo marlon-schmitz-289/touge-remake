@@ -538,9 +538,19 @@ public sealed class StoryMode(Catalog catalog)
                 EndingScreen(c);
                 break;
         }
-        var fadeIn = Current is Phase.Select or Phase.Loading or Phase.Ending || (Current == Phase.Scene && _line == 0) || (Current == Phase.Show && _media is { Uploaded: true })
-            ? 1 - Math.Clamp((Current == Phase.Show ? _shownFor : _t) / Fade, 0, 1) : 0;
-        c.Fade(_leave >= 0 ? Math.Clamp(_leave / Fade, 0, 1) : _out >= 0 ? Math.Clamp(_out / Fade, 0, 1) : fadeIn);
+        c.Fade(Blackout);
+    }
+
+    /// <summary>How far the screen is faded to black (0..1): leaving, a show fading out, or a screen fading in.</summary>
+    public float Blackout
+    {
+        get
+        {
+            if (_leave >= 0) return Math.Clamp(_leave / Fade, 0, 1);
+            if (Current == Phase.Show && _out >= 0) return Math.Clamp(_out / Fade, 0, 1); // only in a show: _out outlives the last one
+            var fadeIn = Current is Phase.Select or Phase.Loading or Phase.Ending || (Current == Phase.Scene && _line == 0) || (Current == Phase.Show && _media is { Uploaded: true });
+            return fadeIn ? 1 - Math.Clamp((Current == Phase.Show ? _shownFor : _t) / Fade, 0, 1) : 0;
+        }
     }
 
     private void SelectScreen(Canvas c)

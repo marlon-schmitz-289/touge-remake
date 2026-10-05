@@ -276,7 +276,9 @@ public class StoryShowTests
         Assert.Equal([new ShowRequest(9, true, 9), new ShowRequest(9, false, 0)], requests.Order(Comparer<ShowRequest>.Create((a, b) => a.Koma == b.Koma ? 0 : a.Koma ? -1 : 1)));
 
         s.Finish(BattleOutcome.Win, "WIN", null, coast: true);
+        Assert.Equal(0, s.Blackout); // the banner is not left black by the show's fade-out
         Run(4.5f);
+        Assert.Equal(0, s.Blackout); // nor the result
         Assert.Equal(StoryMode.Action.Save, Run(0.1f, (0, 0, true, false)));
         Assert.Equal(StoryMode.Phase.Show, s.Current);
         Run(0.1f, (0, -1, false, false)); // AUTO back on: the scene after the race and KOMATC32 play out
