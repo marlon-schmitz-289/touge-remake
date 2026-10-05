@@ -341,6 +341,8 @@ public sealed class RivalPilot
         // side by side a car may use the road out to a body half plus a hand's width from its end (the racing line keeps 1.3 m)
         var (roomL, roomR) = map.Room(s);
         float passLo = MathF.Min(lo, PassMargin - roomR), passHi = MathF.Max(hi, roomL - PassMargin);
+        // side by side in a hairpin the bodies swing out: more room between the two
+        var sideGap = PassGap + (MathF.Abs(map.At(map.Bend, s + 10)) > 1 / 25f ? 0.6f : 0);
 
         if (ahead >= 0)
         {
@@ -362,7 +364,7 @@ public sealed class RivalPilot
                 if (_passing >= 0 && s < cs[_passing].To && nose > -3)
                 {
                     // committed: hold the inside through the corner
-                    target = Math.Clamp(o.Lateral + cs[_passing].Dir * PassGap, passLo, passHi);
+                    target = Math.Clamp(o.Lateral + cs[_passing].Dir * sideGap, passLo, passHi);
                     mode = Mode.Pass;
                     Pilot.BrakeDecel += 0.05f * G;
                 }
@@ -373,7 +375,7 @@ public sealed class RivalPilot
                     var open = passHi - o.Lateral > o.Lateral - passLo ? 1 : -1;
                     var side = _setupZone == az ? _setupSide
                         : z.Corner >= 0 && (cs[z.Corner].Dir > 0 ? passHi - o.Lateral : o.Lateral - passLo) >= Alongside ? cs[z.Corner].Dir : open;
-                    var want = Math.Clamp(o.Lateral + side * PassGap, passLo, passHi);
+                    var want = Math.Clamp(o.Lateral + side * sideGap, passLo, passHi);
                     var close = dsAhead <= FollowGap(v, Style.Aggression, true) + 2; // pressing, right behind
                     if (MathF.Abs(want - o.Lateral) < Alongside) why = "room"; // no room for two here
                     else if (z.Corner >= 0)
@@ -444,7 +446,7 @@ public sealed class RivalPilot
             var inLine = MathF.Abs(lat - o.Lateral) < Alongside && MathF.Abs((target ?? lat) - o.Lateral) < Alongside + 0.2f;
             var oSpeed = MathF.Max(o.Speed - _oDecel * 0.3f, 0); // where its speed is going
             if (overlap) ram = MathF.Min(ram, oSpeed + MathF.Max(dsAhead - CarLength - 0.8f, 0) / 1.0f);
-            if (inLine)
+            if (inLine || NoPass) // in line behind it, or no passing yet (a lead/chase off the start): its following gap
             {
                 var gap = State is Mode.Setup or Mode.Pass ? CarLength + 0.8f : FollowGap(o.Speed, Style.Aggression, State == Mode.Pressure);
                 cap = MathF.Min(cap, MathF.Max(oSpeed + 1.0f * (dsAhead - gap), 0));
@@ -476,6 +478,8 @@ public sealed class RivalPilot
                     }
                 }
             }
+            // a car that gets 30 % alongside meanwhile has its lane: the cover ends (no squeezing it)
+            if (_defended >= 0 && -dsBehind < CarLength * 0.7f) _defended = -1;
             if (_defended >= 0 && s < cs[_defended].Apex)
             {
                 target = _defendTarget;
@@ -491,9 +495,9 @@ public sealed class RivalPilot
         foreach (var o in others)
         {
             var ds = o.Along - s;
-            if (!(MathF.Abs(ds) < (startLane ? 12 : 6) && MathF.Abs(o.Lateral - lat) < PassGap + 1)) continue;
+            if (!(MathF.Abs(ds) < (startLane ? 12 : 6) && MathF.Abs(o.Lateral - lat) < sideGap + 1)) continue;
             var side = lat >= o.Lateral ? 1 : -1;
-            var keep = o.Lateral + side * PassGap;
+            var keep = o.Lateral + side * sideGap;
             var t = target ?? racing.OffsetAt(s + 10);
             if ((t - keep) * side >= 0) continue;
             // where the road's room ends before our side does, hold where we are (never towards it) and drop in behind
