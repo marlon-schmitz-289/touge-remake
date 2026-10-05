@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text;
 using Silk.NET.SDL;
 
@@ -78,6 +79,12 @@ public sealed unsafe class InputSnapshot
     /// <summary>Characters typed this frame (from SDL_TEXTINPUT events).</summary>
     public string TypedText { get; private set; } = "";
 
+    /// <summary>Path of a file dropped onto the window this frame (SDL_DROPFILE), else null.</summary>
+    public string? DroppedFile { get; set; }
+
+    /// <summary>Text on the system clipboard (paste), null without one or without a device.</summary>
+    public string? Clipboard => HasDevice && _sdl.HasClipboardText() == SdlBool.True ? _sdl.GetClipboardTextS() : null;
+
     /// <summary>
     ///     Which device last produced input. The cursor (<see cref="Mouse"/>'s position) is
     ///     always the real OS mouse — a gamepad never moves it — this is purely for cosmetics
@@ -95,6 +102,7 @@ public sealed unsafe class InputSnapshot
         foreach (var p in _pads) p.BeginFrame();
         foreach (var j in _joysticks) j.BeginFrame();
         TypedText = "";
+        DroppedFile = null;
     }
 
     internal void ProcessEvent(Event evt)
@@ -118,6 +126,13 @@ public sealed unsafe class InputSnapshot
                         TypedText += Encoding.UTF8.GetString(p, len);
                 }
 
+                break;
+            case EventType.Dropfile:
+                unsafe
+                {
+                    DroppedFile = Marshal.PtrToStringUTF8((nint)evt.Drop.File);
+                    _sdl.Free(evt.Drop.File);
+                }
                 break;
             case EventType.Mousemotion:
                 Mouse.X = evt.Motion.X;

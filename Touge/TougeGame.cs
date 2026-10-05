@@ -157,6 +157,33 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     private readonly List<float> _frameTimes = [];
     private (int Smoke, int Skids, int Sparks) _fxPeak;
 
+    /// <summary>Started from the launcher: Options gets GAME DISC, deciding there calls this (the launcher takes over again).</summary>
+    public Action? ChangeDisc { get; init; }
+
+    /// <summary>Options → GAME DISC: the disc in use and CHANGE GAME DISC (back to the launcher to pick another ISO).</summary>
+    private Options.Page DiscPage(Action change) => new("GAME DISC", "The ISO the game runs from; pick another one in the launcher.")
+    {
+        Input = (k, sound) =>
+        {
+            if (k.Back) return Options.Result.Leave;
+            if (!k.Ok) return Options.Result.None;
+            sound?.Invoke("SYS006");
+            change();
+            return Options.Result.None;
+        },
+        Draw = (c, theta) =>
+        {
+            c.Plate(136, 150, 240, 34, 1);
+            c.Fit("CHANGE GAME DISC", 256, 173, 200, 0.5f, Canvas.Shade(0.12f, 0.12f, 0.14f, 1), 0.12f, 0, 17);
+            c.Glow(130, 144, 382, 190, Canvas.Pulse(theta));
+            c.Carbon(36, 344, 480, 426, 1, false);
+            c.Text("DISC IN USE", 50, 366, 11.5f, Canvas.White, 0, 0.12f);
+            c.Fit(isoPath, 50, 386, 416, 0, Overlay.Rgba(0.72f, 0.73f, 0.75f), 0, 0, 11);
+            c.Text("Back to the launcher: the game closes and you choose another disc image.", 50, 406, 10.5f, Canvas.White, 0, 0.12f);
+            Menu.Hint(c, "DECIDE: Change disc    BACK: Options");
+        },
+    };
+
     public override void Load()
     {
         using var iso = new Iso9660(isoPath);
@@ -185,6 +212,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         {
             _catalog = new Catalog(iso);
             _menu = new Menu(_catalog, _settings) { Controls = new ControlsScreen(_settings.Controls, Input, _driver) };
+            if (ChangeDisc is { } change) _menu.Options.Pages.Add(DiscPage(change));
             if (_persist && !_catalog.Courses.Any(c => _settings.Course == $"{c.Id}_DAY" || _settings.Course == $"{c.Id}_NIT" || _settings.Course == $"{c.Id}_RIN"))
                 _settings.Course = "AKINA_DAY";
             _menu.Sound = n => _menuAudio?.Play(n);

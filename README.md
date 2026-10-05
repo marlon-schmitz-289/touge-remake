@@ -17,7 +17,24 @@ Assets kommen zur Laufzeit aus der eigenen ISO (SLPM-65268), nie ins Repo.
 
 ## Starten
 
+Ohne Kommandozeile: `dotnet run --project Touge` (bzw. das gebaute `Touge`/`Touge.exe` aus `Touge/bin/<Konfiguration>/net10.0/` ohne Argumente
+starten) öffnet den **Launcher** (`Touge/Launcher.cs`, `Ui/LauncherScreen.cs`) im Stil des Front-Ends – ohne Daten der Disc, also noch ohne Original-Sounds:
+- Er sucht im Hintergrund (höchstens 4 s, je Ort nur eine Ordnerebene tief) in Downloads, Schreibtisch, Dokumente, Home, aktuellem und App-Ordner
+  sowie auf eingehängten Laufwerken (`/Volumes`, `/media`, `/run/media`, `/mnt`, Laufwerksbuchstaben) nach `*.iso` und zeigt nur passende Discs
+  (ISO 9660, `SYSTEM.CNF` bootet `SLPM_652.68`, `CDVD/DATA` da, Image nicht abgeschnitten) mit Titel, Version und Größe.
+- **BROWSE FOR THE ISO**: Dateibrowser im Spiel (Laufwerke/Ordner/`*.iso`, ←/„..“ eine Ebene hoch, Tab oder Klick ins PATH-Feld zum Tippen,
+  Strg+V/Cmd+V fügt einen Pfad ein, Enter öffnet den Ordner bzw. prüft die Datei). **SYSTEM FILE DIALOG**: Dateidialog des Systems (osascript,
+  zenity/kdialog, PowerShell/WinForms), fehlt er, sagt der Launcher das. Eine `.iso` aufs Fenster ziehen oder einen Pfad einfügen wählt sie auch.
+- Falsche Dateien (fehlt, unlesbar, keine Disc, anderes Spiel, abgeschnitten, Ordner) stehen rot im Panel, nichts stürzt ab.
+- Die gewählte Disc startet das Spiel im selben Fenster und wird in `last-disc.txt` neben `settings.json` (App-Daten-Ordner des Benutzers,
+  z. B. `~/Library/Application Support/InitialDRemake/` bzw. `%APPDATA%\InitialDRemake\`) gemerkt; der nächste Start geht direkt ins Spiel.
+  Andere Disc: Optionen → **GAME DISC** → CHANGE GAME DISC (zurück in den Launcher) oder einmal mit `--launcher` starten.
+- Mit ISO als erstem Argument (oder `INITIALD_ISO`) läuft alles wie bisher, ohne Launcher.
+
 ```sh
+dotnet run --project Touge [-- --launcher]   # Launcher (ohne --launcher startet die gemerkte Disc direkt)
+dotnet run --project Touge -- --shot out/proof/launcher/discs.png | --menu browse [--browse <ordner>] --shot … | --drop <datei.iso> --shot …   # Launcher-Bilder: Liste nach der Suche, Dateibrowser, gezogene Datei (Fehler bzw. Start)
+dotnet run --project Touge -- --data-dir <ordner> [--menu options:gamedisc] --shot out/proof/l.png   # gemerkte Disc aus <ordner>/last-disc.txt: Bild des Front-Ends bzw. der Optionsseite GAME DISC
 dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso"   # Front-End (Hinweis, Karten, Titel, Hauptmenü) → Kurs, Auto, Rennen, Ergebnis, Rekorde, Optionen
 dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso" [AKINA_DAY|AKINA_NIT|USUI_NIT|…]   # direkt fahren, ohne Menü
 dotnet run --project Touge -- "<iso>" AKINA_NIT --menu boot|logo|disclaimer|title|mode|quit|course|route|time|weather|maker[:n]|car|gearbox|intro|pause|records|guide|guide-list|guide-talk|options[:gamesetting|hud|screen|graphics|sound|playlist|controller] --shot out/proof/ui_car.png [--shot-size 3200x1800]   # Menü-Bild (options:<seite> öffnet eine Optionsseite, maker:<n> die Modellliste mit Zeile n, z. B. --car IMP --menu maker:2 = das gesperrte IMP3)

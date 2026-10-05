@@ -36,6 +36,7 @@ public enum Key
     LeftShift = KeyCode.KLshift, RightShift = KeyCode.KRshift,
     LeftCtrl = KeyCode.KLctrl, RightCtrl = KeyCode.KRctrl,
     LeftAlt = KeyCode.KLalt, RightAlt = KeyCode.KRalt,
+    LeftGui = KeyCode.KLgui, RightGui = KeyCode.KRgui,
 
     // Function keys
     F1 = KeyCode.KF1, F2 = KeyCode.KF2, F3 = KeyCode.KF3, F4 = KeyCode.KF4,

@@ -38,6 +38,9 @@ public sealed class Canvas
 
     public Vector2 P(float x, float y) => new(_ox + x * Kx, _oy + y * Ky);
 
+    /// <summary>Canvas point of screen pixel <paramref name="px"/> (mouse hit tests), the inverse of <see cref="P"/>.</summary>
+    public Vector2 Unproject(Vector2 px) => Kx > 0 ? new((px.X - _ox) / Kx, (px.Y - _oy) / Ky) : new(-1, -1);
+
     /// <summary>Cursor/PRESS START pulse of the original, 80..255 as 0..1, θ in degrees.</summary>
     public static float Pulse(float theta) => (80 + 175 * (1 + MathF.Cos(theta * MathF.PI / 180)) / 2) / 255;
 

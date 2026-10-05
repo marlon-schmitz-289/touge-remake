@@ -24,6 +24,9 @@ public abstract class KanseiGame : IDisposable
     /// <summary>Frames per second at most (0 = no cap, the display/vsync paces); the loop sleeps out the rest of each frame.</summary>
     public int FrameCap { get; set; }
 
+    /// <summary>Hands this game's window, device and input to <paramref name="inner"/> (a game hosting another, e.g. a launcher).</summary>
+    protected void Share(KanseiGame inner) => (inner.Window, inner.Device, inner.Input) = (Window, Device, Input);
+
     public virtual void Load() { }
     public virtual void Tick(float dt) { }
     public virtual void Update(in GameTime time) { }
