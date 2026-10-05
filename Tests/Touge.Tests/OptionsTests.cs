@@ -22,7 +22,7 @@ public class OptionsTests
         Assert.Equal(preset, s.QualityPreset);
         Assert.Equal((0.4f, 0.4f, 0.3f, false), (s.SoundVolume, s.MenuVolume, s.MusicVolume, s.MusicOn));
         Assert.Equal((Hud.MapMode.Overview, true, "USUI_NIT", "FD3S", 2, true, Touge.Formats.Livery.Stock),
-            (s.MapMode, s.BumperCam, s.Course, s.Car, s.Paint, s.Manual, s.Livery));
+            (s.MapMode, s.Camera == CameraView.Bumper, s.Course, s.Car, s.Paint, s.Manual, s.Livery));
         Assert.Equal([10f, 20, 30, 40], s.Best["AKINA_A"]);
         // new fields at their defaults
         Assert.Equal((1f, 1f, 60, 100, true, Settings.DisplayMode.Window), (s.MasterVolume, s.EngineVolume, s.Fov, s.RenderScale, s.VSync, s.Display));

@@ -65,7 +65,8 @@ dotnet run --project Touge -- "<iso>" AKINA_NIT --flow out/proof/vs --versus flo
 dotnet run --project Touge -- "<iso>" IROHA_DAY --headless --host [--bot] [--port 47860] [--players 2] [--races 2] [--net-rule race] [--seconds 600]   # Host ohne Fenster
 dotnet run --project Touge -- "<iso>" --headless --join 127.0.0.1[:47860] --bot [--car FD3S] [--net-sim 80:5%:20]   # Bot-Client ohne Fenster (wartet, bis der Host da ist), Log je Sekunde + Zusammenfassung je Rennen
 dotnet run --project Touge -- "<iso>" AKINA_DAY --replay-test 380 [--battle keisuke] [--drift] [--save out/proof/r.rpl]   # ohne Fenster: Lauf aufnehmen, Datei schreiben/lesen, auf frischen Autos abspielen, Positionsfehler je Tick (mit Keyframes) und nur aus Eingaben, 20 Sprünge
-dotnet run --project Touge -- "<iso>" --replay out/proof/r.rpl [--replay-at 30] [--replay-cam tv|chase|bumper|free] [--shot out/proof/rv.png]   # Replay im Viewer
+dotnet run --project Touge -- "<iso>" --replay out/proof/r.rpl [--replay-at 30] [--replay-cam tv|chase|far|hood|cockpit|bumper|free] [--shot out/proof/rv.png]   # Replay im Viewer
+dotnet run --project Touge -- "<iso>" AKINA_NIT --cam far|hood|cockpit|chase|bumper [--autodrive 5] --shot out/proof/cams/c.png   # Startkamera wählen (sonst Einstellung)
 dotnet run --project Touge -- "<iso>" AKINA_DAY --ghost out/proof/r.rpl --autodrive 9 --drift --shot out/proof/ghost.png   # Geist aus einer Replay-Datei (mit Menüs: der Bestzeit-Lauf)
 dotnet run --project Touge -- "<iso>" --data-dir out/proof/data --menu replay|replay-best|replay-records|replay-delete|saveload|saveload-actions|saveload-name --shot out/proof/m.png   # REPLAY & RECORD / SAVE & LOAD als Bild (anderer App-Daten-Ordner: die echten Daten bleiben unberührt)
 dotnet run --project Touge -- "<iso>" AKINA_NIT --flow out/proof/fourpasses/flow --fourpasses|--fourpasses-wet [--data-dir out/proof/fourpasses/flow_data]   # FOUR PASSES per Skript: 12. Feld → DRY bzw. WET → Auto → alle vier Etappen mit Pilot in 16× (Telop, Rennen, STAGE n CLEAR, Etappenblatt, Pause in Etappe 2) → Endergebnis → REPLAY & RECORD (Replays, RECORDS)
@@ -84,7 +85,7 @@ bis hier, danach geht das Rennen genau dort weiter), Ergebnis → REPLAY, Hauptm
 Bestzeiten wie bisher; ↑/↓, Entscheiden ansehen, K bzw. Pad Y behalten (KEPT: nie weggekürzt), X/Entf bzw. Pad X löschen mit JA/NEIN).
 Zurück aus Viewer/Fotomodus steht der Cursor wieder auf REPLAY bzw. PHOTO. Viewer: blinkendes REPLAY, Auto/Tempo/Gang, Zeitleiste;
 Kameras C bzw. Pad Y: TV (die Originalkameras aus `REPLAY.AFS`/REPCAM je Kurs und Richtung, an der Strecke, Zoom und Fahrt wie im Original,
-schauen aufs Auto), Verfolger, Stoßstange, frei (WASD/QE, IJKL oder rechte Maustaste, Shift schnell; Pad Sticks + Trigger). Leertaste/Enter bzw.
+schauen aufs Auto), Verfolger, weiter Verfolger, Motorhaube, Cockpit, Stoßstange, frei (WASD/QE, IJKL oder rechte Maustaste, Shift schnell; Pad Sticks + Trigger). Leertaste/Enter bzw.
 Pad A Pause, ←/→ (Pad D-Pad/LB/RB) gehalten zurück/vor (4×), ↑/↓ Tempo ¼–4×, Tab (Pad BACK) anderes Auto, H (Pad X) Overlay aus, R (Pad L3)
 von vorn, P (Pad R3) Fotomodus, Esc/Backspace (Pad B) zurück. Motor/Reifen/Effekte laufen mit, Eurobeat spielt weiter.
 GEIST (Optionen → GAME SETTING → GHOST, Standard an): in Time Attack fährt der Bestzeit-Lauf derselben Strecke, Richtung und Hilfen als
@@ -163,7 +164,7 @@ Ergebnis, WIN/LOSE-Jingle beim Entscheid): SPLIT SCREEN, ONLINE oder VS CPU.
   Richtung), z. B. Host im Fenster `--versus host --bot` und Bot ohne Fenster `--headless --join 127.0.0.1 --bot`.
 
 Fahren (Standard, alles außer F-Tasten/M/N/B/T/1–3 unter Optionen → CONTROLLER umbelegbar): W/S oder ↑/↓ Gas/Bremse, A/D oder ←/→ lenken, Leertaste Handbremse, S im Stand halten = Rückwärts (Automatik), T Automatik/Manuell,
-Shift/Strg hoch-/runterschalten (manuell, auch in R), R (Pad: Y) zurück auf die Fahrlinie (nächster freier Punkt, Blick in Fahrtrichtung), B Richtung wechseln (bergab ↔ bergauf, setzt auf die Fahrlinie der Gegenrichtung; Minimap/Fortschritt folgen), C Verfolger-/Stoßstangenkamera,
+Shift/Strg hoch-/runterschalten (manuell, auch in R), R (Pad: Y) zurück auf die Fahrlinie (nächster freier Punkt, Blick in Fahrtrichtung), B Richtung wechseln (bergab ↔ bergauf, setzt auf die Fahrlinie der Gegenrichtung; Minimap/Fortschritt folgen), C (Pad BACK) Kamera weiter: CHASE (Verfolger) → FAR CHASE (höher, weiter hinten, träger) → HOOD (auf der Motorhaube, Lage aus dem Automodell) → COCKPIT (Fahrerauge rechts hinter der Scheibe, Innenraum aus den HCAR-Daten, Kombiinstrument groß als Armaturenbrett statt unten rechts) → BUMPER (Stoßstange),
 L Licht an/aus, H Fernlicht an/aus (Umschalter, schaltet das Licht auch ein; Pad: D-Pad hoch/runter),
 F2 Grafikqualität ULTRA ↔ LOW (MSAA, Schatten, AO, Bloom, Regen-SSR zusammen; `--quality off` startet LOW).
 Menüs: Ohne Kurs/Test-Flags startet das Spiel im Front-End im Stil des Originals (`Ui/FrontEnd`, nur Vektorformen + Schrift, keine
@@ -186,7 +187,7 @@ NAME001, BGM „JOY“) → Retry / Replay / Course Select / Car Select / Exit. 
 Original zweistufig: Abschnittsliste aus Chromplatten (OPSL) → Seite mit Zeilen (OPGM: Reiter links, Chromplatte mit gravierten Werten, mehr als
 3 Werte als ◀ Wert ▶, Lautstärken als 10 Blöcke, Hilfetext unten; ↑/↓ Zeile, ←/→ bzw. Enter/A ändern, Esc/B zurück), alles wirkt sofort und wird gespeichert:
 GAME SETTING (Einheit km/h/mph im Kombiinstrument, Getriebe-Vorwahl AT/MT, Lenkhilfe OFF/LOW/FULL = `CounterSteerAssist` × 0/0,5/1, Drift-Hilfe
-LOW/NORMAL/HIGH = `DriftDamping` × 0,5/1/1,6 – beide ab dem nächsten Lauf; andere Hilfen als FULL/NORMAL fahren eigene Bestzeiten, RECORDS zeigt nur die Serienwerte –, Startkamera, Blickwinkel 50–90°, Kamerawackeln, Aufkleber
+LOW/NORMAL/HIGH = `DriftDamping` × 0,5/1/1,6 – beide ab dem nächsten Lauf; andere Hilfen als FULL/NORMAL fahren eigene Bestzeiten, RECORDS zeigt nur die Serienwerte –, Startkamera (alle fünf Ansichten; alte Einstellung BumperCam = BUMPER), Blickwinkel 50–90°, Kamerawackeln, Aufkleber
 ANIME/STOCK/NONE), HUD (an/aus, HUD SIZE 80–130 %, Navi-Karte), SCREEN (WINDOW/BORDERLESS, außer macOS auch FULLSCREEN exklusiv; Auflösung aus den Modi des
 Bildschirms; VSync; Bildratenbegrenzung 30–240; Render-Skalierung 50–150 %), GRAPHICS (Voreinstellung LOW/MEDIUM/HIGH/ULTRA bzw. CUSTOM aus den
 Schaltern MSAA, Sonnenschatten, AO, Bloom, Regen-Spiegelungen), SOUND (Gesamt, Musik an/aus + Lautstärke, SE, Motor, Menü-SE), PLAYLIST (Renntitel einzeln an/aus), CONTROLLER

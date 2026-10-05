@@ -7,18 +7,21 @@ namespace Touge.Ui;
 /// <summary>
 ///     Replay viewer controls and overlay (the game plays the cars, <see cref="Replays.ReplayPlayer"/>). The original shows a
 ///     blinking REPLAY and cuts between trackside TV cameras; on top of that: pause, speed ¼×–4×, rewind/fast forward,
-///     chase/bumper/free camera, the other car in a battle, overlay off, photo mode.
+///     the driving cameras (chase, far chase, hood, cockpit, bumper: <see cref="CameraRig"/>) and a free camera, the other car in a battle, overlay off, photo mode.
 ///     Keyboard: Space/Enter pause, ←/→ hold rewind/forward, ↑/↓ speed, C camera, Tab car, H overlay, P photo, R from the start,
 ///     Esc/Backspace exit. Pad: A/Start pause, D-pad ←/→ or LB/RB rewind/forward, D-pad ↑/↓ speed, Y camera, Back car, X overlay,
 ///     right stick click photo, left stick click from the start, B exit. Free camera: <see cref="Replays.FreeCam"/>.
 /// </summary>
 public sealed class ReplayViewer
 {
-    public enum Camera { Tv, Chase, Bumper, Free }
+    public enum Camera { Tv, Chase, Far, Hood, Cockpit, Bumper, Free }
     public enum Command { None, Exit, Photo, Restart }
 
     public static readonly float[] Speeds = [0.25f, 0.5f, 1, 2, 4];
-    private static readonly string[] CameraNames = ["TV CAMERA", "CHASE", "BUMPER", "FREE CAMERA"];
+    private static readonly string[] CameraNames = ["TV CAMERA", "CHASE", "FAR CHASE", "HOOD", "COCKPIT", "BUMPER", "FREE CAMERA"];
+
+    /// <summary>The driving camera <paramref name="c"/> stands for (null: TV, free).</summary>
+    public static CameraView? Driving(Camera c) => c is Camera.Tv or Camera.Free ? null : Enum.Parse<CameraView>(c.ToString());
 
     public bool Active { get; private set; }
     public bool Paused { get; set; }

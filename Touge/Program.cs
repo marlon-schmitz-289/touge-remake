@@ -53,9 +53,10 @@ using Touge;
 // --shot-after <s>: --shot erst nach so vielen Sekunden (statt sofort), das Spiel läuft bis dahin normal.
 // --replay-test <s> [--battle <rivale>] [--drift] [--save <datei.rpl>]: Lauf ohne Fenster aufnehmen, Datei schreiben/lesen, auf frischen Autos abspielen,
 //   Positionsfehler je Tick (mit Keyframes) und nur aus Eingaben (Determinismus), Sprünge; optional die Replay-Datei.
-// --replay <datei.rpl> [--replay-at <s>] [--replay-cam tv|chase|bumper|free]: Replay im Viewer öffnen (z. B. mit --shot).
+// --replay <datei.rpl> [--replay-at <s>] [--replay-cam tv|chase|far|hood|cockpit|bumper|free]: Replay im Viewer öffnen (z. B. mit --shot).
 // --ghost <datei.rpl>: dieser Lauf fährt als Geist mit (sonst mit Menüs der Bestzeit-Lauf); --data-dir <ordner>: anderer App-Daten-Ordner (Einstellungen, Replays, Spielstände, Fotos), Läufe werden dort auch in Testläufen gespeichert.
 // --menu replay|replay-best|replay-records|replay-delete|saveload|saveload-actions|saveload-name|photo: REPLAY & RECORD, SAVE & LOAD, Fotomodus (Bilder).
+// --cam chase|far|hood|cockpit|bumper: Startkamera (sonst Einstellung bzw. Verfolger), im Spiel C / Pad BACK.
 // --drift: Pilot reißt alle 7 s (ab 4,5 s) einen 2,5-s-Handbremsdrift (Reifenrauch/Bremsspuren testen), z. B. --autodrive 6.3 --drift --shot.
 var iso = args.FirstOrDefault(a => a.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
           ?? Environment.GetEnvironmentVariable("INITIALD_ISO");
@@ -66,7 +67,7 @@ if (iso == null || !File.Exists(iso))
 }
 string[] valueFlags = ["--story-check", "--progress", "--battle", "--rule", "--lead", "--flow", "--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--hud-scale", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture", "--lights", "--render-scale", "--jukebox", "--legend-progress",
     "--join", "--port", "--name", "--net-sim", "--players", "--races", "--seconds", "--net-rule", "--versus", "--split", "--car2", "--shot-after",
-    "--replay-test", "--replay", "--replay-at", "--replay-cam", "--save", "--data-dir", "--ghost", "--hint-device"];
+    "--replay-test", "--replay", "--replay-at", "--replay-cam", "--save", "--data-dir", "--ghost", "--hint-device", "--cam"];
 string? Arg(string flag) { var i = Array.IndexOf(args, flag); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
 // --car: HCAR name (AE86T, FD3S, R32, EVO3, …) or index 0–31 in that list (Touge.Formats.CarPaint.Cars)
 var carArg = Arg("--car") ?? "AE86T";
@@ -88,6 +89,11 @@ var shot = Arg("--shot");
 var at = int.Parse(Arg("--at") ?? "0");
 float? orbit = Arg("--orbit") is { } o ? float.Parse(o.Split(':')[0], CultureInfo.InvariantCulture) : null;
 var orbitDistance = Arg("--orbit") is { } od && od.Split(':') is [_, var m] ? float.Parse(m, CultureInfo.InvariantCulture) : 5.5f;
+if (Arg("--cam") is { } camArg && !Enum.TryParse<CameraView>(camArg, true, out _))
+{
+    Console.Error.WriteLine($"--cam {camArg}: unbekannt, möglich: chase far hood cockpit bumper");
+    return 1;
+}
 if (Arg("--lights") is { } lightArg && !Enum.TryParse<Headlights.Mode>(lightArg, true, out _))
 {
     Console.Error.WriteLine($"--lights {lightArg}: unbekannt, möglich: off low high");
@@ -226,6 +232,7 @@ KanseiApp.Run(new TougeGame(iso, course.ToUpperInvariant(), shot, at, orbit, aut
       NetPort = Arg("--port") is { } vsPort ? int.Parse(vsPort) : null, PlayerName = Arg("--name"), VersusRule = Arg("--net-rule") == "race" ? Touge.Net.NetRule.Race : Touge.Net.NetRule.Battle,
       ShotAfter = Arg("--shot-after") is { } after ? float.Parse(after, CultureInfo.InvariantCulture) : 0,
       Battle = battle, LegendProgressPath = Arg("--legend-progress"), LegendFlow = args.Contains("--legend"), ShotBattleResult = args.Contains("--battle-result"), Lights = Arg("--lights") is { } lights ? Enum.Parse<Headlights.Mode>(lights, true) : null,
+      StartCamera = Arg("--cam") is { } cam ? Enum.Parse<CameraView>(cam, true) : null,
       RenderScale = Arg("--render-scale") is { } rs ? int.Parse(rs) : 100,
       InputDebug = args.Contains("--input-debug"), SimWheel = args.Contains("--sim-wheel"),
       SaveRuns = Arg("--data-dir") != null, ReplayFile = Arg("--replay"), GhostFile = Arg("--ghost"), ReplayAt = Arg("--replay-at") is { } ra ? float.Parse(ra, CultureInfo.InvariantCulture) : 0,

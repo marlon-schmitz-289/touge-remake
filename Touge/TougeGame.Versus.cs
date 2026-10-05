@@ -65,7 +65,9 @@ public sealed partial class TougeGame
     {
         public Vector3 Pos, Look, ShakeOffset, Velocity, Last;
         public float Fov, Shake;
-        public bool Snap, Bumper;
+        public bool Snap;
+        public CameraView View;
+        public CameraView? OnBoard;
     }
 
     private Versus? _versusUi;
@@ -220,7 +222,7 @@ public sealed partial class TougeGame
             {
                 if (_p2Input.Shift(p2.Race.Vehicle) is var shift and not 0) _p2Shift = shift;
                 if (_p2Input.Pressed(Control.ResetCar)) ResetP2();
-                if (_p2Input.Pressed(Control.Camera)) (_cam2.Bumper, _cam2.Snap) = (!_cam2.Bumper, true);
+                if (_p2Input.Pressed(Control.Camera)) (_cam2.View, _cam2.Snap) = (CameraRig.Next(_cam2.View), true);
                 if (_p2Input.Pressed(Control.Lights)) p2.Lights.Toggle();
                 if (_p2Input.Pressed(Control.HighBeam)) p2.Lights.ToggleHigh();
             }
@@ -468,7 +470,7 @@ public sealed partial class TougeGame
             {
                 Visible = _settings.HudOn, Mode = _settings.MapMode, Scale = _settings.HudScale, Night = _courseTime.EndsWith("_NIT"), Mph = _settings.Mph, ResetKey = _p2ResetKey,
             };
-            _cam2 = new CamState { Snap = true, Fov = MathF.PI / 3, Bumper = _cam2.Bumper };
+            _cam2 = new CamState { Snap = true, Fov = MathF.PI / 3, View = _cam2.View };
         }
         else
         {
@@ -775,7 +777,7 @@ public sealed partial class TougeGame
         lights.Apply(lamps, model.Lamp, body, _renderer.Atmosphere.LocalLightShare, brake, reverse);
         var (glow, b, r) = (l.LampGlow, l.Brake, l.Reverse);
         (l.LampGlow, l.Brake, l.Reverse) = (lamps.LampGlow, lamps.Brake, lamps.Reverse);
-        var shell = lights.State != Headlights.Mode.Off ? model.Lit : model.Day;
+        var shell = model.ShellFor(lights.State != Headlights.Mode.Off, InCabin(body));
         _carRenderer.Draw(pass, shell.Body, shell.Decals, model.Wheel, body, wheels, viewProj, _pos);
         if (shell.PopUp is { } popUp) _carRenderer.DrawPart(pass, popUp, model.Lamp.PopUpAt(lights.Open) * body, viewProj, _pos);
         (l.LampGlow, l.Brake, l.Reverse) = (glow, b, r);
@@ -828,10 +830,10 @@ public sealed partial class TougeGame
         var c = _cam2;
         _cam2 = new CamState
         {
-            Pos = _pos, Look = _camLook, Fov = _fov, Snap = _camSnap, Shake = _shake, ShakeOffset = _shakeOffset, Velocity = _camVelocity, Last = _lastCamPos, Bumper = _bumperCam,
+            Pos = _pos, Look = _camLook, Fov = _fov, Snap = _camSnap, Shake = _shake, ShakeOffset = _shakeOffset, Velocity = _camVelocity, Last = _lastCamPos, View = _camView, OnBoard = _onBoard,
         };
-        (_pos, _camLook, _fov, _camSnap, _shake, _shakeOffset, _camVelocity, _lastCamPos, _bumperCam) =
-            (c.Pos, c.Look, c.Fov, c.Snap, c.Shake, c.ShakeOffset, c.Velocity, c.Last, c.Bumper);
+        (_pos, _camLook, _fov, _camSnap, _shake, _shakeOffset, _camVelocity, _lastCamPos, _camView, _onBoard) =
+            (c.Pos, c.Look, c.Fov, c.Snap, c.Shake, c.ShakeOffset, c.Velocity, c.Last, c.View, c.OnBoard);
     }
 
     /// <summary>Player 2's view: its chase camera, its car's lamps lighting the road, player 1's car as one of the others.</summary>
@@ -842,8 +844,8 @@ public sealed partial class TougeGame
         SwapCamera();
         _frameDt = ctx.Time.DeltaTime;
         var menu = _menu?.Current ?? Menu.Screen.None;
-        if (!_fly && menu is Menu.Screen.None or Menu.Screen.Intro or Menu.Screen.Finish) UpdateDriveCamera(shot != null ? 0 : ctx.Time.DeltaTime, car.Vehicle, p2.Pose);
-        else if (_camSnap) UpdateDriveCamera(0, car.Vehicle, p2.Pose);
+        if (!_fly && menu is Menu.Screen.None or Menu.Screen.Intro or Menu.Screen.Finish) UpdateDriveCamera(shot != null ? 0 : ctx.Time.DeltaTime, car.Vehicle, p2.Pose, p2.Body, p2.Model!);
+        else if (_camSnap) UpdateDriveCamera(0, car.Vehicle, p2.Pose, p2.Body, p2.Model!);
         RenderView(ctx, shot, frame, viewport, new ViewCar(p2.Model!, p2.Body, p2.Wheels, p2.Lights, car.Input.Brake, car.Vehicle.Gear < 0, car.Vehicle), 1);
         SwapCamera();
     }
@@ -873,7 +875,7 @@ public sealed partial class TougeGame
         _p2Overlay.Clear();
         var p2 = _vsCars[0];
         if (_hud2 == null || p2.Race == null) return;
-        _hud2.Lights = p2.Lights.State;
+        (_hud2.Lights, _hud2.Dashboard) = (p2.Lights.State, _cam2.OnBoard == CameraView.Cockpit);
         _hud2.Rival = VersusRival(1);
         _hud2.Build(_p2Overlay, vp.Width, vp.Height, p2.Pose.Translation, Vector3.TransformNormal(Vector3.UnitZ, p2.Pose), p2.Race.Vehicle, p2.Car, _menuTime);
         BuildVersusHud(_p2Overlay, vp.Width, vp.Height, 1);

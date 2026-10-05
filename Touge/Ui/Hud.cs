@@ -35,6 +35,8 @@ public sealed class Hud
     public bool Mph;
     /// <summary>Options HUD SIZE (0.8..1.3): scales every HUD element.</summary>
     public float Scale = 1;
+    /// <summary>Cockpit camera: the cluster sits large in a dash across the bottom instead of bottom right (<see cref="Dash"/>).</summary>
+    public bool Dashboard;
     /// <summary>Key named by the stuck/wrong-way hint (split screen: player 2's own reset binding); null: the binding on the device used last (<see cref="Hints"/>).</summary>
     public string? ResetKey;
 
@@ -108,13 +110,14 @@ public sealed class Hud
         var u = g.U * Math.Clamp(Scale, 0.8f, 1.3f);
         var k = Dash(g, Scale);
         // course dial bottom left, same height as the cluster box (Cluster.Box.Y), so the two read as one dash row
+        var gauge = Cluster.Cars[carName];
+        var reading = new Cluster.Reading(car.Rpm, car.SpeedKmh, car.Gear, car.AutomaticGearbox, _boost, Night, time, Lights, Mph);
+        if (Dashboard) DashPanel(o, width, height, g, k, gauge, reading); // first: the course dial lies on it
         var s = g.U * k * Cluster.Box.Y / (2 * MapWidget.Radius);
         _map.Rival = Rival is { } r ? (Xz(r.Position), Math.Clamp((r.Along - _start) / (_pilot.Length - LapTimer.Gate - _start), 0, 1)) : null;
         _map.Draw(o, new Vector2(g.Left + MapWidget.Radius * s, g.Bottom - MapWidget.Radius * s), s, Mode, Xz(carPos), Xz(carForward),
             _progress, (_pilot.Length - LapTimer.Gate - _start) * (1 - _progress), Timer, Cluster.Cars[carName], Night);
-        var gauge = Cluster.Cars[carName];
-        Cluster.Draw(o, gauge, new Vector2(g.Right, g.Bottom), k * Cluster.Fit(gauge, g),
-            new Cluster.Reading(car.Rpm, car.SpeedKmh, car.Gear, car.AutomaticGearbox, _boost, Night, time, Lights, Mph));
+        if (!Dashboard) Cluster.Draw(o, gauge, new Vector2(g.Right, g.Bottom), k * Cluster.Fit(gauge, g), reading);
         var timingH = Drift.Total > 0 ? 186 : 150;
         Timing(o, new Vector2(g.Left, g.Top), timingH, u, time);
         // drift combo top centre; when it would crowd the timing panel (4:3, 5:4) it moves below the top row
@@ -122,6 +125,29 @@ public sealed class Hud
         var fits = cx - DriftHalf * u > g.Left + (TimingW + 24) * u;
         DriftPanel(o, new Vector2(cx, fits ? g.Top : g.Top + (timingH + 24) * u), u);
         Banners(o, width, height, u, time);
+    }
+
+    /// <summary>
+    ///     Cockpit dash: a dark panel across the bottom that rises into a hood over the cluster, the cluster 1.3× the dash row
+    ///     straight ahead (the eye sits behind the wheel), a faint highlight along the panel's top edge.
+    /// </summary>
+    private static void DashPanel(Overlay o, int width, int height, Style.Grid g, float k, Cluster.Gauge gauge, in Cluster.Reading reading)
+    {
+        var u = k * 1.3f * Cluster.Fit(gauge, g);
+        var size = gauge.Size * u;
+        var cx = width / 2f;
+        var bottom = height - 10 * g.U;
+        float top = bottom - size.Y - 22 * g.U, low = MathF.Max(top + 0.45f * size.Y, height - 110 * g.U), half = size.X / 2 + 34 * g.U;
+        uint dash = Overlay.Rgba(0.035f, 0.035f, 0.04f, 0.97f), edge = Overlay.Rgba(1, 1, 1, 0.1f);
+        Vector2 l0 = new(0, low), l1 = new(cx - half - 50 * g.U, low), h0 = new(cx - half, top), h1 = new(cx + half, top), r1 = new(cx + half + 50 * g.U, low), r0 = new(width, low);
+        o.Rect(new Vector2(0, low), new Vector2(width, height), dash);
+        o.Quad(l1, h0, h1, r1, dash);
+        o.Line(l0, l1, 2 * g.U, edge);
+        o.Line(l1, h0, 2 * g.U, edge);
+        o.Line(h0, h1, 2 * g.U, edge);
+        o.Line(h1, r1, 2 * g.U, edge);
+        o.Line(r1, r0, 2 * g.U, edge);
+        Cluster.Draw(o, gauge, new Vector2(cx + size.X / 2, bottom), u, reading);
     }
 
     private void Timing(Overlay o, Vector2 at, float h, float u, float time)

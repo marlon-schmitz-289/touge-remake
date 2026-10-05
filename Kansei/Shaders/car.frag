@@ -10,7 +10,7 @@
 // a sharp highlight of the sun/lamps and the bright upper environment refracted through the bent surface, over a
 // very faint wet spot. Antialiased by derivatives: soft drop edges over ~1 px, and drops fade out (to nothing,
 // not to an average) once a cell gets smaller than ~3 px, so distant cars do not sparkle with rounding.
-// Fog last (fog.glsl; the light glow follows per pixel in glow.frag).
+// Glass seen from inside (cockpit camera) is discarded. Fog last (fog.glsl; the light glow follows per pixel in glow.frag).
 
 layout(location = 0) in vec3 vPos;
 layout(location = 1) in vec3 vNormal;
@@ -86,8 +86,11 @@ void main()
     if (t.a < (decal ? 0.02 : 0.5)) discard;
     vec3 v = normalize(pc.uEye.xyz - vPos);
     vec3 n = normalize(vNormal);
-    if (dot(n, v) < 0.0) n = -n; // no culling: shade the side we see
     bool glass = abs(kind - 0.5) < 0.1, paint = abs(kind - 1.0) < 0.1, lamp = kind > 1.5;
+    // glass seen from inside the car (cockpit camera, open tops): the data's normals point out of the car, the eye is
+    // behind them - see through it (derivative face normals were noisy at the grazing side windows)
+    if (glass && dot(n, v) < 0.0) discard;
+    if (dot(n, v) < 0.0) n = -n; // no culling: shade the side we see
     float rain = pc.uParams.y;
     vec3 base = t.rgb * vColor.rgb * (glass ? 0.25 : 1.0) * (paint ? 1.0 - 0.2 * rain : 1.0);
 
