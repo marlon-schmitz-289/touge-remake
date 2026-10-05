@@ -73,7 +73,7 @@ public sealed partial class TougeGame
         if (Battle == null || _rivalModel == null) return;
         ICarDriver player = autodrive != null || bench != null || Flow != null ? new AiDriver(new RivalPilot(_drive.Line, BattleRun.Autopilot)) : _playerDriver;
         _race = BattleRun.Create(_drive, Battle, player);
-        _race.RubberBanding = player == _playerDriver;
+        _race.RubberBanding = player == _playerDriver && Battle.RubberBand;
         _rivalPrevVelocity = Vector3.Zero;
         Array.Clear(_rivalSmoke);
         Array.Clear(_rivalSpray);

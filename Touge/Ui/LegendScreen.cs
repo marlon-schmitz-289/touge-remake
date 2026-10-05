@@ -368,7 +368,7 @@ public sealed class LegendScreen(Catalog catalog, Progress progress)
     }
 
     /// <summary>A five-point star (filled gold or dim) centred at canvas (x, y).</summary>
-    private static void Star(Canvas c, float x, float y, bool on)
+    internal static void Star(Canvas c, float x, float y, bool on)
     {
         var col = on ? Gold : Overlay.Rgba(1, 1, 1, 0.2f);
         var ctr = c.P(x, y);

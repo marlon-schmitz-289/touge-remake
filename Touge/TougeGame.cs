@@ -258,6 +258,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             _inRace = false;
         }
         else if (_story != null && StartMenu?.StartsWith("story") == true) StartStoryMenu(StartMenu);
+        else if (_menu != null && StartMenu == "freebattle") OpenFreeBattleAtStart();
         else if (_menu != null && StartMenu != null)
         {
             // options:<page> opens an options page directly (screenshots), controls:<device> the controls screen
@@ -839,6 +840,12 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             case Menu.Action.Restart:
                 ResetRun();
                 break;
+            case Menu.Action.Rivals when _inFreeBattle:
+                ReturnToFreeBattleLobby();
+                break;
+            case Menu.Action.Exit when _inFreeBattle:
+                ExitFreeBattle();
+                break;
             case Menu.Action.Rivals:
                 ReturnToLadder();
                 break;
@@ -1108,7 +1115,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     /// <summary>--flow: the scripted key of this frame; asks for the step's PNG first (written next frame), quits after the last step (with --bench: races on).</summary>
     private (int X, int Y, bool Ok, bool Back) FlowKeys(float dt)
     {
-        var script = bench != null ? FlowBenchScript : LegendFlow ? LegendFlowScript : StoryFlow ? StoryFlowScript : VersusStart == "flow" ? VersusFlowScript : FlowScript;
+        var script = bench != null ? FlowBenchScript : FreeBattleFlow ? FreeBattleFlowScript : LegendFlow ? LegendFlowScript : StoryFlow ? StoryFlowScript : VersusStart == "flow" ? VersusFlowScript : FlowScript;
         if (_flowStep >= script.Length)
         {
             if (bench == null) Window.ShouldClose = true;

@@ -77,6 +77,10 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     // ---- Legend of the Streets (Ui/LegendScreen): its battles leave to the rival ladder, not the main menu
     /// <summary>A Legend battle: backing out of the car select, pause Exit and the result's RIVAL SELECT return <see cref="Action.Rivals"/>.</summary>
     public bool Legend { get; set; }
+    // ---- free battle (VS CPU, Ui/FreeBattle): pause Exit and the result's CHANGE SETTINGS return Action.Rivals (its lobby)
+    public bool FreeBattle { get; set; }
+    public static readonly string[] FreeBattleButtons = ["RETRY", "REPLAY", "CHANGE SETTINGS", "EXIT"];
+    private string[] Buttons => FreeBattle ? FreeBattleButtons : ResultButtons;
     /// <summary>Cars not won yet (Legend's secret car): shown as ?????, not selectable.</summary>
     public Func<string, bool>? CarLocked { get; set; }
     private bool Locked(int car) => CarLocked?.Invoke(catalog.Cars[car].Id) == true;
@@ -114,7 +118,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     {
         Screen.Course or Screen.Route or Screen.Time or Screen.Weather => "TOKYO.adx",
         Screen.Maker or Screen.Car or Screen.Gearbox or Screen.Records => "WORRY.adx",
-        Screen.Loading => null, Screen.Finish => Battle is { Outcome: Race.BattleOutcome.Lose } ? "LOSE.adx" : "WIN.adx", Screen.Result => Legend ? LegendResultMusic : "JOY.adx", Screen.Options or Screen.Controls => playing,
+        Screen.Loading => null, Screen.Finish => Battle is { Outcome: Race.BattleOutcome.Lose } ? "LOSE.adx" : "WIN.adx", Screen.Result => Legend || FreeBattle ? LegendResultMusic : "JOY.adx", Screen.Options or Screen.Controls => playing,
         _ => RaceMusic,
     };
 
@@ -158,7 +162,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     public void Close() => Current = Screen.None;
 
     /// <summary>The cursor on the pause/result button <paramref name="label"/> (back from the replay viewer or photo mode).</summary>
-    public void Select(string label) => _row = Math.Max(0, Array.IndexOf(Current == Screen.Pause ? PauseButtons : ResultButtons, label));
+    public void Select(string label) => _row = Math.Max(0, Array.IndexOf(Current == Screen.Pause ? PauseButtons : Buttons, label));
 
     private void Enter(Screen s, bool fadeIn)
     {
@@ -396,7 +400,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                         case "Replay": return Action.Replay;
                         case "Photo": return Action.Photo;
                         case "Exit":
-                            Leave(Screen.None, Legend ? Action.Rivals : Action.Exit);
+                            Leave(Screen.None, Legend || FreeBattle ? Action.Rivals : Action.Exit);
                             break;
                         default:
                             _quit.Show();
@@ -417,19 +421,22 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                 }
                 if (k.X != 0)
                 {
-                    var n = Math.Clamp(_row + k.X, 0, ResultButtons.Length - 1);
+                    var n = Math.Clamp(_row + k.X, 0, Buttons.Length - 1);
                     if (n != _row) Sound?.Invoke("SYS005");
                     _row = n;
                 }
                 else if (k.Ok)
                 {
                     Sound?.Invoke("SYS006");
-                    switch (ResultButtons[_row])
+                    switch (Buttons[_row])
                     {
                         case "RETRY":
                             Leave(Screen.Intro, Action.Restart);
                             break;
                         case "REPLAY": return Action.Replay;
+                        case "CHANGE SETTINGS":
+                            Leave(Screen.None, Action.Rivals);
+                            break;
                         case "COURSE SELECT":
                             if (Legend) Leave(Screen.None, Action.Rivals);
                             else Go(Screen.Course, false);
@@ -848,10 +855,11 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     {
         var b = Style.Ease((_t - ButtonsAt) / 0.2f);
         if (b <= 0) return;
-        const float step = 94, w = 88;
-        for (var i = 0; i < ResultButtons.Length; i++)
-            c.Button(24 + i * step, 392, w, 30, Legend && ResultButtons[i] == "COURSE SELECT" ? "RIVAL SELECT" : ResultButtons[i],
-                i == 0 ? Canvas.ButtonKind.Positive : ResultButtons[i] == "EXIT" ? Canvas.ButtonKind.Negative : Canvas.ButtonKind.Neutral, b);
+        var buttons = Buttons;
+        float step = 470f / buttons.Length, w = step - 6;
+        for (var i = 0; i < buttons.Length; i++)
+            c.Button(24 + i * step, 392, w, 30, Legend && buttons[i] == "COURSE SELECT" ? "RIVAL SELECT" : buttons[i],
+                i == 0 ? Canvas.ButtonKind.Positive : buttons[i] == "EXIT" ? Canvas.ButtonKind.Negative : Canvas.ButtonKind.Neutral, b);
         var x = 24 + _row * step;
         c.Glow(x - 4, 388, x + w + 4, 426, Canvas.Pulse(Theta), b);
     }
