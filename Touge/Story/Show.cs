@@ -179,13 +179,14 @@ public sealed class KomaSequence
 ///     A portrait scene part (ROBJ slot) at any time of its voice track: the portrait shown, the mouth frame of each face
 ///     (lip-sync digits of the page from its first balloon on, for the faces talking) and the eyes (a blink every few seconds).
 /// </summary>
-public sealed class PortraitScene(IReadOnlyList<StoryScript.Stage> stages, IReadOnlyList<string> lips)
+/// <param name="missing">Portraits the archive lacks (STR21 P_11, STR22): the one before stays, its faces keep still.</param>
+public sealed class PortraitScene(IReadOnlyList<StoryScript.Stage> stages, IReadOnlyList<string> lips, IReadOnlySet<int>? missing = null)
 {
     public const int Faces = 3;
     public IReadOnlyList<StoryScript.Stage> Stages => stages;
 
     /// <summary>Portrait numbers used (to load).</summary>
-    public IEnumerable<int> Pictures => stages.Where(s => s.Step == StoryScript.Step.Picture).Select(s => s.Value).Distinct();
+    public IEnumerable<int> Pictures => stages.Where(s => s.Step == StoryScript.Step.Picture).Select(s => s.Value).Where(n => missing?.Contains(n) != true).Distinct();
 
     /// <summary>Portrait at <paramref name="t" /> (−1 = none yet) and its faces' mouth frames 0–5 (0 = closed).</summary>
     public (int Picture, int[] Mouth) At(double t)
@@ -195,12 +196,14 @@ public sealed class PortraitScene(IReadOnlyList<StoryScript.Stage> stages, IRead
         var mouth = new int[Faces];
         string? digits = null;
         var page = 0.0;
+        var still = false;
         foreach (var s in stages)
         {
             if (s.Time > t) break;
             switch (s.Step)
             {
-                case StoryScript.Step.Picture: picture = s.Value; break;
+                case StoryScript.Step.Picture when missing?.Contains(s.Value) == true: still = true; break;
+                case StoryScript.Step.Picture: (picture, still) = (s.Value, false); break;
                 case StoryScript.Step.Talk when s.Value < Faces: talking[s.Value] = true; break;
                 case StoryScript.Step.Quiet when s.Value < Faces: talking[s.Value] = false; break;
                 case StoryScript.Step.Page:
@@ -210,7 +213,7 @@ public sealed class PortraitScene(IReadOnlyList<StoryScript.Stage> stages, IRead
         }
         var f = (int)((t - page) * 60);
         var d = digits != null && f >= 0 && f < digits.Length ? digits[f] - '0' : 0;
-        for (var k = 0; k < Faces; k++) mouth[k] = talking[k] ? Math.Clamp(d, 0, 5) : 0;
+        for (var k = 0; k < Faces; k++) mouth[k] = talking[k] && !still ? Math.Clamp(d, 0, 5) : 0;
         return (picture, mouth);
     }
 

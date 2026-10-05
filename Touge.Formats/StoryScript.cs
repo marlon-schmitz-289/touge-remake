@@ -66,17 +66,18 @@ public static class StoryScript
     ///     wait, N new page, K_ page style, Q_ effect, U_ shake, F_ speaker of the next balloon, E_ fade (end of a part).
     ///     Text tokens are balloons ('\n' = line break); the balloons up to the next wait, page break or speaker are one utterance.
     /// </summary>
-    public static List<List<Line>> ParseScript(ReadOnlySpan<byte> robj) => Parse(robj, null, null);
+    public static List<List<Line>> ParseScript(ReadOnlySpan<byte> robj) => Parse(robj, null, null, null);
 
     /// <summary>
     ///     For each utterance of <see cref="ParseScript" /> the time in s on the part's voice track (<see cref="Manga.SceneVoice" />)
     ///     when it appears: the last A_n (page) or WF_n (balloon) before it, n in 1/30 s of ADX time (the game doubles it to
-    ///     60-Hz frames, 0x1D0CD0/0x1CFC28); 0 before the first cue.
+    ///     60-Hz frames, 0x1D0CD0/0x1CFC28); 0 before the first cue. A page also waits for the lip string of the page before it
+    ///     (<paramref name="lips" /> = <see cref="Manga.Lips" />): pages chained by W_0 | N without a new A_ follow one another.
     /// </summary>
-    public static List<List<double>> Times(ReadOnlySpan<byte> robj)
+    public static List<List<double>> Times(ReadOnlySpan<byte> robj, string[][]? lips = null)
     {
         var times = new List<List<double>>();
-        Parse(robj, times, null);
+        Parse(robj, times, null, lips);
         return times;
     }
 
@@ -103,15 +104,16 @@ public static class StoryScript
     ///     Per part (as <see cref="ParseScript" />) the staging on the part's voice track in s: portraits, who talks, pages and
     ///     utterances at the cue in effect (A_/WF_, 1/30 s) when their token comes.
     /// </summary>
-    public static List<List<Stage>> Staging(ReadOnlySpan<byte> robj)
+    public static List<List<Stage>> Staging(ReadOnlySpan<byte> robj, string[][]? lips = null)
     {
         var stage = new List<List<Stage>>();
-        Parse(robj, null, stage);
+        Parse(robj, null, stage, lips);
         return stage;
     }
 
-    private static List<List<Line>> Parse(ReadOnlySpan<byte> robj, List<List<double>>? times, List<List<Stage>>? staging)
+    private static List<List<Line>> Parse(ReadOnlySpan<byte> robj, List<List<double>>? times, List<List<Stage>>? staging, string[][]? lips)
     {
+        var spoken = lips?.Where(l => l.Length > 0).ToArray(); // part n = the n-th slot with a page list (StoryMedia.Part)
         if (robj.Length < 0x20 || !robj[..4].SequenceEqual("ROBJ"u8)) throw new InvalidDataException("no ROBJ script");
         var at = BinaryPrimitives.ReadInt32LittleEndian(robj[0x18..]) + 12;
         var parts = new List<List<Line>> { new() };
@@ -119,8 +121,9 @@ public static class StoryScript
         var stage = new List<List<Stage>> { new() };
         var text = new StringBuilder();
         var speaker = "";
-        int cue = 0, start = 0, page = 0;
-        var paged = false;
+        double cue = 0, start = 0, next = 0; // 1/30 s; next = end of the last page's lip string
+        var page = 0;
+        bool paged = false, cued = false;
         void Add(Step step, int value) => stage[^1].Add(new Stage(cue / 30.0, step, value));
         void Flush()
         {
@@ -152,7 +155,7 @@ public static class StoryScript
                 {
                     Flush();
                     Add(Step.End, 0);
-                    (cue, page, paged) = (0, 0, false); // every part has its own voice track
+                    (cue, next, page, paged) = (0, 0, 0, false); // every part has its own voice track
                     if (parts[^1].Count > 0)
                     {
                         parts.Add([]);
@@ -164,13 +167,23 @@ public static class StoryScript
                 else if (name is "W" or "WF" or "N") Flush();
                 if (name == "N") (page, paged) = (page + 1, false); // pages are counted by N (lip strings are numbered so)
                 var arg = int.TryParse(tok[Math.Min(tok.Length, name.Length + 1)..], out var n) ? n : -1;
-                if (name is "A" or "WF" && arg >= 0) cue = Math.Max(cue, arg); // waits for that time: an earlier one (STR06) passes at once
+                if (name is "A" or "WF" && arg >= 0) (cue, cued) = (Math.Max(cue, arg), cued || name == "A" && arg > cue); // waits for that time: an earlier one (STR06) passes at once
+                else if (name == "W" && arg > 0) next = Math.Max(next, cue + arg / 2.0); // W_n: n 60-Hz frames (STR16's silent thoughts)
                 else if (name == "P" && arg >= 0) Add(Step.Picture, arg);
                 else if (name == "C" && arg >= 0) Add(Step.Talk, arg);
                 else if (name == "K" && arg >= 0) Add(Step.Quiet, arg);
                 continue;
             }
-            if (!paged) Add(Step.Page, page);
+            if (!paged)
+            {
+                // no cue of its own: after the last page's lip string or W_n (STR25 pages 9–12, STR16 12–14). ponytail: else at least
+                // 2 s after the last utterance (STR11 page 5 follows a WF_ balloon whose length nothing on the disc gives)
+                if (!cued) cue = Math.Max(cue, Math.Max(next, parts[^1].Count > 0 || text.Length > 0 ? start + 60 : 0));
+                cued = false;
+                Add(Step.Page, page);
+                var part = stage.Count - 1;
+                next = cue + (spoken != null && part < spoken.Length && page < spoken[part].Length ? spoken[part][page].Length / 2.0 : 0);
+            }
             paged = true;
             if (text.Length == 0) start = cue;
             text.Append(tok.Replace("\n", "")); // '\n' breaks lines inside a balloon

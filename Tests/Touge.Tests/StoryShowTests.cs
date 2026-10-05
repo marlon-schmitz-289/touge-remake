@@ -51,6 +51,20 @@ public class StoryShowTests
         Assert.Equal(3, StoryScript.ParseScript(d)[0].Count);
     }
 
+    /// <summary>
+    ///     A page without an A_ of its own (W_0 | N chains, STR25 pages 9–12) starts when the last page's lip string or W_n
+    ///     (60-Hz frames) is over, at least 2 s after the last utterance; an A_ page keeps its cue.
+    /// </summary>
+    [Fact]
+    public void Times_UncuedPagesFollowTheLipStrings()
+    {
+        var d = Robj("P_1", "C_0", "A_30", "一", "W_0", "N", "二", "W_0", "N", "三", "W_0", "N", "A_600", "四", "W_200", "N", "五", "W_0", "N", "六", "E_60", "KST02");
+        string[][] lips = [[new string('1', 180), "", ""], .. Enumerable.Repeat(Array.Empty<string>(), Manga.Slots - 1)];
+        Assert.Equal([[1, 4, 6, 20, 70 / 3.0, 76 / 3.0]], StoryScript.Times(d, lips));
+        Assert.Equal([[1, 3, 5, 20, 70 / 3.0, 76 / 3.0]], StoryScript.Times(d)); // no lip strings: the W_n and the 2 s
+        Assert.Equal(StoryScript.Times(d, lips)[0].Take(3), StoryScript.Staging(d, lips)[0].Where(x => x.Step == StoryScript.Step.Page).Select(x => x.Time).Take(3));
+    }
+
     /// <summary>Lip sync: one digit per 60-Hz frame from the page's first balloon, for the faces talking (C_), closed (0) for the others and after the string.</summary>
     [Fact]
     public void PortraitScene_MouthFromTheLipDigits()
@@ -60,7 +74,7 @@ public class StoryShowTests
             new(0, StoryScript.Step.Picture, 10), new(0, StoryScript.Step.Talk, 1), new(1, StoryScript.Step.Page, 0), new(1, StoryScript.Step.Line, 0),
             new(2, StoryScript.Step.Quiet, 1), new(3, StoryScript.Step.Picture, 12), new(3, StoryScript.Step.Talk, 0), new(3, StoryScript.Step.Page, 2),
         ];
-        var s = new PortraitScene(stages, ["012345", "", "5"]);
+        var s = new PortraitScene(stages, ["012345", "", new string('5', 60)]);
         Assert.Equal([10, 12], s.Pictures);
         Assert.Equal(-1, s.At(-1).Picture);
         Assert.Equal([0, 0, 0], s.At(-1).Mouth);
@@ -70,6 +84,16 @@ public class StoryShowTests
         var (picture, mouth) = s.At(3.001);
         Assert.Equal(12, picture);
         Assert.Equal([5, 0, 0], mouth);
+        // a portrait the archive lacks (STR21 P_11): the one before stays with its mouth shut
+        var lacking = new PortraitScene([.. stages, new(3.5, StoryScript.Step.Picture, 99)], ["012345", "", new string('5', 60)], new HashSet<int> { 99 });
+        Assert.Equal([10, 12], lacking.Pictures);
+        Assert.Equal([5, 0, 0], s.At(3.6).Mouth);
+        Assert.Equal(12, lacking.At(3.6).Picture);
+        Assert.Equal([0, 0, 0], lacking.At(3.6).Mouth);
+        // white padding rows of a backdrop take the picture's nearest row
+        var grey = Enumerable.Repeat((byte)90, 4 * 8 * 4).ToArray();
+        Array.Fill(grey, (byte)255, 0, 4 * 4);
+        Assert.All(StoryMedia.FillWhiteEdges((4, 8, grey)).Item3, b => Assert.Equal(90, b));
         // eyes blink now and then: mostly open, half/shut for a few frames
         var frames = Enumerable.Range(0, 600).Select(f => PortraitScene.Eyes(f / 60.0, 0)).ToList();
         Assert.True(frames.Count(f => f == 0) > 540);
@@ -230,10 +254,7 @@ public class StoryShowTests
             var first = s.Update(k, 1 / 60f);
             actions.Add(first);
             for (var t = 1 / 60f; t < seconds; t += 1 / 60f)
-            {
-                Thread.Sleep(1); // the shows decode on worker threads
                 actions.Add(s.Update(default, 1 / 60f));
-            }
             return first;
         }
         Run(1.5f, (0, 0, true, false));

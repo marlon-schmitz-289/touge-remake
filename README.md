@@ -294,7 +294,7 @@ und die blinzeln; nach dem Sieg die Szene danach (Kapitel 30 dazu der Epilog, Ka
 je Zeile zur Stimme: Szenen = die 585 Äußerungen der Disc in eigener Übersetzung an ihren Zeiten auf der Spur, im nachgebauten
 Sprechfenster mit Namensplatte; Manga-Hörspiele (kein Text auf der Disc) = eigene Übersetzung des Gehörten (`MangaText`), als Band unten;
 englische Titel unter den Titelkarten. Steuerung: Entscheiden = nächste Zeile (springt in der Spur weiter), ↑/↓ = AUTO an/aus (aus: hält
-am Ende jeder Zeile, ▼), → = Szene überspringen, Zurück: vor dem Rennen zur Kapitelwahl, danach überspringen. Lautstärke: Optionen →
+am Ende jeder Zeile, ▼), → oder START am Pad (wie `SKIPMSG` im Original) = Szene überspringen, Zurück: vor dem Rennen zur Kapitelwahl, danach überspringen. Lautstärke: Optionen →
 SOUND → VOICE (auch Iketani im Car Guide). Bilder werden je Szene im Hintergrund dekodiert, verteilt hochgeladen und danach freigegeben.
 Ohne die Medien (Manga-Tabellen nicht lesbar) Textpanels über dem Flug wie bisher (ST_BGM_N-Musik). Ziele (Code aus dem ELF): Rennen; vorne bleiben bis ins Ziel; hinterher
 und überholen (auch: in 120 s); 100 s dranbleiben; allein mit Zeitgrenze, Tofu bergauf mit höchstens 3 Wandtreffern, Mitfahrer mit 10.000 Driftpunkten –

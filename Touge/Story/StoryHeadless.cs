@@ -81,7 +81,7 @@ public static class StoryHeadless
                 }
                 var lines = m.Show.Lines;
                 for (var i = 1; i < lines.Count; i++)
-                    if (lines[i].Time < lines[i - 1].Time) problems.Add($"Zeile {i} vor Zeile {i - 1}");
+                    if (lines[i].Time <= lines[i - 1].Time) problems.Add($"Zeile {i} nicht nach Zeile {i - 1}");
                 if (lines.Count > 0 && lines[^1].Time > m.Show.Length) problems.Add("letzte Zeile nach dem Ende");
                 Console.WriteLine($"[Story] Kapitel {c.Index,2} {r}: Stimme {m.Voice} {m.VoiceSeconds:0.0} s, Länge {m.Show.Length:0.0} s, {m.Decoded.Count} Bilder, {lines.Count} Untertitel" +
                                   (problems.Count > 0 ? $"  FEHLER {string.Join("; ", problems)}" : ""));

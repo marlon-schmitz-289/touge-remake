@@ -180,6 +180,7 @@ public sealed class StoryMode(Catalog catalog)
         {
             if ((_leave += dt) < Fade) return Action.None;
             _leave = -1;
+            if (Current == Phase.Show) DropShows();
             if (_nextChapter is { } n) (Chapter, _part, _nextChapter) = (n, PartOf(n), null);
             if (_then == Action.Exit) Close();
             else Go(_next);
@@ -415,7 +416,7 @@ public sealed class StoryMode(Catalog catalog)
         {
             // before the race BACK leaves the chapter (RIGHT skips the show)
             Sound?.Invoke("BEEP001");
-            DropShows();
+            Media.Play(m, 0, false); // the picture fades out with the leave, freed after it (Update)
             InRun = false;
             Leave(Phase.Select, Action.Leave);
             return Action.None;
@@ -748,8 +749,8 @@ public sealed class StoryMode(Catalog catalog)
             }
         }
         c.Text(s.Auto ? "AUTO" : "AUTO OFF", 498, 30, 10, s.Auto ? Amber : Grey, 1, 0.15f, 0.1f);
-        Menu.Hint(c, _afterRace ? "DECIDE: Next line    UP/DOWN: Auto    RIGHT/BACK: Skip"
-            : "DECIDE: Next line    UP/DOWN: Auto    RIGHT: Skip    BACK: Chapter select");
+        Menu.Hint(c, _afterRace ? "DECIDE: Next line    UP/DOWN: Auto    START/RIGHT/BACK: Skip"
+            : "DECIDE: Next line    UP/DOWN: Auto    START/RIGHT: Skip    BACK: Chapter select");
     }
 
     private static readonly ShowMedia EmptyShow = new() { Request = new ShowRequest(0, true, 0), Show = new Show([], 0) };

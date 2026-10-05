@@ -41,8 +41,8 @@ internal static class MangaDump
         Gims(bgp.Read(bgp.Find($"BGSTR{ch.Episode:00}.PAC") ?? throw new FileNotFoundException($"BGSTR{ch.Episode:00}.PAC")), sdir);
 
         var parts = StoryScript.ParseScript(robj);
-        var times = StoryScript.Times(robj);
         var lips = Manga.Lips(robj);
+        var times = StoryScript.Times(robj, lips);
         var slots = Enumerable.Range(0, Manga.Slots).Where(s => lips[s].Length > 0).ToArray();
         var sb = new StringBuilder($"{Manga.Pictures(robj)} BGSTR{ch.Episode:00}.PAC\n");
         for (var p = 0; p < parts.Count; p++)

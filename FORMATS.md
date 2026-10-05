@@ -318,14 +318,23 @@ KOMATCn: identisch außer 22↔23, 25→28, 26→25, 27→26, 28→29, 29→27; 
   `TALKWIN` (Sprechfenster 64×64, 9-Slice), `SKIPMSG` („STARTボタンでスキップ“), `MASK`, `RAIN` (Regen-Overlay). `MG_KNJ` = je Szene
   gerenderte Glyphen (nur für Japanisch nötig).
 - Token (Interpreter `sub_1CF940`, `atoi` = `func_122AC8`): `P_n` Bild n zeigen, `C_k` Gesicht k spricht (Lippensync an), `K_k` Gesicht k
-  verstummt, `A_n` warten bis Tonzeit **2n Frames** (n in 1/30 s), `WF_n` ebenso, dann nächste Blase, `W_n` Pause (n > 0, vermutlich 2n Frames), `W_0` Seite
-  zu Ende, `N` neue Seite, `F_name` Sprecher der nächsten Blase, `Q_n`/`U_a,b` Blasenstil/Wackeln, `E_60` Abblende = Ende des Slots,
+  verstummt, `A_n` warten bis Tonzeit **2n Frames** (n in 1/30 s), `WF_n` ebenso, dann nächste Blase, `W_n` Pause (n > 0, n 60-Hz-Frames: STR16 Seiten 12–14 mit
+  W_150/200/300 passen so zwischen A_1853 und A_2240, mit 2n nicht), `W_0` Seite zu Ende, `N` neue Seite, `F_name` Sprecher der nächsten Blase, `Q_n`/`U_a,b` Blasenstil/Wackeln, `E_60` Abblende = Ende des Slots,
   Text-Token = Blasen.
 - Ton je Slot: `MG_KOMAS` `(c+1)_01.adx` (Slot 0), `_02` (Slot 3), `_03` (Slot 4) – eine durchgehende Stereo-Spur je Teil mit allen
   Stimmen (+ Musik); `StoryScript.Times` liefert je Äußerung die Startzeit (letztes A_/WF_ davor, s), also genau der Text-Takt zur
   Stimme – die englische Zeile lässt sich 1:1 an die Äußerungen aus `ParseScript` hängen.
 - `A_n` kleiner als ein früheres (STR06 Slot 3: `A_392`, dann `A_354`) wartet nicht: die Zeit bleibt beim größeren.
-  `P_n` ohne Bild im FPK (STR21 `P_11`, STR22 `P_17`): das vorige Porträt bleibt.
+  `P_n` ohne Bild im FPK (STR21 `P_11`, STR22 `P_17`): das vorige Porträt bleibt (Remake: mit geschlossenem Mund, sonst spräche
+  das falsche Gesicht).
+- Seiten ohne eigenes `A_` (Ketten `W_0`, `N` – STR25 Slot 3 Seiten 9–12, STR06/11/16/18/20/27/30, zusammen 13 Äußerungen) haben
+  keine eigene Tonzeit: Remake startet sie, wenn die Lippen-Ziffern der vorigen Seite (Länge/60 s) bzw. ein `W_n` abgelaufen sind,
+  frühestens 2 s nach der vorigen Äußerung (STR11 Seite 5 folgt einer `WF_`-Blase ohne Längenangabe). STR25: 47,93 → 50,15 →
+  57,57 → 63,62 s, die Seiten dauern dann genau ihre Lippenfolge (2,22/7,42/6,05 s). Wie das Spiel selbst auf das Ende der Seite
+  wartet, ist im Interpreter nicht nachgesehen.
+- `BGSTR`-Hintergründe mit reinweißen Randzeilen (BGSTR21 `STR20`/`STR21` und BGSTR17 `STR24` oben 12, BGSTR13 `STR10` oben 10,
+  BGSTR10 `STR17` unten 32, BGSTR17 `STR17` unten 29, BGSTR13 `STR08`/`STR12` unten 24/14, BGSTR27 `STR21` oben 54 = weißer
+  Verlauf): auf 640 × 448 gestreckt ein weißer Balken; Remake schneidet sie (≤ ¼) ab und streckt den Rest.
 - **Lippensync**: der Seiten-Eintrag nennt die Seitennummer (alle `N` des Slots gezählt, auch leere Seiten; Seiten ohne Sprechen, z. B.
   Gedanken, haben keinen Eintrag – STR13 Slot 0: Seiten 0–3, 8–12); Ziffernfolge 0–5 = Mundbild je 60-Hz-Frame ab
   der Tonzeit, zu der die erste Blase der Seite erscheint, für das Gesicht aus `C_k`. Belegt mit der Stimm-Aktivität (Mitte−Seite-

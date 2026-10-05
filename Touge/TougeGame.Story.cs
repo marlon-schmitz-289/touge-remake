@@ -1,3 +1,4 @@
+using Kansei.Input;
 using Touge.Formats;
 using Touge.Race;
 using Touge.Story;
@@ -85,6 +86,8 @@ public sealed partial class TougeGame
     private void UpdateStory((int X, int Y, bool Ok, bool Back) keys, float dt)
     {
         var s = _story!;
+        // START skips a show as in the original (SKIPMSG); in menus it confirms
+        if (s.Current == StoryMode.Phase.Show && Flow == null && MenuKeys.PadsOf(Input).Any(p => p.IsButtonPressed(GamepadButton.Start))) keys = (1, 0, false, false);
         switch (s.Update(keys, dt))
         {
             case StoryMode.Action.Load:
@@ -219,7 +222,7 @@ public sealed partial class TougeGame
         ("Intro", 1, null, 0, 0, false, false), ("StoryBanner", 1, null, 0, 0, true, false), ("StoryResult", 1, null, 1, 0, false, false),
         ("StoryResult", 0.6f, "ghost_result_select", 0, 0, true, false), ("StorySelect", 1.2f, "select_after", 0, 0, true, false),
         // chapter 3 again: BACK in the scene returns to the select; then into the race and out through Pause → Exit
-        ("StoryLoading", 0.4f, null, 0, 0, false, false), ("StoryShow", 2, "ghost_manga_back", 0, 0, false, true),
+        ("StoryLoading", 0.4f, null, 0, 0, false, false), ("StoryShow", 2, "ghost_manga_back", 0, 0, false, true), ("StoryShow", 0.25f, "manga_back_fade", 0, 0, false, false),
         ("StorySelect", 1.2f, "select_from_scene", 0, 0, true, false), ("StoryLoading", 0.4f, null, 0, 0, false, false),
         ("StoryShow", 1.5f, null, 1, 0, false, false), ("StoryShow", 1.5f, null, 1, 0, false, false), ("Intro", 1, null, 0, 0, false, false), ("Race", 1.5f, "ghost_race2", 0, 0, false, true),
         ("Pause", 0.6f, null, 1, 0, false, false), ("Pause", 0.4f, null, 1, 0, false, false), ("Pause", 0.4f, null, 1, 0, false, false), ("Pause", 0.4f, "pause_exit", 1, 0, false, false), ("Pause", 0.4f, null, 0, 0, true, false),

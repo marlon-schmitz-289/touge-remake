@@ -52,10 +52,10 @@ public sealed class StoryMedia(string isoPath, SpriteRenderer? sprites)
     /// <summary>The voice output (null: no sound, the shows run on the frame clock).</summary>
     public AudioDevice? Audio { get; set; }
 
-    /// <summary>Starts decoding a show on a worker thread.</summary>
-    public Task<ShowMedia> Load(ShowRequest r) => Task.Run(() => Decoder?.Invoke(r) ?? Decode(isoPath, r));
+    /// <summary>Starts decoding a show on a worker thread (<see cref="Decoder" />: at once).</summary>
+    public Task<ShowMedia> Load(ShowRequest r) => Decoder != null ? Task.FromResult(Decoder(r)) : Task.Run(() => Decode(isoPath, r));
 
-    /// <summary>Tests: shows made up instead of read from the disc.</summary>
+    /// <summary>Tests: shows made up instead of read from the disc, synchronously (no thread-pool timing in the flow).</summary>
     public Func<ShowRequest, ShowMedia>? Decoder { get; init; }
 
     /// <summary>Everything a show needs, decoded (no GPU, no audio device): also the headless check.</summary>
@@ -122,9 +122,10 @@ public sealed class StoryMedia(string isoPath, SpriteRenderer? sprites)
         var str = iso.OpenAfs(Dir + "MANGA/MG_STR.AFS");
         var fpk = str.Read(str.Find(Manga.Pictures(robj)) ?? throw new FileNotFoundException(Manga.Pictures(robj)));
         var entries = Manga.Fpk(fpk).ToDictionary(e => e.Name);
-        // STR21/STR22 each name one portrait their archive lacks: the one before stays
-        var stages = StoryScript.Staging(robj)[part].Where(s => s.Step != StoryScript.Step.Picture || entries.ContainsKey($"{s.Value:00}.ICP")).ToList();
-        var scene = new PortraitScene(stages, lips[r.Number]);
+        // STR21/STR22 each name one portrait their archive lacks: the one before stays, its mouth shut
+        var stages = StoryScript.Staging(robj, lips)[part];
+        var missing = stages.Where(s => s.Step == StoryScript.Step.Picture && !entries.ContainsKey($"{s.Value:00}.ICP")).Select(s => s.Value).ToHashSet();
+        var scene = new PortraitScene(stages, lips[r.Number], missing);
         var faces = Manga.Faces(robj);
         foreach (var n in scene.Pictures)
         {
@@ -144,12 +145,12 @@ public sealed class StoryMedia(string isoPath, SpriteRenderer? sprites)
                 var name = all.ContainsKey($"STR{n:00}") ? $"STR{n:00}" : "STR00";
                 if (!all.TryGetValue(name, out var e)) continue;
                 backdrops[n] = name;
-                if (!images.ContainsKey(name)) images[name] = Gim.Decode(pac.AsSpan(e.Offset, e.Size));
+                if (!images.ContainsKey(name)) images[name] = FillWhiteEdges(Gim.Decode(pac.AsSpan(e.Offset, e.Size)));
             }
         }
         var voice = Manga.SceneVoice(r.Chapter, r.Number);
         var pcm = Voice(voices, voice);
-        var times = StoryScript.Times(robj)[part];
+        var times = StoryScript.Times(robj, lips)[part];
         var english = StoryText.Chapters[r.Chapter].Scene;
         var text = part < english.Length ? english[part] : [];
         var lines = times.Zip(text, (t, l) => new ShowLine(t, l)).ToList();
@@ -159,6 +160,32 @@ public sealed class StoryMedia(string isoPath, SpriteRenderer? sprites)
             Request = r, Scene = scene, Faces = Manga.Faces(robj), Backdrops = backdrops, Decoded = images, Pcm = pcm, Voice = pcm == null ? "-" : voice, VoiceSeconds = Seconds(pcm),
             Show = new Show(lines, length),
         };
+    }
+
+    /// <summary>
+    ///     Some BGSTR backdrops (BGSTR21 STR20/21, BGSTR10 STR17, …) have 2–32 pure white rows at the top or bottom that the
+    ///     stretched 640 × 448 view would show as a bar: the picture without them (and their lighter rim row) is stretched over
+    ///     the full height (a quarter at most is cut).
+    /// </summary>
+    public static (int, int, byte[]) FillWhiteEdges((int W, int H, byte[] Rgba) image)
+    {
+        var (w, h, rgba) = image;
+        bool White(int y)
+        {
+            for (var i = y * w * 4; i < (y + 1) * w * 4; i += 4)
+                if (rgba[i] < 240 || rgba[i + 1] < 240 || rgba[i + 2] < 240) return false;
+            return true;
+        }
+        int top = 0, bottom = 0;
+        while (top < h / 4 && White(top)) top++;
+        while (bottom < h / 4 && White(h - 1 - bottom)) bottom++;
+        if (top > 0) top = Math.Min(top + 1, h / 4);
+        if (bottom > 0) bottom = Math.Min(bottom + 1, h / 4);
+        if (top + bottom == 0) return image;
+        var row = w * 4;
+        var src = (byte[])rgba.Clone();
+        for (var y = 0; y < h; y++) Array.Copy(src, (top + y * (h - top - bottom) / h) * row, rgba, y * row, row);
+        return image;
     }
 
     /// <summary>Atlas cell of a face patch: 80 × 128 with a 2-px gutter; columns mouth 0–5, first eye 6–8, second eye 9–11, row = face.</summary>

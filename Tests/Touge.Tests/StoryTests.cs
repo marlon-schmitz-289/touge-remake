@@ -43,8 +43,8 @@ public class StoryTests
         Assert.Equal([new("", "ずいぶん走りこんだな…オレもうガスねーや"), new("走り屋", "もうすぐ四時ですよ")], parts[0]);
         Assert.Equal([new("", "（信じられん…）"), new("啓介", "またな")], parts[1]);
         Assert.Throws<InvalidDataException>(() => StoryScript.ParseScript(new byte[64]));
-        // voice track time of each utterance: last A_/WF_ before it, in 1/30 s
-        Assert.Equal([[24 / 30.0, 191 / 30.0], [0, 0]], StoryScript.Times(d));
+        // voice track time of each utterance: last A_/WF_ before it, in 1/30 s; a page without its own A_ at least 2 s on
+        Assert.Equal([[24 / 30.0, 191 / 30.0], [0, 2]], StoryScript.Times(d));
     }
 
     /// <summary>The chapter table: 8-byte selection, 22-byte objective, driver through the pointer table, opponent by figure (−1 = none).</summary>
