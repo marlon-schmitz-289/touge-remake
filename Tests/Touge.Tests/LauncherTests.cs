@@ -82,6 +82,37 @@ public sealed class LauncherTests : IDisposable
     }
 
     [Fact]
+    public void SymlinkedDiscPassesAndPastedPathsResolve()
+    {
+        var good = Iso("Spiele Ä/Initial D – Kopie ü.iso");
+        var link = Path.Combine(_dir, "link.iso");
+        File.CreateSymbolicLink(link, good);
+        Assert.True(Disc.Check(link).Ok, Disc.Check(link).Error); // the target's size, not the link's
+        var b = new Browser(Path.GetDirectoryName(good));
+        Assert.Equal(new FileInfo(good).Length, new Browser(_dir).Entries.Single(e => e.Name == "link.iso").Size);
+        Assert.Equal(Browser.Outcome.Pick, b.Submit("Initial D – Kopie ü.iso")); // Finder's Cmd+C: the name only
+        Assert.Equal(good, b.Result);
+        if (!OperatingSystem.IsWindows()) // Terminal: Initial\ D\ –\ Kopie\ ü.iso
+            Assert.Equal(good, Disc.Resolve(good.Replace(" ", "\\ ")));
+        Assert.Equal(good, Disc.Resolve("file://" + new Uri(good).AbsolutePath));
+    }
+
+    [Fact]
+    public void MissingGlyphsShowAsQuestionMark()
+    {
+        var dir = AppContext.BaseDirectory;
+        while (!File.Exists(Path.Combine(dir, "InitialDRemake.slnx"))) dir = Path.GetDirectoryName(dir)!;
+        var font = new Kansei.Graphics.SdfFont(File.ReadAllBytes(Path.Combine(dir, "Touge/Assets/Fonts/Rajdhani-Bold.ttf")), Style.Glyphs);
+        Assert.True(font.TryGet('ü', out var u));
+        Assert.True(font.TryGet('–', out _));
+        Assert.True(font.TryGet('?', out var q));
+        Assert.NotEqual(q, u);
+        Assert.True(font.TryGet('漢', out var missing));
+        Assert.Equal(q, missing);
+        Assert.False(font.TryGet('\n', out _));
+    }
+
+    [Fact]
     public void ScanFindsGoodDiscsOneLevelDeep()
     {
         var top = Iso("GOOD2.ISO");

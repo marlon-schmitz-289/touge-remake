@@ -17,13 +17,21 @@ Assets kommen zur Laufzeit aus der eigenen ISO (SLPM-65268), nie ins Repo.
 
 ## Starten
 
-Ohne Kommandozeile: `dotnet run --project Touge` (bzw. das gebaute `Touge`/`Touge.exe` aus `Touge/bin/<Konfiguration>/net10.0/` ohne Argumente
-starten) öffnet den **Launcher** (`Touge/Launcher.cs`, `Ui/LauncherScreen.cs`) im Stil des Front-Ends – ohne Daten der Disc, also noch ohne Original-Sounds:
+**Zum Doppelklicken** (ohne installiertes .NET, ohne Spieldaten – die ISO kommt im Launcher dazu): `Tools/package.sh` baut nach `out/dist/`
+- `Touge.app` (macOS, Apple Silicon): in den Programme-Ordner ziehen, doppelklicken. Beim ersten Start fragt macOS, ob Touge auf Downloads/
+  Schreibtisch/Dokumente zugreifen darf (für die Suche nach der ISO) – erlauben, die Liste füllt sich danach. Weitergegeben (Download/AirDrop)
+  verlangt Gatekeeper einmal Rechtsklick → Öffnen (oder `xattr -dr com.apple.quarantine Touge.app`).
+- `Touge-win-x64.zip`: entpacken, `Touge.exe` doppelklicken (SmartScreen: „Weitere Informationen“ → „Trotzdem ausführen“).
+- `Touge-linux-x64.tar.gz`: entpacken, `./Touge` starten (braucht Vulkan- bzw. OpenGL-Treiber).
+
+`Tools/package.sh osx-arm64` baut nur eine davon. Ohne Paket: `dotnet run --project Touge`. (Das gebaute `Touge` aus `Touge/bin/…` ist nicht
+eigenständig und findet ein .NET unter `~/.dotnet` ohne `DOTNET_ROOT` nicht.) Ohne Argumente öffnet sich der **Launcher** (`Touge/Launcher.cs`, `Ui/LauncherScreen.cs`) im Stil des Front-Ends – ohne Daten der Disc, also noch ohne Original-Sounds:
 - Er sucht im Hintergrund (höchstens 4 s, je Ort nur eine Ordnerebene tief) in Downloads, Schreibtisch, Dokumente, Home, aktuellem und App-Ordner
   sowie auf eingehängten Laufwerken (`/Volumes`, `/media`, `/run/media`, `/mnt`, Laufwerksbuchstaben) nach `*.iso` und zeigt nur passende Discs
   (ISO 9660, `SYSTEM.CNF` bootet `SLPM_652.68`, `CDVD/DATA` da, Image nicht abgeschnitten) mit Titel, Version und Größe.
 - **BROWSE FOR THE ISO**: Dateibrowser im Spiel (Laufwerke/Ordner/`*.iso`, ←/„..“ eine Ebene hoch, Tab oder Klick ins PATH-Feld zum Tippen,
-  Strg+V/Cmd+V fügt einen Pfad ein, Enter öffnet den Ordner bzw. prüft die Datei). **SYSTEM FILE DIALOG**: Dateidialog des Systems (osascript,
+  Strg+V/Cmd+V fügt einen Pfad ein – auch aus dem Terminal mit `\ `-Escapes, als `file://`-URL oder nur als Dateiname wie nach Cmd+C im
+  Finder, der dann im aktuellen Ordner bzw. den Suchorten gesucht wird –, Enter öffnet den Ordner bzw. prüft die Datei). Symlinks auf die ISO gehen. **SYSTEM FILE DIALOG**: Dateidialog des Systems (osascript,
   zenity/kdialog, PowerShell/WinForms), fehlt er, sagt der Launcher das. Eine `.iso` aufs Fenster ziehen oder einen Pfad einfügen wählt sie auch.
 - Falsche Dateien (fehlt, unlesbar, keine Disc, anderes Spiel, abgeschnitten, Ordner) stehen rot im Panel, nichts stürzt ab.
 - Die gewählte Disc startet das Spiel im selben Fenster und wird in `last-disc.txt` neben `settings.json` (App-Daten-Ordner des Benutzers,

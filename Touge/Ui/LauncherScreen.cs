@@ -217,7 +217,7 @@ public sealed class Browser
         list.AddRange(info.EnumerateDirectories("*", opts).Where(d => !d.Name.StartsWith('.')).OrderBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
             .Select(d => new Entry(d.Name, d.FullName, Kind.Folder)));
         list.AddRange(info.EnumerateFiles("*", opts).Where(f => f.Extension.Equals(".iso", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase).Select(f => new Entry(f.Name, f.FullName, Kind.Iso, f.Length)));
+            .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase).Select(f => new Entry(f.Name, f.FullName, Kind.Iso, f.LinkTarget != null && f.ResolveLinkTarget(true) is FileInfo { Exists: true } t ? t.Length : f.Length)));
         return list;
     }
 
@@ -244,9 +244,7 @@ public sealed class Browser
     /// <summary>A typed/pasted path: a folder opens, anything else is picked (the launcher checks it).</summary>
     public Outcome Submit(string text)
     {
-        text = text.Trim().Trim('"', '\'');
-        if (text.StartsWith('~')) text = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + text[1..];
-        if (text.StartsWith("file://")) text = Uri.UnescapeDataString(new Uri(text).LocalPath);
+        text = Disc.Resolve(text, Dir);
         if (Directory.Exists(text) || text == "")
         {
             Typing = !Open(text);

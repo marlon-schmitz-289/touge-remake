@@ -10,6 +10,9 @@ namespace Touge.Ui;
 /// </summary>
 public static class Style
 {
+    /// <summary>The overlay font's characters: ASCII, Latin-1 (umlauts in file names) and common typographic punctuation.</summary>
+    public static readonly string Glyphs = string.Concat(Enumerable.Range(32, 95).Concat(Enumerable.Range(0xA1, 95)).Select(c => (char)c)) + "–—‘’“”…€";
+
     public static readonly uint Panel = Overlay.Rgba(0.02f, 0.03f, 0.05f, 0.62f), PanelLight = Overlay.Rgba(1, 1, 1, 0.08f),
         Text = Overlay.Rgba(1, 1, 1, 0.96f), Dim = Overlay.Rgba(1, 1, 1, 0.6f), Faint = Overlay.Rgba(1, 1, 1, 0.18f),
         Amber = Overlay.Rgba(1, 0.72f, 0.1f), Red = Overlay.Rgba(1, 0.24f, 0.2f), Green = Overlay.Rgba(0.3f, 1, 0.45f),

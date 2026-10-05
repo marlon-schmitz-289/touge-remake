@@ -2,6 +2,8 @@
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
+        <!-- Tools/package.sh for Windows: a GUI exe, no console window behind the game -->
+        <OutputType Condition="'$(TougeGui)' == 'true'">WinExe</OutputType>
         <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>

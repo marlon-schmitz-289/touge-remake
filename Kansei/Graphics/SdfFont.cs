@@ -102,13 +102,14 @@ public sealed class SdfFont
         }
     }
 
-    public bool TryGet(char c, out Glyph g) => _glyphs.TryGetValue(c, out g);
+    /// <summary>The glyph of <paramref name="c"/>; a printable character the atlas lacks shows as '?' instead of vanishing.</summary>
+    public bool TryGet(char c, out Glyph g) => _glyphs.TryGetValue(c, out g) || c > ' ' && _glyphs.TryGetValue('?', out g);
 
     /// <summary>Advance width of <paramref name="text"/> in pixels at font size <paramref name="size"/> (unknown characters: half an em).</summary>
     public float Measure(ReadOnlySpan<char> text, float size)
     {
         var w = 0f;
-        foreach (var c in text) w += _glyphs.TryGetValue(c, out var g) ? g.Advance : 0.5f;
+        foreach (var c in text) w += TryGet(c, out var g) ? g.Advance : 0.5f;
         return w * size;
     }
 

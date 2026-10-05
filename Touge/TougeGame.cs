@@ -188,7 +188,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     {
         using var iso = new Iso9660(isoPath);
         _overlay.Font = new SdfFont(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts", "Rajdhani-Bold.ttf")),
-            string.Concat(Enumerable.Range(32, 95).Select(c => (char)c)) + "°");
+            Style.Glyphs);
         _overlayRenderer = new OverlayRenderer(Device);
         _textRenderer = new TextRenderer(Device, _overlay.Font);
         if (UseMenus)
@@ -240,13 +240,18 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         if (_menu != null)
         {
             _menu.Options.Resolutions = Resolutions;
-            Window.FullscreenModeChanged += m => _settings.Display = m switch // F11 keeps the setting in step
+            _onFullscreen = m => // F11 keeps the setting in step
             {
-                Kansei.Windowing.FullscreenMode.Windowed => Settings.DisplayMode.Window,
-                Kansei.Windowing.FullscreenMode.Exclusive => Settings.DisplayMode.Fullscreen,
-                _ => Settings.DisplayMode.Borderless,
+                _settings.Display = m switch
+                {
+                    Kansei.Windowing.FullscreenMode.Windowed => Settings.DisplayMode.Window,
+                    Kansei.Windowing.FullscreenMode.Exclusive => Settings.DisplayMode.Fullscreen,
+                    _ => Settings.DisplayMode.Borderless,
+                };
+                _applied = DisplayState;
+                if (SavesRuns) _settings.Save();
             };
-            Window.FullscreenModeChanged += _ => { _applied = DisplayState; if (SavesRuns) _settings.Save(); };
+            Window.FullscreenModeChanged += _onFullscreen;
         }
         // the front end shows Akina at night behind the title, like the original's photo; course select loads the choice
         var title = _front != null && (_persist || Flow != null);
@@ -1628,8 +1633,11 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         _textRenderer.Draw(encoder, overlay, target, w, h);
     }
 
+    private Action<Kansei.Windowing.FullscreenMode>? _onFullscreen;
+
     public override void Dispose()
     {
+        if (_onFullscreen != null) Window.FullscreenModeChanged -= _onFullscreen; // CHANGE GAME DISC: the window outlives this game
         EndRecording();
         _audio?.Dispose();
         _rivalAudio?.Dispose();

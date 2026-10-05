@@ -20,18 +20,37 @@ public sealed record Disc(string Path, string? Version, long Size, string? Error
     public string Title => "INITIAL D SPECIAL STAGE";
     public string Info => FormattableString.Invariant($"SLPM-65268  |  {(Version is { } v ? "VER " + v : "")}  |  {Size / 1e9:0.00} GB");
 
+    /// <summary>
+    ///     A typed, pasted or dropped path as a full path: quotes, ~, file:// URLs, Terminal's backslash escapes (not on Windows)
+    ///     and a bare file name (Finder's Cmd+C copies only the name) looked up in <paramref name="dir"/> and the scan's places.
+    /// </summary>
+    public static string Resolve(string text, string? dir = null)
+    {
+        text = text.Trim().Trim('"', '\'');
+        if (text == "") return text;
+        if (text.StartsWith('~')) text = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + text[1..];
+        if (text.StartsWith("file://", StringComparison.OrdinalIgnoreCase)) text = Uri.UnescapeDataString(new Uri(text).LocalPath);
+        if (!OperatingSystem.IsWindows() && !System.IO.Path.Exists(text) && text.Contains('\\'))
+            text = System.Text.RegularExpressions.Regex.Replace(text, @"\\(.)", "$1");
+        if (!System.IO.Path.IsPathRooted(text))
+            text = new[] { dir }.Concat(DiscScan.Places()).Where(d => d != null).Select(d => System.IO.Path.Combine(d!, text))
+                .FirstOrDefault(System.IO.Path.Exists) ?? text;
+        return System.IO.Path.GetFullPath(text);
+    }
+
     public static Disc Check(string path)
     {
         Disc Bad(string why, long size = 0) => new(path, null, size, why);
         try
         {
-            path = System.IO.Path.GetFullPath(path.Trim().Trim('"'));
+            path = Resolve(path);
             if (Directory.Exists(path)) return Bad("THAT IS A FOLDER, NOT A DISC IMAGE");
             if (!File.Exists(path)) return Bad("FILE NOT FOUND: " + path);
-            var size = new FileInfo(path).Length;
+            long size;
             byte[] pvd = new byte[2048];
             using (var fs = File.OpenRead(path))
             {
+                size = fs.Length; // the target's size, also through a symlink (FileInfo.Length would be the link's)
                 if (size < 17 * 2048) return Bad("NOT A DISC IMAGE (FILE TOO SMALL)", size);
                 fs.Position = 16 * 2048;
                 fs.ReadExactly(pvd);
@@ -136,6 +155,7 @@ public sealed class DiscScan
         finally
         {
             _done = true;
+            Console.WriteLine($"[Launcher] scan done: {_found.Count} disc(s){(DateTime.UtcNow > until ? " (time limit)" : "")}");
         }
     }
 }
@@ -220,7 +240,7 @@ public sealed class LauncherGame(Func<string, Action, TougeGame> newGame, bool p
     public override void Load()
     {
         _overlay.Font = new SdfFont(System.IO.File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts", "Rajdhani-Bold.ttf")),
-            string.Concat(Enumerable.Range(32, 95).Select(c => (char)c)) + "°");
+            Style.Glyphs);
         _overlayRenderer = new OverlayRenderer(Device);
         _textRenderer = new TextRenderer(Device, _overlay.Font);
         _screen = new LauncherScreen(new DiscScan().Start());
