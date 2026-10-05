@@ -44,7 +44,7 @@ public static class AiBench
     }
 
     /// <summary>What the pilot did in a run: drifts held/aborted, mistakes, its corner plan.</summary>
-    public sealed record PilotStats(int Drifts, int Aborts, int Mistakes, DriftController.Entry?[] Plan, int[]? AbortWhy = null);
+    public sealed record PilotStats(int Drifts, int Aborts, int Mistakes, DriftController.Entry?[] Plan, int[]? AbortWhy = null, int Faded = 0);
 
     /// <summary>One run alone from the spawn to the goal (or 600 s) with <paramref name="style"/>.</summary>
     public static (Result R, PilotStats P) Solo(Drive drive, RivalStyle style, List<Corner> corners, int seed = 0)
@@ -77,9 +77,9 @@ public static class AiBench
             var rl = pilot.Racing!;
             var (lo, hi) = rl.BoundsAt(s);
             var (l, r) = rl.Map.Room(s);
-            return (pilot.Drifting ? $"drift {pilot.Drift.State} cmd {pilot.Drift.Command * Deg:F0} {pilot.Drift.Debug}" :pilot.State.ToString()) + $" plan {rl.OffsetAt(s):+0.00;-0.00} [{lo:+0.0;-0.0},{hi:+0.0;-0.0}] room L {l:F2} R {r:F2} κ {rl.CurvatureAt(s):+0.000;-0.000}";
+            return (pilot.Drifting ? $"drift {pilot.Drift.State} cmd {pilot.Drift.Command * Deg:F0} {pilot.Drift.Debug}" :pilot.State.ToString()) + $" plan {rl.OffsetAt(s):+0.00;-0.00} [{lo:+0.0;-0.0},{hi:+0.0;-0.0}] room L {l:F2} R {r:F2} κ {rl.CurvatureAt(s):+0.000;-0.000} {pilot.MistakeNote}";
         });
-        return (r, new PilotStats(pilot.Drift.Held, pilot.Drift.Aborted, pilot.Mistakes, [.. Enumerable.Range(0, corners.Count).Select(pilot.DriftAt)], [.. pilot.Drift.AbortWhy]));
+        return (r, new PilotStats(pilot.Drift.Held, pilot.Drift.Aborted, pilot.Mistakes, [.. Enumerable.Range(0, corners.Count).Select(pilot.DriftAt)], [.. pilot.Drift.AbortWhy], pilot.Drift.Faded));
     }
 
     /// <summary>
@@ -346,7 +346,7 @@ public static class AiBench
                 rows.Add((car, who, eligible, planned.Count, p.Drifts, mean, std, tG > 0 ? 100 * (tD / tG - 1) : 0,
                     planned.Count > 0 ? planned.Average(i => r.Corners[i].Exit - grip.Corners[i].Exit) : 0, hits, spins, total, p.Aborts));
                 Console.WriteLine($"[Drift] {course} {(rev ? "up" : "down")} {car} {who}: {r.TimeText} s ({total:+0.0;-0.0}% vs grip {grip.TimeText}), planned {planned.Count} " +
-                                  $"held {p.Drifts} aborted {p.Aborts} (slip/inside/wall/none {string.Join("/", p.AbortWhy ?? [])}), β̄max {mean:F1}±{std:F1}°, corner time {rows[^1].DtPct:+0.0;-0.0}%, Δexit {rows[^1].DExit:+0;-0} km/h, hits in drifts {hits} (run {r.WallHits}), spins {spins}");
+                                  $"held {p.Drifts} aborted {p.Aborts} (slip/inside/wall {string.Join("/", p.AbortWhy ?? [])}) faded {p.Faded}, β̄max {mean:F1}±{std:F1}°, corner time {rows[^1].DtPct:+0.0;-0.0}%, Δexit {rows[^1].DExit:+0;-0} km/h, hits in drifts {hits} (run {r.WallHits}), spins {spins}");
             }
         }
         Console.WriteLine("[Drift] summary per car/style: planned corners (hairpins on the courses), held, aborted, β̄max, corner time vs grip, Δexit, hits per drift, spins, run vs grip");
