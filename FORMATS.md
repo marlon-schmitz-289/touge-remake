@@ -38,7 +38,7 @@ Eintrag 0x20: char name[16], u32 offset (ab PAC-Start), u32 size, u32 type, u32 
 - Auto-ID = Index in der Namensliste im ELF (`0x2C4978`: AE86T, AE86L, AE85, MR2 … CAPPU), siehe `CarPaint.Cars`.
 - Farbe 0 = Standard (Anime-Farbe: FD3S gelb, FC3S weiß, R32 schwarz, AE86T weiß – die schwarze Panda-Unterseite ist im Mesh). 1–7 Farben je Auto.
 - Das Spiel setzt RGB auf alle Teile (`0x193E90`), nur Materialien mit Flag 0x100 übernehmen es. Das Bytepaar geht an `0x193F00` → Alpha der Lackfarbe bzw. zweiter Alpha-Wert (vermutlich Reflexionsstärke, nicht verifiziert).
-- Sonderfälle in `0x15D060`: AE86T (Auto-ID 0) zeigt bei Farbe 1 `_emblem00` und blendet `_emblem01` aus, bei jeder anderen Farbe umgekehrt (`0x193B80` setzt, `0x193CA0` löscht Teile-Flag 4) – umgesetzt (`CarParts.Visible`). Nicht umgesetzt: S13, SIL80, S2000, FD3S bekommen bei Byte 0x13 des Auto-Structs = 5 fest kodierte RGB (0x18/08/38, 0x54/10/20, 0x74/70/80) – der Zustand kommt mit Standardteilen nicht vor.
+- Sonderfälle in `0x15D060`: AE86T (Auto-ID 0) zeigt bei Farbe 1 (rot) `_emblem01` (weiße Schriftzüge APEX/TRUENO, Texturen `AE86T033/100`) und blendet `_emblem00` aus, bei jeder anderen Farbe umgekehrt: `_emblem00` = schwarze Schriftzüge (`AE86T097`) auf dem weißen Panda (`0x193CA0` löscht Teile-Flag 4 = zeigen, `0x193B80` setzt es = verstecken; Namen `0x2C54C8` = `_emblem00`, `0x2C54E8` = `_emblem01`) – umgesetzt (`CarParts.Visible`). Nicht umgesetzt: S13, SIL80, S2000, FD3S bekommen bei Byte 0x13 des Auto-Structs = 5 fest kodierte RGB (0x18/08/38, 0x54/10/20, 0x74/70/80) – der Zustand kommt mit Standardteilen nicht vor.
 
 ## Autos: Tabellen im ELF – teils geknackt
 Index = Auto-ID (Namensliste `0x2C4978`, 8 B je Name).

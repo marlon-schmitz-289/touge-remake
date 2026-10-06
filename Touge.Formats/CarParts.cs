@@ -97,7 +97,7 @@ public static class CarParts
         }
         if (roll != 0) show.Add("roll01");
         if (s.Rival) show.Add("rival00");
-        if (car == "AE86T") Swap(show, paint == 1 ? "emblem01" : "emblem00", paint == 1 ? "emblem00" : "emblem01");
+        if (car == "AE86T" && paint == 1) Swap(show, "emblem00", "emblem01"); // white letters on paint 1 (red), else black (emblem00)
         show.IntersectWith(have);
         if (lit) show = [.. show.Select(p => Lit(p, have))];
         return show;

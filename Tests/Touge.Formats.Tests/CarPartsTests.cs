@@ -35,7 +35,7 @@ public class CarPartsTests
         HashSet<string> have = ["body00", "bodyshd00", "wind00", "grill00", "other00", "other01", "emblem00", "emblem01", "sticker01", "rival00",
             "Fspoile00", "Fspoile01", "Flight00", "Flight10", "Blamp00", "Blamp02", "muffler00", "muffler01", "number", "Rnumber00", "tire00FL"];
         string[] stock = [.. CarParts.Visible("AE86T", have, CarParts.SetupOf("AE86T", Livery.Stock), 0).Order(StringComparer.Ordinal)];
-        Assert.Equal(["Blamp00", "Flight00", "Fspoile00", "body00", "emblem01", "grill00", "muffler00", "other00", "other01", "wind00"], stock);
+        Assert.Equal(["Blamp00", "Flight00", "Fspoile00", "body00", "emblem00", "grill00", "muffler00", "other00", "other01", "wind00"], stock);
         // lights on: night lamps where the PAC has them (no Flight01 here, so the day headlamp stays); AE86 bonnet 1 lamp Flight10 → Flight11
         var lit = CarParts.Visible("AE86T", have, CarParts.SetupOf("AE86T", Livery.Stock), 0, true);
         Assert.Contains("Blamp02", lit);
@@ -46,10 +46,10 @@ public class CarPartsTests
 
         // Takumi's AE86: front spoiler 01 (plus 00, AE86 case), muffler 01, Fujiwara tofu sticker, no rival flag; paint 1 swaps the emblem
         var takumi = CarParts.Visible("AE86T", have, CarParts.SetupOf("AE86T", Livery.Rival), 1);
-        Assert.Superset(new HashSet<string> { "sticker01", "Fspoile00", "Fspoile01", "muffler01", "emblem00" }, takumi);
+        Assert.Superset(new HashSet<string> { "sticker01", "Fspoile00", "Fspoile01", "muffler01", "emblem01" }, takumi);
         Assert.DoesNotContain("muffler00", takumi);
         Assert.DoesNotContain("rival00", takumi);
-        Assert.DoesNotContain("emblem01", takumi);
+        Assert.DoesNotContain("emblem00", takumi);
         Assert.Contains("rival00", CarParts.Visible("FD3S", have, CarParts.SetupOf("FD3S", Livery.Rival), 0));
         Assert.DoesNotContain("rival00", CarParts.Visible("FD3S", have, CarParts.SetupOf("FD3S", Livery.Stock), 0));
 
