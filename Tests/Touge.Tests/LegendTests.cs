@@ -31,7 +31,10 @@ public class LegendTests
         Assert.True(Legend.Find("USUI0/sakamoto") is { Wet: true, Night: true, Reverse: true });
         Assert.True(Legend.Find("AKAGI/kenta") is { Wet: true, Night: false });
         // the first four rungs of a main course run detuned, the secret one stock; the rival's spec carries it
-        Assert.Equal([0.6f, 0.72f, 0.85f, 0.92f, 1], Legend.Of(3).Select(e => e.Rival.Power));
+        Assert.Equal([0.6f, 0.78f, 0.95f, 1, 1], Legend.Of(3).Select(e => e.Rival.Power));
+        // Myogi: Takumi (Itsuki's AE85) is the course's last rung at full power, not a detuned second one
+        Assert.Equal(["itsuki", "shingo", "takeshi", "takumi"], Legend.Of(0).Select(e => e.Rival.Id));
+        Assert.Equal(1, Legend.Find("MYOUGI0/takumi")!.Rival.Power);
         // every main course opens with a rival a beginner beats (EASY's skill, detuned), the secret ones are the strongest
         Assert.All(Enumerable.Range(0, Legend.MainCourses), s => Assert.InRange(Legend.Of(s)[0].Rival.Style.Skill, 0, 0.2f));
         Assert.All(Legend.All.Where(e => e.Secret), e => Assert.True(e.Rival.Style.Skill >= Legend.All.Where(x => !x.Secret).Max(x => x.Rival.Style.Skill)));

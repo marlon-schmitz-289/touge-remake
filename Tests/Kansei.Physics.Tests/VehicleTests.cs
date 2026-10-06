@@ -160,6 +160,19 @@ public class VehicleTests(ITestOutputHelper log)
         Assert.True(car.Gear <= gear, $"upshifted on free revs: {gear} -> {car.Gear}");
     }
 
+    /// <summary>Full throttle lugging in top gear (above the plain downshift revs) kicks down to the gear that pulls harder.</summary>
+    [Fact]
+    public void AutomaticKicksDownAtFullThrottle()
+    {
+        var car = NewCar();
+        AccelerateTo(car, 100);
+        while (car.Gear < car.Spec.Gears.Length) Run(car, new VehicleInput(0, 0, 0, Shift: 1), 0.6f);
+        Assert.True(car.Rpm > car.Spec.AutoDownRpm, $"{car.Rpm:F0} rpm: the plain downshift would do it");
+        Run(car, new VehicleInput(1, 0, 0), 1);
+        log.WriteLine($"kickdown: gear {car.Gear}, {car.Rpm:F0} rpm, {car.SpeedKmh:F0} km/h");
+        Assert.True(car.Gear < car.Spec.Gears.Length, $"stayed in {car.Gear} at {car.Rpm:F0} rpm");
+    }
+
     /// <summary>
     ///     Engine speed is a flywheel behind a friction clutch: through an upshift at full throttle it falls over ≥ 0.1 s to
     ///     the new gear's revs, through a manual downshift without blip it is dragged up — never a jump (limiter aside).

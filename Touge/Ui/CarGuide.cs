@@ -256,7 +256,7 @@ public sealed class CarGuide(Catalog catalog)
     /// <summary>Spec sheet rows (label, value) of a car, two columns of four.</summary>
     public static (string Label, string Value)[] Sheet(Catalog.Car car)
     {
-        var s = CarSpecs.All[car.Id];
+        var s = CarSpecs.Real[car.Id];
         var e = Entries[car.Id];
         var (ps, psRpm, nm, nmRpm) = Peaks(s);
         return
