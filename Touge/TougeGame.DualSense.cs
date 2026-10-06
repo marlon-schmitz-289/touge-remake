@@ -34,7 +34,7 @@ public sealed partial class TougeGame
         AppDomain.CurrentDomain.UnhandledException += _dsCrash;
         if (_menu == null) return;
         _dsPage = DualSensePage(_settings.DualSense, _ds);
-        _menu.Options.Show(_dsPage, Input.Pads.Any(p => p.IsDualSense)); // --menu options:dualsense finds it at once
+        _menu.Options.Show(_dsPage, true); // always, so it can be set up before a pad is plugged in
     }
 
     private static Options.Page DualSensePage(DualSenseSettings s, DualSenseFeedback f) =>
@@ -54,13 +54,10 @@ public sealed partial class TougeGame
                     "Engine, kerbs and grass, contacts, landings,", "drift slides and gear changes."),
                 Options.Row.Slider("RUMBLE STRENGTH", () => s.RumbleStrength, v => s.RumbleStrength = v, "Strength of the rumble."),
                 Options.Row.Action("RUMBLE TEST", "TEST", () => f.Test("RUMBLE"), "DECIDE: heavy and light motor in turn."),
-                new Options.Row("SPEAKER", () => f.SpeakerAvailable ? ["ON", "OFF"] : ["USB ONLY"], () => s.Speaker ? 0 : 1, i =>
-                    {
-                        if (f.SpeakerAvailable) s.Speaker = i == 0;
-                    },
+                new Options.Row("SPEAKER", () => ["ON", "OFF"], () => s.Speaker ? 0 : 1, i => s.Speaker = i == 0,
                     () => f.SpeakerAvailable
                         ? ["Countdown, menu sounds, gear clicks and wall hits", "also from the controller's speaker."]
-                        : ["The speaker needs the USB cable:", "over Bluetooth a computer gets no controller audio."]),
+                        : ["Countdown, menu sounds, gear clicks and wall hits", "from the controller (USB cable only, no audio over Bluetooth)."]),
                 Options.Row.Slider("SPEAKER VOLUME", () => s.SpeakerVolume, v => s.SpeakerVolume = v, "Volume of the controller's speaker."),
                 Options.Row.Action("SPEAKER TEST", "TEST", () => f.Test("SPEAKER"), "DECIDE: the GO sound from the controller."),
                 Options.Row.Toggle("PLAYER LEDS", () => s.PlayerLeds, v => s.PlayerLeds = v, "Player number under the touchpad (split screen: 1 and 2)."),
@@ -96,7 +93,6 @@ public sealed partial class TougeGame
         if (_dsRoughness?.Target != _drive) _dsRoughness = _drive.Roughness; // a new run makes a new Drive
         _ds.Update(Input.Pads, _dsSeatOf ??= DsSeat, _dsRoughness, dt, DualSenseTest ? _dsTestScript ??= TestScript : null);
         if (DualSenseTest) TestStep();
-        if (_dsPage != null) _menu!.Options.Show(_dsPage, _ds.Connected);
         if (_ds.Swiped && _jukebox != null)
         {
             _settings.MusicOn = true;

@@ -70,7 +70,7 @@ dotnet run --project Touge -- --data-dir <ordner> [--menu options:gamedisc] --sh
 TOUGE_AUTOPICK=1|change out/dist/osx-arm64-app/Touge.app/Contents/MacOS/Touge   # Ende-zu-Ende ohne Argumente (wie Finder): wählt nach der Suche die erste gefundene Disc; change verlässt das Spiel nach 8 s wie GAME DISC (Ablauf in touge.log)
 dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso"   # Front-End (Hinweis, Karten, Titel, Hauptmenü) → Kurs, Auto, Rennen, Ergebnis, Rekorde, Optionen
 dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso" [AKINA_DAY|AKINA_NIT|USUI_NIT|…]   # direkt fahren, ohne Menü
-dotnet run --project Touge -- "<iso>" AKINA_NIT --menu boot|logo|disclaimer|title|mode|quit|course|route|time|weather|maker[:n]|car|gearbox|intro|pause|records|guide|guide-list|guide-talk|options[:gamesetting|hud|screen|graphics|sound|playlist|controller] --shot out/proof/ui_car.png [--shot-size 3200x1800]   # Menü-Bild (options:<seite> öffnet eine Optionsseite, maker:<n> die Modellliste mit Zeile n, z. B. --car IMP --menu maker:2 = das gesperrte IMP3)
+dotnet run --project Touge -- "<iso>" AKINA_NIT --menu boot|logo|disclaimer|title|mode|quit|course|route|time|weather|maker[:n]|car|gearbox|intro|pause|records|guide|guide-list|guide-talk|options[:gamesetting|hud|screen|graphics|sound|playlist|controller|dualsense] --shot out/proof/ui_car.png [--shot-size 3200x1800]   # Menü-Bild (options:<seite> öffnet eine Optionsseite, maker:<n> die Modellliste mit Zeile n, z. B. --car IMP --menu maker:2 = das gesperrte IMP3)
 dotnet run --project Touge -- "<iso>" --flow out/proof   # ganzer Ablauf per Skript im Fenster (Titel → Auswahl → Laden → Countdown → Rennen mit Pilot in 16× → Pause → Ziel → Ergebnis → Rekorde → Optionen → Car Guide), PNG je Schritt
 dotnet run --project Touge -- "<iso>" --flow out/proof/legend/flow --legend [--car FD3S]   # Legend of the Streets per Skript: Akina, zwei Battles (Autopilot, 16×), Leiter danach, PNG je Schritt
 dotnet run --project Touge -- "<iso>" --legend-sim [--legend-progress out/progress.json] [--car FD3S] [--player-skill 0.5]   # Legend ohne Fenster: Autopilot (als Spieler mit Können k, sonst 0,8; mit Gummiband) fährt jede Rivalenleiter hoch (Niederlage beendet den Kurs), Freischaltungen + Bilanz, Fortschritt als JSON
@@ -405,7 +405,7 @@ aktive Gerät ist (sonst 0, damit ein unbenutztes Rad ohne Autocenter nicht mitd
 und Curbs als Rumble. Auf Akina mit dem Piloten (90 s, erzwungene Drifts): mittlere Kraft 0,19 bei 70 %, 0,1 % der Ticks am Anschlag, in 99 %
 der Drift-Ticks zieht das Rad Richtung Gegenlenken. Nicht mit echter Hardware geprüft (kein Lenkrad am Testrechner); Vorzeichen der Kraft je
 Treiber verschieden → FFB DIRECTION.
-DualSense (PS5-Controller, `DualSenseFeedback`, Optionen → DUALSENSE, nur sichtbar solange einer angeschlossen ist, gespeichert als
+DualSense (PS5-Controller, `DualSenseFeedback`, Optionen → DUALSENSE, immer sichtbar (auch ohne Pad einstellbar), gespeichert als
 `Settings.DualSense`; ältere Dateien bekommen die Standardwerte): alles über SDL2s Gamecontroller-API, gleicher Weg unter macOS/Windows/Linux –
 Lightbar `SDL_GameControllerSetLED`, Spieler-LEDs `SetPlayerIndex`, Rumble `GameControllerRumble`, adaptive Trigger, Mikro-LED und
 Lautsprecher-Lautstärke/-Pfad als 47-Byte-Effektblock über `SDL_GameControllerSendEffect` (`Kansei/Input/DualSense`; SDL verpackt ihn selbst:
