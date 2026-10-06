@@ -78,6 +78,11 @@ public sealed class RaceCar(string name, Vehicle vehicle, ICarDriver driver, Vec
     public bool Parked { get; internal set; }
     /// <summary>Free play: times it reached the course end (a circuit: its two laps).</summary>
     public int CourseEnds { get; internal set; }
+    /// <summary>
+    ///     Free play online: seconds this car still passes through the others (a player driving in lands on the grid, maybe on a
+    ///     car standing there); past them it stays a ghost until it is <see cref="RaceSession.ClearGap"/> m from every car.
+    /// </summary>
+    public float Protect { get; set; }
     internal float StuckFor;
     internal Coaster? Coast;
 }
@@ -156,6 +161,8 @@ public sealed class RaceSession
     public Func<RaceCar, bool>? AtCourseEnd { get; set; }
     /// <summary>Cars pass through each other (free play's ghost option): no contacts.</summary>
     public bool Ghost { get; set; }
+    /// <summary>Distance (m, centre to centre) at which a protected car (<see cref="RaceCar.Protect"/>) no longer overlaps another.</summary>
+    public const float ClearGap = 5;
 
     public RaceCar Add(string name, Vehicle vehicle, ICarDriver driver)
     {
@@ -304,6 +311,7 @@ public sealed class RaceSession
         for (var j = i + 1; j < Cars.Count; j++)
         {
             RaceCar a = Cars[i], b = Cars[j];
+            if (a.Protect > 0 || b.Protect > 0) continue;
             var c = CarCollision.Resolve(a.Vehicle, b.Vehicle, a.PrevPosition, a.PrevOrientation, b.PrevPosition, b.PrevOrientation);
             if (c is { } contact)
             {
@@ -316,6 +324,9 @@ public sealed class RaceSession
             }
         }
         Time += dt;
+        foreach (var car in Cars)
+            if (car.Protect > 0 && (car.Protect -= dt) <= 0 && Cars.Any(o => o != car && Vector3.Distance(o.Vehicle.Position, car.Vehicle.Position) < ClearGap))
+                car.Protect = dt; // still on top of someone: ghost until apart
         foreach (var car in Cars)
         {
             var v = car.Vehicle;

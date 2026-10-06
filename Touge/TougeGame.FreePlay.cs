@@ -175,6 +175,7 @@ public sealed partial class TougeGame
         else _drive.ResetNearest();
         _freeLegs++;
         StartFreeRun();
+        if (!atEnd) _hud.Timer.GoHere(); // mid-course: no start gate ahead, the clock runs from here
         Console.WriteLine($"\n[FreePlay] {(atEnd ? "Kursende: umgedreht" : "Richtung gewechselt")}, jetzt {(_drive.Reverse ? "rückwärts" : "vorwärts")} ({_freeLegs}.)");
     }
 
@@ -186,7 +187,9 @@ public sealed partial class TougeGame
     {
         _inRace = false;
         _freePending = null;
-        _versusUi!.OpenFree(_settings.FreePlay, _carName, _paint, !_drive.Car.AutomaticGearbox);
+        var c = _free!.Copy();
+        c.Reverse = _drive.Reverse; // turned around: the direction driven now
+        _versusUi!.OpenFree(c, _carName, _paint, !_drive.Car.AutomaticGearbox);
     }
 
     /// <summary>Pause → EXIT: the run goes, back to the main menu.</summary>

@@ -200,7 +200,7 @@ public sealed class Hud
         for (var i = 0; i < LapTimer.Sectors; i++)
         {
             Vector2 min = Vector2.Round(new Vector2(x + i * 68 * u, at.Y + 118 * u)), max = Vector2.Round(min + new Vector2(62, 22) * u);
-            var done = i < t.Sector;
+            var done = i < t.Sector && i >= t.From; // started mid-course: the sectors before stay unlit
             var delta = t.Delta(i);
             var fill = done ? delta is { } dd ? Style.Fade(dd <= 0 ? Style.Green : Style.Red, 0.85f) : Overlay.Rgba(1, 1, 1, 0.75f) : Style.Faint;
             Style.Slanted(o, min, max, fill, 0.3f);

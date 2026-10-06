@@ -188,12 +188,16 @@ public sealed class NetRace
         else if (net.IsHost) _referee = new Referee(net.Config.Rule, race.Goal);
     }
 
+    /// <summary>Free play: seconds a car that drives in passes through the others (<see cref="RaceCar.Protect"/>).</summary>
+    public const float SpawnGhost = 2;
+
     /// <summary>The race on <paramref name="drive"/> (its car is ours, driven by <paramref name="local"/>) with everybody of <paramref name="net"/>.</summary>
     public static NetRace Create(Drive drive, NetSession net, ICarDriver local)
     {
         var race = new RaceSession(drive.Ground, drive.Line, drive.RunOutLine);
         var r = new NetRace(race, net);
         r.ByPlayer[net.Local.Id] = race.Add(net.Local.Name, drive.Car, local);
+        if (net.Free) race.Cars[0].Protect = SpawnGhost; // a guest driving in lands on the grid, maybe on someone standing there
         foreach (var p in net.Players.Where(p => !p.IsLocal && (!net.Free || r.Drives(p)))) r.AddRemote(p);
         drive.ResetTo(0);
         var at = race.Cars[0].Track.Track(drive.Car.Position).Along;
@@ -245,7 +249,8 @@ public sealed class NetRace
     private void AddRemote(NetPlayer p)
     {
         var spec = CarSpecs.All.TryGetValue(p.Car, out var s) ? s : CarSpec.AE86;
-        ByPlayer[p.Id] = Race.Add(p.Name, new Vehicle(spec) { SurfaceGrip = Local.Vehicle.SurfaceGrip }, new RemoteDriver(p, () => Net.RaceTime));
+        var car = ByPlayer[p.Id] = Race.Add(p.Name, new Vehicle(spec) { SurfaceGrip = Local.Vehicle.SurfaceGrip }, new RemoteDriver(p, () => Net.RaceTime));
+        if (Net.Free) car.Protect = SpawnGhost; // the same on everybody else's machine
     }
 
     /// <summary>

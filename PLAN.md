@@ -181,11 +181,15 @@ Jede Phase endet mit etwas Sichtbarem/Fahrbarem.
   auf der zweiten Runde, Fenster-Host + Headless-Bot, Headless-Sitzung mit drei Bots, die nacheinander kommen und gehen). Tests `FreePlayTests` (Kursende:
   ausrollen → Entscheid → Start, STOP gibt das Auto zurück, Rundkurs, Geister, Lobby-Zeilen/KI-Feld, Regel/Protokoll, Loopback-Sitzung mit Beitritt und
   Abgang während der Fahrt). Offen: TURN AROUND nur allein (im Mehrspieler zurück zum Start, weil sich die Autos Boden und Fahrlinie einer Richtung teilen);
-  ein Späteinsteiger erscheint an der Startaufstellung (kann auf einem dort stehenden Auto landen, GHOSTS hilft); Fotomodus online grau (die Sitzung liefe
+  ein Späteinsteiger erscheint an der Startaufstellung (fährt dort erst durch die anderen durch, s. u.); Fotomodus online grau (die Sitzung liefe
   ohne Abfrage weiter); KI-Autos fahren nur die eigene Richtung; online kein KI-Verkehr; keine eigene Freifahrt-Bestenliste.
 - Stand Free Play, Nachbesserung (Review): am alten Ziel zeigt die Zeittafel COURSE END statt FINISH (`Hud.Free`, auch geteilter Bildschirm/online); Pause → TURN
   wendet auch mit Pad/Lenkrad (vorher nur Taste B); B und TURN wenden hinter derselben Schwarzblende wie das Kursende (verdeckt das Laden der Gegenrichtung aus
   der ISO); Pause-Texte der Freifahrt ohne „race“ (CONTINUE „Back to driving.“, EXIT „Back to the main menu.“); `--flow --freeplay` prüft TURN mitten auf der Strecke. Story-, Four-Passes- und Save-&-Load-Skripte nach der Menüverschiebung neu durchlaufen.
+- Stand Free Play, zweite Nachbesserung (Review): nach TURN/B mitten auf der Strecke läuft die Zeit sofort ab dem Sektor des Autos (`LapTimer.GoHere`, nie eine
+  Bestzeit); CHANGE öffnet die Lobby mit der gerade gefahrenen Richtung; online fährt ein neu hinzugekommenes Auto 2 s und danach bis 5 m Abstand durch die
+  anderen hindurch (`RaceCar.Protect`, auf jedem Rechner). Tests `SpawnGhost_ThroughUntilApart`, `Timer_GoHere_MidCourse`. Offen bleibt: TURN AROUND/RESTART/STOP,
+  Fotomodus und KI-Autos nur allein.
 
 ### Phase 5 – Feinschliff
 - Alle Strecken/Varianten, alle Autos tunen

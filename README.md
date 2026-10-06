@@ -249,7 +249,7 @@ Schwarzblende – TURN AROUND (Standard, wie ein Arcade-Freilauf: die Straße h�
 (deren Start), weiter bergauf bzw. bergab; RESTART: zurück an den Start; STOP: das Auto bleibt dort stehen und gehört wieder dem Fahrer (wenden, R, B). Auf den
 Rundkursen geht es einfach weiter (Runde um Runde). B oder Pause → TURN wendet überall (Gegenrichtung, wo das Auto steht, hinter derselben Schwarzblende; so auch mit Pad/Lenkrad), R setzt auf die Straße. Am alten Ziel zeigt die Zeittafel COURSE END statt FINISH. Die Zeit (TIMER ON) läuft je Lauf
 vom Startbogen wie in Time Attack, mit Sektoren gegen die Bestzeit dieser Richtung und der besten Zeit der Sitzung, setzt aber keinen Rekord (kein NEW RECORD,
-nichts gespeichert); OFF blendet die Zeittafel aus. KI-Autos (Rivalen aus `--battle`, Auswahl fest je Kurs, mit ihrer Lackierung, Licht und Ton): sie starten
+nichts gespeichert); nach TURN mitten auf der Strecke läuft sie sofort ab dort (Sektoren davor bleiben leer, nie eine Bestzeit, `LapTimer.GoHere`); OFF blendet die Zeittafel aus. KI-Autos (Rivalen aus `--battle`, Auswahl fest je Kurs, mit ihrer Lackierung, Licht und Ton): sie starten
 45 m + 40 m je Auto vor dem Spieler (bei jedem Wenden/Neustart neu), fahren den Kurs ab und am Kursende zurück an den Start; CRUISE = Verkehr (Können 0, 75 %
 Motormoment), die Stufen wie bei VS CPU. Pause: CONTINUE / RESET (zurück auf die Straße) / CHANGE (zurück in die Lobby: Kurs, Zeit, Wetter, Auto, KI ändern,
 START fährt sofort weiter, ohne Hauptmenü) / TURN (wenden) / PHOTO (Fotomodus) / EXIT (Hauptmenü) / QUIT GAME. Nicht aufgezeichnet (kein Replay).
@@ -259,7 +259,8 @@ rollt jedes Auto aus und kommt zurück an den Start (Rundkurse: weiter), RETRY i
 und START geht auch allein; Gäste kommen und gehen jederzeit (bis 4): wer während der Fahrt beitritt, landet in der Lobby, wählt sein Auto und fährt mit DRIVE IN
 dazu (lädt den Kurs, Rennuhr aus dem Lobby-Paket des Hosts, Median der ersten Schätzungen); Pause → EXIT eines Gastes führt zurück in die Lobby (anderes Auto,
 dann wieder DRIVE IN), ohne die Sitzung zu verlassen; wer geht, verschwindet sofort von der Strecke und aus der Liste (seine Nummer ist wieder frei). Positionen wie
-im Versus (30 Zustände/s, Interpolation/Extrapolation); neue Mitspieler-Autos lädt jeder Rechner nach (`NetRace.Sync`). EXIT des Hosts bringt alle in die Lobby.
+im Versus (30 Zustände/s, Interpolation/Extrapolation); neue Mitspieler-Autos lädt jeder Rechner nach (`NetRace.Sync`); wer hinzukommt, fährt
+2 s und danach bis 5 m Abstand durch die anderen hindurch (`RaceCar.Protect`), landet also nicht in einem dort stehenden Auto. EXIT des Hosts bringt alle in die Lobby.
 Protokoll Version 3 (FORMATS.md).
 
 Fahren (Standard, alles außer F-Tasten/M/N/B/T/1–3 unter Optionen → CONTROLLER umbelegbar): W/S oder ↑/↓ Gas/Bremse, A/D oder ←/→ lenken, Leertaste Handbremse, S im Stand halten = Rückwärts (Automatik), T Automatik/Manuell,

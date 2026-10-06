@@ -129,6 +129,44 @@ public class FreePlayTests
         }
     }
 
+    /// <summary>A car driving in on top of another passes through it until they are apart, then they touch again.</summary>
+    [Fact]
+    public void SpawnGhost_ThroughUntilApart()
+    {
+        var race = Straight(_ => false);
+        var a = race.Add("A", new Vehicle(CarSpec.AE86), new ManualDriver());
+        var me = new ManualDriver { Input = new VehicleInput(1, 0, 0) };
+        var b = race.Add("B", new Vehicle(CarSpec.AE86), me);
+        Assert.True(race.Place(a, 100, 0));
+        Assert.True(race.Place(b, 100, 0)); // the same spot
+        b.Protect = 0.2f;
+        for (var t = 0; t < 120 * 4; t++) race.Tick(Dt);
+        Assert.Equal(0, race.Contacts);
+        Assert.True(b.Protect <= 0, "still a ghost although apart");
+        Assert.True(b.Along > a.Along + RaceSession.ClearGap);
+        Assert.True(race.Place(b, a.Along - 10, 0)); // back behind A, driving into it
+        for (var t = 0; t < 120 * 2; t++) race.Tick(Dt);
+        Assert.True(race.Contacts > 0);
+    }
+
+    /// <summary>Turned mid-course: the clock runs from the car's sector on (none before it), and that run is never a best.</summary>
+    [Fact]
+    public void Timer_GoHere_MidCourse()
+    {
+        var t = new LapTimer(400, [10, 20, 30, 40]);
+        t.GoHere();
+        t.Update(150, 0.1f); // sector 2 (100–200 m)
+        Assert.Equal(LapTimer.State.Running, t.Phase);
+        Assert.Equal(1, t.From);
+        for (var along = 150f; t.Phase == LapTimer.State.Running; along += 1) t.Update(along, 0.01f);
+        Assert.Null(t.Delta(0));
+        Assert.NotNull(t.Delta(1));
+        Assert.False(t.NewRecord);
+        Assert.Equal(40, t.Best![^1]);
+        t.Restart();
+        Assert.Equal(0, t.From);
+    }
+
     private static Catalog TestCatalog() => new(
         [
             new Catalog.Course("AKINA", "AKINA", ["DAY", "NIT", "RIN"], [Vector2.Zero, Vector2.One], 7400, 300, true, false),
