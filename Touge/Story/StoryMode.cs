@@ -525,9 +525,8 @@ public sealed class StoryMode(Catalog catalog)
                 c.Marquee("STORY", false, _clock);
                 break;
             case Phase.Loading:
-                c.Fill(Canvas.White);
+                LoadingArt.Draw(c, _t);
                 c.Text($"CHAPTER {Chapter + 1}  {Text.Title}", 36, 428, 12, Grey, 0, 0.15f);
-                c.Text("Now Loading...", 476, 428, 15, Overlay.Rgba(0.92f, 0.08f, 0.06f), 1, 0.22f, 0, 0.4f);
                 break;
             case Phase.Scene:
                 SceneScreen(c);
