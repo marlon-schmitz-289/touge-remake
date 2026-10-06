@@ -22,6 +22,7 @@ public sealed partial class TougeGame
     private VsCar? _dsP2;
     private Func<int, DualSenseFeedback.Seat>? _dsSeatOf;
     private Func<int, float>? _dsRoughness;
+    private Func<int, DualSenseFeedback.Output?>? _dsTestScript;
     private UnhandledExceptionEventHandler? _dsCrash;
 
     private void LoadDualSense(Iso9660 iso)
@@ -93,7 +94,8 @@ public sealed partial class TougeGame
         _dsP2 = _dsP2Pad >= 0 && _vsCars.Count > 0 ? _vsCars[0] : null;
         (_dsTime, _dsDt) = (_dsTime + dt, dt);
         if (_dsRoughness?.Target != _drive) _dsRoughness = _drive.Roughness; // a new run makes a new Drive
-        _ds.Update(Input.Pads, _dsSeatOf ??= DsSeat, _dsRoughness, dt, DualSenseTest ? TestScript : null);
+        _ds.Update(Input.Pads, _dsSeatOf ??= DsSeat, _dsRoughness, dt, DualSenseTest ? _dsTestScript ??= TestScript : null);
+        if (DualSenseTest) TestStep();
         if (_dsPage != null) _menu!.Options.Show(_dsPage, _ds.Connected);
         if (_ds.Swiped && _jukebox != null)
         {
@@ -116,32 +118,29 @@ public sealed partial class TougeGame
 
     private float _dsLastLog = -1;
 
-    /// <summary>--dualsense-test: the scripted output, speaker cues at 13–16 s, tilt/touch logged in the last part, quit at the end.</summary>
-    private DualSenseFeedback.Output? TestScript(int pad)
+    /// <summary>--dualsense-test, once per frame: speaker cues at 13–16 s, tilt/touch of the first DualSense logged in the last part, quit at the end (with or without a pad).</summary>
+    private void TestStep()
     {
         var t = _dsTime;
-        var pads = Input.Pads;
-        if (pad == 0)
+        if (Crossed(13) || Crossed(14) || Crossed(15)) _ds!.Speak("CAR010");
+        if (Crossed(16)) _ds!.Speak("CAR011");
+        if (Crossed(17)) _settings.DualSense.Gyro = true; // motion reports on for the tilt part
+        if (t > 17 && t - _dsLastLog >= 0.5f && Input.Pads.FirstOrDefault(p => p.IsDualSense) is { } p)
         {
-            if (Crossed(13) || Crossed(14) || Crossed(15)) _ds!.Speak("CAR010");
-            if (Crossed(16)) _ds!.Speak("CAR011");
-            if (Crossed(17)) _settings.DualSense.Gyro = true; // motion reports on for the tilt part
-            if (t > 17 && t - _dsLastLog >= 0.5f)
-            {
-                _dsLastLog = t;
-                var p = pads[pad];
-                Console.WriteLine($"[DualSense] {t:0.0} s Beschleunigung {p.Accel.X:0.00} {p.Accel.Y:0.00} {p.Accel.Z:0.00} m/s², Neigung {DualSenseFeedback.Tilt(p.Accel, 0.5f):+0.00;-0.00}, Touch {(p.Touch is { } tp ? $"{tp.X:0.00} {tp.Y:0.00}" : "-")}");
-            }
-            if (t >= DualSenseFeedback.ScriptSeconds)
-            {
-                Console.WriteLine("[DualSense] Test fertig");
-                Window.ShouldClose = true;
-            }
+            _dsLastLog = t;
+            Console.WriteLine($"[DualSense] {t:0.0} s Beschleunigung {p.Accel.X:0.00} {p.Accel.Y:0.00} {p.Accel.Z:0.00} m/s², Neigung {DualSenseFeedback.Tilt(p.Accel, 0.5f):+0.00;-0.00}, Touch {(p.Touch is { } tp ? $"{tp.X:0.00} {tp.Y:0.00}" : "-")}");
         }
-        return DualSenseFeedback.Script(t, pads[pad].Accel);
+        if (t >= DualSenseFeedback.ScriptSeconds && !Window.ShouldClose)
+        {
+            Console.WriteLine(_ds!.Connected ? "[DualSense] Test fertig" : "[DualSense] Test fertig: kein DualSense angeschlossen");
+            Window.ShouldClose = true;
+        }
 
         bool Crossed(float at) => t >= at && t - _dsDt < at;
     }
+
+    /// <summary>--dualsense-test: the scripted output of pad <paramref name="pad"/>.</summary>
+    private DualSenseFeedback.Output? TestScript(int pad) => DualSenseFeedback.Script(_dsTime, Input.Pads[pad].Accel);
 
     private void DisposeDualSense()
     {
