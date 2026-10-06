@@ -703,7 +703,7 @@ public sealed partial class TougeGame
             default: // the driving cameras on the focused car
                 var view = ReplayViewer.Driving(_viewer.Cam)!.Value;
                 var (body, model) = FocusModel();
-                (_pos, _camLook, _fov) = CameraRig.Place(view, ref _follow, _camSnap, dt, pose, body, model.Mounts, _settings.Fov * MathF.PI / 180, _course.Hull);
+                (_pos, _camLook, _fov) = CameraRig.Place(view, ref _follow, _camSnap, dt, pose, body, model.Mounts, _settings.Fov * MathF.PI / 180, _course.Hull, _settings.CameraSmoothing);
                 _onBoard = view is CameraView.Hood or CameraView.Cockpit ? view : null;
                 break;
         }
