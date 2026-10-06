@@ -60,25 +60,29 @@ float beam(int i, vec3 dir)
     float below = cut - y;
     float vertical = smoothstep(-soft, soft, below) * pow(0.02 / (0.02 + max(below, 0.0)), 2.75);
     float sx = mix(0.28, 0.36, high), wide = mix(0.9, 1.2, high);
-    float across = exp(-x * x / (sx * sx)) + 0.3 * exp(-x * x / (wide * wide));
+    float across = exp(-x * x / (sx * sx)) + 0.1 * exp(-x * x / (wide * wide));
     return vertical * across * mix(1.0, 2.5, high);
 }
 
 // Irradiance cap: what the local lights throw onto a surface saturates softly towards LightCap — per light and in sum —
 // so a wall in front of the bumper, several lamps overlapping or a lamp right next to a surface never blow out (no
-// runaway before tonemapping). Applied after N·L: a grazing road keeps its full share.
-const float LightCap = 1.0;
+// runaway before tonemapping). Applied after N·L: a grazing road keeps its full share. A headlight saturates far lower
+// (HeadCap, per lamp): rails and verges facing the beam get ~10× the grazing road's light, at LightCap × night exposure they burn
+// flat white; at HeadCap they stay lit with their texture while the road keeps its share.
+const float LightCap = 1.0, HeadCap = 0.08; // HeadCap per lamp: two lamps ≈ 0.15
 
-vec3 capped(vec3 e)
+vec3 capped(vec3 e, float cap)
 {
     float l = dot(e, vec3(0.2126, 0.7152, 0.0722));
-    return l > 1e-6 ? e * (LightCap * (1.0 - exp(-l / LightCap)) / l) : e;
+    return l > 1e-6 ? e * (cap * (1.0 - exp(-l / cap)) / l) : e;
 }
+
+vec3 capped(vec3 e) { return capped(e, LightCap); }
 
 const int Lights = 8;
 const float TailRange = 8.0;
 const float FogLightCap = 0.3; // most irradiance a lamp lends a surface in dense fog
-const float HeadVeil = 0.08, HeadVeilCap = 0.07; // headlight light scattered by dense fog: share of the street lamps' glow, most it adds
+const float HeadVeil = 0.5, HeadVeilCap = 0.18; // headlight light scattered by dense fog: share of the street lamps' glow, most it adds
 
 // Point light j (0–3 street lights, 4–5 rear lamps): position + radius, colour. A rear lamp lights surfaces by the
 // night share (uTailColor.w) but stays `mirror`ed at full strength: a brake light streaks on a wet road by day too.
@@ -123,7 +127,7 @@ vec3 dynamicLight(vec3 p, vec3 n, vec3 v, float shininess, inout vec3 spec)
         vec3 l;
         vec3 e = lightIn(i, p, false, l);
         if (e == vec3(0.0)) continue; // out of reach (most lights for most pixels): no specular power either
-        e = capped(e * max(dot(n, l), 0.0));
+        e = capped(e * max(dot(n, l), 0.0), i < 2 ? HeadCap : LightCap);
         sum += e;
         hl += e * (norm * pow(max(dot(n, normalize(l + v)), 0.0), shininess));
     }
