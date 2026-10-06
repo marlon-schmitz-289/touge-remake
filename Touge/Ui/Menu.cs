@@ -28,7 +28,8 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     ///     Quit: close the game (confirmed in the pause menu); Replay: watch the run (pause, result); Photo: photo mode (pause);
     ///     Rivals: back to the Legend of the Streets rival ladder.
     /// </summary>
-    public enum Action { None, Load, Resume, Restart, Exit, PreviewCar, SettingsChanged, Quit, Replay, Photo, Rivals }
+    /// <remarks>ResetCar: free play's pause RESET (back onto the road where the car is).</remarks>
+    public enum Action { None, Load, Resume, Restart, Exit, PreviewCar, SettingsChanged, Quit, Replay, Photo, Rivals, ResetCar, TurnAround }
 
     /// <summary>A finished run for the result sheet.</summary>
     /// <param name="Deltas">Per sector against the best run it was compared with (null without one).</param>
@@ -50,8 +51,18 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
 
     /// <summary>Pause buttons; "Quit Game" only on desktop builds (<see cref="QuitPrompt"/>).</summary>
     public static readonly string[] PauseButtons = ["Continue", "Retry", "Replay", "Photo", "Exit", .. QuitPrompt.Available ? new[] { "Quit Game" } : []],
-        ResultButtons = ["RETRY", "REPLAY", "COURSE SELECT", "CAR SELECT", "EXIT"];
-    private static readonly string[] PauseCaptions = ["Return to the race.", "Restart the race from the beginning.", "Watch the run so far.", "Free camera, take a picture.", "Quit this race.", "Close the game."];
+        ResultButtons = ["RETRY", "REPLAY", "COURSE SELECT", "CAR SELECT", "EXIT"],
+        /// <summary>Free play's pause: back onto the road, CHANGE (the free play lobby: course, time, weather, car …), photo.</summary>
+        FreePauseButtons = ["Continue", "Reset", "Change", "Turn", "Photo", "Exit", .. QuitPrompt.Available ? new[] { "Quit Game" } : []];
+    private static readonly Dictionary<string, string> PauseCaptions = new()
+    {
+        ["Continue"] = "Return to the race.", ["Retry"] = "Restart the race from the beginning.", ["Replay"] = "Watch the run so far.",
+        ["Photo"] = "Free camera, take a picture.", ["Exit"] = "Quit this race.", ["Quit Game"] = "Close the game.",
+        ["Reset"] = "Back onto the road where you are.", ["Turn"] = "Turn around: drive the other way from here.", ["Change"] = "Course, time, weather, car, AI cars: change and drive on.",
+    };
+    /// <summary>Free play's captions where the race's would say "race".</summary>
+    private static readonly Dictionary<string, string> FreeCaptions = new() { ["Continue"] = "Back to driving.", ["Exit"] = "Back to the main menu." };
+    private string[] Pause => FreePause ? FreePauseButtons : PauseButtons;
     private readonly QuitPrompt _quit = new();
 
     public Screen Current { get; private set; }
@@ -70,7 +81,12 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     public bool NoRetry { get; set; }
     /// <summary>Versus: the pause's Replay and Photo are greyed out (versus runs are not recorded; an online race runs on).</summary>
     public bool NoReplay { get; set; }
-    private bool PauseOff(int i) => i == 1 && NoRetry || i is 2 or 3 && NoReplay;
+    private bool PauseOff(int i) => Pause[i] switch { "Retry" => NoRetry, "Replay" or "Photo" => NoReplay, _ => false };
+    // ---- free play (Ui/FreePlay, VERSUS rule FREE RUN): the telop says FREE PLAY and there is no countdown; FreePause: the solo run's pause buttons
+    public bool Free { get; set; }
+    public bool FreePause { get; set; }
+    /// <summary>Seconds into the intro when the cars may go: GO, or in free play the telop's end.</summary>
+    private float IntroGo => Free ? CountAt : GoAt;
     /// <summary>Original UI sound by SYSSE name.</summary>
     public Action<string>? Sound { get; set; }
 
@@ -104,7 +120,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     public bool Manual => _manual;
 
     /// <summary>The game is held (no physics, no driving) while this shows; the intro lets go at GO.</summary>
-    public bool Freezes => Current is not (Screen.None or Screen.Finish) && !(Current == Screen.Intro && _t >= GoAt);
+    public bool Freezes => Current is not (Screen.None or Screen.Finish) && !(Current == Screen.Intro && _t >= IntroGo);
 
     /// <summary>Drawn over the running race with its HUD (the game builds the HUD first).</summary>
     public bool OverRace => Current is Screen.Intro or Screen.Pause;
@@ -176,7 +192,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     public void Close() => Current = Screen.None;
 
     /// <summary>The cursor on the pause/result button <paramref name="label"/> (back from the replay viewer or photo mode).</summary>
-    public void Select(string label) => _row = Math.Max(0, Array.IndexOf(Current == Screen.Pause ? PauseButtons : Buttons, label));
+    public void Select(string label) => _row = Math.Max(0, Array.IndexOf(Current == Screen.Pause ? Pause : Buttons, label));
 
     private void Enter(Screen s, bool fadeIn)
     {
@@ -363,6 +379,11 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                 return Action.Load;
             case Screen.Intro:
                 if (k.Ok && _t < CountAt) _t = CountAt - dt; // START skips the telop
+                if (Free)
+                {
+                    if (_t >= CountAt) Current = Screen.None;
+                    break;
+                }
                 if (Crossed(CountAt) || Crossed(CountAt + 1) || Crossed(CountAt + 2)) Sound?.Invoke("CAR010");
                 if (Crossed(GoAt)) Sound?.Invoke("CAR011");
                 if (_t >= IntroEnd) Current = Screen.None;
@@ -374,8 +395,8 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                 }
                 else if (k.X != 0)
                 {
-                    var n = Math.Clamp(_row + k.X, 0, PauseButtons.Length - 1);
-                    while (PauseOff(n) && n + k.X >= 0 && n + k.X < PauseButtons.Length) n += k.X;
+                    var n = Math.Clamp(_row + k.X, 0, Pause.Length - 1);
+                    while (PauseOff(n) && n + k.X >= 0 && n + k.X < Pause.Length) n += k.X;
                     if (PauseOff(n)) n = _row;
                     if (n != _row) Sound?.Invoke("SYS005");
                     _row = n;
@@ -384,9 +405,18 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                 else if (k.Ok)
                 {
                     Sound?.Invoke("SYS006");
-                    switch (PauseButtons[_row])
+                    switch (Pause[_row])
                     {
                         case "Continue": return Resume();
+                        case "Reset":
+                            Resume();
+                            return Action.ResetCar;
+                        case "Turn":
+                            Resume();
+                            return Action.TurnAround;
+                        case "Change":
+                            Leave(Screen.None, Action.Rivals);
+                            break;
                         case "Retry" when InFourPass && FourPass!.Index > 0:
                             RestartFourPass(); // back to stage 1: another course
                             break;
@@ -697,6 +727,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
         c.Text(tags, 490 + shift, 234, 13, Canvas.White, 1, 0.12f, 0.08f);
         FourPassTelop(c, shift);
         if (Versus != null) c.Text($"VS  {Versus}", 490 + shift, 258, 17, Canvas.WordRed, 1, 0.15f, 0.08f, 0.3f);
+        else if (Free) c.Text("FREE PLAY", 490 + shift, 258, 17, Canvas.WordRed, 1, 0.15f, 0.08f, 0.3f);
     }
 
     /// <summary>3, 2, 1 in big red, GO! in the racing orange; each pops in from 1.5× and fades at its end.</summary>
@@ -718,19 +749,20 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
         c.O.FadeText(0.5f); // the HUD's text lies above every shape: dim it too
         c.Lettering("PAUSE", 256, 128, 44, Overlay.Rgba(1, 0.25f, 0.2f), Overlay.Rgba(0.75f, 0, 0), 0.5f, 0.2f, true);
         // caption bar, then the strip with the "Pause" tab and the chrome buttons (centred)
-        var step = MathF.Min(86, 470f / PauseButtons.Length);
-        var x0 = 256 - (PauseButtons.Length * step - 10) / 2f;
+        var buttons = Pause;
+        var step = MathF.Min(86, 470f / buttons.Length);
+        var x0 = 256 - (buttons.Length * step - 10) / 2f;
         c.Carbon(x0 - 16, 328, 512 - x0 + 16, 352, 1, false);
-        c.Text(PauseCaptions[_row], 256, 345, 12, Canvas.White, 0.5f, 0.12f);
+        c.Text(FreePause && FreeCaptions.TryGetValue(buttons[_row], out var fc) ? fc : PauseCaptions[buttons[_row]], 256, 345, 12, Canvas.White, 0.5f, 0.12f);
         var grey = Canvas.Shade(0.08f, 0.08f, 0.08f, 1, 0.4f);
         c.Carbon(x0 - 16, 358, 512 - x0 + 16, 412, 1, false);
         c.Text("Pause", x0 - 6, 372, 11, Canvas.White, 0, 0.2f);
-        for (var i = 0; i < PauseButtons.Length; i++)
+        for (var i = 0; i < buttons.Length; i++)
         {
             var x = x0 + i * step;
             var off = PauseOff(i);
             c.Plate(x, 380, step - 10, 22, off ? 0.5f : 1);
-            c.Text(PauseButtons[i], x + (step - 10) / 2, 396, 12, off ? grey : Canvas.Shade(0.08f, 0.08f, 0.08f, 1), 0.5f, 0.18f);
+            c.Text(buttons[i], x + (step - 10) / 2, 396, 12, off ? grey : Canvas.Shade(0.08f, 0.08f, 0.08f, 1), 0.5f, 0.18f);
         }
         var sx = x0 + _row * step;
         c.Glow(sx - 4, 376, sx + step - 6, 406, Canvas.Pulse(Theta));

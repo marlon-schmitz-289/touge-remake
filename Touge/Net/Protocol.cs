@@ -12,12 +12,13 @@ public enum Phase : byte { Lobby, Loading, Countdown, Race, Results }
 
 /// <summary>
 ///     <see cref="Battle"/>: two players, the original's battle (first to the goal, or a breakaway gap of
-///     <see cref="Race.Battle.Breakaway"/>); <see cref="Race"/>: 2–4 players, finishing order.
+///     <see cref="Race.Battle.Breakaway"/>); <see cref="Race"/>: 2–4 players, finishing order; <see cref="Free"/>: free play,
+///     no race state — 1–4 players drive the course, join and leave any time, back to the start at the course end.
 /// </summary>
-public enum NetRule : byte { Battle, Race }
+public enum NetRule : byte { Battle, Race, Free }
 
-/// <summary>What the host chose: course + time of day (AKINA_DAY/_NIT/_RIN), direction, fog, rule.</summary>
-public sealed record RaceConfig(string CourseTime = "AKINA_DAY", bool Reverse = false, bool Fog = false, NetRule Rule = NetRule.Battle);
+/// <summary>What the host chose: course + time of day (AKINA_DAY/_NIT/_RIN), direction, fog, rule; <paramref name="Ghost"/>: cars pass through each other.</summary>
+public sealed record RaceConfig(string CourseTime = "AKINA_DAY", bool Reverse = false, bool Fog = false, NetRule Rule = NetRule.Battle, bool Ghost = false);
 
 /// <summary>A player as the host lists it: id 0 is the host, ping in ms (the host's measurement), the race it has loaded.</summary>
 public sealed record PlayerInfo(byte Id, string Name, string Car, byte Paint, bool Ready, ushort PingMs, int LoadedRace);
@@ -84,7 +85,8 @@ public sealed record Hello(uint Token, string Name, string Car, byte Paint, bool
 
 /// <summary>
 ///     Host → each client, several times a second: the whole session state (idempotent, so a lost one costs nothing):
-///     the recipient's id, phase, race number, the host's choice, the players and, in the countdown, the seconds to GO.
+///     the recipient's id, phase, race number, the host's choice, the players and the seconds to GO (in the race negative:
+///     a player joining a free play session late sets its race clock by it).
 /// </summary>
 public sealed record Lobby(byte YouId, Phase Phase, int RaceId, RaceConfig Config, PlayerInfo[] Players, float SecondsToGo, uint Seq = 0) : INetMessage
 {
@@ -95,7 +97,7 @@ public sealed record Lobby(byte YouId, Phase Phase, int RaceId, RaceConfig Confi
         w.U8((byte)Phase);
         w.I32(RaceId);
         w.Str(Config.CourseTime);
-        w.U8((byte)((Config.Reverse ? 1 : 0) | (Config.Fog ? 2 : 0)));
+        w.U8((byte)((Config.Reverse ? 1 : 0) | (Config.Fog ? 2 : 0) | (Config.Ghost ? 4 : 0)));
         w.U8((byte)Config.Rule);
         w.U8((byte)Players.Length);
         foreach (var p in Players)
@@ -196,7 +198,7 @@ public sealed record Bye(byte Id, string Reason = "") : INetMessage
 /// </summary>
 public static class Protocol
 {
-    public const byte Version = 2;
+    public const byte Version = 3;
     public const int MaxPacket = 1200, MaxString = 32, MaxList = 4;
     private const byte Magic0 = (byte)'I', Magic1 = (byte)'D';
 
@@ -337,11 +339,11 @@ public static class Protocol
         var raceId = r.I32();
         var course = r.Str();
         var flags = r.U8();
-        var rule = r.U8() == 1 ? NetRule.Race : NetRule.Battle;
+        var rule = r.U8() switch { 1 => NetRule.Race, 2 => NetRule.Free, _ => NetRule.Battle };
         var n = r.Count();
         var players = new PlayerInfo[n];
         for (var i = 0; i < n; i++) players[i] = new PlayerInfo(r.Id(), r.Str(), r.Str(), r.U8(), r.U8() != 0, r.U16(), r.I32());
-        return new Lobby(you, phase, raceId, new RaceConfig(course, (flags & 1) != 0, (flags & 2) != 0, rule), players, r.F32(), r.U32());
+        return new Lobby(you, phase, raceId, new RaceConfig(course, (flags & 1) != 0, (flags & 2) != 0, rule, (flags & 4) != 0), players, r.F32(), r.U32());
     }
 
     private static CarState ReadState(ref Reader r)

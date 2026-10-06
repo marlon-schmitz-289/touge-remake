@@ -39,7 +39,8 @@ public sealed class EffectsRenderer : IDisposable
             for (var q = 0; q < 2; q++)
                 _pipeline[k, q] = world.ScenePipeline(_shader, WorldVertex.Layout, MultisampleState.Disabled with { SampleCount = WorldRenderer.Samples(q) },
                     true, $"effect-{(Kind)k}", blend[k]);
-            _rings[k] = new TransientBufferRing(device, capacity[k] * 6 * WorldVertex.Size, BufferUsage.Vertex, $"effect-{(Kind)k}");
+            // twice the capacity: a split screen draws every effect once per view in one frame (a long free run fills the skid marks)
+            _rings[k] = new TransientBufferRing(device, 2 * capacity[k] * 6 * WorldVertex.Size, BufferUsage.Vertex, $"effect-{(Kind)k}");
         }
         _rainShader = device.CreateShader(ShaderLoader.LoadGraphics(typeof(EffectsRenderer).Assembly, "rain", "rain", "rain"));
         for (var q = 0; q < 2; q++)

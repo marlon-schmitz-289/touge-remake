@@ -45,13 +45,14 @@ public class FrontEndTests
         Run(1, (0, 1, false, false)); // TIME ATTACK
         Run(0.5f, (0, 1, false, false)); // VERSUS
         Assert.Equal("VERSUS", FrontEnd.Modes[f.Index]);
+        Run(0.5f, (0, 1, false, false)); // FREE PLAY
+        Assert.Equal("FREE PLAY", FrontEnd.Modes[f.Index]);
         Run(0.5f, (0, 1, false, false)); // STORY
         Run(FrontEnd.Fade + 0.1f, (0, 0, true, false)); // STORY is built: leaves for it
         Assert.Equal(FrontEnd.Result.Story, r);
         f.Open(FrontEnd.Step.Modes); // the story hands back: same entry selected
-        Run(0.5f, (0, -1, false, false));
-        Run(0.5f, (0, -1, false, false));
-        Assert.Equal(["sys002", "SYS005", "SYS005", "SYS005", "SYS005", "SYS005", "SYS006", "SYS005", "SYS005"], sounds);
+        for (var i = 0; i < 3; i++) Run(0.5f, (0, -1, false, false));
+        Assert.Equal(["sys002", "SYS005", "SYS005", "SYS005", "SYS005", "SYS005", "SYS005", "SYS006", "SYS005", "SYS005", "SYS005"], sounds);
 
         f.Update((0, 0, true, false), 1 / 60f); // decide TIME ATTACK
         Run(FrontEnd.Fade - 0.1f);

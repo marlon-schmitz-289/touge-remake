@@ -201,7 +201,7 @@ public sealed partial class TougeGame
     private static readonly (string At, float Wait, string? Shot, int X, int Y, bool Ok, bool Back)[] StoryFlowScript =
     [
         ("Boot", 1.2f, null, 0, 0, true, false), ("Logo", 1, null, 0, 0, true, false), ("Title", 1.5f, null, 0, 0, true, false),
-        ("Modes", 1, null, 0, 1, false, false), ("Modes", 0.6f, null, 0, 1, false, false), ("Modes", 0.6f, null, 0, 1, false, false), ("Modes", 0.8f, "modes_story", 0, 0, true, false),
+        ("Modes", 1, null, 0, 1, false, false), .. Enumerable.Repeat(("Modes", 0.6f, (string?)null, 0, 1, false, false), 3), ("Modes", 0.8f, "modes_story", 0, 0, true, false),
         ("StorySelect", 1.5f, "select", 0, -1, false, false), ("StorySelect", 0.8f, "select_ch7", 1, 0, false, false),
         ("StorySelect", 0.8f, "select_part2_locked", -1, 0, false, false), ("StorySelect", 0.5f, null, 0, -1, false, false),
         ("StorySelect", 0.6f, null, 0, 0, true, false),
