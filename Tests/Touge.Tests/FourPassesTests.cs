@@ -131,7 +131,7 @@ public class FourPassesTests
         Assert.Equal(Menu.Screen.Maker, m.Current);
         Assert.True(m.FourPass!.Wet);
         Run(0.1f, ok);
-        Run(Menu.Fade + 0.1f, ok); // model → car
+        Run(Menu.Fade + 0.1f, ok); // the maker's cars
         Run(0.1f, ok); // gearbox
         actions.Clear();
         Run(Menu.Fade + Menu.LoadAt + 0.1f, ok);

@@ -9,8 +9,8 @@ namespace Touge.Ui;
 ///     The game-flow screens behind the main menu, rebuilt in the original's style with <see cref="Canvas"/> (no original
 ///     textures), flow after its game-flow controller 0x1702A0 (Time Attack: course first, then the car):
 ///     course select (3 × 4 grid as K_CRSSEL, map line in the carbon "monitor" instead of the photo) → route → time of
-///     day → weather (choice pairs as T_TRIAL, steps with one option skipped; FOG, an addition, over the day or night course) → maker select (T_MKSEL: 7 chrome plates,
-///     carbon MODEL panel) → car (the 3D car turning behind, body colour) → transmission → loading (white, "Now Loading...")
+///     day → weather (choice pairs as T_TRIAL, steps with one option skipped; FOG, an addition, over the day or night course) → car select in two steps (<see cref="CarPicker"/>:
+///     maker as T_MKSEL's 7 chrome plates, then that maker's cars beside the turning 3D car, body colour) → transmission → loading (white, "Now Loading...")
 ///     → course telop and 3-2-1-GO (TLP_STG, CAR010/CAR011) → race; pause bar (Continue/Retry/Exit, PAUSE.PAC) →
 ///     finish banner (FINISH.PAC) → result sheet with tallied rows (RESULT.PAC, NAME001) and the action buttons
 ///     (ACTCHOICE: Retry, Course Select, Car Select, Exit). Records (REC_TEX) and Options (<see cref="Ui.Options"/>: OPSL sections, OPGM rows) hang off the main
@@ -81,11 +81,12 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     public bool FreeBattle { get; set; }
     public static readonly string[] FreeBattleButtons = ["RETRY", "REPLAY", "CHANGE SETTINGS", "EXIT"];
     /// <summary>Cars not won yet (Legend's secret car): shown as ?????, not selectable.</summary>
-    public Func<string, bool>? CarLocked { get; set; }
-    private bool Locked(int car) => CarLocked?.Invoke(catalog.Cars[car].Id) == true;
+    public Func<string, bool>? CarLocked { get => _picker.CarLocked; set => _picker.CarLocked = value; }
 
-    private int _slot, _maker, _model, _car, _paint, _choice, _row;
-    private bool _reverse, _night, _wet, _fog, _manual, _inModels, _loadAsked, _fadeIn;
+    /// <summary>MAKER and CAR (<see cref="CarPicker"/>, shared with the lobbies).</summary>
+    private readonly CarPicker _picker = new(catalog);
+    private int _slot, _choice, _row;
+    private bool _reverse, _night, _wet, _fog, _manual, _loadAsked, _fadeIn;
     private float _t, _clock, _leave = -1;
     private Screen _next;
     private Action _then;
@@ -98,8 +99,8 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     public bool Reverse => InFourPass ? FourPass!.Current.Reverse : _reverse;
     /// <summary>Fog over <see cref="CourseTime"/> (always a _DAY or _NIT course).</summary>
     public bool Fog => _fog;
-    public string CarId => catalog.Cars[_car].Id;
-    public int Paint => _paint;
+    public string CarId => catalog.Cars[_picker.Car].Id;
+    public int Paint => _picker.Paint;
     public bool Manual => _manual;
 
     /// <summary>The game is held (no physics, no driving) while this shows; the intro lets go at GO.</summary>
@@ -126,8 +127,20 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     /// <summary>Rain over a dry course (a story chapter): the telop says WET.</summary>
     public bool Rain { get; set; }
 
-    /// <summary>Screenshots: the maker screen's model list with row <paramref name="row"/> selected.</summary>
-    public void ShowModel(int row) => (_inModels, _model) = (true, Math.Clamp(row, 0, MakerCars(_maker).Length - 1));
+    /// <summary>
+    ///     Screenshots: on the maker screen maker <paramref name="row"/>, on the car screen the maker's car in row
+    ///     <paramref name="row"/>; PreviewCar when that car has to be loaded.
+    /// </summary>
+    public Action ShowRow(int row)
+    {
+        if (Current == Screen.Maker) _picker.Open(_picker.Cars(Math.Clamp(row, 0, Catalog.Makers.Length - 1))[0], 0);
+        else if (Current == Screen.Car && _picker.Cars(_picker.Maker) is var cars)
+        {
+            _picker.Pick(cars[Math.Clamp(row, 0, cars.Length - 1)]);
+            if (!_picker.Locked(_picker.Car)) return Action.PreviewCar;
+        }
+        return Action.None;
+    }
 
     /// <summary>Opens <paramref name="s"/> with the selection at the given course/direction/car/paint; backing out of it leaves to the main menu.</summary>
     public void Open(Screen s, string courseTime, bool reverse, string car, int paint, bool manual = false, bool fog = false)
@@ -136,10 +149,8 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
         if (s is not (Screen.Pause or Screen.Intro)) FourPass = null; // over a four-pass stage the run goes on
         _slot = FourPass != null ? FourSlot : Math.Max(0, catalog.Courses.ToList().FindIndex(c => c.Id == id));
         (_night, _wet, _fog, _reverse) = (courseTime.EndsWith("_NIT"), courseTime.EndsWith("_RIN"), fog, reverse);
-        _car = Math.Max(0, catalog.Cars.ToList().FindIndex(c => c.Id == car));
-        if (Locked(_car)) (_car, paint) = (0, 0);
-        (_paint, _manual) = (paint, manual);
-        _maker = Array.IndexOf(Catalog.Makers, catalog.Cars[_car].Maker);
+        _picker.Open(catalog.Cars.ToList().FindIndex(c => c.Id == car), paint);
+        _manual = manual;
         _back.Clear();
         _leave = -1;
         Enter(s, s is not (Screen.Pause or Screen.Intro));
@@ -169,7 +180,8 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
 
     private void Enter(Screen s, bool fadeIn)
     {
-        (Current, _t, _fadeIn, _inModels, _loadAsked) = (s, 0, fadeIn, false, false);
+        (Current, _t, _fadeIn, _loadAsked) = (s, 0, fadeIn, false);
+        if (s is Screen.Maker or Screen.Car) _picker.Current = s == Screen.Maker ? CarPicker.Step.Maker : CarPicker.Step.Car;
         _choice = s switch
         {
             Screen.Route => _reverse ? 1 : 0, Screen.Time => _night && Times().Length > 1 ? 1 : 0, Screen.Weather => Math.Max(0, Array.IndexOf(Weathers(), _fog ? "FOG" : _wet ? "WET" : "DRY")),
@@ -245,8 +257,6 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
             Go(Screen.Maker);
         }
     }
-
-    private int[] MakerCars(int maker) => [.. Enumerable.Range(0, catalog.Cars.Count).Where(i => catalog.Cars[i].Maker == Catalog.Makers[maker])];
 
     private static int Wrap(int i, int n) => (i % n + n) % n;
 
@@ -327,53 +337,20 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                     }
                 }
                 break;
-            case Screen.Maker:
-                if (k.Y != 0)
+            case Screen.Maker or Screen.Car:
+                switch (_picker.Update(k, Sound))
                 {
-                    if (_inModels) _model = Wrap(_model + k.Y, MakerCars(_maker).Length);
-                    else _maker = Wrap(_maker + k.Y, Catalog.Makers.Length);
-                    Sound?.Invoke("SYS005");
+                    case CarPicker.Result.MakerChosen:
+                        Go(Screen.Car);
+                        return _picker.Locked(_picker.Car) ? Action.None : Action.PreviewCar;
+                    case CarPicker.Result.Moved when !_picker.Locked(_picker.Car): return Action.PreviewCar;
+                    case CarPicker.Result.Decide:
+                        Go(Screen.Gearbox);
+                        break;
+                    case CarPicker.Result.Back:
+                        Back();
+                        break;
                 }
-                else if (k.Ok && !_inModels)
-                {
-                    Sound?.Invoke("SYS006");
-                    _inModels = true;
-                    _model = Math.Max(0, Array.IndexOf(MakerCars(_maker), _car));
-                }
-                else if (k.Ok && Locked(MakerCars(_maker)[_model])) Sound?.Invoke("BEEP001");
-                else if (k.Ok)
-                {
-                    Sound?.Invoke("SYS006");
-                    var car = MakerCars(_maker)[_model];
-                    if (car != _car) (_car, _paint) = (car, 0);
-                    Go(Screen.Car);
-                    return Action.PreviewCar;
-                }
-                else if (k.Back && _inModels)
-                {
-                    Sound?.Invoke("BEEP001");
-                    _inModels = false;
-                }
-                else if (k.Back) Back();
-                break;
-            case Screen.Car:
-                if (k.X != 0 || k.Y != 0)
-                {
-                    Sound?.Invoke("SYS005");
-                    if (k.X != 0)
-                    {
-                        var cars = MakerCars(_maker).Where(i => !Locked(i) || i == _car).ToArray();
-                        (_car, _paint) = (cars[Wrap(Array.IndexOf(cars, _car) + k.X, cars.Length)], 0);
-                    }
-                    else _paint = Wrap(_paint + k.Y, catalog.Cars[_car].Paints.Length);
-                    return Action.PreviewCar;
-                }
-                if (k.Ok)
-                {
-                    Sound?.Invoke("SYS006");
-                    Go(Screen.Gearbox);
-                }
-                else if (k.Back) Back();
                 break;
             case Screen.Loading:
                 if (_loadAsked)
@@ -536,11 +513,11 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                 break;
             case Screen.Maker:
                 c.Backdrop(_clock);
-                MakerScreen(c);
+                _picker.DrawMaker(c, Theta, Legend ? "Rivals" : "Return");
                 c.Marquee("SELECT A MAKER", false, _clock);
                 break;
             case Screen.Car or Screen.Gearbox:
-                CarScreen(c);
+                _picker.DrawCar(c, Theta, In(0.25f), Current == Screen.Car);
                 if (Current == Screen.Gearbox)
                 {
                     c.Fill(Overlay.Rgba(0, 0, 0, 0.45f));
@@ -703,73 +680,6 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
         }
         if (sub > 0)
             for (var i = 0; i < 2; i++) c.Text(i == 0 ? "Automatic" : "Manual, shift yourself", 156 + i * 200, mid + 44, 12, Style.Fade(Canvas.White, a), 0.5f, 0.15f);
-    }
-
-    private void MakerScreen(Canvas c)
-    {
-        for (var i = 0; i < Catalog.Makers.Length; i++)
-        {
-            float x = 24, y = 70 + i * 52;
-            var sel = i == _maker;
-            c.Plate(x, y, 220, 40, sel ? 1 : 0.62f);
-            // white name field with the maker in heavy dark letters (plain text, no brand logos)
-            Vector2 min = Vector2.Round(c.P(x + 26, y + 7)), max = Vector2.Round(c.P(x + 206, y + 33));
-            c.O.Rect(min, max, Canvas.Shade(0.96f, 0.96f, 0.97f, sel ? 1 : 0.7f));
-            c.Fit(Catalog.Makers[i], x + 116, y + 28, 150, 0.5f, Canvas.Shade(0.12f, 0.12f, 0.14f, 1), 0.08f, 0, 20);
-        }
-        if (!_inModels) c.Glow(18, 64 + _maker * 52, 250, 116 + _maker * 52, Canvas.Pulse(Theta));
-        // model panel with its tab
-        var cars = MakerCars(_maker);
-        c.Carbon(262, 150, 496, 382);
-        c.Plate(272, 132, 90, 24, 1);
-        c.Text("MODEL", 317, 149, 13, Canvas.Shade(0.1f, 0.1f, 0.1f, 1), 0.5f, 0.15f);
-        for (var i = 0; i < cars.Length; i++)
-        {
-            var y = 182 + i * 22;
-            var sel = _inModels && i == _model;
-            if (sel) c.Diamond(282, y - 4, 5);
-            c.Fit(Locked(cars[i]) ? "?????" : catalog.Cars[cars[i]].Name, 292, y, 190, 0, Locked(cars[i]) ? Overlay.Rgba(1, 1, 1, 0.35f) : sel ? Canvas.Yellow : Canvas.White, 0.15f, 0.06f, 13);
-        }
-        if (_inModels) c.Glow(270, 166 + _model * 22, 490, 188 + _model * 22, Canvas.Pulse(Theta));
-        Hint(c, _inModels && Locked(cars[_model]) ? Race.Legend.SecretCarHint
-            : _inModels ? "UP/DOWN: Select model    DECIDE: OK    BACK: Makers" : "UP/DOWN: Select maker    DECIDE: Models    BACK: Return");
-    }
-
-    private void CarScreen(Canvas c)
-    {
-        var car = catalog.Cars[_car];
-        var cars = MakerCars(_maker);
-        var a = In(0.25f);
-        var slide = (1 - a) * 60;
-        c.Carbon(16, 318 + slide, 496, 424 + slide);
-        c.Text($"{Catalog.Makers[_maker]}   {Array.IndexOf(cars, _car) + 1} / {cars.Length}", 32, 340 + slide, 11, Grey, 0, 0.12f);
-        c.Fit(car.Name, 32, 366 + slide, 300, 0, Canvas.White, 0.15f, 0.07f, 24);
-        c.Text($"{car.Ps} PS   {car.Kg} kg", 32, 390 + slide, 13, Canvas.White, 0, 0.15f, 0.06f);
-        // drivetrain box: FF MR FR 4WD, the car's one lit
-        c.Text("DRIVE", 350, 340 + slide, 10, Grey, 0, 0.1f);
-        string[] drives = ["FF", "MR", "FR", "4WD"];
-        for (var i = 0; i < drives.Length; i++)
-        {
-            float x = 350 + i * 34, y = 346 + slide;
-            var on = drives[i] == car.Drive;
-            c.O.Rect(Vector2.Round(c.P(x, y)), Vector2.Round(c.P(x + 30, y + 18)), on ? Overlay.Rgba(0.8f, 0.07f, 0.06f) : Overlay.Rgba(0.18f, 0.18f, 0.19f));
-            c.Text(drives[i], x + 15, y + 14, 12, on ? Canvas.White : Overlay.Rgba(1, 1, 1, 0.35f), 0.5f, 0.15f);
-        }
-        // body colour swatches, the yellow diamond over the chosen one
-        c.Text("BODY COLOUR", 350, 384 + slide, 10, Grey, 0, 0.1f);
-        for (var i = 0; i < car.Paints.Length; i++)
-        {
-            var at = c.P(358 + i * 22, 404 + slide);
-            if (i == _paint) c.Diamond(358 + i * 22, 391 + slide, 4);
-            c.O.Disc(at, 8 * c.S, Overlay.Rgba(0, 0, 0, 0.9f));
-            c.O.Disc(at, 6.5f * c.S, Catalog.Swatch(car.Paints[i]));
-        }
-        if (Current == Screen.Car)
-        {
-            c.Arrow(24, 180, 24, 220, 8, 200);
-            c.Arrow(488, 180, 488, 220, 504, 200);
-            Hint(c, "LEFT/RIGHT: Car    UP/DOWN: Body colour    DECIDE: OK    BACK: Maker");
-        }
     }
 
     /// <summary>Course-name telop: a black band wipes in from the right with the name in blue lettering, the conditions below; wipes out before the count.</summary>

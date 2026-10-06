@@ -176,11 +176,11 @@ public sealed partial class TougeGame
         ("LegendCourse", 1, "legend_courses_after", 0, 0, false, true), ("Modes", 1.2f, "legend_back_to_modes", 0, 0, false, false),
     ];
 
-    /// <summary>One Legend battle in the flow script: ladder → card → maker/model/car/gearbox → load → race → result → RIVAL SELECT.</summary>
+    /// <summary>One Legend battle in the flow script: ladder → card → maker/car/gearbox → load → race → result → RIVAL SELECT.</summary>
     private static (string, float, string?, int, int, bool, bool)[] LegendFlowBattle(string n) =>
     [
         ("LegendRivals", 1, $"legend_ladder_{n}", 0, 0, true, false), ("LegendCard", 1.5f, $"legend_card_{n}", 0, 0, true, false),
-        ("Maker", 1, $"legend_maker_{n}", 0, 0, true, false), ("Maker", 0.5f, null, 0, 0, true, false), ("Car", 1.2f, $"legend_car_{n}", 0, 0, true, false),
+        ("Maker", 1, $"legend_maker_{n}", 0, 0, true, false), ("Car", 1.2f, $"legend_car_{n}", 0, 0, true, false),
         ("Gearbox", 0.6f, null, 0, 0, true, false), ("Loading", 0.5f, null, 0, 0, false, false),
         ("Intro", 1.2f, $"legend_telop_{n}", 0, 0, false, false), ("Race", 2.5f, $"legend_race_{n}", 0, 0, false, false),
         ("Finish", 0.8f, $"legend_finish_{n}", 0, 0, false, false), ("Result", 3.6f, $"legend_result_{n}", 1, 0, false, false), ("Result", 0.3f, null, 1, 0, false, false),

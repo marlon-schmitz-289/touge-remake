@@ -33,7 +33,7 @@ public sealed partial class TougeGame
     private static (string, float, string?, int, int, bool, bool)[] SaveLoadRun(string n) =>
     [
         S("Course", 1, $"sl_course_{n}", ok: true), S("Route", 0.6f, null, ok: true), S("Time", 0.6f, null, ok: true), S("Weather", 0.6f, null, ok: true),
-        S("Maker", 0.8f, null, ok: true), S("Maker", 0.5f, null, ok: true), S("Car", 1, null, ok: true), S("Gearbox", 0.6f, null, ok: true),
+        S("Maker", 0.8f, null, ok: true), S("Car", 1, null, ok: true), S("Gearbox", 0.6f, null, ok: true),
         S("Loading", 0.5f), S("Intro", 1), S("Race", 2, $"sl_race_{n}"), S("Finish", 0.8f, $"sl_finish_{n}"),
         S("Result", 3.6f, $"sl_result_{n}", x: 1), .. Rep(3, "Result", x: 1), S("Result", 0.5f, $"sl_result_exit_{n}", ok: true),
     ];

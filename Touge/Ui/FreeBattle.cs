@@ -35,7 +35,8 @@ public sealed class FreeBattle(Catalog catalog)
 {
     public enum Row { Course, Route, Conditions, Rule, Lead, Level, Rival, Car, Colour, Gearbox, Start }
 
-    public enum Result { None, Start, Back }
+    /// <summary>PickCar: DECIDE on CAR, the host opens the car select (<see cref="CarPicker"/>) and hands the choice back (<see cref="SetCar"/>).</summary>
+    public enum Result { None, Start, Back, PickCar }
 
     public FreeBattleChoice Choice { get; private set; } = new();
     public int Car { get; private set; }
@@ -64,6 +65,9 @@ public sealed class FreeBattle(Catalog catalog)
         (Paint, Manual) = (Math.Clamp(paint, 0, catalog.Cars[Car].Paints.Length - 1), manual);
         _row = Math.Min(_row, Rows.Length - 1);
     }
+
+    /// <summary>The car select's choice.</summary>
+    public void SetCar(int car, int paint) => (Car, Paint) = (car, paint);
 
     /// <summary>Rows in cursor order: the battle (left), the rival and the player's car (right), START; WHO LEADS only for lead/chase.</summary>
     public Row[] Rows => Choice.Rule == BattleRule.LeadChase
@@ -110,17 +114,12 @@ public sealed class FreeBattle(Catalog catalog)
             case Row.Lead: c.PlayerLeads = !c.PlayerLeads; break;
             case Row.Level: c.Level = (AiLevel)Wrap((int)c.Level + d, 4); break;
             case Row.Rival: c.Rival = Rivals.All[Wrap(RivalIndex + d, Rivals.All.Length)].Id; break;
-            case Row.Car:
-                do Car = Wrap(Car + d, catalog.Cars.Count);
-                while (CarLocked?.Invoke(catalog.Cars[Car].Id) == true);
-                Paint = 0;
-                break;
             case Row.Colour: Paint = Wrap(Paint + d, catalog.Cars[Car].Paints.Length); break;
             case Row.Gearbox: Manual = !Manual; break;
         }
     }
 
-    /// <summary>One frame of menu keys: UP/DOWN rows, LEFT/RIGHT (or DECIDE) values, DECIDE on START starts, BACK leaves.</summary>
+    /// <summary>One frame of menu keys: UP/DOWN rows, LEFT/RIGHT (or DECIDE) values, DECIDE or LEFT/RIGHT on CAR asks for the car select, on START starts, BACK leaves.</summary>
     public Result Update((int X, int Y, bool Ok, bool Back) k, Action<string>? sound)
     {
         var rows = Rows;
@@ -131,10 +130,10 @@ public sealed class FreeBattle(Catalog catalog)
             if (n != _row) sound?.Invoke("SYS005");
             _row = n;
         }
-        else if (k.Ok && rows[_row] == Row.Start)
+        else if ((k.Ok && rows[_row] == Row.Start) || ((k.Ok || k.X != 0) && rows[_row] == Row.Car)) // CAR: only through the car select
         {
             sound?.Invoke("SYS006");
-            return Result.Start;
+            return rows[_row] == Row.Start ? Result.Start : Result.PickCar;
         }
         else if (k.X != 0 || k.Ok)
         {
@@ -311,6 +310,7 @@ public sealed class FreeBattle(Catalog catalog)
         }
         c.Button(298, 368, 162, 28, "START", Canvas.ButtonKind.Positive);
         if (Selected == Row.Start) c.Glow(294, 364, 464, 400, pulse);
-        Menu.Hint(c, "UP/DOWN: Select    LEFT/RIGHT: Change    START: Battle    BACK: Return");
+        Menu.Hint(c, Selected == Row.Car ? "UP/DOWN: Select    DECIDE: Car select    BACK: Return"
+            : "UP/DOWN: Select    LEFT/RIGHT: Change    START: Battle    BACK: Return");
     }
 }

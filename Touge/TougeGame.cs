@@ -325,7 +325,8 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
                 var device = start.Split(':') is [_, var d] ? d : "";
                 _menu.Controls!.Open(device.ToLowerInvariant() == "gamepad" ? DeviceKind.Pad : Enum.TryParse<DeviceKind>(device, true, out var dk) ? dk : DeviceKind.Keyboard); // --menu controls:wheel
             }
-            if (screen == Menu.Screen.Maker && start.Split(':') is [_, var row]) _menu.ShowModel(int.Parse(row)); // --menu maker:2: the model list, row 2
+            if (start.Split(':') is [_, var row] && int.TryParse(row, out var r) && _menu.ShowRow(r) == Menu.Action.PreviewCar)
+                SwitchCar(Array.IndexOf(CarPaint.Cars, _menu.CarId), _menu.Paint); // --menu maker:2 = HONDA, --car IMP --menu car:2 = the locked IMP3
             _inRace = screen is Menu.Screen.Pause or Menu.Screen.Intro;
             if (shotPath != null) _menu.Settle();
         }
@@ -1032,7 +1033,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     private bool UpdateMenuCamera(float dt)
     {
         if (ReplayCamera(dt)) return true;
-        var front = _front is { Active: true } || _guide is { Active: true, ShowsCar: false } || _legend is { Active: true, ShowsCar: false } || _story is { Flyover: true } || _versusUi is { Active: true } || ReplayBackdrop;
+        var front = _front is { Active: true } || _guide is { Active: true, ShowsCar: false } || _legend is { Active: true, ShowsCar: false } || _story is { Flyover: true } || _versusUi is { Active: true, ShowsCar: false } || ReplayBackdrop;
         var screen = _menu?.Current ?? Menu.Screen.None;
         if (_legend is { ShowsCar: true } && _rivalModel != null)
         {
@@ -1051,13 +1052,15 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             (_camLook, _fov) = (target - right * (0.19f * back * _guide.Shift), MathF.PI / 4);
             return true;
         }
-        var showcase = _story is { Showcase: true };
+        var showcase = _story is { Showcase: true } || _versusUi is { ShowsCar: true }; // the lobbies' car select turns the car as the menu's
         if (!front && !showcase && screen is Menu.Screen.None or Menu.Screen.Intro or Menu.Screen.Finish) return false;
         if (!front && (showcase || screen is Menu.Screen.Car or Menu.Screen.Gearbox or Menu.Screen.Result))
         {
             OrbitCar(0.6f + _menuTime * 0.35f, 1.5f); // further out and looking down: the whole car above the info panel
             var fwd = Forward();
-            (_camLook, _fov) = (_pos + fwd - Vector3.UnitY * 0.1f, MathF.PI / 4);
+            // the car select's model list sits on the left: the car turns right of the middle
+            var aside = screen is Menu.Screen.Car or Menu.Screen.Gearbox || _versusUi is { ShowsCar: true } ? 0.2f : 0;
+            (_camLook, _fov) = (_pos + fwd - Vector3.UnitY * 0.1f - Vector3.Normalize(Vector3.Cross(fwd, Vector3.UnitY)) * aside, MathF.PI / 4);
             return true;
         }
         if (!front && screen == Menu.Screen.Pause)
@@ -1120,8 +1123,11 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         ("Modes", 1, "modes", 0, 1, false, false), ("Modes", 0.6f, "modes_time_attack", 0, 0, true, false),
         ("Course", 1, "course", 1, 0, false, false), ("Course", 0.5f, "course_happogahara", -1, 0, false, false), ("Course", 0.5f, null, 0, 0, true, false),
         ("Route", 0.8f, "route", 0, 0, true, false), ("Time", 0.8f, "time", 0, 0, true, false), ("Weather", 0.8f, "weather", 0, 0, true, false),
-        ("Maker", 1, "maker", 0, 0, true, false), ("Maker", 0.6f, "model", 0, 0, true, false),
-        ("Car", 1.5f, "car", 0, 1, false, false), ("Car", 1, "car_paint", 0, 0, true, false), ("Gearbox", 0.8f, "gearbox", 0, 0, true, false),
+        // car select: makers (NISSAN's cars, back), TOYOTA → its cars, the Levin and back to the Trueno, the last paint
+        ("Maker", 1, "maker", 0, 1, false, false), ("Maker", 0.6f, "maker_nissan", 0, 0, true, false), ("Car", 1.5f, "car_nissan", 0, 0, false, true),
+        ("Maker", 1, "maker_back", 0, -1, false, false), ("Maker", 0.5f, null, 0, 0, true, false),
+        ("Car", 1.5f, "car", 0, 1, false, false), ("Car", 1, "car_levin", 0, -1, false, false), ("Car", 1, null, -1, 0, false, false),
+        ("Car", 1, "car_paint", 0, 0, true, false), ("Gearbox", 0.8f, "gearbox", 0, 0, true, false),
         ("Loading", 0.6f, "loading", 0, 0, false, false), ("Intro", 1, "telop", 0, 0, false, false), ("Intro", 2, "countdown", 0, 0, false, false),
         ("Race", 2, "race", 0, 0, false, true),
         // pause → REPLAY (the run so far, TV camera) → back; → PHOTO → back; CONTINUE
@@ -1160,9 +1166,9 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         ("Modes", 1, null, 0, 1, false, false), ("Modes", 0.6f, null, 0, 0, true, false), ("Course", 1, null, 0, 0, true, false),
         ("Route", 0.5f, null, 0, 0, true, false), ("Time", 0.5f, null, 0, 0, true, false),
         .. _benchCourse.EndsWith("_NIT") ? [] : new[] { ("Weather", 0.5f, (string?)null, 0, 0, true, false) },
-        ("Maker", 0.5f, null, 0, 0, true, false), ("Maker", 0.5f, null, 0, 0, true, false),
-        .. Enumerable.Repeat(("Car", 0.3f, (string?)null, 1, 0, false, false), 12), .. Enumerable.Repeat(("Car", 0.3f, (string?)null, -1, 0, false, false), 12),
-        .. Enumerable.Repeat(("Car", 0.3f, (string?)null, 0, 1, false, false), 3), .. Enumerable.Repeat(("Car", 0.3f, (string?)null, 0, -1, false, false), 3),
+        ("Maker", 0.5f, null, 0, 0, true, false),
+        .. Enumerable.Repeat(("Car", 0.3f, (string?)null, 0, 1, false, false), 12), .. Enumerable.Repeat(("Car", 0.3f, (string?)null, 0, -1, false, false), 12),
+        .. Enumerable.Repeat(("Car", 0.3f, (string?)null, 1, 0, false, false), 3), .. Enumerable.Repeat(("Car", 0.3f, (string?)null, -1, 0, false, false), 3),
         ("Car", 1, "bench_car", 0, 0, true, false), ("Gearbox", 0.5f, null, 0, 0, true, false),
     ];
 
