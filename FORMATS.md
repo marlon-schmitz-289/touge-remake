@@ -199,12 +199,11 @@ Gefunden über die View-Matrix (`sub_1486D0`: View = Inverse der Kameramatrix) r
 Der Verfolger hat also **keine Kollision, keinen Zielpunkt, keine Geschwindigkeit**: das Auge hängt starr am Auto-Ursprung, nur seine
 Ausrichtung läuft dem Auto mit Zeitkonstante 1/(−60·ln(1 − 2/31)) = 0,25 s nach (Gier im Drift: Nachlauf = Gierrate · 0,25 s). Das Auto
 steht genau in der Bildmitte, atan(1,7/4,6) = 20,3° unter der Achse, also bei 0,37/0,69 = 53 % der unteren Bildhälfte (≈ 77 % von oben).
-Eine ferne Verfolgerkamera gibt es im Original nicht. Remake (`CameraRig.Place`): CHASE genau so (Ursprung = Modellmatrix des Autos,
-Blickwinkel aus der Einstellung × 0,75·0,92502/tan 30° = 1,2017 in tan ½, also bei 60° genau die 69,5° des Originals), aber **ohne den
-Nachlauf der Gier**: der Blickrahmen dreht starr mit dem Auto (der 0,25-s-Nachlauf wirkte gespielt wie „hinterhergezogen“); nur im Drift
-dreht er 0,35·sin(Schräglauf) zur Fahrtrichtung (Schräglauf aus der Bewegung des Autos, 0,1 s geglättet), die Neigung folgt der
-Karosserie gefiltert (8/s, Federn des Aufbaus raus), kein Rollen. Der Nachlauf des Originals ist als GAME SETTING → CAMERA SMOOTHING
-(0–1, Feder 2·4,0/s ÷ Stufe) wählbar. FAR = CHASE × 1,5; die Kurs-Kollision bleibt als Sicherheitsnetz.
+Eine ferne Verfolgerkamera gibt es im Original nicht. Remake (`CameraRig.Place`): näher als das Original, 4,2 m hinter und 1,5 m über
+dem Ursprung (Modellmatrix des Autos), Blick 3° unter der Fahrzeugachse (Auto ganz in der unteren Bildhälfte), Blickwinkel aus der
+Einstellung × 0,75·0,92502/tan 30° = 1,2017 in tan ½ (bei 60° die 69,5° des Originals). **Kein Nachlauf, keine Driftblende**: der
+Blickrahmen dreht starr mit der Gier des Autos; nur die Neigung folgt der Karosserie leicht gefiltert (12/s, Federn raus), kein Rollen.
+FAR = CHASE × 1,5; die Kurs-Kollision zieht das Auge heran (weiter Sweep 1,2 m federt es vorab ein, die harte Grenze höchstens 30 m/s) und lässt es mit 3/s wieder heraus.
 
 ## Replay-Datei (eigenes Format, `.rpl`)
 gzip von: `"IDRP"`, u16 Version (1), u16 Zustandsgröße (`Vehicle.StateBytes`, 314), i32 Länge + Kopf als JSON (`ReplayInfo`: Kurs, Richtung,

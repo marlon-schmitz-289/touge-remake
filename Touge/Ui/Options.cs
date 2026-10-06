@@ -200,8 +200,6 @@ public sealed class Options
                         "Camera at the start of a run.", "C or pad BACK cycles the views while driving (split screen: each player)."),
                     Row.Choice("FIELD OF VIEW", [.. fovs.Select(f => $"{f}°")], () => Array.IndexOf(fovs, s.Fov), i => s.Fov = fovs[i],
                         "Camera view angle; 60° is the original's chase view."),
-                    Row.Slider("CAMERA SMOOTHING", () => s.CameraSmoothing, v => s.CameraSmoothing = v,
-                        "How far the chase camera lags behind the car's turns.", "0: fixed to the car.  Full: the original's lazy swing."),
                     Row.Slider("CAMERA SHAKE", () => s.CameraShake, v => s.CameraShake = v, "Camera shake on wall hits."),
                     Row.Choice("STICKERS", ["ANIME", "STOCK", "NONE"], () => s.Livery switch { Livery.Rival => 0, Livery.Stock => 1, _ => 2 },
                         i => s.Livery = i switch { 0 => Livery.Rival, 1 => Livery.Stock, _ => Livery.None },
