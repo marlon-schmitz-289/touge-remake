@@ -95,7 +95,7 @@ public sealed partial class TougeGame
         ("Course", 1, null, 0, 1, false, false), ("Course", 0.3f, null, 0, 1, false, false), ("Course", 0.3f, null, 1, 0, false, false),
         ("Course", 0.3f, null, 1, 0, false, false), ("Course", 0.8f, "fp_course", 0, 0, true, false),
         .. FourPassWet ? new[] { ("Weather", 0.5f, (string?)null, 1, 0, false, false) } : [], ("Weather", 0.8f, "fp_weather", 0, 0, true, false),
-        ("Maker", 0.8f, null, 0, 0, true, false), ("Maker", 0.5f, null, 0, 0, true, false), ("Car", 1.2f, "fp_car", 0, 0, true, false),
+        ("Maker", 0.8f, null, 0, 0, true, false), ("Car", 1.2f, "fp_car", 0, 0, true, false),
         ("Gearbox", 0.6f, null, 0, 0, true, false),
         .. FourPassFlowStage(1, pause: false), .. FourPassFlowStage(2, pause: true), .. FourPassFlowStage(3, pause: false),
         ("Loading", 0.4f, null, 0, 0, false, false), ("Intro", 1, "fp_telop_4", 0, 0, false, false), ("Race", 1.5f, "fp_race_4", 0, 0, false, false),

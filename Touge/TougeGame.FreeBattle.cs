@@ -134,7 +134,7 @@ public sealed partial class TougeGame
     }
 
     /// <summary>
-    ///     --flow … --freebattle: main menu → VERSUS → VS CPU → lobby (RULE stays LEAD / CHASE, you lead, rival Ryosuke) → START →
+    ///     --flow … --freebattle: main menu → VERSUS → VS CPU → lobby (RULE stays LEAD / CHASE, you lead, rival Ryosuke, CAR → maker MAZDA → FD3S, paint 2) → START →
     ///     telop, countdown → battle (autopilot, 16×) → finish → result → RETRY → battle → pause → Exit (the lobby) → RULE RACE →
     ///     START → battle → result → EXIT → main menu.
     /// </summary>
@@ -146,8 +146,13 @@ public sealed partial class TougeGame
         ("VsCpu", 1.5f, "fb_lobby", 0, 1, false, false), ("VsCpu", 0.3f, null, 0, 1, false, false), ("VsCpu", 0.3f, null, 0, 1, false, false),
         ("VsCpu", 0.3f, null, 0, 1, false, false), ("VsCpu", 0.4f, "fb_lobby_lead", 1, 0, false, false),
         ("VsCpu", 0.3f, null, 0, 1, false, false), ("VsCpu", 0.3f, null, 0, 1, false, false), ("VsCpu", 0.6f, "fb_lobby_rival", 1, 0, false, false),
-        .. Enumerable.Repeat(("VsCpu", 0.25f, (string?)null, 0, 1, false, false), 4),
-        ("VsCpu", 0.8f, "fb_lobby_start", 0, 0, true, false),
+        // CAR → the car select: makers, MAZDA → its cars (FD3S), next paint, DECIDE back into the lobby
+        ("VsCpu", 0.3f, null, 0, 1, false, false), ("VsCpu", 0.5f, "fb_lobby_car", 0, 0, true, false),
+        ("VsCpu", 1, "fb_pick_maker", 0, 1, false, false), .. Enumerable.Repeat(("VsCpu", 0.25f, (string?)null, 0, 1, false, false), 3),
+        ("VsCpu", 0.6f, "fb_pick_mazda", 0, 0, true, false), ("VsCpu", 1.5f, "fb_pick_car", 1, 0, false, false),
+        ("VsCpu", 1, "fb_pick_paint", 0, 0, true, false),
+        .. Enumerable.Repeat(("VsCpu", 0.25f, (string?)null, 0, 1, false, false), 2),
+        ("VsCpu", 0.3f, null, 0, 1, false, false), ("VsCpu", 0.8f, "fb_lobby_start", 0, 0, true, false),
         ("VsLoading", 0.3f, "fb_loading", 0, 0, false, false),
         ("Intro", 1.2f, "fb_telop", 0, 0, false, false), ("Intro", 2.5f, "fb_countdown", 0, 0, false, false), ("Race", 2, "fb_race", 0, 0, false, false),
         ("Finish", 0.8f, "fb_finish", 0, 0, false, false), ("Result", 3.6f, "fb_result", 0, 0, true, false),

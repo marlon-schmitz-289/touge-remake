@@ -264,6 +264,9 @@ public sealed partial class TougeGame
         if (FreeBattleAction(action)) return true; // VS CPU (TougeGame.FreeBattle)
         switch (action)
         {
+            case Versus.Action.PreviewCar:
+                SwitchCar(Array.IndexOf(CarPaint.Cars, ui.PickCarId), ui.PickPaint);
+                break;
             case Versus.Action.Split:
                 ui.OpenSplit(_settings.Car, _settings.Paint);
                 ui.Vertical = _settings.SplitVertical;
@@ -393,7 +396,7 @@ public sealed partial class TougeGame
             ? [new VsCar(1, "PLAYER 2", ui.CarId(1), ui.Seats[1].Paint)]
             : [.. _net!.Players.Where(p => !p.IsLocal && p.Connected).Take(MaxVersusCars).Select(p => new VsCar(p.Id, p.Name, CarSpecs.All.ContainsKey(p.Car) ? p.Car : "AE86T", p.Paint))];
         var key = $"{config} {ui.CarId(0)}/{ui.Seats[0].Paint} {string.Join(' ', cars.Select(c => $"{c.Id}:{c.Name}:{c.Car}/{c.Paint}"))} {_settings.Livery}";
-        if (key == _vsLoadedKey && _vsCars.Count > 0)
+        if (key == _vsLoadedKey && _vsCars.Count > 0 && _carName == ui.CarId(0) && _paint == ui.Seats[0].Paint) // the car select may have shown another car
         {
             // RETRY / rematch with the same course and cars: only a fresh start
             (_hud, _fx, _simTime) = (NewHud(), new Effects(), 0);
@@ -679,7 +682,7 @@ public sealed partial class TougeGame
     }
 
     /// <summary>
-    ///     --flow &lt;dir&gt; --versus flow: the main menu → VERSUS → SPLIT SCREEN → lobby (next course, both down to START/READY: START
+    ///     --flow &lt;dir&gt; --versus flow: the main menu → VERSUS → SPLIT SCREEN → lobby (next course, player 1 picks the R32 in the car select, both down to START/READY: START
     ///     beeps while player 2 is not ready, player 2 gets ready, START) → telop, countdown → race (16×) → pause → RETRY → race →
     ///     pause → EXIT (back in the lobby) → back to the main menu, a PNG per step (both players get the script's keys).
     /// </summary>
@@ -689,7 +692,11 @@ public sealed partial class TougeGame
         ("Modes", 1, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.6f, "vs_main_menu", 0, 0, true, false),
         ("VsMode", 1, "vs_mode", 0, 0, true, false),
         ("VsLobby", 1, "vs_lobby", 1, 0, false, false),
-        .. Enumerable.Repeat(("VsLobby", 0.25f, (string?)null, 0, 1, false, false), 8),
+        .. Enumerable.Repeat(("VsLobby", 0.25f, (string?)null, 0, 1, false, false), 6),
+        // player 1's CAR → the car select (makers, NISSAN's cars, the R32), then on to START
+        ("VsLobby", 0.5f, "vs_lobby_car", 0, 0, true, false), ("VsLobby", 1, "vs_pick_maker", 0, 1, false, false),
+        ("VsLobby", 0.6f, null, 0, 0, true, false), ("VsLobby", 1.5f, "vs_pick_car", 0, 0, true, false),
+        .. Enumerable.Repeat(("VsLobby", 0.25f, (string?)null, 0, 1, false, false), 2),
         ("VsLobby", 0.5f, "vs_lobby_start", 0, 0, true, false), ("VsLobby", 0.6f, "vs_lobby_ready", 0, 0, true, false),
         ("Intro", 1, "vs_telop", 0, 0, false, false), ("Intro", 2.5f, "vs_countdown", 0, 0, false, false),
         ("Race", 1.5f, "vs_race", 0, 0, false, true), ("Pause", 0.8f, "vs_pause", 1, 0, false, false), ("Pause", 0.4f, null, 0, 0, true, false),

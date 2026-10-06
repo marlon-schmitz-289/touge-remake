@@ -22,7 +22,54 @@ public sealed class Versus(Catalog catalog)
     ///     load it; host: <see cref="NetSession.StartRace"/>); Rematch/ToLobby from the result; Leave: close the session (back to
     ///     ONLINE); Exit: back to the main menu.
     /// </summary>
-    public enum Action { None, Split, Host, Join, Start, Rematch, ToLobby, Leave, Exit, Cpu, CpuStart, CpuLeave }
+    /// <remarks>PreviewCar: show <see cref="PickCarId"/>/<see cref="PickPaint"/> (the car select's highlighted car, <see cref="ShowsCar"/>).</remarks>
+    public enum Action { None, Split, Host, Join, Start, Rematch, ToLobby, Leave, Exit, Cpu, CpuStart, CpuLeave, PreviewCar }
+
+    // ---- the car select over a lobby (CAR + DECIDE): the same two steps as every car select, for one seat at a time
+    private readonly CarPicker _picker = new(catalog);
+    /// <summary>Whose car the select is choosing: -1 none, 0/1 the lobby's seats, <see cref="CpuSeat"/> the VS CPU lobby.</summary>
+    private int _pickSeat = -1;
+    private const int CpuSeat = 2;
+    private float _pickT;
+    public bool Picking => _pickSeat >= 0 && Active;
+    /// <summary>The car select is on its CAR step: the game turns the highlighted car behind it.</summary>
+    public bool ShowsCar => Picking && _picker.Current == CarPicker.Step.Car;
+    public string PickCarId => catalog.Cars[_picker.Car].Id;
+    public int PickPaint => _picker.Paint;
+
+    private void OpenPicker(int seat, int car, int paint)
+    {
+        _picker.CarLocked = CarLocked;
+        _picker.Open(car, paint);
+        (_pickSeat, _pickT) = (seat, 0);
+    }
+
+    /// <summary>The car select's frame: DECIDE hands the car to the seat, BACK walks CAR → MAKER → the lobby.</summary>
+    private Action PickerInput((int X, int Y, bool Ok, bool Back) k)
+    {
+        var r = _picker.Update(k, Sound);
+        if (r == CarPicker.Result.MakerChosen) _pickT = 0; // the CAR step slides in
+        switch (r)
+        {
+            case CarPicker.Result.MakerChosen or CarPicker.Result.Moved:
+                return _picker.Locked(_picker.Car) ? Action.None : Action.PreviewCar;
+            case CarPicker.Result.Decide:
+                if (_pickSeat == CpuSeat) CpuLobby.SetCar(_picker.Car, _picker.Paint);
+                else
+                {
+                    (Seats[_pickSeat].Car, Seats[_pickSeat].Paint) = (_picker.Car, _picker.Paint);
+                    if (_pickSeat == 0 && !Split) PushSeat();
+                }
+                _pickSeat = -1;
+                break;
+            case CarPicker.Result.Back:
+                Sound?.Invoke("BEEP001");
+                if (_picker.Current == CarPicker.Step.Car) (_picker.Current, _pickT) = (CarPicker.Step.Maker, 0);
+                else _pickSeat = -1;
+                break;
+        }
+        return Action.None;
+    }
 
     // ---- VS CPU (Ui/FreeBattle): Cpu = open its lobby (the game fills it via OpenCpu), CpuStart = load the battle, CpuLeave = back to the tiles
     public FreeBattle CpuLobby { get; } = new(catalog);
@@ -182,7 +229,7 @@ public sealed class Versus(Catalog catalog)
         Enter(Screen.Lobby);
     }
 
-    private void Enter(Screen s) => (Current, _t, _row, _row2, _editing) = (s, 0, s == Current ? _row : 0, 0, 0);
+    private void Enter(Screen s) => (Current, _t, _row, _row2, _editing, _pickSeat) = (s, 0, s == Current ? _row : 0, 0, 0, -1);
 
     private int CarIndex(string id) => catalog.Cars.ToList().FindIndex(c => c.Id == id) is var i && i >= 0 && CarLocked?.Invoke(id) != true ? i : 0;
 
@@ -278,6 +325,11 @@ public sealed class Versus(Catalog catalog)
         (_t, _clock) = (_t + dt, _clock + dt);
         if (_p2Flash >= 0) _p2Flash += dt;
         if (_t < Fade * 0.5f) return Action.None; // a decision that opened this screen does not act on it
+        if (Picking)
+        {
+            _pickT += dt;
+            return PickerInput(_pickSeat == 1 ? k2 : k1);
+        }
         switch (Current)
         {
             case Screen.Mode:
@@ -313,6 +365,9 @@ public sealed class Versus(Catalog catalog)
             case Screen.Cpu:
                 switch (CpuLobby.Update(k1, Sound))
                 {
+                    case FreeBattle.Result.PickCar:
+                        OpenPicker(CpuSeat, CpuLobby.Car, CpuLobby.Paint);
+                        break;
                     case FreeBattle.Result.Start: return Action.CpuStart;
                     case FreeBattle.Result.Back:
                         Enter(Screen.Mode);
@@ -454,6 +509,12 @@ public sealed class Versus(Catalog catalog)
                 PushSeat();
             }
         }
+        else if (k1.Ok && rows[_row] == Row.Car)
+        {
+            Sound?.Invoke("SYS006");
+            OpenPicker(0, Seats[0].Car, Seats[0].Paint);
+            return Action.None;
+        }
         else if (k1.Ok)
         {
             Sound?.Invoke("SYS005");
@@ -488,6 +549,11 @@ public sealed class Versus(Catalog catalog)
             {
                 Seats[1].Ready = !Seats[1].Ready;
                 Sound?.Invoke(Seats[1].Ready ? "SYS006" : "BEEP001");
+            }
+            else if (P2Rows[_row2] == Row.Car)
+            {
+                Sound?.Invoke("SYS006");
+                OpenPicker(1, Seats[1].Car, Seats[1].Paint);
             }
             else
             {
@@ -557,6 +623,23 @@ public sealed class Versus(Catalog catalog)
         if (!Active) return;
         var c = _c;
         c.Begin(o, width, height);
+        if (Picking)
+        {
+            var who = _pickSeat == 1 ? "PLAYER 2: " : Split && _pickSeat == 0 ? "PLAYER 1: " : "";
+            if (_picker.Current == CarPicker.Step.Maker)
+            {
+                c.Backdrop(_clock);
+                _picker.DrawMaker(c, Theta, "Lobby");
+                c.Marquee(who + "SELECT A MAKER", false, _clock);
+            }
+            else
+            {
+                _picker.DrawCar(c, Theta, Style.Ease(_pickT / 0.25f), true);
+                c.Marquee(who + "SELECT A CAR", false, _clock);
+            }
+            c.Fade(1 - Math.Clamp(_t / Fade, 0, 1));
+            return;
+        }
         switch (Current)
         {
             case Screen.Mode:
@@ -743,8 +826,8 @@ public sealed class Versus(Catalog catalog)
         // player 1 drives the menus with the device used last (only the keyboard's other half or a wheel while player 2 has a pad)
         var p1 = Hints.Device == DeviceKind.Wheel ? $"HAT + {Hints.Of(Control.MenuOk)}" : P2Keyboard ? Hints.Pick("WASD + SPACE", "D-PAD + A", "") : "ARROWS + ENTER";
         Menu.Hint(c, Split ? $"P1: {p1}    P2: {(P2Keyboard ? "ARROWS + ENTER" : "D-PAD + A")}    START when both are ready    BACK: Return"
-            : host ? "UP/DOWN: Select    LEFT/RIGHT: Change    START when everyone is ready    BACK: Leave"
-            : "UP/DOWN: Select    LEFT/RIGHT: Change    READY: tell the host    BACK: Leave");
+            : host ? "UP/DOWN: Select    LEFT/RIGHT: Change    DECIDE on CAR: Car select    START when everyone is ready    BACK: Leave"
+            : "UP/DOWN: Select    LEFT/RIGHT: Change    DECIDE on CAR: Car select    READY: tell the host    BACK: Leave");
     }
 
     internal static void Swatch(Canvas c, float x, float y, uint bgr)

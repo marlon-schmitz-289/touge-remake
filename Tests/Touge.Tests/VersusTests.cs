@@ -79,6 +79,27 @@ public class VersusTests
         Assert.Equal(Versus.Action.ToLobby, Step(v, Ok));
     }
 
+    /// <summary>Split screen: player 2's DECIDE on CAR opens the car select for player 2 alone (player 1's keys wait), the pick lands on its seat.</summary>
+    [Fact]
+    public void SplitLobby_CarSelectPerSeat()
+    {
+        var v = new Versus(TestCatalog());
+        v.Open();
+        v.OpenSplit("AE86T", 0);
+        Step(v, None, Ok); // player 2 on CAR (its first row)
+        Assert.True(v.Picking);
+        Step(v, Down); // player 1: ignored
+        Step(v, None, (0, -4, false, false)); // the select opens on its FD3S (MAZDA): four makers up to TOYOTA
+        Step(v, None, Ok);
+        Assert.Equal("AE86T", v.PickCarId);
+        Step(v, None, Right);
+        Step(v, None, Ok);
+        Assert.False(v.Picking);
+        Assert.Equal((0, 1), (v.Seats[1].Car, v.Seats[1].Paint));
+        Assert.Equal((0, 0), (v.Seats[0].Car, v.Seats[0].Paint));
+        Assert.Equal(Versus.Screen.Lobby, v.Current);
+    }
+
     /// <summary>ONLINE: typing an address and ENTER joins; BACK from the online lobby leaves the session.</summary>
     [Fact]
     public void Online_JoinByAddress()

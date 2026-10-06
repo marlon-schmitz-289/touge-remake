@@ -70,7 +70,7 @@ dotnet run --project Touge -- --data-dir <ordner> [--menu options:gamedisc] --sh
 TOUGE_AUTOPICK=1|change out/dist/osx-arm64-app/Touge.app/Contents/MacOS/Touge   # Ende-zu-Ende ohne Argumente (wie Finder): wählt nach der Suche die erste gefundene Disc; change verlässt das Spiel nach 8 s wie GAME DISC (Ablauf in touge.log)
 dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso"   # Front-End (Hinweis, Karten, Titel, Hauptmenü) → Kurs, Auto, Rennen, Ergebnis, Rekorde, Optionen
 dotnet run --project Touge -- "<pfad>/Initial D - Special Stage (Japan) (v2.00).iso" [AKINA_DAY|AKINA_NIT|USUI_NIT|…]   # direkt fahren, ohne Menü
-dotnet run --project Touge -- "<iso>" AKINA_NIT --menu boot|logo|disclaimer|title|mode|quit|course|route|time|weather|maker[:n]|car|gearbox|intro|pause|records|guide|guide-list|guide-talk|options[:gamesetting|hud|screen|graphics|sound|playlist|controller|dualsense] --shot out/proof/ui_car.png [--shot-size 3200x1800]   # Menü-Bild (options:<seite> öffnet eine Optionsseite, maker:<n> die Modellliste mit Zeile n, z. B. --car IMP --menu maker:2 = das gesperrte IMP3)
+dotnet run --project Touge -- "<iso>" AKINA_NIT --menu boot|logo|disclaimer|title|mode|quit|course|route|time|weather|maker[:n]|car[:n]|gearbox|intro|pause|records|guide|guide-list|guide-talk|options[:gamesetting|hud|screen|graphics|sound|playlist|controller|dualsense] --shot out/proof/ui_car.png [--shot-size 3200x1800]   # Menü-Bild (options:<seite> öffnet eine Optionsseite, maker:<n> mit Hersteller n hervorgehoben, car:<n> die Autos des Herstellers von --car mit Zeile n, z. B. --car IMP --menu car:2 = das gesperrte IMP3)
 dotnet run --project Touge -- "<iso>" --flow out/proof   # ganzer Ablauf per Skript im Fenster (Titel → Auswahl → Laden → Countdown → Rennen mit Pilot in 16× → Pause → Ziel → Ergebnis → Rekorde → Optionen → Car Guide), PNG je Schritt
 dotnet run --project Touge -- "<iso>" --flow out/proof/legend/flow --legend [--car FD3S]   # Legend of the Streets per Skript: Akina, zwei Battles (Autopilot, 16×), Leiter danach, PNG je Schritt
 dotnet run --project Touge -- "<iso>" --legend-sim [--legend-progress out/progress.json] [--car FD3S] [--player-skill 0.5]   # Legend ohne Fenster: Autopilot (als Spieler mit Können k, sonst 0,8; mit Gummiband) fährt jede Rivalenleiter hoch (Niederlage beendet den Kurs), Freischaltungen + Bilanz, Fortschritt als JSON
@@ -113,8 +113,8 @@ dotnet run --project Touge -- "<iso>" --story-check [n|calibrate] [--player-skil
 dotnet run --project Touge -- "<iso>" AKINA_NIT --versus split [--bot] [--split vertical] [--car FD3S --car2 AE86T] [--net-rule battle|race] [--autodrive 25 --shot out/proof/s.png]   # geteilter Bildschirm direkt (Lobby; --bot: beide Autopiloten, Rennen startet sofort)
 dotnet run --project Touge -- "<iso>" AKINA_DAY --versus host|join:<ip[:port]>|online|menu [--bot] [--port 47860] [--name TAKUMI] [--players 2] [--net-sim 80:5%:20] [--menu pause] [--shot-after 40 --shot out/proof/o.png]   # online im Fenster (--bot: Lobby läuft von selbst, Autopilot fährt; --menu pause: Pause über dem laufenden Rennen fürs Bild)
 dotnet run --project Touge -- "<iso>" --menu freebattle --shot out/proof/freebattle/lobby.png   # VERSUS → VS CPU: Lobby des freien Battles gegen die KI als Bild
-dotnet run --project Touge -- "<iso>" --flow out/proof/freebattle/flow --freebattle   # freies Battle per Skript: Hauptmenü → VERSUS → VS CPU → Lobby (LEAD/CHASE, du führst, Ryosuke) → Battle (Autopilot, 16×) → Ergebnis → RETRY → Pause-Exit → Lobby → RACE → Battle → EXIT
-dotnet run --project Touge -- "<iso>" AKINA_NIT --flow out/proof/vs --versus flow   # Versus-Ablauf per Skript: Hauptmenü → VERSUS → SPLIT → Lobby (START gesperrt bis READY) → Rennen → Pause → RETRY → EXIT → Lobby → Hauptmenü, PNG je Schritt
+dotnet run --project Touge -- "<iso>" --flow out/proof/freebattle/flow --freebattle   # freies Battle per Skript: Hauptmenü → VERSUS → VS CPU → Lobby (LEAD/CHASE, du führst, Ryosuke, CAR → Autowahl MAZDA → FD3S, Lack 2) → Battle (Autopilot, 16×) → Ergebnis → RETRY → Pause-Exit → Lobby → RACE → Battle → EXIT
+dotnet run --project Touge -- "<iso>" AKINA_NIT --flow out/proof/vs --versus flow   # Versus-Ablauf per Skript: Hauptmenü → VERSUS → SPLIT → Lobby (Spieler 1: CAR → Autowahl NISSAN → R32; START gesperrt bis READY) → Rennen → Pause → RETRY → EXIT → Lobby → Hauptmenü, PNG je Schritt
 dotnet run --project Touge -- "<iso>" IROHA_DAY --headless --host [--bot] [--port 47860] [--players 2] [--races 2] [--net-rule race] [--seconds 600]   # Host ohne Fenster
 dotnet run --project Touge -- "<iso>" --headless --join 127.0.0.1[:47860] --bot [--car FD3S] [--net-sim 80:5%:20]   # Bot-Client ohne Fenster (wartet, bis der Host da ist), Log je Sekunde + Zusammenfassung je Rennen
 dotnet run --project Touge -- "<iso>" AKINA_DAY --replay-test 380 [--battle keisuke] [--drift] [--save out/proof/r.rpl]   # ohne Fenster: Lauf aufnehmen, Datei schreiben/lesen, auf frischen Autos abspielen, Positionsfehler je Tick (mit Keyframes) und nur aus Eingaben, 20 Sprünge
@@ -197,14 +197,14 @@ Ergebnis, WIN/LOSE-Jingle beim Entscheid): SPLIT SCREEN, ONLINE oder VS CPU.
   vorher hatte der FD3S bei 0,8 LEGEND 12/14, der Trueno 2/14); HARD
   holt nur auf (halbes Gummiband), LEGEND ohne Gummiband und mit halb so vielen Fehlern; Sterne auf der Karte nach dem Können der Stufe),
   rechts die Rivalenkarte (einer der 14 aus `--battle`: Team, Auto, Stufe in Sternen, kurze Notiz zum Fahrstil; ◀ ▶ blättert) und das
-  eigene Auto mit Lack und AT/MT. In der Lobby läuft das Thema des Rivalen aus `MG_BGM.AFS` (wie auf Legends VS-Karte). START → Laden
+  eigene Auto mit Lack und AT/MT (◀ ▶ blättert, ENTSCHEIDEN auf CAR öffnet dieselbe Autowahl wie Time Attack: Hersteller → Autos mit 3D-Vorschau). In der Lobby läuft das Thema des Rivalen aus `MG_BGM.AFS` (wie auf Legends VS-Karte). START → Laden
   (gleicher Kurs: nur die Autos) → Telop „VS …“, 3-2-1-GO → Battle → YOU WIN/LOSE (WIN/LOSE.adx) → Battle-Blatt mit `R_WIN01`/`R_LOSE`
   → RETRY / REPLAY / CHANGE SETTINGS (zur Lobby) / EXIT (Hauptmenü). Pause → Exit führt zur Lobby. Replays heißen „FREE BATTLE vs
   <Rivale>“. Die letzte Wahl merkt sich `settings.json` (`FreeBattle`, Auto/Lack/Getriebe wie überall). Tastatur, Pad und Lenkrad über
   die Menütasten.
 - **Geteilter Bildschirm** (2 Spieler): Lobby links das Rennen (Kurs, Route, Bedingungen DAY/NIGHT/WET/DAY FOG/NIGHT FOG, Regel
   BATTLE = Battle des Originals mit 8-s-Vorsprungssieg bzw. RACE = beide bis ins Ziel, Bildschirm oben/unten oder links/rechts, Gerät von
-  Spieler 2), rechts je Spieler Auto und Lackfarbe; Spieler 2 hat einen eigenen (blauen) Cursor auf seiner Karte und muss READY drücken,
+  Spieler 2), rechts je Spieler Auto und Lackfarbe (ENTSCHEIDEN auf CAR öffnet die Autowahl Hersteller → Autos für diesen Spieler, gesteuert nur von ihm; online ebenso); Spieler 2 hat einen eigenen (blauen) Cursor auf seiner Karte und muss READY drücken,
   dann START. Geräte: Spieler 2 nimmt ein Pad (nur die Pad-Belegung aus CONTROLLER) oder – ohne Pad – die Pfeil-Hälfte der Tastatur
   (Pfeile fahren, R-CTRL Handbremse, R-SHIFT/R-ALT Gang hoch/runter, BACKSPACE zurück auf die Straße, ENTER Kamera; in den Menüs Pfeile +
   ENTER); Spieler 1 behält alles andere (Lenkrad, die übrigen Pads, Tastatur – mit Spieler 2 auf der Tastatur ohne Pfeil-Hälfte, Menüs
@@ -249,8 +249,10 @@ Enter/A entscheiden, Esc/B = NO), YES speichert die Einstellungen und schließt 
 graue Logo-Kachelwand, roter/blauer Laufschrift-Kopf, Chromplatten, Karbonpaneele, gelber Pulsrahmen, Verlaufswörter rot/blau, alles Englisch):
 TIME ATTACK = Kurswahl (3 × 4 Raster wie im Original, Streckenlinie im Karbon-„Monitor“ statt Foto, Länge/Höhe/Bestzeit; das 12. Feld ist
 FOUR PASSES, siehe unten) → Route (DOWNHILL/UPHILL bzw. CLOCKWISE/COUNTER-CLOCKWISE aus dem Drehsinn der Linie) → Tageszeit (DAY/NIGHT) → Wetter
-(DRY/WET/FOG, nachts DRY/FOG) – Schritte mit nur einer Möglichkeit entfallen – → Hersteller (7 Chromplatten, Modellliste im Karbonpaneel) → Auto (3D-Auto dreht
-sich, ←/→ Modell, ↑/↓ Lackfarbe, Antrieb FF/MR/FR/4WD) → Getriebe (AT/MT) → Laden (weiß, „Now Loading...“) → Streckentelop + 3-2-1-GO
+(DRY/WET/FOG, nachts DRY/FOG) – Schritte mit nur einer Möglichkeit entfallen – → Autowahl in zwei Schritten (`Ui/CarPicker`):
+Hersteller (7 Chromplatten mit Autozahl, rechts die Aufstellung: Fahrgestellcodes, gesperrte als ?????, „1 LOCKED“) → Autos dieses Herstellers
+(Liste links, das 3D-Auto dreht sich rechts daneben, ↑/↓ Auto, ←/→ Lackfarbe, Leistung/Gewicht, Antrieb FF/MR/FR/4WD; gesperrte Autos ?????
+mit Hinweis, piepen; ZURÜCK zu den Herstellern; geöffnet wird auf dem zuletzt gefahrenen Auto) → Getriebe (AT/MT) → Laden (weiß, „Now Loading...“) → Streckentelop + 3-2-1-GO
 (CAR010/CAR011, Auto steht bis GO) → Rennen. Esc (Pad: Start) pausiert (alarm_02): Continue/Retry/Replay/Photo/Exit/Quit Game (Quit Game wie im Hauptmenü mit Abfrage, nur Desktop). Start und Ziel sind die beiden Bögen an den
 Streckenenden: bergab endet, wo bergauf startet, und umgekehrt (Auto steht 5 m hinter seinem Startbogen, Zeit läuft ab dem Bogen). Im Ziel
 „FINISH!!“ bzw. „NEW RECORD!!“ (das Spiel übernimmt das Auto wie ein Arcade-Racer: rollt aus und bremst gleichmäßig bis

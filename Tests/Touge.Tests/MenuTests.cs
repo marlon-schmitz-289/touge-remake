@@ -7,7 +7,7 @@ public class MenuTests
 {
     /// <summary>
     ///     The game flow as the original's Time Attack: course → route → (time skipped when the course has one) → weather (DRY/FOG at night) →
-    ///     maker → model → car → transmission → loading asks once for the load → telop and 3-2-1-GO hold the game until GO →
+    ///     maker → car (that maker's models) → transmission → loading asks once for the load → telop and 3-2-1-GO hold the game until GO →
     ///     finish → result tally → Exit; back walks the visited steps, the locked grid slot beeps, music per screen.
     /// </summary>
     [Fact]
@@ -53,13 +53,21 @@ public class MenuTests
         Run(Menu.Fade + 0.1f, back); // back across modules: the weather again
         Assert.Equal(Menu.Screen.Weather, m.Current);
         Run(Menu.Fade + 0.1f, ok);
-        Run(0.1f, ok); // into the model list
-        Run(0.1f, (0, 1, false, false)); // LEVIN SR
+        Run(0.1f, (0, 1, false, false)); // NISSAN
         actions.Clear();
-        Run(Menu.Fade + 0.1f, ok);
+        Run(Menu.Fade + 0.1f, ok); // its cars: the first one shown
         Assert.Equal(Menu.Action.PreviewCar, actions[0]);
-        Assert.Equal(("AE85", Menu.Screen.Car), (m.CarId, m.Current));
-        Run(0.1f, (0, -1, false, false)); // body colour wraps to the last
+        Assert.Equal(("R32", Menu.Screen.Car), (m.CarId, m.Current));
+        Run(Menu.Fade + 0.1f, back); // back to the makers, NISSAN still lit
+        Assert.Equal(Menu.Screen.Maker, m.Current);
+        Run(0.1f, (0, -1, false, false)); // TOYOTA
+        Run(Menu.Fade + 0.1f, ok);
+        Assert.Equal(("AE86T", Menu.Screen.Car), (m.CarId, m.Current)); // the saved car's maker opens on it
+        actions.Clear();
+        Run(0.1f, (0, 1, false, false)); // LEVIN SR
+        Assert.Equal(Menu.Action.PreviewCar, actions[0]);
+        Assert.Equal("AE85", m.CarId);
+        Run(0.1f, (-1, 0, false, false)); // body colour wraps to the last
         Assert.Equal(1, m.Paint);
         Run(0.1f, ok);
         Run(0.1f, (1, 0, false, false)); // MT

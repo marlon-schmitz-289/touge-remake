@@ -248,12 +248,19 @@ public class LegendTests
         m.Open(Menu.Screen.Maker, "AKINA_NIT", true, "IMP3", 0); // a saved locked car falls back to an open one
         Assert.Equal("AE86T", m.CarId);
         Run(0.1f, (0, 5, false, false)); // SUBARU
-        Run(0.1f, ok);
+        actions.Clear();
+        Run(Menu.Fade + 0.1f, ok); // its cars open on the first open one, past the locked IMP3
+        Assert.Equal(("IMP", Menu.Screen.Car), (m.CarId, m.Current));
+        Assert.Contains(Menu.Action.PreviewCar, actions);
+        actions.Clear();
+        Run(0.1f, (0, 1, false, false)); // down wraps to IMP3: not shown on the car
+        Assert.DoesNotContain(Menu.Action.PreviewCar, actions);
         sounds.Clear();
-        Run(0.1f, ok); // IMP3 is the first SUBARU: locked
+        Run(0.1f, ok); // locked
         Assert.Equal(["BEEP001"], sounds);
+        Assert.Equal(Menu.Screen.Car, m.Current);
+        Run(Menu.Fade + 0.1f, back); // back to the makers
         Assert.Equal(Menu.Screen.Maker, m.Current);
-        Run(0.1f, back); // out of the model list
         actions.Clear();
         Run(Menu.Fade + 0.1f, back);
         Assert.Contains(Menu.Action.Rivals, actions);

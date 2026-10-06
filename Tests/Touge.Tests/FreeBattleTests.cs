@@ -144,6 +144,36 @@ public class FreeBattleTests
         Assert.Equal(Versus.Screen.Mode, v.Current);
     }
 
+    /// <summary>VS CPU: DECIDE on CAR opens the two-step car select (maker, then its cars) over the lobby; the choice comes back to the lobby.</summary>
+    [Fact]
+    public void Versus_VsCpuCarSelect()
+    {
+        var v = new Versus(TestCatalog());
+        v.Open();
+        v.OpenCpu(new FreeBattleChoice(), "AE86T", 0, false);
+        while (v.CpuLobby.Selected != FreeBattle.Row.Car) Step(v, Down);
+        Step(v, Ok);
+        Assert.True(v.Picking);
+        Assert.False(v.ShowsCar); // the makers first, TOYOTA lit
+        for (var i = 0; i < 4; i++) Step(v, Down); // MAZDA
+        Assert.Equal(Versus.Action.PreviewCar, Step(v, Ok));
+        Assert.True(v.ShowsCar);
+        Assert.Equal("FD3S", v.PickCarId);
+        Assert.Equal(Versus.Action.PreviewCar, Step(v, Right));
+        Step(v, Ok);
+        Assert.False(v.Picking);
+        Assert.Equal(("FD3S", 1), (v.CpuLobby.CarId, v.CpuLobby.Paint));
+        // BACK walks the cars → the makers → the lobby, the lobby's car unchanged
+        Step(v, Ok);
+        Step(v, Ok);
+        Step(v, Back);
+        Assert.Equal((true, false), (v.Picking, v.ShowsCar));
+        Step(v, Back);
+        Assert.False(v.Picking);
+        Assert.Equal(Versus.Screen.Cpu, v.Current);
+        Assert.Equal("FD3S", v.CpuLobby.CarId);
+    }
+
     private static Versus.Action Step(Versus v, params (int, int, bool, bool)[] keys)
     {
         var a = Versus.Action.None;
