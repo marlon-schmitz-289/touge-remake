@@ -556,8 +556,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                 c.Marquee(Current == Screen.Gearbox ? "SELECT TRANSMISSION" : "SELECT A CAR", false, _clock);
                 break;
             case Screen.Loading:
-                c.Fill(Canvas.White);
-                c.Text("Now Loading...", 476, 428, 15, HintRed, 1, 0.22f, 0, 0.4f);
+                LoadingArt.Draw(c, _t);
                 break;
             case Screen.Intro:
                 Telop(c);

@@ -701,8 +701,7 @@ public sealed class Versus(Catalog catalog)
                 c.Marquee("FREE PLAY", false, _clock);
                 break;
             case Screen.Loading:
-                c.Fill(Canvas.White);
-                c.Text("Now Loading...", 476, 428, 15, Overlay.Rgba(0.92f, 0.08f, 0.06f), 1, 0.22f, 0, 0.4f);
+                LoadingArt.Draw(c, _t);
                 if (!Split && Net != null)
                     c.Text($"Waiting for {Net.Players.Count(p => p.Connected && p.LoadedRace != Net.RaceId)} player(s)", 476, 404, 11,
                         Overlay.Rgba(0.4f, 0.4f, 0.42f), 1, 0.15f);

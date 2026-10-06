@@ -195,6 +195,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         _overlayRenderer = new OverlayRenderer(Device);
         _textRenderer = new TextRenderer(Device, _overlay.Font);
         _sprites = new SpriteRenderer(Device);
+        (LoadingArt.IsoPath, LoadingArt.Sprites) = (isoPath, _sprites);
         if (UseMenus)
         {
             _settings = Settings.Load();
