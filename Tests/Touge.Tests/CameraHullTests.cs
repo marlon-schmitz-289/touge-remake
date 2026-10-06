@@ -45,63 +45,76 @@ public class CameraHullTests
         var hull = Course(wallZ: 47);
         var f = new CameraRig.Follow();
         var mounts = new CameraRig.Mounts();
-        var v = new Vector3(0, 0, 0.1f);
-        // the car 2 m in front of the wall, facing away from it (+Z): the eye would stand 5 m behind, in the wall
-        var (pos, look, _) = CameraRig.Place(CameraView.Chase, ref f, true, 1 / 60f, PoseAt(new(0, 0.5f, 49)), PoseAt(new(0, 0.5f, 49)), mounts, v, 1, hull);
+        // the car 2 m in front of the wall, facing away from it (+Z): the eye would stand 4.6 m behind, in the wall
+        var (pos, look, _) = CameraRig.Place(CameraView.Chase, ref f, true, 1 / 60f, PoseAt(new(0, 0.5f, 49)), PoseAt(new(0, 0.5f, 49)), mounts, 1, hull);
         Assert.True(pos.Z > 47 + CameraHull.Radius - 1e-3f, $"{pos}");
         Assert.True(look.Z > pos.Z);
+        // standing there: the pulled-in eye holds still (no pumping in and out)
+        var held = pos;
+        for (var i = 0; i < 120; i++)
+            (pos, _, _) = CameraRig.Place(CameraView.Chase, ref f, false, 1 / 60f, PoseAt(new(0, 0.5f, 49)), PoseAt(new(0, 0.5f, 49)), mounts, 1, hull);
+        Assert.True(Vector3.Distance(pos, held) < 0.02f, $"{held} -> {pos}");
         // driving away from it: the eye eases out (no jump), back to the full distance
         var last = 49 - pos.Z;
         for (var i = 1; i <= 240; i++)
         {
             var car = new Vector3(0, 0.5f, 49 + i * 0.05f);
-            (pos, _, _) = CameraRig.Place(CameraView.Chase, ref f, false, 1 / 60f, PoseAt(car), PoseAt(car), mounts, v, 1, hull);
+            (pos, _, _) = CameraRig.Place(CameraView.Chase, ref f, false, 1 / 60f, PoseAt(car), PoseAt(car), mounts, 1, hull);
             Assert.True(pos.Z > 47 + CameraHull.Radius - 1e-3f);
             var behind = car.Z - pos.Z;
             Assert.True(behind - last < 0.2f, $"frame {i}: {last:F2} -> {behind:F2}");
             last = behind;
         }
-        Assert.InRange(last, 5, 6.2f);
+        Assert.Equal(4.6f, last, 2);
     }
 
     [Fact]
-    public void Chase_view_keeps_its_distance_at_speed_and_follows_the_slope()
+    public void Chase_view_is_the_originals_rig_and_lags_a_turn_by_a_quarter_second()
     {
-        var f = new CameraRig.Follow();
         var mounts = new CameraRig.Mounts();
-        var speed = new Vector3(0, 0, 40); // 144 km/h along +Z
-        Vector3 pos = default, car = default;
-        for (var i = 0; i < 120; i++)
-        {
-            car = new Vector3(0, 0.5f, i * 40 / 60f);
-            (pos, _, _) = CameraRig.Place(CameraView.Chase, ref f, i == 0, 1 / 60f, PoseAt(car), PoseAt(car), mounts, speed, 1);
-        }
-        Assert.InRange(car.Z - pos.Z, 5, 6.2f); // no lag that grows with speed (it was ~12 m)
-        // 10 % downhill: the eye stands as high over the road behind as on the flat, the aim goes down the slope
-        var down = Vector3.Normalize(new Vector3(0, -0.1f, 1));
-        var pose = Matrix4x4.CreateWorld(new Vector3(0, 0.5f, 0), down, Vector3.Cross(down, Vector3.UnitX) * -1);
+        // snapped on the flat: 4.6 m behind and 1.7 m over the car's origin, looking straight along the car, the chase fov
+        var car = PoseAt(new Vector3(3, 0.3f, 7));
+        var f = new CameraRig.Follow();
+        var (eye, look, fov) = CameraRig.Place(CameraView.Chase, ref f, true, 1 / 60f, car, car, mounts, 1);
+        Assert.True(Vector3.Distance(eye, new Vector3(3, 2, 2.4f)) < 1e-4f, $"{eye}");
+        Assert.True(Vector3.Dot(Vector3.Normalize(look - eye), Vector3.UnitZ) > 0.9999f);
+        Assert.Equal(MathF.Tan(0.5f) * CameraRig.Widen, MathF.Tan(fov / 2), 4);
+        // a steady turn at 1 rad/s (at any speed: no velocity in it): the view trails the heading by rate / TurnRate (0.25 rad)
         var g = new CameraRig.Follow();
-        var (eye, look, _) = CameraRig.Place(CameraView.Chase, ref g, true, 1 / 60f, pose, pose, mounts, down * 20, 1);
-        var roadBehind = 0.5f + 0.1f * -eye.Z;
-        Assert.InRange(eye.Y - roadBehind, 1.3f, 1.6f);
-        Assert.True(look.Y < 0.5f + 0.75f); // below the car's height plus the aim: down the slope
+        var heading = 0f;
+        for (var i = 0; i <= 360; i++, heading += 1 / 120f)
+        {
+            var p = PoseAt(new Vector3(MathF.Sin(heading), 0, MathF.Cos(heading)) * 30, heading);
+            (eye, look, _) = CameraRig.Place(CameraView.Chase, ref g, i == 0, 1 / 120f, p, p, mounts, 1);
+        }
+        var dir = Vector3.Normalize(look - eye);
+        Assert.Equal(1 / CameraRig.TurnRate, heading - 1 / 120f - MathF.Atan2(dir.X, dir.Z), 2);
+        Assert.InRange(1 / CameraRig.TurnRate, 0.24f, 0.26f); // 6.45 % per 60-Hz frame
+        // 10 % downhill: the view pitches down the slope, the eye stays 1.7 m over the car across the slope (higher behind)
+        var pose = Matrix4x4.CreateRotationX(MathF.Atan(0.1f)) * Matrix4x4.CreateTranslation(0, 0.5f, 0); // nose down
+        var h = new CameraRig.Follow();
+        (eye, look, _) = CameraRig.Place(CameraView.Chase, ref h, true, 1 / 60f, pose, pose, mounts, 1);
+        Assert.Equal(-0.1f / MathF.Sqrt(1.01f), Vector3.Normalize(look - eye).Y, 3);
+        Assert.InRange(eye.Y, 0.5f + 0.46f + 1.69f - 0.01f, 0.5f + 0.46f + 1.69f + 0.01f); // 4.6 m back up the slope + 1.7 m across it
     }
 
     [Fact]
-    public void Chase_view_follows_the_travel_in_a_spin_and_snaps_after_a_jump()
+    public void Chase_view_swings_round_the_short_way_and_snaps_after_a_jump()
     {
-        var fwd = Vector3.UnitZ;
-        Assert.True(Vector3.Dot(CameraRig.Aim(fwd, new Vector3(1, 0, 1) * 10), Vector3.Normalize(fwd + Vector3.Normalize(new Vector3(1, 0, 1)))) > 0.999f); // 45° drift: half way between
-        Assert.True(Vector3.Dot(CameraRig.Aim(fwd, new Vector3(0, 0, -20)), -fwd) > 0.99f); // sliding backwards: the travel
-        Assert.Equal(fwd, CameraRig.Aim(fwd, new Vector3(0, 0, -1))); // reversing slowly: the heading
-        // the car put 50 m away (a reset, another car in the replay): the view starts over there
-        var f = new CameraRig.Follow();
         var mounts = new CameraRig.Mounts();
-        CameraRig.Place(CameraView.Chase, ref f, true, 1 / 60f, PoseAt(Vector3.Zero), PoseAt(Vector3.Zero), mounts, default, 1);
+        // spun round 200°: the view turns the short way (-160°) and is behind the car again within 2 s
+        var f = new CameraRig.Follow();
+        CameraRig.Place(CameraView.Chase, ref f, true, 1 / 60f, PoseAt(Vector3.Zero), PoseAt(Vector3.Zero), mounts, 1);
+        var spun = PoseAt(Vector3.Zero, 200 * MathF.PI / 180);
+        var (eye, look, _) = CameraRig.Place(CameraView.Chase, ref f, false, 1 / 60f, spun, spun, mounts, 1);
+        var first = Vector3.Normalize(look - eye);
+        Assert.True(first.X < 0, $"{first}"); // turning towards -X (the short way to -160°)
+        for (var i = 0; i < 120; i++) (eye, look, _) = CameraRig.Place(CameraView.Chase, ref f, false, 1 / 60f, spun, spun, mounts, 1);
+        Assert.True(Vector3.Dot(Vector3.Normalize(look - eye), Vector3.TransformNormal(Vector3.UnitZ, spun)) > 0.99f);
+        // the car put 50 m away (a reset, another car in the replay): the view starts over there
         var moved = PoseAt(new Vector3(50, 0, 0), MathF.PI / 2);
-        var (pos, _, _) = CameraRig.Place(CameraView.Chase, ref f, false, 1 / 60f, moved, moved, mounts, default, 1);
-        Assert.InRange(Vector3.Distance(pos, moved.Translation), 5, 6.5f);
-        Assert.True(pos.X < 50 - 4.5f); // behind the turned car (it faces +X)
+        (eye, _, _) = CameraRig.Place(CameraView.Chase, ref f, false, 1 / 60f, moved, moved, mounts, 1);
+        Assert.True(MathF.Abs(eye.X - (50 - 4.6f)) < 1e-3f && MathF.Abs(eye.Z) < 1e-3f, $"{eye}"); // behind the turned car (it faces +X)
     }
 
     [Fact]
