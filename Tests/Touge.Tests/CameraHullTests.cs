@@ -79,6 +79,9 @@ public class CameraHullTests
         Assert.True(Vector3.Distance(eye, new Vector3(3, 2, 2.4f)) < 1e-4f, $"{eye}");
         Assert.True(Vector3.Dot(Vector3.Normalize(look - eye), Vector3.UnitZ) > 0.9999f);
         Assert.Equal(MathF.Tan(0.5f) * CameraRig.Widen, MathF.Tan(fov / 2), 4);
+        // the default 60° setting is the original's chase: tan ½ H 0.92502 at 4:3, vertical 0.75 of it (69.5°)
+        (_, _, fov) = CameraRig.Place(CameraView.Chase, ref f, true, 1 / 60f, car, car, mounts, MathF.PI / 3);
+        Assert.Equal(0.75f * 0.92502f, MathF.Tan(fov / 2), 4);
         // a steady turn at 1 rad/s (at any speed: no velocity in it): the view trails the heading by rate / TurnRate (0.25 rad)
         var g = new CameraRig.Follow();
         var heading = 0f;

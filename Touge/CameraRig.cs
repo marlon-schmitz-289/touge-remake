@@ -122,8 +122,11 @@ public static class CameraRig
     /// </summary>
     public static readonly float TurnRate = -60 * MathF.Log(1 - 0.064516f);
 
-    /// <summary>The chase views' tan(½ fov) over the on-board one's: 0.92502 / 0.80285 (<c>0x170028</c>, <c>0x16FE78</c>).</summary>
-    public const float Widen = 0.92502f / 0.80285f;
+    /// <summary>
+    ///     Chase views' tan(½ vertical fov) over the setting's: the original's chase tan(½ H) 0.92502 (<c>0x170028</c>), vertical
+    ///     0.75 of it, over the default 60° — so the default gives the original's 69.5° and other settings scale with it.
+    /// </summary>
+    public static readonly float Widen = 0.75f * 0.92502f / MathF.Tan(MathF.PI / 6);
 
     /// <summary>The car's pitch the view follows at most (rad): the original clamps it to ±30° (<c>0x154C40</c>).</summary>
     private const float MaxPitch = MathF.PI / 6;

@@ -200,7 +200,7 @@ Der Verfolger hat also **keine Kollision, keinen Zielpunkt, keine Geschwindigkei
 Ausrichtung läuft dem Auto mit Zeitkonstante 1/(−60·ln(1 − 2/31)) = 0,25 s nach (Gier im Drift: Nachlauf = Gierrate · 0,25 s). Das Auto
 steht genau in der Bildmitte, atan(1,7/4,6) = 20,3° unter der Achse, also bei 0,37/0,69 = 53 % der unteren Bildhälfte (≈ 77 % von oben).
 Eine ferne Verfolgerkamera gibt es im Original nicht. Remake (`CameraRig.Place`): CHASE genau so (Ursprung = Modellmatrix des Autos,
-Blickwinkel aus der Einstellung × 0,92502/0,80285 in tan ½), statt des Lerps eine kritisch gedämpfte Feder mit 2·4,0/s (gleicher
+Blickwinkel aus der Einstellung × 0,75·0,92502/tan 30° = 1,2017 in tan ½, also bei 60° genau die 69,5° des Originals), statt des Lerps eine kritisch gedämpfte Feder mit 2·4,0/s (gleicher
 Nachlauf, ohne Knick), ohne Rollen (Neigung aus der Karosserie statt dem Boden, darum gefiltert); FAR = CHASE × 1,5; die Kurs-Kollision
 bleibt als Sicherheitsnetz.
 
