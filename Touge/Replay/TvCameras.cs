@@ -135,11 +135,27 @@ public sealed class TvCameras(ReplayCameras.Cam[] cams, Vector3[] road, bool rev
             (_look, _lookRate) = (target, Vector3.Zero);
         }
         else CameraRig.Spring(ref _look, ref _lookRate, target, 16, dt);
+        var dist = Vector3.Distance(eye, target);
+        fov = Frame(fov, dist);
+        // the spring's lag (~2v/16 m) at most 30 % of the half picture: a close or tightly zoomed shot keeps the car in frame
+        var off = _look - target;
+        var lim = dist * MathF.Tan(fov * MathF.PI / 360 * 0.3f);
+        if (off.Length() > lim) _look = target + off * (lim / off.Length());
         return (eye, _look, fov, cut);
     }
 
     /// <summary>Nothing of the course between <paramref name="eye"/> and <paramref name="target"/> (always without a hull).</summary>
     private bool Sees(Vector3 eye, Vector3 target) => hull?.Hit(eye, target) == null;
+
+    /// <summary>
+    ///     The table's FOV held to a sensible size of the car at <paramref name="dist"/> m: the picture 5–40 m high there
+    ///     (no half car when an eye passes close, no speck far away), 3°–75°.
+    /// </summary>
+    internal static float Frame(float fov, float dist)
+    {
+        static float Deg(float half, float d) => 2 * MathF.Atan(half / MathF.Max(d, 0.1f)) * 180 / MathF.PI;
+        return Math.Clamp(Math.Clamp(fov, Deg(2.5f, dist), MathF.Max(Deg(20, dist), Deg(2.5f, dist))), 3, 75);
+    }
 
     /// <summary>Vertical FOV (degrees) that keeps the car about 9 m of the picture high, 10°–50°.</summary>
     private static float Zoom(Vector3 eye, Vector3 target) => Math.Clamp(2 * MathF.Atan(4.5f / MathF.Max(Vector3.Distance(eye, target), 1)) * 180 / MathF.PI, 10, 50);

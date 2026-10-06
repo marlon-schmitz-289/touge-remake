@@ -55,7 +55,7 @@ using Touge;
 // --menu freebattle: VERSUS → VS CPU-Lobby beim Start; --flow <dir> --freebattle: freies Battle gegen die KI per Skript (Lobby → LEAD/CHASE → Ergebnis → RETRY → Pause-Exit → RACE → EXIT).
 // --versus split|host|join[:ip[:port]]|online [--bot] [--split vertical] [--car2 X] [--players n] [--net-rule battle|race]: Versus direkt (Testläufe/Bilder):
 //   geteilter Bildschirm bzw. Online-Host/-Client im Fenster; --bot: Autopilot fährt, Lobby läuft von selbst (Host startet bei --players Spielern).
-// --shot-after <s>: --shot erst nach so vielen Sekunden (statt sofort), das Spiel läuft bis dahin normal.
+// --shot-after <s>: --shot erst nach so vielen Sekunden (statt sofort), das Spiel läuft bis dahin normal (Versus, Replay).
 // --replay-test <s> [--battle <rivale>] [--drift] [--save <datei.rpl>]: Lauf ohne Fenster aufnehmen, Datei schreiben/lesen, auf frischen Autos abspielen,
 //   Positionsfehler je Tick (mit Keyframes) und nur aus Eingaben (Determinismus), Sprünge; optional die Replay-Datei.
 // --replay <datei.rpl> [--replay-at <s>] [--replay-cam tv|chase|far|hood|cockpit|bumper|free] [--replay-focus 1]: Replay im Viewer öffnen (z. B. mit

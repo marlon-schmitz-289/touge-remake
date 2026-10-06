@@ -660,6 +660,8 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         var k = Input.Keyboard;
         var dt = time.DeltaTime;
         _menuTime += dt;
+        // --replay --shot-after: the replay plays that long, then the picture (versus mode has its own trigger)
+        if (shotPath != null && ShotAfter > 0 && _player != null && _versusUi == null && !_vsShotTaken && _menuTime >= ShotAfter && _shotState == 0) (_shotState, _vsShotTaken) = (1, true);
         SyncAudio();
         _jukebox?.Update(dt, hold: _menu?.Current == Menu.Screen.Pause);
         if (_simWheel != null) InputDebugView.Simulate(_simWheel, time.TotalTime);

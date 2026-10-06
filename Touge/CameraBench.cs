@@ -199,8 +199,11 @@ public static class CameraBench
         Viewer(player, 1, (p, time) =>
         {
             var c = p.Translation;
-            var (eye, look, _, cut) = tvCams.Update(c, 1 / Fps, first);
+            var (eye, look, tvFov, cut) = tvCams.Update(c, 1 / Fps, first);
             tv.Frame(hull, c, eye, look, time, cut && !first);
+            // the car's centre off the picture (outside 90 %): the aim lags or the shot is too tight
+            var vp = Matrix4x4.CreateLookAt(eye, look, Vector3.UnitY) * Matrix4x4.CreatePerspectiveFieldOfView(tvFov * MathF.PI / 180, 16 / 9f, 0.3f, 2000);
+            if (Project(c + Vector3.UnitY * 0.6f, vp) is not { } q || MathF.Abs(q.X) > 0.9f || MathF.Abs(q.Y) > 0.9f) tv.Hidden++;
             var (ce, cl, _) = CameraRig.Place(CameraView.Chase, ref chaseFollow, false, 1 / Fps, p, p, mounts, player.Cars[0].Velocity, fov65, hull);
             chase.Frame(hull, c, ce, cl, time);
             first = false;

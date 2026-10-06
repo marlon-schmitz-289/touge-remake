@@ -50,7 +50,7 @@ public sealed class CameraHull(TriangleGround solid)
     /// <summary>
     ///     How far (m) from <paramref name="pivot"/> towards <paramref name="eye"/> the camera may go: a thin sphere sweep (the
     ///     centre ray and four rays <paramref name="radius"/> around it) stops <paramref name="radius"/> before the first surface,
-    ///     then it backs off to where there is ground below (bisection: the edge of the course). At most the full distance.
+    ///     then it backs off to where there is ground below (bisection: the edge of the course) unless the pivot itself has none. At most the full distance.
     /// </summary>
     public float Reach(Vector3 pivot, Vector3 eye, float radius = Radius)
     {
@@ -66,7 +66,8 @@ public sealed class CameraHull(TriangleGround solid)
         foreach (var o in offsets)
             if (solid.Raycast(pivot + o, d, len + radius, out var h)) reach = MathF.Min(reach, h.Distance - radius);
         reach = MathF.Max(reach, 0);
-        if (reach == 0 || Floor(pivot + d * reach)) return reach;
+        // a pivot already over the void (a free/photo camera started at a TV eye beyond the edge) may move freely; only the sweep holds it
+        if (reach == 0 || Floor(pivot + d * reach) || !Floor(pivot)) return reach;
         float lo = 0, hi = reach; // the pivot stands over the course
         for (var i = 0; i < 8; i++)
         {

@@ -25,13 +25,16 @@ public class CameraHullTests
         var walled = Course(wallZ: 47);
         Assert.Equal(3 - CameraHull.Radius, walled.Reach(new Vector3(0, 1.5f, 50), new Vector3(0, 1.5f, 44)), 3);
         // a wall the centre ray just misses (0.2 m beside it) still stops the sphere
-        var post = new CameraHull(new TriangleGround([new(0.2f, 0, 47), new(0.2f, 0, 46), new(0.2f, 5, 46.5f)], [0, 1, 2], [0], [false]));
+        var post = new CameraHull(new TriangleGround([new(-10, 0, 0), new(10, 0, 0), new(0, 0, 100), new(0.2f, 0, 47), new(5, 0, 47), new(0.2f, 5, 47)], [0, 1, 2, 3, 4, 5], [0, 0], [false, false]));
         Assert.True(post.Reach(new Vector3(0, 1.5f, 50), new Vector3(0, 1.5f, 44)) < 3.8f);
         // out over the end of the ground (Z < 0: the void): back to within a few cm of the edge
         var edge = open.Reach(new Vector3(0, 1.5f, 3), new Vector3(0, 1.5f, -5));
         Assert.InRange(edge, 2.9f, 3.05f);
         Assert.True(open.Floor(new Vector3(0, 1.5f, 3 - edge)));
         Assert.False(open.Floor(new Vector3(0, 1.5f, -1)));
+        // a pivot already over the void (free camera started at a TV eye there) is not frozen: it may move, back towards the course too
+        Assert.Equal(2, open.Reach(new Vector3(0, 5, -10), new Vector3(0, 5, -12)), 3);
+        Assert.Equal(4, open.Reach(new Vector3(0, 5, -10), new Vector3(0, 5, -6)), 3);
     }
 
     private static Matrix4x4 PoseAt(Vector3 p, float yaw = 0) => Matrix4x4.CreateRotationY(yaw) * Matrix4x4.CreateTranslation(p);
@@ -146,6 +149,16 @@ public class CameraHullTests
         Assert.All(cuts.Zip(cuts.Skip(1)), c => Assert.True(c.Second - c.First >= TvCameras.Blind, $"cuts {string.Join(", ", cuts)}"));
         Assert.True(cuts.Count <= 3, $"cuts {string.Join(", ", cuts)}");
         Assert.True(eye.X < 5); // camera 1 stands behind the wall: a trackside camera on the road side took over
+    }
+
+    [Fact]
+    public void Tv_zoom_keeps_the_car_whole_up_close_and_visible_far_away()
+    {
+        static float Height(float fov, float d) => 2 * d * MathF.Tan(fov / 2 * MathF.PI / 180); // picture height at the car
+        Assert.InRange(Height(TvCameras.Frame(40, 4), 4), 5 - 1e-3f, 40); // 4 m off: widened so the car fits
+        Assert.Equal(75, TvCameras.Frame(40, 1)); // closer still: no fisheye beyond 75°
+        Assert.InRange(Height(TvCameras.Frame(50, 120), 120), 5, 40 + 1e-3f); // 120 m off at 50°: zoomed in
+        Assert.Equal(20, TvCameras.Frame(20, 30)); // a sensible table shot is kept
     }
 
     [Fact]
