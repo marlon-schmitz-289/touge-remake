@@ -121,15 +121,22 @@ public static class CameraBench
             vel.Add(car.Velocity);
         }
         var name = $"{course}{(reverse ? " rev" : "")}";
+        // places for pictures (--at n): the steepest downhill and the tightest bends of the line (points ~10 m apart)
+        var line = drive.Line;
+        var steep = Enumerable.Range(0, line.Length - 5).OrderBy(k => (line[k + 5].Y - line[k].Y) / MathF.Max(Vector2.Distance(new(line[k].X, line[k].Z), new(line[k + 5].X, line[k + 5].Z)), 1)).First();
+        var bends = Enumerable.Range(3, Math.Max(line.Length - 6, 0)).OrderByDescending(k => MathF.Acos(Math.Clamp(Vector3.Dot(Vector3.Normalize(line[k] - line[k - 3]), Vector3.Normalize(line[k + 3] - line[k])), -1, 1)))
+            .Aggregate(new List<int>(), (l, k) => { if (l.Count < 3 && l.All(o => Math.Abs(o - k) > 20)) l.Add(k); return l; });
+        Console.WriteLine($"[CamBench] {name}: steilstes Gefälle bei Punkt {steep}, engste Kurven bei {string.Join(", ", bends)}");
         Console.WriteLine($"[CamBench] {name}: {pos.Count * Drive.Dt:F0} s, {drive.Pilot.Track(car.Position).Along:F0} von {goal:F0} m");
 
         // live: the driving cameras at 144 Hz on the interpolated pose
         var track = new LinePilot(drive.Line);
         var mounts = new CameraRig.Mounts(Vector3.Zero, Vector3.Zero, Vector3.Zero, -Vector3.One, Vector3.One);
+        var fov65 = 65 * MathF.PI / 180;
         foreach (var view in new[] { CameraView.Chase, CameraView.Far })
         {
             var s = new Stats(CameraRig.Name(view));
-            Vector3 eye = default, look = default;
+            var follow = new CameraRig.Follow();
             for (var f = 0; ; f++)
             {
                 var tt = f / Fps / Drive.Dt;
@@ -137,25 +144,31 @@ public static class CameraBench
                 if (i + 1 >= pos.Count) break;
                 var a = Vector3.Distance(pos[i], pos[i + 1]) > 3 ? 1 : tt - i; // a reset: no glide across it (SyncPose)
                 var pose = Matrix4x4.CreateFromQuaternion(Quaternion.Slerp(rot[i], rot[i + 1], a)) * Matrix4x4.CreateTranslation(Vector3.Lerp(pos[i], pos[i + 1], a));
-                (eye, look, var fov) = CameraRig.Place(view, eye, look, f == 0 || Vector3.Distance(pos[i], pos[i + 1]) > 3, 1 / Fps, pose, pose, mounts, vel[i + 1].Length() * 3.6f, 65 * MathF.PI / 180);
+                var (eye, look, fov) = CameraRig.Place(view, ref follow, false, 1 / Fps, pose, pose, mounts, vel[i + 1], fov65, hull);
                 s.Frame(hull, pose.Translation, eye, look, f / Fps);
                 if (Hidden(track, pose, eye, look, fov)) s.Hidden++;
             }
             Report(name, s, total);
         }
 
-        // the showcase orbit (car select, result sheet, story) around the car parked every 100 m along the line, 72 angles
+        // the showcase orbit (car select, result sheet, story) around the car parked at every 10th line point (~100 m), 72 angles;
+        // the places where the unclipped orbit was worst for pictures (--at n --orbit deg:7)
         var orbit = new Stats("ORBIT");
-        for (var at = 0f; at < track.Length; at += 100)
+        var worst = new List<(int At, int Deg, int Bad)>();
+        for (var at = 0; at + 1 < line.Length; at += 10)
         {
-            var p = track.PointAt(at);
-            var body = Matrix4x4.CreateWorld(p + Vector3.UnitY * 0.5f, Vector3.Normalize((track.PointAt(at + 2) - p) with { Y = 0 }), Vector3.UnitY);
+            var body = Matrix4x4.CreateWorld(line[at] + Vector3.UnitY * 0.5f, Vector3.Normalize((line[at + 1] - line[at]) with { Y = 0 }), Vector3.UnitY);
+            var bad = (Deg: 0, N: 0);
             for (var k = 0; k < 72; k++)
             {
-                var (eye, look) = Orbit(body, k * MathF.Tau / 72, hull);
+                var (eye, look) = CameraRig.Orbit(body, k * MathF.Tau / 72, 7, hull); // OrbitCar 5.5 m + 1.5 m
                 orbit.Frame(hull, body.Translation, eye, look, 0);
+                var (raw, _) = CameraRig.Orbit(body, k * MathF.Tau / 72, 7, null);
+                if (hull.Hit(body.Translation + Vector3.UnitY, raw) != null || !hull.Floor(raw)) bad = (bad.N == 0 ? k * 5 : bad.Deg, bad.N + 1);
             }
+            if (bad.N > 0) worst.Add((at, bad.Deg, bad.N));
         }
+        Console.WriteLine($"[CamBench] {name}: Orbit ohne Kamerakollision schlecht bei (Punkt/Winkel/Anteil): {string.Join(", ", worst.OrderByDescending(w => w.Bad).Take(3).Select(w => $"{w.At}/{w.Deg}°/{w.Bad * 100 / 72}%"))}");
         Report(name, orbit, total);
 
         // the replay: speeds as the viewer steps them, then TV and chase at 1×
@@ -177,37 +190,22 @@ public static class CameraBench
                 if (Vector3.Distance(pos[i], pos[i - 2]) < 3) real.Add((pos[i] - 2 * pos[i - 1] + pos[i - 2]).Length() / (Drive.Dt * Drive.Dt) * speed * speed);
             Console.WriteLine($"[CamBench]   replay x{speed,-4} shown car acc RMS/p99/max {Stats.Spread(shown)} m/s²  (recording {Stats.Spread(real)})");
         }
-        var tvCams = new TvCameras(ReplayCameras.Load(iso, course[..course.LastIndexOf('_')], reverse), Road(iso, course), reverse);
+        var tvCams = new TvCameras(ReplayCameras.Load(iso, course[..course.LastIndexOf('_')], reverse), Road(iso, course), reverse, hull);
         var tv = new Stats("TV");
         var chase = new Stats("replay CHASE");
-        Vector3 ce = default, cl = default, prev = default;
-        var last = -1;
+        var chaseFollow = new CameraRig.Follow();
         var first = true;
         Viewer(player, 1, (p, time) =>
         {
             var c = p.Translation;
-            var (eye, look, _) = tvCams.Update(c, 1 / Fps, first);
-            var (_, _, index) = tvCams.At(c);
-            tv.Frame(hull, c, eye, look, time, index != last && last >= 0);
-            last = index;
-            first |= Vector3.Distance(c, prev) > 3; // a reset: the game snaps
-            prev = c;
-            (ce, cl, _) = CameraRig.Place(CameraView.Chase, ce, cl, first, 1 / Fps, p, p, mounts, player.Cars[0].Velocity.Length() * 3.6f, 65 * MathF.PI / 180);
+            var (eye, look, _, cut) = tvCams.Update(c, 1 / Fps, first);
+            tv.Frame(hull, c, eye, look, time, cut && !first);
+            var (ce, cl, _) = CameraRig.Place(CameraView.Chase, ref chaseFollow, false, 1 / Fps, p, p, mounts, player.Cars[0].Velocity, fov65, hull);
             chase.Frame(hull, c, ce, cl, time);
             first = false;
         });
         Report(name, tv, total);
         Report(name, chase, total);
-    }
-
-    /// <summary>The showcase orbit as <see cref="TougeGame"/> places it (OrbitCar at 5.5 m, then 1.5 m further out).</summary>
-    private static (Vector3 Eye, Vector3 Look) Orbit(in Matrix4x4 body, float angle, CameraHull hull)
-    {
-        var target = Vector3.Transform(new Vector3(0, 0.4f, 0), body);
-        var dir = Vector3.TransformNormal(new Vector3(MathF.Sin(angle), 0, MathF.Cos(angle)), body);
-        var eye = target + dir * 5.5f + new Vector3(0, 1.3f, 0);
-        eye -= Vector3.Normalize(target - eye) * 1.5f;
-        return (eye, target);
     }
 
     private static void Report(string course, Stats s, Dictionary<string, int[]> total)
@@ -234,8 +232,12 @@ public static class CameraBench
             {
                 tick++;
                 acc += speed;
-                for (; acc >= 1; acc--)
+                for (var n = 0; acc >= 1; acc--, n++)
+                {
+                    player.KeepPrev = n > 0; // as TougeGame.ReplayTick
                     if (!player.Step()) break;
+                }
+                player.KeepPrev = false;
             }
             var tickAlpha = (t - tick * Drive.Dt) / Drive.Dt;
             var alpha = Math.Clamp(acc + tickAlpha * MathF.Min(speed, 1), 0, 1);

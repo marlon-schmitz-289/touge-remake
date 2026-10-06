@@ -473,6 +473,7 @@ public sealed partial class TougeGame
     private byte[][]? _liveStates;
     private Effects? _liveFx;
     private TvCameras? _tv;
+    private ReplayViewer.Camera? _shownCam;
     private float _replayAcc;
     private readonly FreeCam _viewerCam = new();
 
@@ -510,7 +511,7 @@ public sealed partial class TougeGame
         _menu?.Close();
         _replayMenu?.Close();
         _player = new ReplayPlayer(replay, cars, _drive.Ground);
-        _tv = new TvCameras(ReplayCameras.Load(iso, _courseTime[.._courseTime.LastIndexOf('_')], _drive.Reverse), _course.Road, _drive.Reverse);
+        _tv = new TvCameras(ReplayCameras.Load(iso, _courseTime[.._courseTime.LastIndexOf('_')], _drive.Reverse), _course.Road, _drive.Reverse, _course.Hull);
         Console.WriteLine($"\n[Replay] {replay.Info.Course} {replay.Seconds:F1} s, {replay.CarCount} Autos, {_tv.Count} TV-Kameras");
         _fly = false;
         _viewer.Open();
@@ -558,12 +559,16 @@ public sealed partial class TougeGame
         if (_player == null) return false;
         if (_photo.Active) return true;
         _replayAcc += _viewer.Speed;
-        for (; _replayAcc >= 1; _replayAcc--)
+        for (var n = 0; _replayAcc >= 1; _replayAcc--, n++)
+        {
+            _player.KeepPrev = n > 0; // 2×/4×: the picture glides over all ticks of this game tick
             if (!StepReplay(dt))
             {
                 (_viewer.Paused, _replayAcc) = (true, 0); // the end: stops there
                 break;
             }
+        }
+        _player.KeepPrev = false;
         return true;
     }
 
@@ -683,12 +688,13 @@ public sealed partial class TougeGame
             return true;
         }
         if (_player == null) return false;
+        if (_viewer.Cam != _shownCam) (_shownCam, _camSnap) = (_viewer.Cam, true); // another camera starts fresh, no glide from the last one
         var pose = FocusPose();
         var car = pose.Translation;
         switch (_viewer.Cam)
         {
             case ReplayViewer.Camera.Tv:
-                (_pos, _camLook, var tvFov) = _tv!.Update(car, dt, _camSnap);
+                (_pos, _camLook, var tvFov, _) = _tv!.Update(car, dt, _camSnap);
                 _fov = tvFov * MathF.PI / 180;
                 break;
             case ReplayViewer.Camera.Free:
@@ -697,8 +703,8 @@ public sealed partial class TougeGame
             default: // the driving cameras on the focused car
                 var view = ReplayViewer.Driving(_viewer.Cam)!.Value;
                 var (body, model) = FocusModel();
-                (_pos, _camLook, _fov) = CameraRig.Place(view, _pos, _camLook, _camSnap, dt, pose, body, model.Mounts,
-                    _player.Cars[Math.Min(_viewer.Focus, _player.Cars.Length - 1)].SpeedKmh, _settings.Fov * MathF.PI / 180);
+                (_pos, _camLook, _fov) = CameraRig.Place(view, ref _follow, _camSnap, dt, pose, body, model.Mounts,
+                    _player.Cars[Math.Min(_viewer.Focus, _player.Cars.Length - 1)].Velocity, _settings.Fov * MathF.PI / 180, _course.Hull);
                 _onBoard = view is CameraView.Hood or CameraView.Cockpit ? view : null;
                 break;
         }

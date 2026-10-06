@@ -5,8 +5,8 @@ using Touge.Formats;
 namespace Touge;
 
 /// <summary>
-///     What the cameras may not pass: the course as drawn (opaque triangles, no foliage/fence cutouts or trees: hills, rock
-///     faces, banks, buildings, the road) as a ray-cast <see cref="TriangleGround"/> with every triangle solid. The collision
+///     What the cameras may not pass: the course as drawn (opaque triangles, no foliage/fence cutouts: hills, rock faces,
+///     banks, buildings, tree trunks, the road) as a ray-cast <see cref="TriangleGround"/> with every triangle solid. The collision
 ///     file alone has only the drivable faces and low walls, not the slopes the chase camera swung into.
 /// </summary>
 public sealed class CameraHull(TriangleGround solid)
@@ -49,10 +49,10 @@ public sealed class CameraHull(TriangleGround solid)
 
     /// <summary>
     ///     How far (m) from <paramref name="pivot"/> towards <paramref name="eye"/> the camera may go: a thin sphere sweep (the
-    ///     centre ray and four rays <see cref="Radius"/> around it) stops <see cref="Radius"/> before the first surface, then
-    ///     it backs off in 0.5-m steps while there is no ground below (the edge of the course). At most the full distance.
+    ///     centre ray and four rays <paramref name="radius"/> around it) stops <paramref name="radius"/> before the first surface,
+    ///     then it backs off to where there is ground below (bisection: the edge of the course). At most the full distance.
     /// </summary>
-    public float Reach(Vector3 pivot, Vector3 eye)
+    public float Reach(Vector3 pivot, Vector3 eye, float radius = Radius)
     {
         var d = eye - pivot;
         var len = d.Length();
@@ -62,11 +62,18 @@ public sealed class CameraHull(TriangleGround solid)
         side = side.LengthSquared() < 1e-6f ? Vector3.UnitX : Vector3.Normalize(side);
         var up = Vector3.Cross(side, d);
         var reach = len;
-        ReadOnlySpan<Vector3> offsets = [Vector3.Zero, side * Radius, -side * Radius, up * Radius, -up * Radius];
+        ReadOnlySpan<Vector3> offsets = [Vector3.Zero, side * radius, -side * radius, up * radius, -up * radius];
         foreach (var o in offsets)
-            if (solid.Raycast(pivot + o, d, len + Radius, out var h)) reach = MathF.Min(reach, h.Distance - Radius);
+            if (solid.Raycast(pivot + o, d, len + radius, out var h)) reach = MathF.Min(reach, h.Distance - radius);
         reach = MathF.Max(reach, 0);
-        while (reach > 0 && !Floor(pivot + d * reach)) reach = MathF.Max(reach - 0.5f, 0);
-        return reach;
+        if (reach == 0 || Floor(pivot + d * reach)) return reach;
+        float lo = 0, hi = reach; // the pivot stands over the course
+        for (var i = 0; i < 8; i++)
+        {
+            var mid = (lo + hi) / 2;
+            if (Floor(pivot + d * mid)) lo = mid;
+            else hi = mid;
+        }
+        return lo;
     }
 }

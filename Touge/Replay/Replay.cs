@@ -209,9 +209,17 @@ public sealed class ReplayPlayer(Replay replay, Vehicle[] cars, IGround ground)
     public int Tick { get; private set; }
     public bool Restore { get; set; } = true;
     public bool Done => Tick >= replay.Ticks;
+    /// <summary>
+    ///     Several ticks in one game tick (fast forward): the later ones keep <see cref="PrevPosition"/> from before the first,
+    ///     so the picture glides over all of them instead of stepping a tick at each game tick.
+    /// </summary>
+    public bool KeepPrev { get; set; }
+
     /// <summary>Poses before the last tick (render interpolation).</summary>
     public Vector3[] PrevPosition { get; } = new Vector3[cars.Length];
     public Quaternion[] PrevOrientation { get; } = new Quaternion[cars.Length];
+    private readonly Vector3[] _tickPos = new Vector3[cars.Length]; // the poses before this tick (car contacts), whatever is shown
+    private readonly Quaternion[] _tickRot = new Quaternion[cars.Length];
     public CarContact? LastContact { get; private set; }
 
     /// <summary>Input car <paramref name="car"/> got in the last tick (brake lights, engine sound).</summary>
@@ -251,17 +259,24 @@ public sealed class ReplayPlayer(Replay replay, Vehicle[] cars, IGround ground)
     public bool Step()
     {
         if (Done) return false;
-        if (Restore && replay.Keys.ContainsKey(Tick)) Load(Tick);
+        if (!KeepPrev)
+            for (var c = 0; c < cars.Length; c++) (PrevPosition[c], PrevOrientation[c]) = (cars[c].Position, cars[c].Orientation);
+        if (Restore && replay.Keys.ContainsKey(Tick))
+        {
+            Load(Tick);
+            // the picture glides from what was shown to the keyframe's state; a reset (a jump) is not glided over
+            for (var c = 0; c < cars.Length; c++)
+                if (Vector3.DistanceSquared(PrevPosition[c], cars[c].Position) > 1) (PrevPosition[c], PrevOrientation[c]) = (cars[c].Position, cars[c].Orientation);
+        }
         for (var c = 0; c < cars.Length; c++)
         {
-            var v = cars[c];
-            (PrevPosition[c], PrevOrientation[c]) = (v.Position, v.Orientation);
-            v.Step(replay.Input(Tick, c), ground, Drive.Dt);
+            (_tickPos[c], _tickRot[c]) = (cars[c].Position, cars[c].Orientation);
+            cars[c].Step(replay.Input(Tick, c), ground, Drive.Dt);
         }
         LastContact = null;
         for (var i = 0; i < cars.Length; i++)
         for (var j = i + 1; j < cars.Length; j++)
-            if (CarCollision.Resolve(cars[i], cars[j], PrevPosition[i], PrevOrientation[i], PrevPosition[j], PrevOrientation[j]) is { } hit
+            if (CarCollision.Resolve(cars[i], cars[j], _tickPos[i], _tickRot[i], _tickPos[j], _tickRot[j]) is { } hit
                 && (LastContact is not { } hard || hit.ImpactSpeed > hard.ImpactSpeed)) LastContact = hit;
         Tick++;
         return true;

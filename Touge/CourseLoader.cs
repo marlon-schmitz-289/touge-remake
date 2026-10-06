@@ -82,8 +82,8 @@ public static class CourseLoader
         var road = CourseRoad.Read(Data($"CRS_ROAD_{course}.BIN") ?? throw new FileNotFoundException($"CRS_ROAD_{course}.BIN"));
 
         // lod/shd are not drawn; the tree templates are placed from TREE_* (baked into the world)
-        var meshes = Meshes(pac, false).Where(m => RaceGates(m.Name, reverse)).ToList();
-        var world = Build(renderer.Device, [.. meshes, .. Trees(pac, course, Data, road)], textures, cutout, white, true);
+        List<(string Name, Mesh Mesh)> meshes = [.. Meshes(pac, false).Where(m => RaceGates(m.Name, reverse)), .. Trees(pac, course, Data, road)];
+        var world = Build(renderer.Device, meshes, textures, cutout, white, true);
         var sky = Build(renderer.Device, Meshes(pac, true), textures, cutout, white, false); // no depth: paint order stays file order
 
         var lights = Data($"CRS_LIGHT_{course}.BIN") is { } l ? CourseRoad.ReadLights(l) : [];
@@ -106,7 +106,11 @@ public static class CourseLoader
             for (var i = 3; i < rgba.Length; i += 4)
                 if (rgba[i] < 255 && cutout.Add(e.Name)) break;
         }
-        return CameraHull.Of(Meshes(pac, false).Where(m => RaceGates(m.Name, reverse)), cutout);
+        var data = Afs.FromBytes(iso.ReadFile("CDVD/DATA/COURSE/CRS_DATA.AFS"), iso.ReadFile("CDVD/DATA/COURSE/CRS_DATA.TBL"));
+        byte[]? Data(string name) => data.Find(name) is { } e ? data.Read(e) : null;
+        var course = courseTime[..courseTime.LastIndexOf('_')];
+        var road = CourseRoad.Read(Data($"CRS_ROAD_{course}.BIN") ?? throw new FileNotFoundException($"CRS_ROAD_{course}.BIN"));
+        return CameraHull.Of([.. Meshes(pac, false).Where(m => RaceGates(m.Name, reverse)), .. Trees(pac, course, Data, road)], cutout);
     }
 
     /// <summary>
