@@ -100,8 +100,8 @@ public class CarGuideTests
     [Fact]
     public void Peaks_FromTorqueCurve()
     {
-        Assert.Equal((130, 6600, 149, 5800), CarGuide.Peaks(CarSpecs.All["AE86T"]));
-        Assert.Equal((280, 6800, 353, 4400), CarGuide.Peaks(CarSpecs.All["R32"]));
+        Assert.Equal((130, 6600, 149, 5800), CarGuide.Peaks(CarSpecs.Real["AE86T"]));
+        Assert.Equal((280, 6800, 353, 4400), CarGuide.Peaks(CarSpecs.Real["R32"]));
         var sheet = CarGuide.Sheet(new Catalog.Car("CAPPU", "SUZUKI", "Cappuccino [EA11R]", "FR", 64, 700, [1]));
         Assert.Contains(("ENGINE", "F6A  657 cc"), sheet);
         Assert.Contains(("WEIGHT", "700 kg"), sheet);

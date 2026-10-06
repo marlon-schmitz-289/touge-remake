@@ -102,7 +102,7 @@ public sealed class Catalog
 
     private static Car CarFor(string id, string maker, uint[] paints)
     {
-        var s = CarSpecs.All[id];
+        var s = CarSpecs.Real[id];
         var drive = s.DriveFront >= 1 ? "FF" : s.DriveFront > 0 ? "4WD" : s.FrontWeight < 0.46f ? "MR" : "FR";
         // peak power from the torque curve's points (P = T·ω)
         var watts = s.TorqueRpm.Select((rpm, i) => s.TorqueNm[i] * rpm * MathF.PI / 30).Max();

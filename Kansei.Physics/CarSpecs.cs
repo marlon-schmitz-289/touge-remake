@@ -17,7 +17,8 @@ public static class CarSpecs
 {
     const float Fr = 0, Ff = 1;
 
-    public static readonly IReadOnlyDictionary<string, CarSpec> All = new Dictionary<string, CarSpec>
+    /// <summary>The stock cars (real figures) — what the spec sheet and car guide show.</summary>
+    public static readonly IReadOnlyDictionary<string, CarSpec> Real = new Dictionary<string, CarSpec>
     {
         ["AE86T"] = CarSpec.AE86,
         ["AE86L"] = CarSpec.AE86,
@@ -54,11 +55,61 @@ public static class CarSpecs
     };
 
     /// <summary>
+    ///     Balance of performance (BoP, the arcade's way): per car a factor on the engine torque so every car is competitive on
+    ///     the passes. Only the power is evened out — weight, tyres, gearing, drivetrain and drift layer stay real, so the cars
+    ///     keep their character (where on a course they gain and lose), just not 70 PS more or less. Calibrated with --ai-bench solo, all 32 cars × 9 courses ×
+    ///     both ways at the reference driver H and the autopilot (README "Balance"): mean lap time within ±0.3 % of the field,
+    ///     no car more than 4 % off on any course. Missing = 1.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, float> Bop = new Dictionary<string, float>
+    {
+        ["AE86T"] = 1.087f,
+        ["AE86L"] = 1.087f,
+        ["AE85"] = 1.546f,
+        ["MR2"] = 1.002f,
+        ["MRS"] = 1.189f,
+        ["ALTEZ"] = 1.224f,
+        ["GT-4"] = 1.154f,
+        ["R32"] = 0.916f,
+        ["R34"] = 0.997f,
+        ["ER34"] = 0.903f,
+        ["S13"] = 0.802f,
+        ["S14Q"] = 1.131f,
+        ["S14"] = 0.867f,
+        ["S15"] = 0.838f,
+        ["ONE80"] = 0.864f,
+        ["SIL80"] = 0.830f,
+        ["EK9"] = 1.039f,
+        ["EG6"] = 1.171f,
+        ["INTGR"] = 0.997f,
+        ["S2000"] = 1.065f,
+        ["EVO3"] = 0.922f,
+        ["EVO4"] = 0.948f,
+        ["EVO7"] = 0.893f,
+        ["FD3S"] = 0.802f,
+        ["FD3SA"] = 0.751f,
+        ["FC3S"] = 0.885f,
+        ["NA6C"] = 1.353f,
+        ["NB8C"] = 1.145f,
+        ["IMP"] = 0.741f,
+        ["IMP2"] = 0.906f,
+        ["IMP3"] = 0.738f,
+        ["CAPPU"] = 1.384f,
+    };
+
+    /// <summary>The cars as driven: <see cref="Real"/> with <see cref="Bop"/> applied.</summary>
+    public static readonly IReadOnlyDictionary<string, CarSpec> All = Real.ToDictionary(kv => kv.Key, kv => Balanced(kv.Value, Bop.GetValueOrDefault(kv.Key, 1)));
+
+    /// <summary><paramref name="s"/> with its torque × <paramref name="power"/>.</summary>
+    public static CarSpec Balanced(CarSpec s, float power) => power == 1 ? s : s with { TorqueNm = [.. s.TorqueNm.Select(t => t * power)] };
+
+    /// <summary>
     ///     Spec from game geometry + real figures. Suspension, brakes and wheel inertia scale with mass/radius from the
     ///     AE86 (same ride frequency and deceleration). Arcade layer by drivetrain: FF keeps more rear grip when the drift
     ///     layer kicks in (0.85 instead of 0.75), 4WD rotates less through its front drive share alone and carves 20 % less.
     ///     Engine inertia grows with √torque (bigger/turbo engines carry heavier cranks and flywheels), rotaries are 40 % lighter.
-    ///     Steer-in at 110 km/h (CarSpecsTests): FR/MR 7–19° body slip (Cappuccino 30°), 4WD 5–10°, FF 3°.
+    ///     Steer-in at 110 km/h (CarSpecsTests): FR/MR 7–19° body slip, 4WD 5–10°, FF 3°. The CoG height scales down with a
+    ///     narrower track than the AE86's (Cappuccino 1.18 m: --ai-bench solo lost it off the road in 18 of 36 runs, with the lower CoG in 2).
     /// </summary>
     static CarSpec Make(float track, float wheelbase, float radius, float mass, float front, float ps, float psRpm, float nm, float nmRpm,
         float limit, float[] gears, float final, float driveFront, float length, float width, bool rotary = false)
@@ -68,7 +119,7 @@ public static class CarSpecs
         var (tRpm, tNm) = Curve(ps, psRpm, nm, nmRpm, limit);
         return a with
         {
-            Mass = mass, FrontWeight = front, Wheelbase = wheelbase, Track = track, WheelRadius = radius, Length = length, Width = width,
+            Mass = mass, CogHeight = a.CogHeight * MathF.Min(1, track / a.Track), FrontWeight = front, Wheelbase = wheelbase, Track = track, WheelRadius = radius, Length = length, Width = width,
             SpringFront = a.SpringFront * m, SpringRear = a.SpringRear * m, Damper = a.Damper * m,
             AntiRollFront = a.AntiRollFront * m, AntiRollRear = a.AntiRollRear * m,
             WheelInertia = a.WheelInertia * r * r, BrakeTorque = a.BrakeTorque * m * r, HandbrakeTorque = a.HandbrakeTorque * m * r,

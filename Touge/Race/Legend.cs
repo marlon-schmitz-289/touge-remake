@@ -41,17 +41,17 @@ public static class Legend
     /// <summary>
     ///     All 34 rivals in the original's id order (0x2A2D90 rows 0–33), grouped by slot as 0x29B2E0 lists them. Skill on the
     ///     one scale (<see cref="RivalPilot.Pace"/>) by rung: a main course's ladder 0.1–0.2 (a beginner beats it, with
-    ///     <see cref="RungPower"/>), ~0.3, 0.3–0.45, 0.3–0.5 (lower in the strong cars: the Trueno has to get through); the additions 0.55–0.7 stock, the secret ones 0.9/1 (--legend-sim
+    ///     <see cref="RungPower"/>), ~0.3, 0.3–0.45, 0.3–0.5 (lower in the strong cars); the additions 0.65–0.8 stock, the secret ones 0.9/1 (--legend-sim
     ///     with LEGEND_ALL=1 and --player-skill 0.2/0.5/0.8, README).
     ///     Byte 3 → <see cref="Entry.Reverse"/>, 4 → <see cref="Entry.Wet"/>, 5 → <see cref="Entry.Night"/>, 6 → <see cref="Entry.Figure"/>.
     /// </summary>
     public static readonly Entry[] All = Tiered(
     [
-        // MYOGI
+        // MYOGI (Takumi in Itsuki's AE85 is row 1 of the original, the remake's ladder has him last: the hero is the course's boss, not its second rung)
         E(0, "itsuki", R("itsuki", "ITSUKI TAKEUCHI", "AKINA SPEEDSTARS", "AE85", 0.1f, 0.2f, 0.3f), false, false, false, 0, "ITSUKI.adx"),
-        E(0, "takumi", R("takumi", "TAKUMI FUJIWARA", "AKINA SPEEDSTARS", "AE85", 0.25f, 0.4f, 0.85f), true, false, false, 1, "TAKUMI01.adx"),
-        E(0, "shingo", R("shingo", "SHINGO SHOJI", "MYOGI NIGHTKIDS", "EG6", 0.35f, 0.95f, 0.2f), false, false, true, 2, "SHINGO.adx"),
-        E(0, "takeshi", R("takeshi", "TAKESHI NAKAZATO", "MYOGI NIGHTKIDS", "R32", 0.3f, 0.55f, 0.1f), true, false, true, 3, "NAKAZATO.adx"),
+        E(0, "shingo", R("shingo", "SHINGO SHOJI", "MYOGI NIGHTKIDS", "EG6", 0.25f, 0.95f, 0.2f), false, false, true, 2, "SHINGO.adx"),
+        E(0, "takeshi", R("takeshi", "TAKESHI NAKAZATO", "MYOGI NIGHTKIDS", "R32", 0.35f, 0.55f, 0.1f), true, false, true, 3, "NAKAZATO.adx"),
+        E(0, "takumi", R("takumi", "TAKUMI FUJIWARA", "AKINA SPEEDSTARS", "AE85", 0.45f, 0.4f, 0.85f), true, false, false, 1, "TAKUMI01.adx"),
         // USUI
         E(1, "tokyo", R("tokyo", "THE TWO FROM TOKYO", "TOKYO", "S15", 0.12f, 0.55f, 0.4f), false, false, false, 4, "DEBU.adx"),
         E(1, "nobuhiko", R("nobuhiko", "NOBUHIKO AKIYAMA", "SAITAMA", "ALTEZ", 0.25f, 0.45f, 0.35f), true, false, false, 5, "NOBUHIKO.adx"),
@@ -79,14 +79,14 @@ public static class Legend
         E(5, "keisuke", R("keisuke", "KEISUKE TAKAHASHI", "PROJECT D", "FD3S", 0.45f, 0.65f, 0.8f), false, false, true, 23, "KEISUKE02.adx"),
         E(5, "takumi", R("takumi", "TAKUMI FUJIWARA", "PROJECT D", "AE86T", 0.9f, 0.5f, 0.9f), false, false, true, 24, "TAKUMI03.adx", true),
         // MYOGI+, USUI+, SHOMARU, MOMIJI LINE, SHIONA (Special Stage's own courses, night only)
-        E(6, "shingo", R("shingo", "SHINGO SHOJI", "MYOGI NIGHTKIDS", "EG6", 0.55f, 0.95f, 0.2f), false, false, true, 26, "SHINGO.adx"),
-        E(6, "takeshi", R("takeshi", "TAKESHI NAKAZATO", "MYOGI NIGHTKIDS", "R32", 0.55f, 0.55f, 0.1f), true, false, true, 27, "NAKAZATO.adx"),
-        E(7, "mako", R("mako", "MAKO SATO & SAYUKI", "IMPACT BLUE", "SIL80", 0.6f, 0.5f, 0.6f), false, false, true, 28, "MAKO.adx"),
+        E(6, "shingo", R("shingo", "SHINGO SHOJI", "MYOGI NIGHTKIDS", "EG6", 0.65f, 0.95f, 0.2f), false, false, true, 26, "SHINGO.adx"),
+        E(6, "takeshi", R("takeshi", "TAKESHI NAKAZATO", "MYOGI NIGHTKIDS", "R32", 0.65f, 0.55f, 0.1f), true, false, true, 27, "NAKAZATO.adx"),
+        E(7, "mako", R("mako", "MAKO SATO & SAYUKI", "IMPACT BLUE", "SIL80", 0.7f, 0.5f, 0.6f), false, false, true, 28, "MAKO.adx"),
         E(8, "wataru", R("wataru", "WATARU AKIYAMA", "SAITAMA", "AE86L", 0.7f, 0.55f, 0.7f), false, false, true, 29, "WATARU.adx"),
-        E(9, "suetsugu", R("suetsugu", "TORU SUETSUGU", "SEVEN STAR LEAF", "NA6C", 0.6f, 0.5f, 0.6f), false, false, true, 30, "SUETSUGU.adx"),
-        E(9, "kawai", R("kawai", "ATSURO KAWAI", "SEVEN STAR LEAF", "ER34", 0.65f, 0.5f, 0.45f), true, false, true, 31, "ATSUO.adx"),
-        E(10, "daiki", R("daiki", "DAIKI NINOMIYA", "TODO SCHOOL", "EK9", 0.65f, 0.6f, 0.2f), false, false, true, 32, "DAIKI.adx"),
-        E(10, "sakai", R("sakai", "SMILEY SAKAI", "TODO SCHOOL", "INTGR", 0.7f, 0.55f, 0.2f), true, false, true, 33, "SAKAI.adx"),
+        E(9, "suetsugu", R("suetsugu", "TORU SUETSUGU", "SEVEN STAR LEAF", "NA6C", 0.7f, 0.5f, 0.6f), false, false, true, 30, "SUETSUGU.adx"),
+        E(9, "kawai", R("kawai", "ATSURO KAWAI", "SEVEN STAR LEAF", "ER34", 0.75f, 0.5f, 0.45f), true, false, true, 31, "ATSUO.adx"),
+        E(10, "daiki", R("daiki", "DAIKI NINOMIYA", "TODO SCHOOL", "EK9", 0.75f, 0.6f, 0.2f), false, false, true, 32, "DAIKI.adx"),
+        E(10, "sakai", R("sakai", "SMILEY SAKAI", "TODO SCHOOL", "INTGR", 0.8f, 0.55f, 0.2f), true, false, true, 33, "SAKAI.adx"),
         // AKINA's fifth: Bunta (row 33 of 0x2A2D90, figure 25)
         E(3, "bunta", R("bunta", "BUNTA FUJIWARA", "FUJIWARA TOFU", "IMP3", 1f, 0.4f, 0.7f), false, false, true, 25, "BUNTA.adx", true),
     ]);
@@ -96,10 +96,10 @@ public static class Legend
 
     /// <summary>
     ///     Engine torque of the rival's car by its rung on a main course's ladder (the remake's own balance, in the spirit of
-    ///     the original's per-course AI speed table 0x2C7930): the first rivals run detuned so the starter car (Trueno) can
-    ///     beat them, the fourth at 92 %; the additions and the secret rivals are always stock.
+    ///     the original's per-course AI speed table 0x2C7930): the first rivals run detuned (on top of their balanced car, CarSpecs.Bop) so a beginner can
+    ///     beat them, the fourth at full power; the additions and the secret rivals are always stock.
     /// </summary>
-    public static float[] RungPower => [0.6f, 0.72f, 0.85f, 0.92f]; // a property: All (above) is initialised first
+    public static float[] RungPower => [0.6f, 0.78f, 0.95f, 1f]; // a property: All (above) is initialised first
 
     /// <summary><see cref="RungPower"/> applied to the main courses' regulars.</summary>
     private static Entry[] Tiered(Entry[] all) =>

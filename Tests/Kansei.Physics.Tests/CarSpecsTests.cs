@@ -61,4 +61,28 @@ public class CarSpecsTests(ITestOutputHelper log)
             Assert.True(MathF.Abs(car.SlipAngle * 57.3f) < 15, $"{name} did not recover");
         }
     }
+
+    /// <summary>
+    ///     BoP: the driven cars are the real ones with only the torque scaled by the car's factor (weight, grip, gearing,
+    ///     drift layer untouched), every car has a factor, and the power-to-weight spread shrinks (stock 4.5 kg/PS Impreza … 11.1 AE85, 10.9
+    ///     Cappuccino; balanced 4.7 S2000 … 7.9 Cappuccino: light cars keep a little less power per kg, they gain it back in the bends).
+    /// </summary>
+    [Fact]
+    public void Bop_scales_only_the_torque()
+    {
+        Assert.Equal(CarSpecs.Real.Keys.Order(), CarSpecs.Bop.Keys.Order());
+        static float KgPerPs(CarSpec s) => s.Mass / s.TorqueNm.Zip(s.TorqueRpm, (nm, rpm) => nm * rpm * MathF.PI / 30 / 735.5f).Max();
+        foreach (var (name, real) in CarSpecs.Real)
+        {
+            var b = CarSpecs.All[name];
+            var k = CarSpecs.Bop[name];
+            Assert.InRange(k, 0.6f, 1.7f);
+            Assert.Equal(real.TorqueNm.Select(t => t * k), b.TorqueNm);
+            Assert.Equal(real with { TorqueNm = b.TorqueNm }, b); // nothing else differs
+        }
+        float Spread(Func<CarSpec, float> f, IEnumerable<CarSpec> cars) => cars.Max(f) / cars.Min(f);
+        Assert.True(Spread(KgPerPs, CarSpecs.All.Values) < 0.7f * Spread(KgPerPs, CarSpecs.Real.Values));
+        Assert.Same(CarSpecs.Real["AE86T"], CarSpecs.Real["AE86L"]);
+        Assert.Equal(CarSpec.AE86, CarSpecs.Real["AE86T"]);
+    }
 }
