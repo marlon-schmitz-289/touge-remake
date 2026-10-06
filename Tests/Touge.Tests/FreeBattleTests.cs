@@ -47,8 +47,8 @@ public class FreeBattleTests
         f.Update(Right, sounds.Add);
         Assert.Equal("itsuki", f.Choice.Rival);
         f.Update(Down, sounds.Add);
-        f.Update(Right, sounds.Add); // car wraps, paint back to the first
-        Assert.Equal(("AE86T", 0), (f.CarId, f.Paint));
+        Assert.Equal(FreeBattle.Result.PickCar, f.Update(Right, sounds.Add)); // CAR: LEFT/RIGHT opens the car select too, no cycling
+        Assert.Equal(("FD3S", 1), (f.CarId, f.Paint));
         for (var i = 0; i < 9; i++) f.Update(Down, sounds.Add); // clamps on START
         Assert.Equal(FreeBattle.Row.Start, f.Selected);
         Assert.Equal(FreeBattle.Result.None, f.Update(Right, sounds.Add));
@@ -61,15 +61,12 @@ public class FreeBattleTests
         Assert.True(f.Manual);
     }
 
-    /// <summary>A locked car (IMP3 before it is won) is never offered: the saved one falls back, stepping skips it.</summary>
+    /// <summary>A locked car (IMP3 before it is won) is never offered: the saved one falls back.</summary>
     [Fact]
     public void Lobby_SkipsLockedCar()
     {
         var f = new FreeBattle(TestCatalog()) { CarLocked = id => id == "FD3S" };
         f.Open(new FreeBattleChoice { Rival = "takumi" }, "FD3S", 1, false);
-        Assert.Equal("AE86T", f.CarId);
-        while (f.Selected != FreeBattle.Row.Car) f.Update(Down, _ => { });
-        f.Update(Right, _ => { });
         Assert.Equal("AE86T", f.CarId);
     }
 

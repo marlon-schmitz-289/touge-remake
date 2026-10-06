@@ -86,7 +86,7 @@ public class VersusTests
         var v = new Versus(TestCatalog());
         v.Open();
         v.OpenSplit("AE86T", 0);
-        Step(v, None, Ok); // player 2 on CAR (its first row)
+        Step(v, None, Right); // player 2 on CAR (its first row): LEFT/RIGHT opens the select as DECIDE does, no cycling
         Assert.True(v.Picking);
         Step(v, Down); // player 1: ignored
         Step(v, None, (0, -4, false, false)); // the select opens on its FD3S (MAZDA): four makers up to TOYOTA

@@ -197,14 +197,14 @@ Ergebnis, WIN/LOSE-Jingle beim Entscheid): SPLIT SCREEN, ONLINE oder VS CPU.
   vorher hatte der FD3S bei 0,8 LEGEND 12/14, der Trueno 2/14); HARD
   holt nur auf (halbes Gummiband), LEGEND ohne Gummiband und mit halb so vielen Fehlern; Sterne auf der Karte nach dem Können der Stufe),
   rechts die Rivalenkarte (einer der 14 aus `--battle`: Team, Auto, Stufe in Sternen, kurze Notiz zum Fahrstil; ◀ ▶ blättert) und das
-  eigene Auto mit Lack und AT/MT (◀ ▶ blättert, ENTSCHEIDEN auf CAR öffnet dieselbe Autowahl wie Time Attack: Hersteller → Autos mit 3D-Vorschau). In der Lobby läuft das Thema des Rivalen aus `MG_BGM.AFS` (wie auf Legends VS-Karte). START → Laden
+  eigene Auto mit Lack und AT/MT (◀ ▶ blättert, ENTSCHEIDEN oder ◀ ▶ auf CAR öffnet dieselbe Autowahl wie Time Attack: Hersteller → Autos mit 3D-Vorschau). In der Lobby läuft das Thema des Rivalen aus `MG_BGM.AFS` (wie auf Legends VS-Karte). START → Laden
   (gleicher Kurs: nur die Autos) → Telop „VS …“, 3-2-1-GO → Battle → YOU WIN/LOSE (WIN/LOSE.adx) → Battle-Blatt mit `R_WIN01`/`R_LOSE`
   → RETRY / REPLAY / CHANGE SETTINGS (zur Lobby) / EXIT (Hauptmenü). Pause → Exit führt zur Lobby. Replays heißen „FREE BATTLE vs
   <Rivale>“. Die letzte Wahl merkt sich `settings.json` (`FreeBattle`, Auto/Lack/Getriebe wie überall). Tastatur, Pad und Lenkrad über
   die Menütasten.
 - **Geteilter Bildschirm** (2 Spieler): Lobby links das Rennen (Kurs, Route, Bedingungen DAY/NIGHT/WET/DAY FOG/NIGHT FOG, Regel
   BATTLE = Battle des Originals mit 8-s-Vorsprungssieg bzw. RACE = beide bis ins Ziel, Bildschirm oben/unten oder links/rechts, Gerät von
-  Spieler 2), rechts je Spieler Auto und Lackfarbe (ENTSCHEIDEN auf CAR öffnet die Autowahl Hersteller → Autos für diesen Spieler, gesteuert nur von ihm; online ebenso); Spieler 2 hat einen eigenen (blauen) Cursor auf seiner Karte und muss READY drücken,
+  Spieler 2), rechts je Spieler Auto und Lackfarbe (ENTSCHEIDEN oder ◀ ▶ auf CAR öffnet die Autowahl Hersteller → Autos für diesen Spieler, gesteuert nur von ihm, solange sind die Tasten des anderen Spielers gesperrt; online ebenso); Spieler 2 hat einen eigenen (blauen) Cursor auf seiner Karte und muss READY drücken,
   dann START. Geräte: Spieler 2 nimmt ein Pad (nur die Pad-Belegung aus CONTROLLER) oder – ohne Pad – die Pfeil-Hälfte der Tastatur
   (Pfeile fahren, R-CTRL Handbremse, R-SHIFT/R-ALT Gang hoch/runter, BACKSPACE zurück auf die Straße, ENTER Kamera; in den Menüs Pfeile +
   ENTER); Spieler 1 behält alles andere (Lenkrad, die übrigen Pads, Tastatur – mit Spieler 2 auf der Tastatur ohne Pfeil-Hälfte, Menüs
@@ -250,7 +250,7 @@ graue Logo-Kachelwand, roter/blauer Laufschrift-Kopf, Chromplatten, Karbonpaneel
 TIME ATTACK = Kurswahl (3 × 4 Raster wie im Original, Streckenlinie im Karbon-„Monitor“ statt Foto, Länge/Höhe/Bestzeit; das 12. Feld ist
 FOUR PASSES, siehe unten) → Route (DOWNHILL/UPHILL bzw. CLOCKWISE/COUNTER-CLOCKWISE aus dem Drehsinn der Linie) → Tageszeit (DAY/NIGHT) → Wetter
 (DRY/WET/FOG, nachts DRY/FOG) – Schritte mit nur einer Möglichkeit entfallen – → Autowahl in zwei Schritten (`Ui/CarPicker`):
-Hersteller (7 Chromplatten mit Autozahl, rechts die Aufstellung: Fahrgestellcodes, gesperrte als ?????, „1 LOCKED“) → Autos dieses Herstellers
+Hersteller (7 Chromplatten mit Autozahl, rechts die Aufstellung: Modellnamen, gesperrte als ?????, „1 LOCKED“) → Autos dieses Herstellers
 (Liste links, das 3D-Auto dreht sich rechts daneben, ↑/↓ Auto, ←/→ Lackfarbe, Leistung/Gewicht, Antrieb FF/MR/FR/4WD; gesperrte Autos ?????
 mit Hinweis, piepen; ZURÜCK zu den Herstellern; geöffnet wird auf dem zuletzt gefahrenen Auto) → Getriebe (AT/MT) → Laden (weiß, „Now Loading...“) → Streckentelop + 3-2-1-GO
 (CAR010/CAR011, Auto steht bis GO) → Rennen. Esc (Pad: Start) pausiert (alarm_02): Continue/Retry/Replay/Photo/Exit/Quit Game (Quit Game wie im Hauptmenü mit Abfrage, nur Desktop). Start und Ziel sind die beiden Bögen an den

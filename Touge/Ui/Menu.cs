@@ -127,12 +127,19 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     /// <summary>Rain over a dry course (a story chapter): the telop says WET.</summary>
     public bool Rain { get; set; }
 
-    /// <summary>Screenshots: on the maker screen maker <paramref name="row"/>, on the car screen the maker's car in row <paramref name="row"/>.</summary>
-    public void ShowRow(int row)
+    /// <summary>
+    ///     Screenshots: on the maker screen maker <paramref name="row"/>, on the car screen the maker's car in row
+    ///     <paramref name="row"/>; PreviewCar when that car has to be loaded.
+    /// </summary>
+    public Action ShowRow(int row)
     {
         if (Current == Screen.Maker) _picker.Open(_picker.Cars(Math.Clamp(row, 0, Catalog.Makers.Length - 1))[0], 0);
         else if (Current == Screen.Car && _picker.Cars(_picker.Maker) is var cars)
+        {
             _picker.Pick(cars[Math.Clamp(row, 0, cars.Length - 1)]);
+            if (!_picker.Locked(_picker.Car)) return Action.PreviewCar;
+        }
+        return Action.None;
     }
 
     /// <summary>Opens <paramref name="s"/> with the selection at the given course/direction/car/paint; backing out of it leaves to the main menu.</summary>

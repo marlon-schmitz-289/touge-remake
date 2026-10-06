@@ -574,9 +574,9 @@ public sealed class Versus(Catalog catalog)
         var s = Seats[seat];
         switch (row)
         {
-            case Row.Car:
-                (s.Car, s.Paint) = (NextCar(s.Car, d), 0);
-                break;
+            case Row.Car: // only through the car select
+                OpenPicker(seat, s.Car, s.Paint);
+                return;
             case Row.Colour:
                 s.Paint = Wrap(s.Paint + d, catalog.Cars[s.Car].Paints.Length);
                 break;
@@ -825,7 +825,7 @@ public sealed class Versus(Catalog catalog)
         if (!Split && Net?.IsHost == true && HostInfo.Length > 0) c.Text($"HOSTING  {HostInfo}", 270, 420, 10, Canvas.White, 0, 0.12f, 0.08f);
         // player 1 drives the menus with the device used last (only the keyboard's other half or a wheel while player 2 has a pad)
         var p1 = Hints.Device == DeviceKind.Wheel ? $"HAT + {Hints.Of(Control.MenuOk)}" : P2Keyboard ? Hints.Pick("WASD + SPACE", "D-PAD + A", "") : "ARROWS + ENTER";
-        Menu.Hint(c, Split ? $"P1: {p1}    P2: {(P2Keyboard ? "ARROWS + ENTER" : "D-PAD + A")}    START when both are ready    BACK: Return"
+        Menu.Hint(c, Split ? $"P1: {p1}    P2: {(P2Keyboard ? "ARROWS + ENTER" : "D-PAD + A")}    DECIDE on CAR: Car select    START when both are ready    BACK: Return"
             : host ? "UP/DOWN: Select    LEFT/RIGHT: Change    DECIDE on CAR: Car select    START when everyone is ready    BACK: Leave"
             : "UP/DOWN: Select    LEFT/RIGHT: Change    DECIDE on CAR: Car select    READY: tell the host    BACK: Leave");
     }

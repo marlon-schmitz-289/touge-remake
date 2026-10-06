@@ -325,7 +325,8 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
                 var device = start.Split(':') is [_, var d] ? d : "";
                 _menu.Controls!.Open(device.ToLowerInvariant() == "gamepad" ? DeviceKind.Pad : Enum.TryParse<DeviceKind>(device, true, out var dk) ? dk : DeviceKind.Keyboard); // --menu controls:wheel
             }
-            if (start.Split(':') is [_, var row] && int.TryParse(row, out var r)) _menu.ShowRow(r); // --menu maker:2 = HONDA, --car IMP --menu car:2 = the locked IMP3
+            if (start.Split(':') is [_, var row] && int.TryParse(row, out var r) && _menu.ShowRow(r) == Menu.Action.PreviewCar)
+                SwitchCar(Array.IndexOf(CarPaint.Cars, _menu.CarId), _menu.Paint); // --menu maker:2 = HONDA, --car IMP --menu car:2 = the locked IMP3
             _inRace = screen is Menu.Screen.Pause or Menu.Screen.Intro;
             if (shotPath != null) _menu.Settle();
         }

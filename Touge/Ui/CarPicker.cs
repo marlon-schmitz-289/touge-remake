@@ -92,8 +92,8 @@ public sealed class CarPicker(Catalog catalog)
 
     private static readonly uint Grey = Overlay.Rgba(0.72f, 0.73f, 0.75f), Dim = Overlay.Rgba(1, 1, 1, 0.35f), HintRed = Overlay.Rgba(1, 0.2f, 0.15f);
 
-    /// <summary>Chassis code of a catalog name ("TRUENO GT-APEX [AE86]" → AE86).</summary>
-    internal static string Chassis(string name) => name.LastIndexOf('[') is var i and >= 0 ? name[(i + 1)..].TrimEnd(']') : name;
+    /// <summary>Model of a catalog name without its chassis code ("TRUENO GT-APEX [AE86]" → TRUENO GT-APEX): the lineup tells same-chassis cars apart (same model: the full name).</summary>
+    internal static string Model(string name) => name.LastIndexOf('[') is var i and > 0 ? name[..i].TrimEnd() : name;
 
     /// <summary>MAKER: the plates on the left, the lineup of the highlighted one on the right; <paramref name="back"/> names BACK's target.</summary>
     public void DrawMaker(Canvas c, float theta, string back)
@@ -121,8 +121,10 @@ public sealed class CarPicker(Catalog catalog)
         c.Text($"{cars.Length} {(cars.Length == 1 ? "CAR" : "CARS")}", 379, 238, 13, Canvas.White, 0.5f, 0.15f, 0.06f);
         for (var i = 0; i < cars.Length; i++)
         {
-            float x = 300 + i % 3 * 79, y = 266 + i / 3 * 24;
-            c.Fit(Locked(cars[i]) ? "?????" : Chassis(catalog.Cars[cars[i]].Name), x, y, 72, 0.5f, Locked(cars[i]) ? Dim : Grey, 0.12f, 0.05f, 13);
+            float x = 274 + i % 2 * 112, y = 264 + i / 2 * 19;
+            var model = Model(catalog.Cars[cars[i]].Name);
+            if (cars.Count(j => Model(catalog.Cars[j].Name) == model) > 1) model = catalog.Cars[cars[i]].Name; // R32/R34: same model, the code tells them apart
+            c.Fit(Locked(cars[i]) ? "?????" : model, x, y, 104, 0, Locked(cars[i]) ? Dim : Grey, 0.12f, 0.05f, 11);
         }
         if (locked > 0) c.Text($"{locked} LOCKED", 379, 368, 11, HintRed, 0.5f, 0.12f);
         Menu.Hint(c, $"UP/DOWN: Select maker    DECIDE: Cars    BACK: {back}");
@@ -130,7 +132,7 @@ public sealed class CarPicker(Catalog catalog)
 
     /// <summary>
     ///     CAR, drawn over the turning 3D car: the maker's models on the left, the highlighted car's specs and colours below;
-    ///     <paramref name="a"/> the entrance, <paramref name="active"/> off under the transmission choice (no list cursor, no hint).
+    ///     <paramref name="a"/> the entrance, <paramref name="active"/> off under the transmission choice (no list, no hint).
     /// </summary>
     public void DrawCar(Canvas c, float theta, float a, bool active, string back = "Makers")
     {
@@ -138,19 +140,9 @@ public sealed class CarPicker(Catalog catalog)
         var locked = Locked(Car);
         if (locked && active) c.Fill(Overlay.Rgba(0, 0, 0, 0.82f)); // the last open car still turns behind: hide it
         var slide = (1 - a) * 60;
-        // model list
-        c.Carbon(16 - slide, 72, 176 - slide, 104 + cars.Length * 22, a);
-        c.Fit(Catalog.Makers[Maker], 28 - slide, 90, 136, 0, Grey, 0.12f, 0, 11);
-        for (var i = 0; i < cars.Length; i++)
-        {
-            var y = 114 + i * 22;
-            var sel = cars[i] == Car;
-            if (sel && active) c.Diamond(30 - slide, y - 4, 5, a);
-            c.Fit(Locked(cars[i]) ? "?????" : catalog.Cars[cars[i]].Name, 40 - slide, y, 128, 0,
-                Style.Fade(Locked(cars[i]) ? Dim : sel ? Canvas.Yellow : Canvas.White, a), 0.12f, 0.05f, 12);
-        }
+        // model list (not under the transmission choice: it would run into the AT/MT panel)
+        if (active) DrawList(c, theta, a, cars, slide);
         var row = Array.IndexOf(cars, Car);
-        if (active) c.Glow(20 - slide, 98 + row * 22, 172 - slide, 120 + row * 22, Canvas.Pulse(theta), a);
         // specs and colours
         var car = catalog.Cars[Car];
         c.Carbon(16, 318 + slide, 496, 424 + slide, a);
@@ -178,5 +170,21 @@ public sealed class CarPicker(Catalog catalog)
         if (!active) return;
         if (locked) c.Lettering("?????", 300, 220, 54, Overlay.Rgba(1, 0.55f, 0.3f), Canvas.WordRed, 0.5f, 0.15f);
         Menu.Hint(c, locked ? Race.Legend.SecretCarHint : $"UP/DOWN: Car    LEFT/RIGHT: Body colour    DECIDE: OK    BACK: {back}");
+    }
+
+    private void DrawList(Canvas c, float theta, float a, int[] cars, float slide)
+    {
+        c.Carbon(16 - slide, 72, 176 - slide, 104 + cars.Length * 22, a);
+        c.Fit(Catalog.Makers[Maker], 28 - slide, 90, 136, 0, Grey, 0.12f, 0, 11);
+        for (var i = 0; i < cars.Length; i++)
+        {
+            var y = 114 + i * 22;
+            var sel = cars[i] == Car;
+            if (sel) c.Diamond(30 - slide, y - 4, 5, a);
+            c.Fit(Locked(cars[i]) ? "?????" : catalog.Cars[cars[i]].Name, 40 - slide, y, 128, 0,
+                Style.Fade(Locked(cars[i]) ? Dim : sel ? Canvas.Yellow : Canvas.White, a), 0.12f, 0.05f, 12);
+        }
+        var row = Array.IndexOf(cars, Car);
+        c.Glow(20 - slide, 98 + row * 22, 172 - slide, 120 + row * 22, Canvas.Pulse(theta), a);
     }
 }

@@ -114,17 +114,12 @@ public sealed class FreeBattle(Catalog catalog)
             case Row.Lead: c.PlayerLeads = !c.PlayerLeads; break;
             case Row.Level: c.Level = (AiLevel)Wrap((int)c.Level + d, 4); break;
             case Row.Rival: c.Rival = Rivals.All[Wrap(RivalIndex + d, Rivals.All.Length)].Id; break;
-            case Row.Car:
-                do Car = Wrap(Car + d, catalog.Cars.Count);
-                while (CarLocked?.Invoke(catalog.Cars[Car].Id) == true);
-                Paint = 0;
-                break;
             case Row.Colour: Paint = Wrap(Paint + d, catalog.Cars[Car].Paints.Length); break;
             case Row.Gearbox: Manual = !Manual; break;
         }
     }
 
-    /// <summary>One frame of menu keys: UP/DOWN rows, LEFT/RIGHT (or DECIDE) values, DECIDE on CAR asks for the car select, on START starts, BACK leaves.</summary>
+    /// <summary>One frame of menu keys: UP/DOWN rows, LEFT/RIGHT (or DECIDE) values, DECIDE or LEFT/RIGHT on CAR asks for the car select, on START starts, BACK leaves.</summary>
     public Result Update((int X, int Y, bool Ok, bool Back) k, Action<string>? sound)
     {
         var rows = Rows;
@@ -135,7 +130,7 @@ public sealed class FreeBattle(Catalog catalog)
             if (n != _row) sound?.Invoke("SYS005");
             _row = n;
         }
-        else if (k.Ok && rows[_row] is Row.Start or Row.Car)
+        else if ((k.Ok && rows[_row] == Row.Start) || ((k.Ok || k.X != 0) && rows[_row] == Row.Car)) // CAR: only through the car select
         {
             sound?.Invoke("SYS006");
             return rows[_row] == Row.Start ? Result.Start : Result.PickCar;
@@ -315,7 +310,7 @@ public sealed class FreeBattle(Catalog catalog)
         }
         c.Button(298, 368, 162, 28, "START", Canvas.ButtonKind.Positive);
         if (Selected == Row.Start) c.Glow(294, 364, 464, 400, pulse);
-        Menu.Hint(c, Selected == Row.Car ? "UP/DOWN: Select    LEFT/RIGHT: Change    DECIDE: Car select    BACK: Return"
+        Menu.Hint(c, Selected == Row.Car ? "UP/DOWN: Select    DECIDE: Car select    BACK: Return"
             : "UP/DOWN: Select    LEFT/RIGHT: Change    START: Battle    BACK: Return");
     }
 }
