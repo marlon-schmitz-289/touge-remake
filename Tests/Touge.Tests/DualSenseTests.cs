@@ -21,7 +21,12 @@ public class DualSenseTests
 
         var spk = Effect(Trigger.Off, Trigger.Off, Mic.Off, 0.5f);
         Assert.Equal((0xAC, 0x05, 0x05), (spk[0], spk[10], spk[21])); // + speaker volume + audio control; off = 0x05
-        Assert.Equal((50, 0x30), (spk[5], spk[7])); // 0x64 scale, path X_X_R
+        Assert.Equal((80, 0x30), (spk[5], spk[7])); // 0x3D..0x64 (audible range), path X_X_R
+        Assert.Equal((0, 0x3D, 0x64), (Volume(0), Volume(0.001f), Volume(1)));
+        Span<byte> buf = stackalloc byte[EffectSize];
+        buf.Fill(0xFF);
+        Effect(buf, Trigger.Off, Trigger.Off, Mic.Off, 0.5f);
+        Assert.True(buf.SequenceEqual(spk)); // the buffer form writes the same bytes, old content cleared
         Assert.Equal((0, 0), (Reset()[5], Reset()[7])); // silent: back to the headphone path
     }
 
@@ -98,6 +103,9 @@ public class DualSenseTests
         Assert.DoesNotContain(page, o.Pages);
         var ran = 0;
         Assert.False(Options.Step(Options.Row.Action("TEST", "TEST", () => ran++), 1)); // runs, nothing to save
+        Assert.Equal(1, ran);
+        var one = Options.Row.Choice("RES", ["1280 x 720"], () => 3, _ => ran = 99);
+        Assert.False(Options.Step(one, 1)); // a one-entry list is no button: nothing set
         Assert.Equal(1, ran);
     }
 

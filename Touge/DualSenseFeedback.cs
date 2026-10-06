@@ -64,7 +64,8 @@ public sealed class DualSenseFeedback(DualSenseSettings s, PadSpeaker? speaker)
         public Vector3 Velocity;
         public int Gear = int.MinValue;
         public float Hit, PrevHit, Bump, Kick;
-        public byte[]? Effect;
+        public readonly byte[] Effect = new byte[EffectSize], Next = new byte[EffectSize];
+        public bool Sent;
         public (byte, byte, byte)? Led;
         public int PlayerLed = int.MinValue;
         public (ushort, ushort) Rumble;
@@ -76,6 +77,7 @@ public sealed class DualSenseFeedback(DualSenseSettings s, PadSpeaker? speaker)
 
     private readonly Dictionary<GamepadState, Pad> _pads = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<string, Vag.Sound> _sounds = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<GamepadState> _gone = [];
     private float _time, _test;
     private string? _testing;
 
@@ -113,10 +115,12 @@ public sealed class DualSenseFeedback(DualSenseSettings s, PadSpeaker? speaker)
     }
 
     /// <summary>Plays <paramref name="name"/> on the pad speaker (if it is one of its sounds, the speaker is on and present).</summary>
-    public void Speak(string name)
+    public void Speak(string name) => Speak(name, false);
+
+    private void Speak(string name, bool test)
     {
-        if (!s.Speaker || speaker is not { Available: true } || !_sounds.TryGetValue(name, out var v)) return;
-        speaker.Play(v.Pcm, v.Rate, s.SpeakerVolume);
+        if (!s.Speaker && !test || speaker is not { Available: true } || !_sounds.TryGetValue(name, out var v)) return;
+        speaker.Play(v.Pcm, v.Rate, 1); // loudness: the pad's volume byte (DualSense.Volume) alone
         if (GamepadState.Trace) Console.WriteLine($"[DualSense] Lautsprecher: {name} ({v.Pcm.Length / (float)v.Rate:0.00} s) auf {speaker.Device}");
     }
 
@@ -124,7 +128,7 @@ public sealed class DualSenseFeedback(DualSenseSettings s, PadSpeaker? speaker)
     public void Test(string feature)
     {
         (_testing, _test) = (feature, 2);
-        if (feature == "SPEAKER") Speak("CAR011");
+        if (feature == "SPEAKER") Speak("CAR011", true); // also while SPEAKER is OFF: hear the volume before switching it on
     }
 
     /// <summary>
@@ -135,9 +139,11 @@ public sealed class DualSenseFeedback(DualSenseSettings s, PadSpeaker? speaker)
     {
         _time += dt;
         _test = MathF.Max(0, _test - dt);
-        speaker?.Scan(_time);
         (Swiped, Clicked, Connected) = (false, false, false);
-        foreach (var gone in _pads.Keys.Where(p => !pads.Contains(p)).ToList()) _pads.Remove(gone); // unplugged: fresh state when it returns
+        foreach (var p in _pads.Keys)
+            if (!pads.Contains(p)) _gone.Add(p);
+        foreach (var p in _gone) _pads.Remove(p); // unplugged: fresh state when it returns
+        _gone.Clear();
         for (var i = 0; i < pads.Count; i++)
         {
             var pad = pads[i];
@@ -150,6 +156,7 @@ public sealed class DualSenseFeedback(DualSenseSettings s, PadSpeaker? speaker)
             if (_test > 0 && script == null) o = TestOutput(o, _testing, _time);
             Apply(pad, st, o, dt);
         }
+        if (Connected) speaker?.Scan(_time); // no DualSense: no SDL audio, no device listing
     }
 
     private void Gestures(GamepadState pad, Pad st)
@@ -345,12 +352,14 @@ public sealed class DualSenseFeedback(DualSenseSettings s, PadSpeaker? speaker)
             (st.Rumble, st.RumbleAge) = (rumble, 0);
         }
 
-        var vol = s.Speaker && SpeakerAvailable ? s.SpeakerVolume : 0;
-        var effect = DualSense.Effect(o.Right, o.Left, o.Mic, st.Speaker == vol ? null : vol);
+        var vol = (s.Speaker || _testing == "SPEAKER" && _test > 0) && SpeakerAvailable ? s.SpeakerVolume : 0;
         st.EffectAge += dt;
-        if (st.EffectAge < 1 / 30f || st.Effect != null && effect.AsSpan(8, 24).SequenceEqual(st.Effect.AsSpan(8, 24)) && st.Speaker == vol) return; // mic LED + triggers
-        pad.SendEffect(effect);
-        (st.Effect, st.EffectAge, st.Speaker) = (effect, 0, vol);
+        if (st.EffectAge < 1 / 30f) return;
+        DualSense.Effect(st.Next, o.Right, o.Left, o.Mic, st.Speaker == vol ? null : vol);
+        if (st.Sent && st.Next.AsSpan(8, 24).SequenceEqual(st.Effect.AsSpan(8, 24)) && st.Speaker == vol) return; // mic LED + triggers
+        pad.SendEffect(st.Next);
+        st.Next.CopyTo(st.Effect);
+        (st.Sent, st.EffectAge, st.Speaker) = (true, 0, vol);
     }
 
     /// <summary>Game over: every DualSense dark and free (lightbar, player LEDs, triggers, mic LED, speaker, rumble, motion).</summary>

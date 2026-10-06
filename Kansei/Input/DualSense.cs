@@ -9,7 +9,7 @@ namespace Kansei.Input;
 ///         <item><term>0</term><description>enable bits 1: 0x01/0x02 rumble (SDL sets them), 0x04 right trigger, 0x08 left trigger,
 ///         0x20 speaker volume, 0x80 audio control</description></item>
 ///         <item><term>1</term><description>enable bits 2: 0x01 mic LED, 0x04 lightbar, 0x10 player LEDs (SDL does lightbar/player LEDs)</description></item>
-///         <item><term>5</term><description>speaker volume (0..0x64)</description></item>
+///         <item><term>5</term><description>speaker volume: the pad is audible only from about 0x3D, so 0..1 maps to 0x3D..0x64, 0 = 0 (mute)</description></item>
 ///         <item><term>7</term><description>audio control: bits 4–5 output path, 3 = X_X_R: headphones off, the right channel of
 ///         the pad's USB audio device to the speaker</description></item>
 ///         <item><term>8</term><description>mic LED: 0 off, 1 on, 2 pulsing</description></item>
@@ -50,19 +50,29 @@ public static class DualSense
     public static byte[] Effect(Trigger right, Trigger left, Mic mic, float? speaker = null)
     {
         var e = new byte[EffectSize];
+        Effect(e, right, left, mic, speaker);
+        return e;
+    }
+
+    /// <summary><see cref="Effect(Trigger, Trigger, Mic, float?)"/> into <paramref name="e"/> (≥ <see cref="EffectSize"/>; per frame without allocating).</summary>
+    public static void Effect(Span<byte> e, Trigger right, Trigger left, Mic mic, float? speaker = null)
+    {
+        e[..EffectSize].Clear();
         e[Enable1] = 0x04 | 0x08;
         e[Enable2] = 0x01;
-        right.Write(e.AsSpan(RightTrigger));
-        left.Write(e.AsSpan(LeftTrigger));
+        right.Write(e[RightTrigger..]);
+        left.Write(e[LeftTrigger..]);
         e[MicLed] = (byte)mic;
         if (speaker is { } v)
         {
             e[Enable1] |= 0x20 | 0x80;
-            e[SpeakerVolume] = (byte)MathF.Round(Math.Clamp(v, 0, 1) * 0x64);
+            e[SpeakerVolume] = Volume(v);
             e[AudioControl] = (byte)(e[SpeakerVolume] > 0 ? 3 << 4 : 0); // X_X_R, silent: back to L_R_X (headphone jack)
         }
-        return e;
     }
+
+    /// <summary>Speaker volume byte: 0 = mute, else 0x3D (quietest audible) .. 0x64.</summary>
+    public static byte Volume(float v) => float.IsFinite(v) && v > 0 ? (byte)MathF.Round(0x3D + Math.Min(v, 1) * (0x64 - 0x3D)) : (byte)0;
 
     /// <summary>Everything back to the pad's idle state: triggers free, mic LED off, speaker silent.</summary>
     public static byte[] Reset() => Effect(Trigger.Off, Trigger.Off, Mic.Off, 0);

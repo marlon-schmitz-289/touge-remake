@@ -16,12 +16,21 @@ public sealed partial class TougeGame
     private PadSpeaker? _padSpeaker;
     private Options.Page? _dsPage;
     private float _dsTime, _dsDt;
+    // per-frame context of DsSeat, delegates made once (no per-frame allocation)
+    private bool _dsDriving;
+    private int _dsP2Pad = -1;
+    private VsCar? _dsP2;
+    private Func<int, DualSenseFeedback.Seat>? _dsSeatOf;
+    private Func<int, float>? _dsRoughness;
+    private UnhandledExceptionEventHandler? _dsCrash;
 
     private void LoadDualSense(Iso9660 iso)
     {
         _padSpeaker = new PadSpeaker(Window.Sdl);
         _ds = new DualSenseFeedback(_settings.DualSense, _padSpeaker);
         _ds.LoadSounds(iso);
+        _dsCrash = (_, _) => _ds.Reset(Input.Pads); // a crash skips Dispose: pads dark and free anyway (SDL is still up here)
+        AppDomain.CurrentDomain.UnhandledException += _dsCrash;
         if (_menu == null) return;
         _dsPage = DualSensePage(_settings.DualSense, _ds);
         _menu.Options.Show(_dsPage, Input.Pads.Any(p => p.IsDualSense)); // --menu options:dualsense finds it at once
@@ -79,14 +88,12 @@ public sealed partial class TougeGame
         _driver.Tilt ??= TiltOf;
         if (_p2Input != null) _p2Input.Tilt ??= TiltOf;
         (_ds.MusicOff, _ds.LightsOn) = (!_settings.MusicOn, _lights.State != Headlights.Mode.Off);
-        var driving = !Frozen && !_fly && _inRace;
-        var p2Pad = _vsSplit && _versusUi != null && _p2Input?.PadOf != null ? _versusUi.P2Device : -1;
-        var p2 = p2Pad >= 0 && _vsCars.Count > 0 ? _vsCars[0] : null;
-        DualSenseFeedback.Seat SeatOf(int pad) => pad == p2Pad
-            ? new(driving ? p2?.Race?.Vehicle : null, _p2Input!.Brake, p2 == null ? 0 : PaintOf(p2.Car, p2.Paint), 1)
-            : new(driving ? _drive.Car : null, _brakeLight, PaintOf(_carName, _paint), 0);
+        var driving = _dsDriving = !Frozen && !_fly && _inRace;
+        _dsP2Pad = _vsSplit && _versusUi != null && _p2Input?.PadOf != null ? _versusUi.P2Device : -1;
+        _dsP2 = _dsP2Pad >= 0 && _vsCars.Count > 0 ? _vsCars[0] : null;
         (_dsTime, _dsDt) = (_dsTime + dt, dt);
-        _ds.Update(Input.Pads, SeatOf, _drive.Roughness, dt, DualSenseTest ? TestScript : null);
+        if (_dsRoughness?.Target != _drive) _dsRoughness = _drive.Roughness; // a new run makes a new Drive
+        _ds.Update(Input.Pads, _dsSeatOf ??= DsSeat, _dsRoughness, dt, DualSenseTest ? TestScript : null);
         if (_dsPage != null) _menu!.Options.Show(_dsPage, _ds.Connected);
         if (_ds.Swiped && _jukebox != null)
         {
@@ -99,6 +106,10 @@ public sealed partial class TougeGame
             _settings.MapMode = _hud.Mode;
         }
     }
+
+    private DualSenseFeedback.Seat DsSeat(int pad) => pad == _dsP2Pad
+        ? new(_dsDriving ? _dsP2?.Race?.Vehicle : null, _p2Input!.Brake, _dsP2 == null ? 0 : PaintOf(_dsP2.Car, _dsP2.Paint), 1)
+        : new(_dsDriving ? _drive.Car : null, _brakeLight, PaintOf(_carName, _paint), 0);
 
     private uint PaintOf(string car, int paint) =>
         _catalog?.Cars.FirstOrDefault(c => c.Id == car)?.Paints is { Length: > 0 } p ? p[Math.Clamp(paint, 0, p.Length - 1)] : 0xFFFFFF;
@@ -134,6 +145,7 @@ public sealed partial class TougeGame
 
     private void DisposeDualSense()
     {
+        if (_dsCrash != null) AppDomain.CurrentDomain.UnhandledException -= _dsCrash;
         _ds?.Reset(Input.Pads);
         _padSpeaker?.Dispose();
     }

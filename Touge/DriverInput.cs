@@ -123,8 +123,10 @@ public sealed class DriverInput(ControlSettings cfg)
         var hasWheelSteer = Wheel != null && AnyAxis(DeviceKind.Wheel, Control.SteerRight);
         var ws = hasWheelSteer ? WheelSteer(input) : 0;
         var stick = Shape(Analog(input, DeviceKind.Pad, Control.SteerRight) - Analog(input, DeviceKind.Pad, Control.SteerLeft), cfg.PadDeadzone, cfg.PadLinearity);
-        if (Tilt?.Invoke(PadOf != null ? PadOf(input) : input.Gamepad) is { } tilt and not 0) stick = Math.Clamp(stick + tilt, -1, 1);
         pad |= stick != 0; // any stick motion past the dead zone, not only past half
+        var tilt = Tilt?.Invoke(PadOf != null ? PadOf(input) : input.Gamepad) ?? 0;
+        pad |= MathF.Abs(tilt) > 0.3f; // a deliberate tilt takes over; a pad lying a little askew does not
+        if (tilt != 0 && (pad || Active == DeviceKind.Pad)) stick = Math.Clamp(stick + tilt, -1, 1);
         // a bumped wheel (a few degrees) takes nothing over: it has to be turned 0.1 of the lock away from where it was left
         if (!hasWheelSteer || Active != DeviceKind.Wheel && float.IsNaN(_wheelAnchor)) _wheelAnchor = hasWheelSteer ? ws : float.NaN;
         if (hasWheelSteer && Active != DeviceKind.Wheel && MathF.Abs(ws - _wheelAnchor) > 0.1f) wheel = true;

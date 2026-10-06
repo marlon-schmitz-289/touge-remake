@@ -22,6 +22,9 @@ public sealed class Options
     /// <summary>One option: <see cref="Values"/> (null = 0..10 slider), the selected index, its setter and the help lines for the panel.</summary>
     public sealed record Row(string Label, Func<string[]>? Values, Func<int> Get, Action<int> Set, Func<string[]> Help)
     {
+        /// <summary>A button (<see cref="Action"/>): runs on DECIDE or LEFT/RIGHT, never <see cref="Result.Changed"/>.</summary>
+        public bool IsAction { get; private init; }
+
         /// <summary>A choice among fixed or live (<paramref name="values"/> re-read every frame) values.</summary>
         public static Row Choice(string label, Func<string[]> values, Func<int> get, Action<int> set, params string[] help) =>
             new(label, values, get, set, () => help);
@@ -32,10 +35,11 @@ public sealed class Options
         public static Row Toggle(string label, Func<bool> get, Action<bool> set, params string[] help) =>
             Choice(label, ["ON", "OFF"], () => get() ? 0 : 1, i => set(i == 0), help);
 
-        /// <summary>0..1 in tenths, drawn as 10 blocks.</summary>
         /// <summary>A single-value row that runs <paramref name="action"/> on DECIDE or LEFT/RIGHT (TEST buttons; nothing is saved).</summary>
         public static Row Action(string label, string value, Action action, params string[] help) =>
-            Choice(label, [value], () => 0, _ => action(), help);
+            Choice(label, [value], () => 0, _ => action(), help) with { IsAction = true };
+
+        /// <summary>0..1 in tenths, drawn as 10 blocks.</summary>
 
         public static Row Slider(string label, Func<float> get, Action<float> set, params string[] help) =>
             new(label, null, () => (int)MathF.Round(get() * 10), i => set(i / 10f), () => help);
@@ -136,10 +140,14 @@ public sealed class Options
             _top = Math.Clamp(_top, Math.Max(0, Selected - VisibleRows + 1), Selected);
             sound?.Invoke("SYS005");
         }
-        else if ((k.X != 0 || k.Ok) && rows.Count > 0 && Step(rows[Selected], k.X != 0 ? k.X : 1))
+        else if ((k.X != 0 || k.Ok) && rows.Count > 0)
         {
-            sound?.Invoke("SYS005");
-            return Result.Changed;
+            if (Step(rows[Selected], k.X != 0 ? k.X : 1))
+            {
+                sound?.Invoke("SYS005");
+                return Result.Changed;
+            }
+            if (rows[Selected].IsAction) sound?.Invoke("SYS006");
         }
         return Result.None;
     }
@@ -147,12 +155,16 @@ public sealed class Options
     /// <summary>Steps a row's value by <paramref name="step"/> (choices wrap, sliders stop at the ends); false if nothing changed.</summary>
     public static bool Step(Row row, int step)
     {
+        if (row.IsAction)
+        {
+            row.Set(0);
+            return false;
+        }
         var cur = row.Get();
         int next;
         if (row.Values is { } values)
         {
             var n = values().Length;
-            if (n == 1) row.Set(0); // an action row (or a list with one entry: set again, harmless)
             if (n < 2) return false;
             next = Wrap(Math.Clamp(cur, 0, n - 1) + step, n);
         }

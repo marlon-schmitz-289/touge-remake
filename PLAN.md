@@ -142,7 +142,8 @@ Jede Phase endet mit etwas Sichtbarem/Fahrbarem.
   Befehle rc 0, Lautsprecher-Gerät gefunden, Beschleunigungswerte kommen. Tests `DualSenseTests` (Effekt-Bytes, Skalierung, Lightbar,
   Neigung, Lautsprecher-Frames, Settings). Offen: Bluetooth (SDL braucht dort den erweiterten Modus, Effekte sollten gehen, kein Audio),
   zwei DualSense gleichzeitig (Lautsprecher nur am ersten), Hot-Plug und Windows/Linux nicht mit Hardware geprüft; online keine Spielerfarbe
-  (Spieler 1); Trigger-Gefühl/Stärken nach Gefühl, nicht mit Spielern abgestimmt.
+  (Spieler 1); Trigger-Gefühl/Stärken nach Gefühl, nicht mit Spielern abgestimmt; geteilter Bildschirm: Schalt-/Wand-Sounds beider
+  Spieler aus dem Lautsprecher des ersten Pads.
 
 ### Phase 4 – Multiplayer
 - Steam-Lobby + Freunde einladen (Muster aus `SteamLobbyManager`), Fallback Direkt-IP

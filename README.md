@@ -396,10 +396,12 @@ TRIGGERS: R2 leichter Widerstand, vibriert bei durchdrehenden Antriebsrädern, K
 pulsiert (20 Hz) bei blockierendem Rad; TRIGGER FORCE. RUMBLE: Motor (Drehzahl, Begrenzer), Curbs/Gras, Kontakte, Landungen, Driftwinkel,
 Gangwechsel; RUMBLE STRENGTH (andere Pads behalten das bisherige Rumble). SPEAKER: Menü-SE, Countdown CAR010/CAR011, Schaltklick, Wandtreffer
 aus dem Controller-Lautsprecher – über USB ist der DualSense ein 4-Kanal-Audiogerät (`Kansei/Audio/PadSpeaker`, SDL-Audio, Pfad X_X_R: rechter
-Kanal → Lautsprecher); über Bluetooth gibt es am PC kein Controller-Audio, die Zeile zeigt dann USB ONLY; SPEAKER VOLUME. PLAYER LEDS,
+Kanal → Lautsprecher); über Bluetooth gibt es am PC kein Controller-Audio, die Zeile zeigt dann USB ONLY; SPEAKER VOLUME (Lautstärke-Byte des Pads 0x3D…0x64 – darunter ist er stumm –, 0 = aus; SPEAKER TEST spielt
+auch bei SPEAKER OFF). PLAYER LEDS,
 MIC LED (aus / an bei Musik aus / an bei Licht an), TOUCHPAD (Wischen = nächster Song, Klick = Kartenmodus wie N), TILT STEER (aus,
-Neigung wie ein Lenkrad zum Stick addiert, TILT SENSITIVITY: volle Lenkung bei 60°…20°). Jede Funktion mit TEST-Zeile. Beim Beenden: Lightbar
-und Spieler-LEDs aus, Trigger frei, Lautsprecher stumm. `--dualsense-log` loggt jeden Befehl mit SDL-Rückgabe;
+Neigung wie ein Lenkrad zum Stick addiert, TILT SENSITIVITY: volle Lenkung bei 60°…20°; übernimmt die Lenkung erst ab 30 % Ausschlag
+oder wenn das Pad ohnehin aktiv ist). Jede Funktion mit TEST-Zeile. Beim Beenden: Lightbar
+und Spieler-LEDs aus, Trigger frei, Lautsprecher stumm (auch bei einem Absturz; nicht bei kill -9). `--dualsense-log` loggt jeden Befehl mit SDL-Rückgabe;
 `--dualsense-test` spielt 20 s lang alles nacheinander durch (Lightbar-Modi, Trigger, Rumble, Countdown aus dem Lautsprecher, Spieler-/Mikro-LED,
 Neigung live) – zum Fühlen: `dotnet run --project Touge -- "<iso>" --dualsense-test`.
 F1 Freiflug: WASD fliegen, Q/E runter/hoch, rechte Maustaste oder Pfeiltasten umschauen, Shift schnell,
