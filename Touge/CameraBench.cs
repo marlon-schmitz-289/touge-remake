@@ -25,14 +25,28 @@ public static class CameraBench
     /// <summary>Counters of one camera over a run.</summary>
     private sealed class Stats(string name)
     {
-        public int Frames, Blocked, Void, Clip, Hidden, Cuts, QuickCuts;
+        public int Frames, Blocked, Void, Clip, Hidden, Down, HiddenDown, BodyDown, Cuts, QuickCuts;
         public double Dist;
-        private readonly List<float> _acc = [], _ang = [];
+        public readonly List<float> Acc = [], Ang = [];
         private Vector3 _r1, _r2, _d1, _d2, _car;
         private int _n;
         private float _lastCut = -9;
 
-        public void Frame(CameraHull hull, Vector3 car, Vector3 eye, Vector3 look, float t, bool cut = false)
+        /// <summary>Per speed band (<see cref="Bands"/> ± 15 km/h): frames, eye–car distance, eye's offset along the car's heading, car's screen X, Y (centre) and height (−1..1).</summary>
+        public readonly double[,] Band = new double[Bands.Length, 6];
+
+        public void Framing(in Matrix4x4 pose, float kmh, Vector3 eye, Vector3 look, float fov)
+        {
+            var b = Array.FindIndex(Bands, v => MathF.Abs(kmh - v) <= 15);
+            if (b < 0) return;
+            var vp = Matrix4x4.CreateLookAt(eye, look, Vector3.UnitY) * Matrix4x4.CreatePerspectiveFieldOfView(fov, 16 / 9f, 0.3f, 2000);
+            Vector3 c = pose.Translation, up = Vector3.TransformNormal(Vector3.UnitY, pose), fwd = Vector3.TransformNormal(Vector3.UnitZ, pose);
+            if (Project(c, vp) is not { } m || Project(c + up * 0.8f, vp) is not { } top || Project(c - up * 0.5f, vp) is not { } bottom) return;
+            double[] add = [1, Vector3.Distance(eye, c), Vector3.Dot(eye - c, fwd), m.X, m.Y, top.Y - bottom.Y];
+            for (var k = 0; k < 6; k++) Band[b, k] += add[k];
+        }
+
+        public void Frame(CameraHull hull, Vector3 car, Vector3 eye, Vector3 look, float t, bool cut = false, bool snap = false)
         {
             Frames++;
             if (hull.Hit(car + Vector3.UnitY, eye) != null) Blocked++;
@@ -50,17 +64,19 @@ public static class CameraBench
                 if (t - _lastCut < 1.5f) QuickCuts++;
                 (_lastCut, _n) = (t, 0);
             }
-            if (Vector3.Distance(car, _car) > 3) _n = 0; // a reset: the game snaps
+            if (snap || Vector3.Distance(car, _car) > 3) _n = 0; // a reset: the game snaps
             _car = car;
             var r = eye - car;
             var dir = Vector3.Normalize(look - eye);
             if (_n >= 2)
             {
-                _acc.Add((r - 2 * _r1 + _r2).Length() * Fps * Fps);
-                _ang.Add((dir - 2 * _d1 + _d2).Length() * Fps * Fps);
+                Acc.Add((r - 2 * _r1 + _r2).Length() * Fps * Fps);
+                Ang.Add((dir - 2 * _d1 + _d2).Length() * Fps * Fps);
             }
             (_r2, _r1, _d2, _d1, _n) = (_r1, r, _d1, dir, _n + 1);
         }
+
+        public static readonly float[] Bands = [30, 80, 130, 180];
 
         private static readonly Vector3[] Axes = [Vector3.UnitX, -Vector3.UnitX, Vector3.UnitY, -Vector3.UnitY, Vector3.UnitZ, -Vector3.UnitZ];
 
@@ -73,24 +89,36 @@ public static class CameraBench
 
         public override string ToString() =>
             $"{name,-14} frames {Frames,6}  blocked {Blocked,5} ({100.0 * Blocked / Math.Max(Frames, 1),5:F2} %)  void {Void,5}  clip {Clip,5}  " +
-            $"hidden {100.0 * Hidden / Math.Max(Frames, 1),5:F1} %  dist {Dist / Math.Max(Frames, 1),5:F1} m  jitter pos {Spread(_acc)}  dir {Spread(_ang)}" +
+            $"hidden {100.0 * Hidden / Math.Max(Frames, 1),5:F1} % (downhill {100.0 * HiddenDown / Math.Max(Down, 1),5:F1} %, behind the car {100.0 * BodyDown / Math.Max(Down, 1),4:F1} %)  dist {Dist / Math.Max(Frames, 1),5:F1} m  jitter pos {Spread(Acc)}  dir {Spread(Ang)}" +
             (Cuts > 0 ? $"  cuts {Cuts} (<1.5 s: {QuickCuts})" : "");
     }
 
     public static bool Run(Iso9660 iso, IReadOnlyList<string> courses, string car)
     {
         CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
-        var total = new Dictionary<string, int[]>();
+        var total = new Dictionary<string, List<Stats>>();
         var models = iso.OpenAfs("CDVD/DATA/MODEL/COURSE.AFS");
         foreach (var c in courses.Count > 0 ? courses : Default)
             foreach (var reverse in new[] { false, true })
                 Course(iso, c.Contains('_') ? c : c + (models.Find(c + "_DAY.PAC") != null ? "_DAY" : "_NIT"), reverse, car, total);
-        Console.WriteLine("[CamBench] Summe (blocked/void/clip/frames):");
-        foreach (var (k, v) in total) Console.WriteLine($"[CamBench]   {k,-14} {v[0],6} {v[1],6} {v[2],6} / {v[3]}");
+        Console.WriteLine("[CamBench] Summe (blocked/void/clip/frames, hidden, hidden downhill, downhill behind the car, jitter pos/dir RMS/p99/max):");
+        foreach (var (k, v) in total)
+            Console.WriteLine($"[CamBench]   {k,-14} {v.Sum(s => s.Blocked),6} {v.Sum(s => s.Void),6} {v.Sum(s => s.Clip),6} / {v.Sum(s => s.Frames)}  " +
+                              $"{100.0 * v.Sum(s => s.Hidden) / v.Sum(s => s.Frames):F1} %  {100.0 * v.Sum(s => s.HiddenDown) / Math.Max(v.Sum(s => s.Down), 1):F1} %  {100.0 * v.Sum(s => s.BodyDown) / Math.Max(v.Sum(s => s.Down), 1):F1} %  " +
+                              $"{Stats.Spread([.. v.SelectMany(s => s.Acc)])}  {Stats.Spread([.. v.SelectMany(s => s.Ang)])}");
+        Console.WriteLine("[CamBench] Bildaufbau je Tempo (km/h: Bilder, Abstand Auge–Auto m, Auge längs zum Auto m, Auto im Bild X/Y/Höhe −1..1):");
+        foreach (var (k, v) in total)
+            for (var b = 0; b < Stats.Bands.Length; b++)
+            {
+                var n = v.Sum(s => s.Band[b, 0]);
+                if (n == 0) continue;
+                double M(int i) => v.Sum(s => s.Band[b, i]) / n;
+                Console.WriteLine($"[CamBench]   {k,-14} {Stats.Bands[b],3:F0}: {n,7}  {M(1):F2}  {M(2):F2}  {M(3):F3} {M(4):F3} {M(5):F3}");
+            }
         return true;
     }
 
-    private static void Course(Iso9660 iso, string course, bool reverse, string carName, Dictionary<string, int[]> total)
+    private static void Course(Iso9660 iso, string course, bool reverse, string carName, Dictionary<string, List<Stats>> total)
     {
         var drive = new Drive(iso, course, reverse, CarSpecs.All[carName]) { ForceDrift = true };
         drive.ResetTo(0);
@@ -100,16 +128,18 @@ public static class CameraBench
         var rec = new ReplayRecorder(replay, [car]);
         var pos = new List<Vector3> { car.Position };
         var rot = new List<Quaternion> { car.Orientation };
-        var vel = new List<Vector3> { car.Velocity };
+        var resets = new HashSet<int>(); // first pose after a reset
         var goal = drive.Pilot.Length - Ui.LapTimer.Gate;
         var stuck = 0f;
         for (var t = 0; t < 400 / Drive.Dt && drive.Pilot.Track(car.Position).Along < goal; t++)
         {
+            // stuck after a spin, or off the course with no ground below (the pilot left IROHA rev that way): back onto the line like R
             stuck = car.SpeedKmh < 5 ? stuck + Drive.Dt : 0;
-            if (stuck > 2) // stuck after a spin: back onto the line like R (a jump the cameras snap over in the game)
+            if (stuck > 2 || (t % 60 == 0 && !hull.Floor(car.Position))) // a jump the cameras snap over in the game
             {
                 drive.ResetNearest();
                 rec.Mark();
+                resets.Add(pos.Count);
                 stuck = 0;
             }
             rec.Before([car]);
@@ -118,7 +148,6 @@ public static class CameraBench
             rec.After([input]);
             pos.Add(car.Position);
             rot.Add(car.Orientation);
-            vel.Add(car.Velocity);
         }
         var name = $"{course}{(reverse ? " rev" : "")}";
         // places for pictures (--at n): the steepest downhill and the tightest bends of the line (points ~10 m apart)
@@ -138,16 +167,22 @@ public static class CameraBench
             var s = new Stats(CameraRig.Name(view));
             var follow = new CameraRig.Follow();
             track = new LinePilot(drive.Line); // its tracking is local: from the start again
-            for (var f = 0; ; f++)
+            for (int f = 0, last = 0; ; f++)
             {
                 var tt = f / Fps / Drive.Dt;
                 var i = (int)tt;
                 if (i + 1 >= pos.Count) break;
-                var a = Vector3.Distance(pos[i], pos[i + 1]) > 3 ? 1 : tt - i; // a reset: no glide across it (SyncPose)
+                var reset = resets.Contains(i + 1);
+                var a = reset ? 1 : tt - i; // a reset: no glide across it, the camera snaps (SyncPose)
+                var snap = reset && last != i;
+                last = i;
                 var pose = Matrix4x4.CreateFromQuaternion(Quaternion.Slerp(rot[i], rot[i + 1], a)) * Matrix4x4.CreateTranslation(Vector3.Lerp(pos[i], pos[i + 1], a));
-                var (eye, look, fov) = CameraRig.Place(view, ref follow, false, 1 / Fps, pose, pose, mounts, vel[i + 1], fov65, hull);
-                s.Frame(hull, pose.Translation, eye, look, f / Fps);
-                if (Hidden(track, pose, eye, look, fov)) s.Hidden++;
+                var (eye, look, fov) = CameraRig.Place(view, ref follow, snap, 1 / Fps, pose, pose, mounts, fov65, hull);
+                s.Frame(hull, pose.Translation, eye, look, f / Fps, snap: snap);
+                s.Framing(pose, (pos[i + 1] - pos[i]).Length() / Drive.Dt * 3.6f, eye, look, fov);
+                var (off, behind, down) = Hidden(track, pose, eye, look, fov);
+                if (off || behind) s.Hidden++;
+                if (down) (s.Down, s.HiddenDown, s.BodyDown) = (s.Down + 1, s.HiddenDown + (off || behind ? 1 : 0), s.BodyDown + (behind ? 1 : 0));
             }
             Report(name, s, total);
         }
@@ -204,7 +239,7 @@ public static class CameraBench
             // the car's centre off the picture (outside 90 %): the aim lags or the shot is too tight
             var vp = Matrix4x4.CreateLookAt(eye, look, Vector3.UnitY) * Matrix4x4.CreatePerspectiveFieldOfView(tvFov * MathF.PI / 180, 16 / 9f, 0.3f, 2000);
             if (Project(c + Vector3.UnitY * 0.6f, vp) is not { } q || MathF.Abs(q.X) > 0.9f || MathF.Abs(q.Y) > 0.9f) tv.Hidden++;
-            var (ce, cl, _) = CameraRig.Place(CameraView.Chase, ref chaseFollow, false, 1 / Fps, p, p, mounts, player.Cars[0].Velocity, fov65, hull);
+            var (ce, cl, _) = CameraRig.Place(CameraView.Chase, ref chaseFollow, false, 1 / Fps, p, p, mounts, fov65, hull);
             chase.Frame(hull, c, ce, cl, time);
             first = false;
         });
@@ -212,12 +247,12 @@ public static class CameraBench
         Report(name, chase, total);
     }
 
-    private static void Report(string course, Stats s, Dictionary<string, int[]> total)
+    private static void Report(string course, Stats s, Dictionary<string, List<Stats>> total)
     {
         Console.WriteLine($"[CamBench]   {s}");
         var key = s.ToString()[..14].Trim();
-        if (!total.TryGetValue(key, out var v)) total[key] = v = new int[4];
-        (v[0], v[1], v[2], v[3]) = (v[0] + s.Blocked, v[1] + s.Void, v[2] + s.Clip, v[3] + s.Frames);
+        if (!total.TryGetValue(key, out var v)) total[key] = v = [];
+        v.Add(s);
     }
 
     /// <summary>
@@ -251,12 +286,13 @@ public static class CameraBench
         }
     }
 
-    /// <summary>The road 20 m ahead of the car (driving line) off the picture or behind the car's body.</summary>
-    private static bool Hidden(LinePilot line, in Matrix4x4 pose, Vector3 eye, Vector3 look, float fov)
+    /// <summary>The road 20 m ahead of the car (driving line) off the picture, or behind the car's body; downhill: it lies over 1 m lower (5 %).</summary>
+    private static (bool Off, bool Behind, bool Down) Hidden(LinePilot line, in Matrix4x4 pose, Vector3 eye, Vector3 look, float fov)
     {
         var view = Matrix4x4.CreateLookAt(eye, look, Vector3.UnitY) * Matrix4x4.CreatePerspectiveFieldOfView(fov, 16 / 9f, 0.3f, 2000);
         var ahead = line.PointAt(line.Track(pose.Translation).Along + 20) + Vector3.UnitY * 0.1f;
-        if (Project(ahead, view) is not { } p || MathF.Abs(p.X) > 1 || MathF.Abs(p.Y) > 1) return true;
+        var down = ahead.Y < line.PointAt(line.Track(pose.Translation).Along).Y - 1;
+        if (Project(ahead, view) is not { } p || MathF.Abs(p.X) > 1 || MathF.Abs(p.Y) > 1) return (true, false, down);
         // the sight line through the car's body (a box 1.7 × 1.3 × 4.2 m around the centre of gravity, slab test in its frame)
         Matrix4x4.Invert(pose, out var local);
         Vector3 o = Vector3.Transform(eye, local), d = Vector3.Transform(ahead, local) - o, lo = new(-0.85f, -0.5f, -2.1f), hi = new(0.85f, 0.8f, 2.1f);
@@ -266,13 +302,13 @@ public static class CameraBench
             float ok = k == 0 ? o.X : k == 1 ? o.Y : o.Z, dk = k == 0 ? d.X : k == 1 ? d.Y : d.Z, l = k == 0 ? lo.X : k == 1 ? lo.Y : lo.Z, h = k == 0 ? hi.X : k == 1 ? hi.Y : hi.Z;
             if (MathF.Abs(dk) < 1e-6f)
             {
-                if (ok < l || ok > h) return false;
+                if (ok < l || ok > h) return (false, false, down);
                 continue;
             }
             float a = (l - ok) / dk, b = (h - ok) / dk;
             (t0, t1) = (MathF.Max(t0, MathF.Min(a, b)), MathF.Min(t1, MathF.Max(a, b)));
         }
-        return t0 <= t1;
+        return (false, t0 <= t1, down);
     }
 
     private static Vector2? Project(Vector3 p, in Matrix4x4 viewProj)
