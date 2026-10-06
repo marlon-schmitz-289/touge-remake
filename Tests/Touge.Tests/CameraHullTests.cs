@@ -66,6 +66,18 @@ public class CameraHullTests
             last = behind;
         }
         Assert.Equal(4.6f, last, 2);
+        // a wall popping up 2 m behind (grazed edge-on in a turn): the eye comes in over a few frames (MaxIn 80 m/s), not in one
+        var at = new Vector3(0, 0.5f, 59);
+        var walled = Course(wallZ: 57);
+        float prev = 4.6f, frames = 0;
+        for (; frames < 20 && prev > 2 + 1e-2f; frames++)
+        {
+            (pos, _, _) = CameraRig.Place(CameraView.Chase, ref f, false, 1 / 144f, PoseAt(at), PoseAt(at), mounts, 1, walled);
+            var now = at.Z - pos.Z;
+            Assert.True(prev - now < 80f / 144 + 1e-3f, $"{prev:F2} -> {now:F2}");
+            prev = now;
+        }
+        Assert.InRange(frames, 3, 6);
     }
 
     [Fact]

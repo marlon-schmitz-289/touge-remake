@@ -127,6 +127,9 @@ public static class CameraRig
     /// </summary>
     public const float PitchRate = 8;
 
+    /// <summary>Fastest the course pulls the chase eye in (m/s): 2 m in 1/40 s, the FAR eye's jumps at walls.</summary>
+    private const float MaxIn = 80;
+
     /// <summary>
     ///     How far the view turns from the body towards where the car is going in a slide: <c>DriftShare · sin(slip)</c> rad —
     ///     a third of a small slip angle, at most 20° side-on, none rolling backwards. No heading lag: only the slip itself is
@@ -164,7 +167,7 @@ public static class CameraRig
     ///     picture at any speed. Only three things move the view against the body: in a slide it turns <see cref="DriftShare"/>
     ///     of the way to where the car is going (from the car's motion, within 0.1 s); its pitch follows the body's at
     ///     <see cref="PitchRate"/> (no bounce, no roll: the horizon stays level); and the course (<paramref name="hull"/>) pulls
-    ///     the eye in towards the pivot over the car (never through a surface) and lets it out slowly.
+    ///     the eye in towards the pivot over the car (at most <see cref="MaxIn"/> fast, then never through a surface) and lets it out slowly.
     ///     <paramref name="smoothing"/> 0..1 (Options CAMERA SMOOTHING) adds a heading lag up to the original's quarter second
     ///     (<see cref="TurnRate"/>). <paramref name="snap"/> or a jump of the car (reset, another car) starts over.
     /// </summary>
@@ -226,7 +229,7 @@ public static class CameraRig
         var look = want + dir * 10;
         var pivot = pose.Translation + Vector3.UnitY * Pivot;
         var full = Vector3.Distance(pivot, want);
-        // hard limit: never through a surface; a wider sweep, also where the view is turning to, eases the eye in before (no jump)
+        // hard limit: never through a surface (after MaxIn); a wider sweep, also where the view is turning to, eases the eye in before (no jump)
         float hard = hull?.Reach(pivot, want) ?? full, soft = full;
         if (hull != null) soft = MathF.Min(hard, MathF.Min(hull.Reach(pivot, want, 1.2f), hull.Reach(pivot, Eye(car, yaw, pitch, r, out _), 1.2f)));
         // out again only past the hold (or all the way): a sweep grazing a surface does not pump the eye in and out
@@ -236,7 +239,9 @@ public static class CameraRig
         {
             Vector3 x = new(f.Reach), v = new(f.ReachRate);
             Spring(ref x, ref v, new Vector3(goal), goal < f.Reach ? 12 : 3, dt); // in quickly, out slowly
-            (f.Reach, f.ReachRate) = (MathF.Min(x.X, hard), x.X > hard ? 0 : v.X);
+            // a surface popping up between pivot and eye (a wall grazed edge-on) pulls the eye in over a few frames, not in one
+            var reach = MathF.Max(MathF.Min(x.X, hard), f.Reach - MaxIn * dt);
+            (f.Reach, f.ReachRate) = (reach, x.X > reach ? 0 : v.X);
         }
         var pos = full > 1e-3f ? pivot + (want - pivot) * (MathF.Min(f.Reach, full) / full) : want;
         return (pos, look, 2 * MathF.Atan(MathF.Tan(fov / 2) * Widen));
