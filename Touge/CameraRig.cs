@@ -155,7 +155,9 @@ public static class CameraRig
         var lift = Vector3.UnitY - f.Dir * f.Dir.Y;
         lift = lift.LengthSquared() < 1e-4f ? Vector3.UnitY : Vector3.Normalize(lift);
         var speed = MathF.Min(velocity.Length() * 3.6f / 180, 1);
-        var want = car - f.Dir * (r.Back + speed * r.Stretch) + lift * r.Height;
+        var back = r.Back + speed * r.Stretch;
+        // uphill the eye behind sinks with the slope and the car hides the road ahead: half of that drop is lifted back
+        var want = car - f.Dir * back + lift * r.Height + Vector3.UnitY * (MathF.Max(f.Dir.Y, 0) * back * 0.5f);
         var look = car + f.Dir * r.Ahead + lift * r.AimHeight;
         var pivot = car + Vector3.UnitY * Pivot;
         var full = Vector3.Distance(pivot, want);

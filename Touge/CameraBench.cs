@@ -12,7 +12,7 @@ namespace Touge;
 ///     played back like the viewer does. Per frame (144 Hz render, 120 Hz physics, interpolated like the game): for CHASE and
 ///     FAR CHASE live and in the replay, and for the TV cameras — <b>blocked</b>: a surface of the course as drawn
 ///     (<see cref="CameraHull"/>) between the car and the eye; <b>void</b>: no ground below the eye (out of the map);
-///     <b>clip</b>: a surface within the 0.3-m near plane; <b>hidden</b>: the road 20 m ahead behind the car or off the picture;
+///     <b>clip</b>: a surface within the 0.3-m near plane; <b>hidden</b>: the road 20 m ahead behind the car's body or off the picture;
 ///     <b>jitter</b>: RMS / p99 / max of the eye's acceleration relative to the car (m/s²) and of the view direction (rad/s²).
 ///     TV also counts cuts and cuts within 1.5 s of the last. Replay stepping: the shown car's acceleration at ¼×–4× speed.
 /// </summary>
@@ -137,6 +137,7 @@ public static class CameraBench
         {
             var s = new Stats(CameraRig.Name(view));
             var follow = new CameraRig.Follow();
+            track = new LinePilot(drive.Line); // its tracking is local: from the start again
             for (var f = 0; ; f++)
             {
                 var tt = f / Fps / Drive.Dt;
@@ -247,20 +248,28 @@ public static class CameraBench
         }
     }
 
-    /// <summary>The road 20 m ahead of the car (driving line) off the picture or inside the car's projected box.</summary>
+    /// <summary>The road 20 m ahead of the car (driving line) off the picture or behind the car's body.</summary>
     private static bool Hidden(LinePilot line, in Matrix4x4 pose, Vector3 eye, Vector3 look, float fov)
     {
         var view = Matrix4x4.CreateLookAt(eye, look, Vector3.UnitY) * Matrix4x4.CreatePerspectiveFieldOfView(fov, 16 / 9f, 0.3f, 2000);
         var ahead = line.PointAt(line.Track(pose.Translation).Along + 20) + Vector3.UnitY * 0.1f;
         if (Project(ahead, view) is not { } p || MathF.Abs(p.X) > 1 || MathF.Abs(p.Y) > 1) return true;
-        Vector2 min = new(float.MaxValue), max = new(float.MinValue);
-        for (var k = 0; k < 8; k++)
+        // the sight line through the car's body (a box 1.7 × 1.3 × 4.2 m around the centre of gravity, slab test in its frame)
+        Matrix4x4.Invert(pose, out var local);
+        Vector3 o = Vector3.Transform(eye, local), d = Vector3.Transform(ahead, local) - o, lo = new(-0.85f, -0.5f, -2.1f), hi = new(0.85f, 0.8f, 2.1f);
+        float t0 = 0, t1 = 1;
+        for (var k = 0; k < 3; k++)
         {
-            var corner = Vector3.Transform(new Vector3((k & 1) == 0 ? -0.85f : 0.85f, (k & 2) == 0 ? -0.5f : 0.8f, (k & 4) == 0 ? -2.1f : 2.1f), pose);
-            if (Project(corner, view) is not { } c) return false; // the eye inside the box: the car is not in front of the road
-            (min, max) = (Vector2.Min(min, c), Vector2.Max(max, c));
+            float ok = k == 0 ? o.X : k == 1 ? o.Y : o.Z, dk = k == 0 ? d.X : k == 1 ? d.Y : d.Z, l = k == 0 ? lo.X : k == 1 ? lo.Y : lo.Z, h = k == 0 ? hi.X : k == 1 ? hi.Y : hi.Z;
+            if (MathF.Abs(dk) < 1e-6f)
+            {
+                if (ok < l || ok > h) return false;
+                continue;
+            }
+            float a = (l - ok) / dk, b = (h - ok) / dk;
+            (t0, t1) = (MathF.Max(t0, MathF.Min(a, b)), MathF.Min(t1, MathF.Max(a, b)));
         }
-        return p.X > min.X && p.X < max.X && p.Y > min.Y && p.Y < max.Y && Vector3.Distance(eye, ahead) > Vector3.Distance(eye, pose.Translation);
+        return t0 <= t1;
     }
 
     private static Vector2? Project(Vector3 p, in Matrix4x4 viewProj)
