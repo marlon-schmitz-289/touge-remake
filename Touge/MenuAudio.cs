@@ -23,6 +23,8 @@ public sealed class MenuAudio : IDisposable
     public string? Track { get; private set; }
     /// <summary>Time source for the log (seconds); the offline capture sets its own.</summary>
     public Func<double>? Clock { get; set; }
+    /// <summary>Called with every sound played (the DualSense speaker echoes some, <see cref="DualSenseFeedback.Speak"/>).</summary>
+    public Action<string>? Played { get; set; }
 
     public MenuAudio(Iso9660 iso, AudioDevice dev)
     {
@@ -44,6 +46,7 @@ public sealed class MenuAudio : IDisposable
     {
         Console.WriteLine($"[Menu] {Stamp}SE {name}");
         _dev.PlaySfx(_se[name], Volume, ui: true);
+        Played?.Invoke(name);
     }
 
     /// <summary>

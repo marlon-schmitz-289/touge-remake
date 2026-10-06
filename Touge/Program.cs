@@ -69,6 +69,8 @@ using Touge;
 //   sonst Disc-Liste (Suche in Downloads, Schreibtisch, Dokumente, Home, Laufwerken), BROWSE, Systemdialog, Drag & Drop, Pfad einfügen.
 //   --launcher: die gemerkte Disc nicht starten; --menu browse [--browse <ordner>]: gleich im Dateibrowser; --drop <datei>: wie hineingezogen;
 //   --shot <png> [--shot-size WxH]: ein Bild des Launchers (nach der Suche), dann Ende – mit --data-dir und gemerkter Disc ein Bild des Front-Ends.
+// --dualsense-test: 20 s alle DualSense-Effekte nacheinander (Lightbar, Trigger, Rumble, Lautsprecher, Spieler-/Mikro-LED, Neigung), jeder Befehl mit SDL-Rückgabe geloggt, dann Ende.
+// --dualsense-log: jeden an den DualSense gesendeten Befehl loggen (auch beim normalen Start).
 // started from Finder/Explorer/launcher (no args = launcher, or just the ISO): no console to read, so everything also goes to touge.log in the profile folder
 // ponytail: "desktop start" guessed from the arguments, not from the console; an explicit --log flag if that ever guesses wrong
 if (args.All(a => a.EndsWith(".iso", StringComparison.OrdinalIgnoreCase)))
@@ -79,7 +81,8 @@ var iso = args.Where((a, i) => i == 0 || args[i - 1] is not ("--drop" or "--brow
 string? badIso = null;
 if (args is [var isoArg] && isoArg == iso && !Disc.Check(iso).Ok) (badIso, iso) = (iso, "");
 var launcher = iso == "";
-string[] launcherFlags = ["--launcher", "--menu", "--shot", "--shot-size", "--data-dir", "--backend", "--drop", "--browse", "--input-debug", "--sim-wheel", "--hint-device"];
+Kansei.Input.GamepadState.Trace = args.Contains("--dualsense-log") || args.Contains("--dualsense-test");
+string[] launcherFlags = ["--launcher", "--menu", "--shot", "--shot-size", "--data-dir", "--backend", "--drop", "--browse", "--input-debug", "--sim-wheel", "--hint-device", "--dualsense-log"];
 string[] valueFlags = ["--drop", "--browse", "--story-check", "--progress", "--battle", "--rule", "--lead", "--flow", "--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--hud-scale", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture", "--lights", "--render-scale", "--jukebox", "--legend-progress",
     "--join", "--port", "--name", "--net-sim", "--players", "--races", "--seconds", "--net-rule", "--versus", "--split", "--car2", "--shot-after",
     "--replay-test", "--ai-bench", "--replay", "--replay-at", "--replay-cam", "--replay-focus", "--save", "--data-dir", "--ghost", "--hint-device", "--cam", "--player-skill", "--ai-level"];
@@ -90,7 +93,7 @@ if (launcher ? badIso == null && !args.Where((a, i) => i == 0 || !valueFlags.Con
     return 1;
 }
 // menus (and the saved settings) only when started plainly: any course or test flag means a scripted run
-var plain = args.Where((a, i) => a != iso && a != badIso && a != "--backend" && (i == 0 || args[i - 1] != "--backend")).All(a => a is "--menu" or "--launcher" or "--input-debug" or "--sim-wheel" or "--hint-device" || a == Arg("--menu") || a == Arg("--hint-device"));
+var plain = args.Where((a, i) => a != iso && a != badIso && a != "--backend" && (i == 0 || args[i - 1] != "--backend")).All(a => a is "--menu" or "--launcher" or "--input-debug" or "--sim-wheel" or "--hint-device" or "--dualsense-log" || a == Arg("--menu") || a == Arg("--hint-device"));
 // app data (settings, records, progress, replays, save slots, photos): --data-dir, the real profile for a plain start, a throwaway folder for any other run
 Touge.Ui.Settings.FilePath = Touge.Ui.Settings.RunFile(Arg("--data-dir"), plain);
 // --car: HCAR name (AE86T, FD3S, R32, EVO3, …) or index 0–31 in that list (Touge.Formats.CarPaint.Cars)
@@ -284,7 +287,7 @@ TougeGame NewGame(string isoPath, Action? changeDisc) => new TougeGame(isoPath, 
       Battle = battle, LegendProgressPath = Arg("--legend-progress"), LegendFlow = args.Contains("--legend"), ShotBattleResult = args.Contains("--battle-result"), Lights = Arg("--lights") is { } lights ? Enum.Parse<Headlights.Mode>(lights, true) : null,
       StartCamera = Arg("--cam") is { } cam ? Enum.Parse<CameraView>(cam, true) : null,
       RenderScale = Arg("--render-scale") is { } rs ? int.Parse(rs) : 100,
-      InputDebug = args.Contains("--input-debug"), SimWheel = args.Contains("--sim-wheel"),
+      InputDebug = args.Contains("--input-debug"), SimWheel = args.Contains("--sim-wheel"), DualSenseTest = args.Contains("--dualsense-test"),
       SaveRuns = Arg("--data-dir") != null, ReplayFile = Arg("--replay"), GhostFile = Arg("--ghost"), ReplayAt = Arg("--replay-at") is { } ra ? float.Parse(ra, CultureInfo.InvariantCulture) : 0,
       ReplayCam = Enum.TryParse<Touge.Ui.ReplayViewer.Camera>(Arg("--replay-cam") ?? "tv", true, out var rc) ? rc : Touge.Ui.ReplayViewer.Camera.Tv,
       ReplayFocus = int.Parse(Arg("--replay-focus") ?? "0"),

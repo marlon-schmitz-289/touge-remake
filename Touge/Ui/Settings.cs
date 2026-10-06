@@ -91,6 +91,8 @@ public sealed class Settings
     public int Paint { get; set; }
     /// <summary>Bindings, wheel/pad tuning and force feedback (Options → CONTROLLER).</summary>
     public ControlSettings Controls { get; set; } = new();
+    /// <summary>PS5 controller features (Options → DUALSENSE); files from before it get the defaults.</summary>
+    public DualSenseSettings DualSense { get; set; } = new();
     // ------------------------------------------------------------ versus (Ui/Versus): name shown to others, UDP port, last JOIN address, split layout
     public string PlayerName { get; set; } = "PLAYER";
     public int NetPort { get; set; } = Touge.Net.NetSession.DefaultPort;
@@ -268,6 +270,8 @@ public sealed class Settings
         Best ??= [];
         MusicOff ??= [];
         Controls ??= new();
+        DualSense ??= new();
+        DualSense.Sanitize();
         var name = Touge.Net.Protocol.Clip(PlayerName ?? "").Trim().ToUpperInvariant();
         PlayerName = name.Length == 0 ? "PLAYER" : name[..Math.Min(16, name.Length)];
         if (NetPort is < 1024 or > 65535) NetPort = Touge.Net.NetSession.DefaultPort;

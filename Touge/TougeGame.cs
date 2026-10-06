@@ -236,6 +236,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
                 if (shotPath != null) _front.Settle();
             }
         }
+        LoadDualSense(iso);
         if (StartCamera is { } startCam) _settings.Camera = startCam;
         _camView = _settings.Camera;
         if (_persist) ApplyDisplay();
@@ -663,6 +664,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         if (_simWheel != null) InputDebugView.Simulate(_simWheel, time.TotalTime);
         _driver.Update(Input, dt);
         SendForces();
+        UpdateDualSense(dt);
         var keys = Flow != null ? FlowKeys(dt) : _frontKeys.Read(Input, dt);
         if (UpdateReplay(keys, dt)) return; // viewer, photo mode, REPLAY & RECORD, SAVE & LOAD
         if (VersusUpdate(keys, dt)) return;
@@ -1375,7 +1377,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         _driver.Wheel?.SetForce(cfg.FfbInvert ? -force : force);
         if (Frozen || _fly || _driver.Active != DeviceKind.Pad) return;
         var (low, high) = _ffb.PadRumble(cfg.Rumble);
-        if (low + high > 0.02f) Input.RumblePad(low, high, 80);
+        if (low + high > 0.02f && !(_ds != null && Input.ActiveIsDualSense)) Input.RumblePad(low, high, 80); // a DualSense: DualSenseFeedback
     }
 
     private void UpdateDriver()
@@ -1643,6 +1645,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     public override void Dispose()
     {
         if (_onFullscreen != null) Window.FullscreenModeChanged -= _onFullscreen; // CHANGE GAME DISC: the window outlives this game
+        DisposeDualSense(); // pads dark and free
         EndRecording();
         _audio?.Dispose();
         _rivalAudio?.Dispose();

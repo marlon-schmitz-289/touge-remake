@@ -24,6 +24,8 @@ public sealed class DriverInput(ControlSettings cfg)
     ///     merged (<see cref="InputSnapshot.Gamepad"/>). A function returning null: no pad.
     /// </summary>
     public Func<InputSnapshot, GamepadState?>? PadOf { get; init; }
+    /// <summary>Tilt steering of the pad read (−1..1, 0 = none), added to the stick (DualSense tilt, <see cref="DualSenseFeedback.Tilt"/>).</summary>
+    public Func<GamepadState?, float>? Tilt { get; set; }
     public DeviceKind Active { get; private set; } = DeviceKind.Keyboard;
     public float Steer { get; private set; }
     /// <summary>Wheel steering before the clamp: beyond ±1 the wheel is past the game's lock (force feedback pushes back).</summary>
@@ -121,6 +123,7 @@ public sealed class DriverInput(ControlSettings cfg)
         var hasWheelSteer = Wheel != null && AnyAxis(DeviceKind.Wheel, Control.SteerRight);
         var ws = hasWheelSteer ? WheelSteer(input) : 0;
         var stick = Shape(Analog(input, DeviceKind.Pad, Control.SteerRight) - Analog(input, DeviceKind.Pad, Control.SteerLeft), cfg.PadDeadzone, cfg.PadLinearity);
+        if (Tilt?.Invoke(PadOf != null ? PadOf(input) : input.Gamepad) is { } tilt and not 0) stick = Math.Clamp(stick + tilt, -1, 1);
         pad |= stick != 0; // any stick motion past the dead zone, not only past half
         // a bumped wheel (a few degrees) takes nothing over: it has to be turned 0.1 of the lock away from where it was left
         if (!hasWheelSteer || Active != DeviceKind.Wheel && float.IsNaN(_wheelAnchor)) _wheelAnchor = hasWheelSteer ? ws : float.NaN;

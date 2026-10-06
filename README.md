@@ -385,6 +385,23 @@ aktive Gerät ist (sonst 0, damit ein unbenutztes Rad ohne Autocenter nicht mitd
 und Curbs als Rumble. Auf Akina mit dem Piloten (90 s, erzwungene Drifts): mittlere Kraft 0,19 bei 70 %, 0,1 % der Ticks am Anschlag, in 99 %
 der Drift-Ticks zieht das Rad Richtung Gegenlenken. Nicht mit echter Hardware geprüft (kein Lenkrad am Testrechner); Vorzeichen der Kraft je
 Treiber verschieden → FFB DIRECTION.
+DualSense (PS5-Controller, `DualSenseFeedback`, Optionen → DUALSENSE, nur sichtbar solange einer angeschlossen ist, gespeichert als
+`Settings.DualSense`; ältere Dateien bekommen die Standardwerte): alles über SDL2s Gamecontroller-API, gleicher Weg unter macOS/Windows/Linux –
+Lightbar `SDL_GameControllerSetLED`, Spieler-LEDs `SetPlayerIndex`, Rumble `GameControllerRumble`, adaptive Trigger, Mikro-LED und
+Lautsprecher-Lautstärke/-Pfad als 47-Byte-Effektblock über `SDL_GameControllerSendEffect` (`Kansei/Input/DualSense`; SDL verpackt ihn selbst:
+USB Report 0x02, Bluetooth Report 0x31 mit CRC-32 über 0xA2 + Report), Neigung aus dem Beschleunigungssensor, Touchpad-Ereignisse.
+LIGHTBAR OFF / CAR COLOUR (Lack) / RPM (grün → gelb ab 60 % → rot ab 85 %, ab 95 % Blinken mit 8 Hz) / PLAYER (blau, rot, grün, pink;
+geteilter Bildschirm: jedes Pad seine Farbe, sein Auto, seine Spieler-LED), roter Puls bei Kontakten, Menüs/Pause ruhiges Grün, BRIGHTNESS.
+TRIGGERS: R2 leichter Widerstand, vibriert bei durchdrehenden Antriebsrädern, Kick beim Gangwechsel; L2 wird mit dem Bremsdruck härter,
+pulsiert (20 Hz) bei blockierendem Rad; TRIGGER FORCE. RUMBLE: Motor (Drehzahl, Begrenzer), Curbs/Gras, Kontakte, Landungen, Driftwinkel,
+Gangwechsel; RUMBLE STRENGTH (andere Pads behalten das bisherige Rumble). SPEAKER: Menü-SE, Countdown CAR010/CAR011, Schaltklick, Wandtreffer
+aus dem Controller-Lautsprecher – über USB ist der DualSense ein 4-Kanal-Audiogerät (`Kansei/Audio/PadSpeaker`, SDL-Audio, Pfad X_X_R: rechter
+Kanal → Lautsprecher); über Bluetooth gibt es am PC kein Controller-Audio, die Zeile zeigt dann USB ONLY; SPEAKER VOLUME. PLAYER LEDS,
+MIC LED (aus / an bei Musik aus / an bei Licht an), TOUCHPAD (Wischen = nächster Song, Klick = Kartenmodus wie N), TILT STEER (aus,
+Neigung wie ein Lenkrad zum Stick addiert, TILT SENSITIVITY: volle Lenkung bei 60°…20°). Jede Funktion mit TEST-Zeile. Beim Beenden: Lightbar
+und Spieler-LEDs aus, Trigger frei, Lautsprecher stumm. `--dualsense-log` loggt jeden Befehl mit SDL-Rückgabe;
+`--dualsense-test` spielt 20 s lang alles nacheinander durch (Lightbar-Modi, Trigger, Rumble, Countdown aus dem Lautsprecher, Spieler-/Mikro-LED,
+Neigung live) – zum Fühlen: `dotnet run --project Touge -- "<iso>" --dualsense-test`.
 F1 Freiflug: WASD fliegen, Q/E runter/hoch, rechte Maustaste oder Pfeiltasten umschauen, Shift schnell,
 Leertaste ~400 m weiter auf der Fahrlinie. F11 Vollbild, Esc Pause-Menü.
 Backend: Metal (macOS) bzw. Vulkan, umschaltbar mit `--backend metal|vulkan|opengl` (oder `PENELOPE_BACKEND`).

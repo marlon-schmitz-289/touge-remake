@@ -33,6 +33,10 @@ public sealed class Options
             Choice(label, ["ON", "OFF"], () => get() ? 0 : 1, i => set(i == 0), help);
 
         /// <summary>0..1 in tenths, drawn as 10 blocks.</summary>
+        /// <summary>A single-value row that runs <paramref name="action"/> on DECIDE or LEFT/RIGHT (TEST buttons; nothing is saved).</summary>
+        public static Row Action(string label, string value, Action action, params string[] help) =>
+            Choice(label, [value], () => 0, _ => action(), help);
+
         public static Row Slider(string label, Func<float> get, Action<float> set, params string[] help) =>
             new(label, null, () => (int)MathF.Round(get() * 10), i => set(i / 10f), () => help);
     }
@@ -78,6 +82,19 @@ public sealed class Options
         if (i < 0) return false;
         (Section, Current, Selected, _top) = (i, Pages[i], 0, 0);
         return true;
+    }
+
+    /// <summary>Shows <paramref name="page"/> after CONTROLLER or hides it (a device's page while it is connected); hidden while open: back to the list.</summary>
+    public void Show(Page page, bool shown)
+    {
+        if (Pages.Contains(page) == shown) return;
+        if (shown) Pages.Insert(Pages.FindIndex(p => p.Title == "CONTROLLER") + 1, page);
+        else
+        {
+            Pages.Remove(page);
+            if (Current == page) Current = null;
+        }
+        Section = Math.Clamp(Section, 0, Math.Max(0, Pages.Count - 1));
     }
 
     private static int Wrap(int i, int n) => n == 0 ? 0 : (i % n + n) % n;
@@ -135,6 +152,7 @@ public sealed class Options
         if (row.Values is { } values)
         {
             var n = values().Length;
+            if (n == 1) row.Set(0); // an action row (or a list with one entry: set again, harmless)
             if (n < 2) return false;
             next = Wrap(Math.Clamp(cur, 0, n - 1) + step, n);
         }

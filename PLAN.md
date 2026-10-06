@@ -135,6 +135,14 @@ Jede Phase endet mit etwas Sichtbarem/Fahrbarem.
   Haptic unter macOS), Spring/Damper-Effekte im Stand fehlen (nur Constant-Force), Belegung der festen Tasten (F1–F4, M, N, B, T, 1–3) nicht änderbar (beim Belegen abgelehnt). Review-Fixes: FFB nur ans aktive
   Lenkrad, Lenkrad übernimmt erst ab 10 % Drehung, Pad-Stick ab Totzone, Curb-Rumpeln als Sinus (kein Aliasing bei 60 fps), FFB auch im
   `--autodrive`-Vorlauf (Overlay), `--menu controls:gamepad`.
+- Stand DualSense (`DualSenseFeedback`, `Kansei/Input/DualSense`, `Kansei/Audio/PadSpeaker`, Optionen → DUALSENSE): Lightbar (Lack/Drehzahl/
+  Spieler, Kontakt-Puls), adaptive Trigger (Bremsdruck, ABS-Puls, Schlupf, Schalt-Kick), Rumble (Motor, Curbs, Kontakte, Landungen, Drift,
+  Schalten), Lautsprecher (USB), Spieler-/Mikro-LED, Touchpad, Neigungslenkung; alles abschaltbar, Stärken einstellbar, TEST je Funktion.
+  Mit echtem DualSense (USB, macOS) geprüft: `--dualsense-test` und `--bench 20 --dualsense-log` (Akina, Pilot) – alle LED-/Effekt-/Rumble-
+  Befehle rc 0, Lautsprecher-Gerät gefunden, Beschleunigungswerte kommen. Tests `DualSenseTests` (Effekt-Bytes, Skalierung, Lightbar,
+  Neigung, Lautsprecher-Frames, Settings). Offen: Bluetooth (SDL braucht dort den erweiterten Modus, Effekte sollten gehen, kein Audio),
+  zwei DualSense gleichzeitig (Lautsprecher nur am ersten), Hot-Plug und Windows/Linux nicht mit Hardware geprüft; online keine Spielerfarbe
+  (Spieler 1); Trigger-Gefühl/Stärken nach Gefühl, nicht mit Spielern abgestimmt.
 
 ### Phase 4 – Multiplayer
 - Steam-Lobby + Freunde einladen (Muster aus `SteamLobbyManager`), Fallback Direkt-IP

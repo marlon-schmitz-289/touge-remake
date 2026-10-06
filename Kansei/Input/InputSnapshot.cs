@@ -73,6 +73,9 @@ public sealed unsafe class InputSnapshot
     /// <summary>Controller type of the currently active pad (Xbox/PlayStation/Switch/etc), for glyph selection.</summary>
     public GameControllerType ActiveType { get; private set; } = GameControllerType.Unknown;
 
+    /// <summary>The active pad is a PS5 DualSense.</summary>
+    public bool ActiveIsDualSense => ActiveType == GameControllerType.PS5;
+
     /// <summary>Display name of the currently active pad, e.g. "Xbox Wireless Controller".</summary>
     public string? ActiveName { get; private set; }
 
@@ -183,6 +186,15 @@ public sealed unsafe class InputSnapshot
                 Gamepad.OnButtonUp((GameControllerButton)evt.Cbutton.Button);
                 Pad(evt.Cbutton.Which)?.OnButtonUp((GameControllerButton)evt.Cbutton.Button);
                 break;
+            case EventType.Controllertouchpaddown or EventType.Controllertouchpadmotion when evt.Ctouchpad.Finger == 0:
+                if (Pad(evt.Ctouchpad.Which) is { } touched) touched.Touch = new System.Numerics.Vector2(evt.Ctouchpad.X, evt.Ctouchpad.Y);
+                break;
+            case EventType.Controllertouchpadup when evt.Ctouchpad.Finger == 0:
+                if (Pad(evt.Ctouchpad.Which) is { } lifted) lifted.Touch = null;
+                break;
+            case EventType.Controllersensorupdate when evt.Csensor.Sensor == (int)SensorType.Accel:
+                if (Pad(evt.Csensor.Which) is { } moved) moved.Accel = new System.Numerics.Vector3(evt.Csensor.Data[0], evt.Csensor.Data[1], evt.Csensor.Data[2]);
+                break;
             case EventType.Controlleraxismotion:
                 var axisValue = evt.Caxis.Value / 32767f;
                 Gamepad.OnAxis((GameControllerAxis)evt.Caxis.Axis, evt.Caxis.Value);
@@ -287,7 +299,11 @@ public sealed unsafe class InputSnapshot
         }
 
         _open[instanceId] = (nint)controller;
-        var state = new GamepadState { IsConnected = true };
+        var state = new GamepadState
+        {
+            IsConnected = true, Sdl = _sdl, Controller = (nint)controller, Name = _sdl.GameControllerNameS(controller) ?? "",
+            IsDualSense = _sdl.GameControllerGetType(controller) == GameControllerType.PS5,
+        };
         _padById[instanceId] = state;
         _pads.Add(state);
         return instanceId;
