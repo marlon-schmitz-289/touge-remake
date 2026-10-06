@@ -308,6 +308,11 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         else if (_story != null && StartMenu?.StartsWith("story") == true) StartStoryMenu(StartMenu);
         else if (_menu != null && StartMenu?.StartsWith("fourpasses") == true) OpenFourPassMenu(StartMenu);
         else if (_menu != null && StartMenu == "freebattle") OpenFreeBattleAtStart();
+        else if (_menu != null && StartMenu == "freeplay")
+        {
+            OpenFreePlay();
+            _inRace = false;
+        }
         else if (_menu != null && StartMenu != null)
         {
             // options:<page> opens an options page directly (screenshots), controls:<device> the controls screen
@@ -529,6 +534,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             : _fly ? new VehicleInput(0, 0, 0, true)
             : _driver.Vehicle(_pendingShift);
         _pendingShift = 0;
+        if (_freePending != null) input = new VehicleInput(0, 0, 0, Handbrake: true); // free play's course end: the car waits behind the fade
         if (_vsRace != null) input = VersusStep(input, dt); // versus: split screen or online (Touge/Net)
         else if (_race != null) input = BattleStep(input, dt); // the session steps every car, the player's included
         else car.Step(input, _drive.Ground, dt);
@@ -699,6 +705,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             if (_menu.Current != Menu.Screen.Intro || _menu.Freezes) return; // after GO the intro only draws
         }
         if (bench is { } benchSeconds && Bench(time, benchSeconds)) return;
+        FreePlayStep(dt);
         if (StoryFinished() || BattleFinished() || VersusFinished()) return;
         if (_race == null && _vsRace == null && _front != null && !_finished && _hud.Timer.Phase == LapTimer.State.Finished)
         {
@@ -790,6 +797,9 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
                 break;
             case FrontEnd.Result.Versus:
                 OpenVersus();
+                break;
+            case FrontEnd.Result.FreePlay:
+                OpenFreePlay();
                 break;
             case FrontEnd.Result.Guide:
                 OpenGuide(CarGuide.Step.Intro);
@@ -898,6 +908,17 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
                 break;
             case Menu.Action.Restart:
                 ResetRun();
+                break;
+            case Menu.Action.Rivals when _free != null:
+                ReturnToFreePlayLobby();
+                break;
+            case Menu.Action.Exit when _free != null:
+                ExitFreePlay();
+                break;
+            case Menu.Action.ResetCar:
+                _drive.ResetNearest();
+                SyncPose();
+                (_inRace, _camSnap, _fly) = (true, true, false);
                 break;
             case Menu.Action.Rivals when _inFreeBattle:
                 ReturnToFreeBattleLobby();
@@ -1140,7 +1161,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         ("Replay", 3, "replay_result", 0, 0, false, true), ("Result", 0.8f, "result_back", 1, 0, false, false),
         ("Result", 0.3f, null, 1, 0, false, false), ("Result", 0.3f, null, 1, 0, false, false),
         ("Result", 0.5f, "result_exit", 0, 0, true, false),
-        ("Modes", 1, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 0, true, false),
+        ("Modes", 1, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 0, true, false),
         ("ReplayMenu", 1, "replay_menu", 0, 0, false, true),
         ("Modes", 1, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 0, true, false),
         ("SaveLoad", 1, "saveload", 0, 0, false, true),
@@ -1179,7 +1200,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     /// <summary>--flow: the scripted key of this frame; asks for the step's PNG first (written next frame), quits after the last step (with --bench: races on).</summary>
     private (int X, int Y, bool Ok, bool Back) FlowKeys(float dt)
     {
-        var script = bench != null ? FlowBenchScript : SaveLoadFlow ? SaveLoadFlowScript : FreeBattleFlow ? FreeBattleFlowScript : LegendFlow ? LegendFlowScript : FourPassFlow ? FourPassFlowScript : StoryFlow ? StoryFlowScript : VersusStart == "flow" ? VersusFlowScript : FlowScript;
+        var script = bench != null ? FlowBenchScript : SaveLoadFlow ? SaveLoadFlowScript : FreeBattleFlow ? FreeBattleFlowScript : FreePlayFlow ? FreePlayFlowScript : LegendFlow ? LegendFlowScript : FourPassFlow ? FourPassFlowScript : StoryFlow ? StoryFlowScript : VersusStart == "flow" ? VersusFlowScript : FlowScript;
         if (_flowStep >= script.Length)
         {
             if (bench == null) Window.ShouldClose = true;
@@ -1188,7 +1209,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         var s = script[_flowStep];
         var at = ReplayFlowAt ?? (_front is { Active: true } ? _front.Current.ToString() : _guide is { Active: true } ? "Guide" + _guide.Current : _legend is { Active: true } ? "Legend" + _legend.Current
             : _story is { Active: true } ? "Story" + _story.Current : _versusUi is { Active: true } ? "Vs" + _versusUi.Current
-            : _menu!.Current != Menu.Screen.None ? _menu.Current.ToString() : "Race");
+            : _menu!.Current != Menu.Screen.None ? _menu.Current.ToString() : _free != null ? FreeFlowAt : "Race");
         if (at != s.At)
         {
             _flowT = 0;
@@ -1399,7 +1420,8 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             _drive.ResetNearest();
             SyncPose();
         }
-        if (k.IsKeyPressed(Key.B) && _race == null && _vsRace == null)
+        if (k.IsKeyPressed(Key.B) && _free != null && _freePending == null) TurnFree(atEnd: false); // free play: turned where the car is, AI cars set off again
+        else if (k.IsKeyPressed(Key.B) && _race == null && _vsRace == null)
         {
             using (var iso = new Iso9660(isoPath)) _drive.SetDirection(iso, !_drive.Reverse);
             _drive.ResetNearest();
@@ -1575,6 +1597,12 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             && _story is not { Active: true } && _versusUi is not { Active: true } && !OverlayQuiet && ShowsNowPlaying(_menu?.Current == Menu.Screen.Pause))
             NowPlaying.Draw(_overlay, w, h, song, _jukebox.Since, hold: _menu?.Current == Menu.Screen.Pause, below: NowPlayingBelow(split), clear: NowPlayingClear(w, h, split));
         if (InputDebug) InputDebugView.Build(_overlay, w, h, Input, _driver, _ffb);
+        if (FreeFadeAlpha > 0) // free play's course end: black over everything (its own layer: overlay text lies above every shape)
+        {
+            DrawOverlay(ctx.Encoder, target, w, h);
+            _overlay.Clear();
+            _overlay.Rect(Vector2.Zero, new Vector2(w, h), Overlay.Rgba(0, 0, 0, FreeFadeAlpha));
+        }
         DrawOverlay(ctx.Encoder, target, w, h);
         if (shot != null)
         {

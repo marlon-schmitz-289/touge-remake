@@ -184,7 +184,8 @@ public sealed class NetRace
     private NetRace(RaceSession race, NetSession net)
     {
         (Race, Net) = (race, net);
-        if (net.IsHost) _referee = new Referee(net.Config.Rule, race.Goal);
+        if (net.Free) (race.AtCourseEnd, race.Ghost) = (race.BackToStart, net.Config.Ghost); // no result: round and round
+        else if (net.IsHost) _referee = new Referee(net.Config.Rule, race.Goal);
     }
 
     /// <summary>The race on <paramref name="drive"/> (its car is ours, driven by <paramref name="local"/>) with everybody of <paramref name="net"/>.</summary>
@@ -193,11 +194,7 @@ public sealed class NetRace
         var race = new RaceSession(drive.Ground, drive.Line, drive.RunOutLine);
         var r = new NetRace(race, net);
         r.ByPlayer[net.Local.Id] = race.Add(net.Local.Name, drive.Car, local);
-        foreach (var p in net.Players.Where(p => !p.IsLocal))
-        {
-            var spec = CarSpecs.All.TryGetValue(p.Car, out var s) ? s : CarSpec.AE86;
-            r.ByPlayer[p.Id] = race.Add(p.Name, new Vehicle(spec) { SurfaceGrip = drive.Car.SurfaceGrip }, new RemoteDriver(p, () => net.RaceTime));
-        }
+        foreach (var p in net.Players.Where(p => !p.IsLocal && (!net.Free || r.Drives(p)))) r.AddRemote(p);
         drive.ResetTo(0);
         var at = race.Cars[0].Track.Track(drive.Car.Position).Along;
         var ids = r.ByPlayer.Keys.Order().ToList();
@@ -240,6 +237,41 @@ public sealed class NetRace
     private static void PlaceAhead(RaceSession race, RaceCar car, float along)
     {
         for (var k = 0; k < 6 && !race.Place(car, along + 2 * k, 0); k++) { }
+    }
+
+    /// <summary>Free play: a remote player whose car is out on the course (in the session, loaded this run).</summary>
+    private bool Drives(NetPlayer p) => p.Connected && p.LoadedRace == Net.RaceId && Net.Players.Contains(p);
+
+    private void AddRemote(NetPlayer p)
+    {
+        var spec = CarSpecs.All.TryGetValue(p.Car, out var s) ? s : CarSpec.AE86;
+        ByPlayer[p.Id] = Race.Add(p.Name, new Vehicle(spec) { SurfaceGrip = Local.Vehicle.SurfaceGrip }, new RemoteDriver(p, () => Net.RaceTime));
+    }
+
+    /// <summary>
+    ///     Free play: the cars follow the session — a player who drives in gets a car, one who left (or went back to the lobby
+    ///     for another car) loses it; a newcomer on a freed id is a new player. True when the field changed (the game reloads models).
+    /// </summary>
+    public bool Sync()
+    {
+        if (!Net.Free) return false;
+        var changed = false;
+        foreach (var (id, car) in ByPlayer.ToArray())
+            if (car.Driver is RemoteDriver rd && !Drives(rd.Player))
+            {
+                Race.Remove(car);
+                ByPlayer.Remove(id);
+                Net.Log?.Invoke($"[Netz] {Net.RaceTime:F1} #{id} {rd.Player.Name} nicht mehr auf der Strecke");
+                changed = true;
+            }
+        foreach (var p in Net.Players)
+            if (!p.IsLocal && !ByPlayer.ContainsKey(p.Id) && Drives(p))
+            {
+                AddRemote(p);
+                Net.Log?.Invoke($"[Netz] {Net.RaceTime:F1} #{p.Id} {p.Name} fährt mit ({p.Car})");
+                changed = true;
+            }
+        return changed;
     }
 
     /// <summary>One physics tick once the race runs (race clock ≥ 0).</summary>

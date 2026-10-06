@@ -72,6 +72,12 @@ public sealed class RaceCar(string name, Vehicle vehicle, ICarDriver driver, Vec
     public int Place { get; internal set; }
     public int WallTicks { get; internal set; }
     public int Respawns { get; internal set; }
+    /// <summary>Times its place on the line jumped (put somewhere, or a circuit's next lap): trackers of the same car (HUD) look for it again.</summary>
+    public int Jumps { get; internal set; }
+    /// <summary>Free play: stopped at the course end and handed back to its driver (<see cref="RaceSession.AtCourseEnd"/> left it there).</summary>
+    public bool Parked { get; internal set; }
+    /// <summary>Free play: times it reached the course end (a circuit: its two laps).</summary>
+    public int CourseEnds { get; internal set; }
     internal float StuckFor;
     internal Coaster? Coast;
 }
@@ -142,13 +148,45 @@ public sealed class RaceSession
     /// <summary>The battle is decided (or, without one, everybody finished), or <see cref="Ended"/>.</summary>
     public bool Over => Ended || Battle is { Outcome: not BattleOutcome.None } || (Cars.Count > 0 && _finished == Cars.Count);
 
+    /// <summary>
+    ///     Free play (null: a race): nobody finishes. Past the goal of a point-to-point course a car coasts to a stop on the
+    ///     run-out, then this decides what happens to it (true: it was put somewhere, e.g. <see cref="BackToStart"/>; false: it
+    ///     stays parked there and its driver drives on). On a circuit the car just goes round (its tracking back to the first lap).
+    /// </summary>
+    public Func<RaceCar, bool>? AtCourseEnd { get; set; }
+    /// <summary>Cars pass through each other (free play's ghost option): no contacts.</summary>
+    public bool Ghost { get; set; }
+
     public RaceCar Add(string name, Vehicle vehicle, ICarDriver driver)
     {
         var car = new RaceCar(name, vehicle, driver, Line);
         Cars.Add(car);
+        ResetTouches();
+        return car;
+    }
+
+    /// <summary>A car leaves the session (free play online: its player left).</summary>
+    public void Remove(RaceCar car)
+    {
+        if (Cars.Remove(car)) ResetTouches();
+    }
+
+    private void ResetTouches()
+    {
         _lastTouch = new float[Cars.Count * Cars.Count];
         Array.Fill(_lastTouch, float.NegativeInfinity);
-        return car;
+    }
+
+    /// <summary>
+    ///     Free play's default at the course end: back on the line at the spawn, or the first spot after it (8 m steps) with no
+    ///     other car within 7 m, as at a fresh start; false if no spot was free.
+    /// </summary>
+    public bool BackToStart(RaceCar car)
+    {
+        for (var s = 0f; s < 120; s += 8)
+            if (!Cars.Any(o => o != car && Vector3.Distance(o.Vehicle.Position, car.Track.PointAt(s)) < 7) && Place(car, s, 0))
+                return true;
+        return false;
     }
 
     /// <summary>
@@ -179,7 +217,8 @@ public sealed class RaceSession
         if (v.Position.Y < hit.Point.Y || v.Velocity.Y < -1) return false; // the wheels find no road there (MYOUGI uphill, left of the line): it sinks
         t.Nearest(v.Position, along); // circuits: the line passes the grid twice
         (car.Along, car.Lateral) = t.Track(v.Position);
-        (car.PrevPosition, car.PrevOrientation, car.StuckFor, car.Coast) = (v.Position, v.Orientation, 0, null);
+        (car.PrevPosition, car.PrevOrientation, car.StuckFor, car.Coast, car.Parked) = (v.Position, v.Orientation, 0, null, false);
+        car.Jumps++;
         car.Driver.Reset();
         return true;
     }
@@ -231,10 +270,10 @@ public sealed class RaceSession
     private Coaster MakeCoast(RaceCar car)
     {
         var side = Math.Clamp(car.Lateral, -2, 2);
-        if (car.FinishedAt != null && RunOut.Length > 1)
+        if ((car.FinishedAt != null || AtCourseEnd != null) && RunOut.Length > 1)
         {
             var runOut = new LinePilot(RunOut) { Offset = side };
-            return new Coaster(runOut, runOut.Length - Touge.Drive.CoastGap - StopSpacing * (car.Place - 1));
+            return new Coaster(runOut, runOut.Length - Touge.Drive.CoastGap - StopSpacing * Math.Max(car.Place - 1, 0));
         }
         var v = car.Speed;
         car.Track.Offset = side;
@@ -253,14 +292,15 @@ public sealed class RaceSession
                 car.Input = car.Driver.Drive(this, car, dt);
                 continue;
             }
-            if (car.Coast == null && (car.FinishedAt != null || Over)) car.Coast = MakeCoast(car);
+            if (AtCourseEnd != null) FreeEnd(car);
+            else if (car.Coast == null && (car.FinishedAt != null || Over)) car.Coast = MakeCoast(car);
             var input = car.Coast?.Drive(v) ?? car.Driver.Drive(this, car, dt);
             if (car.Coast != null) KeepBehind(car);
             car.Input = input;
             v.Step(input, Ground, dt);
         }
         LastContact = null;
-        for (var i = 0; i < Cars.Count; i++)
+        for (var i = 0; i < Cars.Count && !Ghost; i++)
         for (var j = i + 1; j < Cars.Count; j++)
         {
             RaceCar a = Cars[i], b = Cars[j];
@@ -281,14 +321,42 @@ public sealed class RaceSession
             var v = car.Vehicle;
             (car.Along, car.Lateral) = car.Track.Track(v.Position);
             if (v.WallContacts > 0) car.WallTicks++;
-            if (car.FinishedAt == null && car.Along >= _goal) (car.FinishedAt, car.Place) = (Time, ++_finished);
+            if (car.FinishedAt == null && car.Along >= _goal && AtCourseEnd == null) (car.FinishedAt, car.Place) = (Time, ++_finished);
             // an AI car stuck (standing, far off the line or on its roof) for 3 s is put back where it was
             var upright = Vector3.Transform(Vector3.UnitY, v.Orientation).Y > 0.3f;
-            var stuck = car.Driver is AiDriver && car.FinishedAt == null && !Over && (v.Velocity.Length() < 1 || MathF.Abs(car.Lateral) > 12 || !upright);
+            var stuck = car.Driver is AiDriver && car.FinishedAt == null && !Over && car.Coast == null && !car.Parked
+                        && (v.Velocity.Length() < 1 || MathF.Abs(car.Lateral) > 12 || !upright);
             car.StuckFor = stuck ? car.StuckFor + dt : 0;
             if (car.StuckFor > 3) Respawn(car);
         }
         if (Battle != null && Cars.Count >= 2) Battle.Update(dt, Cars[0].Along, Cars[1].Along);
+    }
+
+    /// <summary>
+    ///     Free play at the course end (<see cref="AtCourseEnd"/>): a circuit's car goes on into its next lap; past the goal of a
+    ///     point-to-point course the auto-run takes it to a stop on the run-out, then <see cref="AtCourseEnd"/> decides. A parked
+    ///     car is its driver's again until it is back on the course (it may turn and drive back up).
+    /// </summary>
+    private void FreeEnd(RaceCar car)
+    {
+        if (car.Along < _goal)
+        {
+            if (car.Along < _goal - 10) car.Parked = false;
+            return;
+        }
+        var v = car.Vehicle;
+        if (RunOut.Length <= 1)
+        {
+            car.Track.Nearest(v.Position, 0); // a circuit's line runs two laps: back onto the first
+            (car.Along, car.Lateral) = car.Track.Track(v.Position);
+            (car.Jumps, car.CourseEnds) = (car.Jumps + 1, car.CourseEnds + 1);
+            return;
+        }
+        if (car.Parked) return;
+        car.Coast ??= MakeCoast(car);
+        if (v.Velocity.Length() > 0.5f) return;
+        (car.Coast, car.CourseEnds) = (null, car.CourseEnds + 1);
+        if (!AtCourseEnd!(car)) car.Parked = true;
     }
 
     /// <summary>

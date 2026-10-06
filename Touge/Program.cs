@@ -49,11 +49,11 @@ using Touge;
 // --story-check [n]: Kapiteltabelle und Szenen der Disc gegen die Übersetzung prüfen, dann jedes Kapitel (oder nur n) mit dem Autopiloten fahren (ohne Fenster).
 // --story-check media[:n]: jede Manga-Sequenz und Porträt-Szene (oder nur Kapitel n) wie im Spiel laden und prüfen, Untertitel mit Zeiten auf der Stimmspur.
 // --story-check audio:n: die Shows von Kapitel n headless über ein Loopback-Gerät abspielen (AUTO aus/an, DECIDE, Überspringen), Pegel und Spuren je 0,5 s, stille Blöcke zählen.
-// --headless [--host | --join <ip[:port]>] [--bot] [--port n] [--name X] [--players n] [--races n] [--seconds s] [--net-sim ms[:verlust[:jitter]]] [--net-rule battle|race]:
+// --headless [--host | --join <ip[:port]>] [--bot] [--port n] [--name X] [--players n] [--races n] [--seconds s] [--net-sim ms[:verlust[:jitter]]] [--net-rule battle|race|free [--ghost-cars]]:
 //   Mehrspieler-Teilnehmer ohne Fenster (Touge/Net/Headless): Host oder Client einer echten UDP-Sitzung, Auto per Autopilot (--bot), Log je Sekunde + Zusammenfassung.
 // --flow <dir> --versus flow: Versus-Ablauf (geteilter Bildschirm) per Skript statt des Time-Attack-Ablaufs.
 // --menu freebattle: VERSUS → VS CPU-Lobby beim Start; --flow <dir> --freebattle: freies Battle gegen die KI per Skript (Lobby → LEAD/CHASE → Ergebnis → RETRY → Pause-Exit → RACE → EXIT).
-// --versus split|host|join[:ip[:port]]|online [--bot] [--split vertical] [--car2 X] [--players n] [--net-rule battle|race]: Versus direkt (Testläufe/Bilder):
+// --versus split|host|join[:ip[:port]]|online [--bot] [--split vertical] [--car2 X] [--players n] [--net-rule battle|race|free [--ghost-cars]]: Versus direkt (Testläufe/Bilder):
 //   geteilter Bildschirm bzw. Online-Host/-Client im Fenster; --bot: Autopilot fährt, Lobby läuft von selbst (Host startet bei --players Spielern).
 // --shot-after <s>: --shot erst nach so vielen Sekunden (statt sofort), das Spiel läuft bis dahin normal (Versus, Replay).
 // --replay-test <s> [--battle <rivale>] [--drift] [--save <datei.rpl>]: Lauf ohne Fenster aufnehmen, Datei schreiben/lesen, auf frischen Autos abspielen,
@@ -195,7 +195,7 @@ if (args.Contains("--headless"))
         return 1;
     }
     var config = new Touge.Net.RaceConfig(course.ToUpperInvariant(), args.Contains("--reverse"), args.Contains("--fog"),
-        Arg("--net-rule") == "race" ? Touge.Net.NetRule.Race : Touge.Net.NetRule.Battle);
+        Arg("--net-rule") switch { "race" => Touge.Net.NetRule.Race, "free" => Touge.Net.NetRule.Free, _ => Touge.Net.NetRule.Battle }, args.Contains("--ghost-cars"));
     return Touge.Net.Headless.Run(new Touge.Net.Headless.Options(iso, join, port, args.Contains("--bot"), Arg("--name") ?? (join == null ? "HOST" : "BOT"), car, paint, config,
         int.Parse(Arg("--players") ?? "2"), float.Parse(Arg("--seconds") ?? "600", CultureInfo.InvariantCulture),
         Arg("--net-sim") is { } sim ? Touge.Net.NetSim.Parse(sim) : null, int.Parse(Arg("--races") ?? "1")));
@@ -290,7 +290,7 @@ TougeGame NewGame(string isoPath, Action? changeDisc) => new TougeGame(isoPath, 
     { HudMode = Arg("--hud"), HudScale = Arg("--hud-scale") is { } hs ? float.Parse(hs, CultureInfo.InvariantCulture) / 100 : 1, Reverse = args.Contains("--reverse"), Fog = args.Contains("--fog"), Car = car, Paint = paint, Livery = livery, ContactSheet = Arg("--cars"), LookAtSun = args.Contains("--sun"), OrbitDistance = orbitDistance,
       VersusStart = Arg("--versus"), VersusBot = args.Contains("--bot"), VersusVertical = Arg("--split") == "vertical", Car2 = Arg("--car2"),
       VersusPlayers = int.Parse(Arg("--players") ?? "2"), NetSim = Arg("--net-sim") is { } vsSim ? Touge.Net.NetSim.Parse(vsSim) : null,
-      NetPort = Arg("--port") is { } vsPort ? int.Parse(vsPort) : null, PlayerName = Arg("--name"), VersusRule = Arg("--net-rule") == "race" ? Touge.Net.NetRule.Race : Touge.Net.NetRule.Battle,
+      NetPort = Arg("--port") is { } vsPort ? int.Parse(vsPort) : null, PlayerName = Arg("--name"), VersusGhost = args.Contains("--ghost-cars"), VersusRule = Arg("--net-rule") switch { "race" => Touge.Net.NetRule.Race, "free" => Touge.Net.NetRule.Free, _ => Touge.Net.NetRule.Battle },
       ShotAfter = Arg("--shot-after") is { } after ? float.Parse(after, CultureInfo.InvariantCulture) : 0,
       Battle = battle, LegendProgressPath = Arg("--legend-progress"), LegendFlow = args.Contains("--legend"), ShotBattleResult = args.Contains("--battle-result"), Lights = Arg("--lights") is { } lights ? Enum.Parse<Headlights.Mode>(lights, true) : null,
       StartCamera = Arg("--cam") is { } cam ? Enum.Parse<CameraView>(cam, true) : null,
@@ -300,7 +300,7 @@ TougeGame NewGame(string isoPath, Action? changeDisc) => new TougeGame(isoPath, 
       ReplayCam = Enum.TryParse<Touge.Ui.ReplayViewer.Camera>(Arg("--replay-cam") ?? "tv", true, out var rc) ? rc : Touge.Ui.ReplayViewer.Camera.Tv,
       ReplayFocus = int.Parse(Arg("--replay-focus") ?? "0"),
       UseMenus = plain || changeDisc != null, StartMenu = changeDisc != null && Arg("--menu") == "browse" ? null : Arg("--menu"), ChangeDisc = changeDisc, Flow = Arg("--flow"), Offscreen = args.Contains("--offscreen"),
-      StoryFlow = args.Contains("--story"), SaveLoadFlow = args.Contains("--saveload"), FreeBattleFlow = args.Contains("--freebattle"), FourPassFlow = args.Contains("--fourpasses") || args.Contains("--fourpasses-wet"), FourPassWet = args.Contains("--fourpasses-wet"), StoryProgress = int.TryParse(Arg("--progress"), out var progress) ? progress : 0,
+      StoryFlow = args.Contains("--story"), SaveLoadFlow = args.Contains("--saveload"), FreeBattleFlow = args.Contains("--freebattle"), FreePlayFlow = args.Contains("--freeplay"), FourPassFlow = args.Contains("--fourpasses") || args.Contains("--fourpasses-wet"), FourPassWet = args.Contains("--fourpasses-wet"), StoryProgress = int.TryParse(Arg("--progress"), out var progress) ? progress : 0,
       ShotSize = shotSize };
 KanseiApp.Run(launcher ? new LauncherGame(NewGame, args.Contains("--launcher"), shot, shotSize, Arg("--menu"), Arg("--drop") ?? badIso, Arg("--browse")) : NewGame(iso, null), new WindowSettings
 {

@@ -40,6 +40,8 @@ public sealed partial class TougeGame
     public int? NetPort { get; init; }
     public string? PlayerName { get; init; }
     public NetRule VersusRule { get; init; }
+    /// <summary>--ghost-cars: with --net-rule free the cars pass through each other.</summary>
+    public bool VersusGhost { get; init; }
     /// <summary>--shot-after: the --shot frame is taken this many seconds after the start instead of at once.</summary>
     public float ShotAfter { get; init; }
 
@@ -95,6 +97,8 @@ public sealed partial class TougeGame
     private readonly SeatKeys _k1 = new(), _k2 = new();
     private readonly SceneLights _p1Lamps = new();
     private float _vsLog;
+    /// <summary>Free runs: the <see cref="RaceCar.Jumps"/> of player 1's and player 2's cars the HUDs have followed.</summary>
+    private (int P1, int P2) _vsJumps;
 
     private string MyName => PlayerName ?? _settings.PlayerName;
     private int MyPort => _versusUi?.Port ?? NetPort ?? _settings.NetPort; // the ONLINE screen's UDP PORT row
@@ -118,7 +122,7 @@ public sealed partial class TougeGame
         var ui = _versusUi!;
         ui.Name = MyName;
         ui.Pads = Input.Pads.Count;
-        var cfg = new RaceConfig(_courseTime, Reverse, Fog && !_courseTime.EndsWith("_RIN"), VersusRule);
+        var cfg = new RaceConfig(_courseTime, Reverse, Fog && !_courseTime.EndsWith("_RIN"), VersusRule, VersusGhost);
         var mode = VersusStart.Split(':', 2);
         switch (mode[0])
         {
@@ -228,6 +232,7 @@ public sealed partial class TougeGame
                 if (_p2Input.Pressed(Control.HighBeam)) p2.Lights.ToggleHigh();
             }
         }
+        if (_netRace?.Sync() == true) SyncVersusCars(); // free play online: players drive in and leave
         if (_netRace != null && _menu?.Current == Menu.Screen.Intro) _menu.SyncIntro(_net!.RaceTime);
         if (StartMenu == "pause" && !_vsPauseShown && _netRace != null && _net!.RaceTime > 2 && _menu?.Current == Menu.Screen.None)
         {
@@ -245,6 +250,7 @@ public sealed partial class TougeGame
             LoadVersusRace();
         }
         FreeBattleLoadStep();
+        FreePlayLoadStep();
         if (!ui.Active) return false;
         // from here the frame's keys are the versus screens' (a BACK that leaves them must not also act on the main menu)
         var split = ui.Split && ui.Current == Versus.Screen.Lobby;
@@ -261,7 +267,7 @@ public sealed partial class TougeGame
             if (_net.IsHost && _net.CanStart && _net.Players.Count(p => p.Connected) >= VersusPlayers) _net.StartRace();
         }
         var action = ui.Update(k1, k2, text, dt);
-        if (FreeBattleAction(action)) return true; // VS CPU (TougeGame.FreeBattle)
+        if (FreeBattleAction(action) || FreePlayAction(action)) return true; // VS CPU (TougeGame.FreeBattle), FREE PLAY (TougeGame.FreePlay)
         switch (action)
         {
             case Versus.Action.PreviewCar:
@@ -309,6 +315,7 @@ public sealed partial class TougeGame
                 ui.ShowOnline();
                 break;
             case Versus.Action.Exit:
+                EndFreePlay(); // BACK out of the free play lobby
                 CloseSession();
                 _lan?.Dispose();
                 _lan = null;
@@ -355,13 +362,15 @@ public sealed partial class TougeGame
                 CloseRaceMenus();
                 ui.BackToLobby();
                 break;
-            case Phase.Loading when _vsLoaded != net.RaceId && ui.Current != Versus.Screen.Loading:
+            // free play: a guest loads only once ready (DRIVE IN), also a run already going
+            case Phase.Loading or Phase.Countdown or Phase.Race when _vsLoaded != net.RaceId && ui.Current != Versus.Screen.Loading
+                                                                   && (net.Free ? net.IsHost || net.Local.Ready : net.Phase == Phase.Loading):
                 EndVersusRace();
                 CloseRaceMenus();
                 ui.ShowLoading();
                 _vsLoadPending = true;
                 break;
-            case Phase.Countdown or Phase.Race when _vsLoaded == net.RaceId && _netRace == null:
+            case Phase.Countdown or Phase.Race when _vsLoaded == net.RaceId && _netRace == null && (!net.Free || net.CanDriveIn):
                 ui.Close();
                 NewVersusRace();
                 OpenMenu(Menu.Screen.Intro);
@@ -467,6 +476,11 @@ public sealed partial class TougeGame
     /// <summary>A fresh versus race on the grid (also RETRY): the session with every car, split's referee and player 2's HUD and camera.</summary>
     private void NewVersusRace()
     {
+        if (_free != null)
+        {
+            NewFreeRace(); // FREE PLAY alone (RETRY is not offered, but a reset of the run lands here)
+            return;
+        }
         if (_versusUi == null || _vsCars.Count == 0 && _vsSplit || _net == null && !_vsSplit) return;
         ICarDriver p1 = VersusBot ? new AiDriver(new RivalPilot(_drive.Line, BattleRun.Autopilot)) : _p1;
         RaceSession race;
@@ -479,7 +493,8 @@ public sealed partial class TougeGame
             p2.Race = race.Add("PLAYER 2", v2, VersusBot ? new AiDriver(new RivalPilot(_drive.Line, BotStyle(p2.Car))) : _p2);
             _drive.ResetTo(0);
             NetRace.Grid(race, race.Cars[0].Track.Track(_drive.Car.Position).Along, [0, 1]);
-            _vsReferee = new Referee(_vsConfig.Rule, race.Goal);
+            if (_vsConfig.Rule == NetRule.Free) (race.AtCourseEnd, race.Ghost, _vsReferee) = (race.BackToStart, _vsConfig.Ghost, null);
+            else _vsReferee = new Referee(_vsConfig.Rule, race.Goal);
             _hud2 = new Hud(_course.Road, _drive.Line, new LinePilot(_drive.Line), null, _drive.Start)
             {
                 Visible = _settings.HudOn, Mode = _settings.MapMode, Scale = _settings.HudScale, Night = _courseTime.EndsWith("_NIT"), Mph = _settings.Mph, ResetKey = _p2ResetKey,
@@ -488,13 +503,16 @@ public sealed partial class TougeGame
         }
         else
         {
-            _netRace = NetRace.Create(_drive, _net!, p1);
+            _net!.MarkLoaded(); // free play: back from the lobby, the others see our car again
+            _netRace = NetRace.Create(_drive, _net, p1);
             race = _netRace.Race;
             foreach (var c in _vsCars) c.Race = _netRace.ByPlayer.GetValueOrDefault(c.Id);
         }
         _vsRace = race;
         (_vsResult, _vsDecidedAt) = (null, -1);
-        if (_menu != null) (_menu.Versus, _menu.NoRetry, _menu.NoReplay) = (string.Join(" / ", _vsCars.Select(c => c.Name)), _netRace != null, true); // the telop's "VS ..."
+        var free = _vsConfig.Rule == NetRule.Free;
+        if (_menu != null) (_menu.Versus, _menu.NoRetry, _menu.NoReplay, _menu.Free) = (free ? null : string.Join(" / ", _vsCars.Select(c => c.Name)), _netRace != null, true, free); // the telop's "VS ..."
+        _vsJumps = (race.Cars[0].Jumps, _vsCars.FirstOrDefault()?.Race?.Jumps ?? 0);
         foreach (var c in _vsCars)
         {
             Array.Clear(c.Smoke);
@@ -513,7 +531,50 @@ public sealed partial class TougeGame
         if (_savedDriver != null) (_driver, _savedDriver) = (_savedDriver, null);
         _p2Input = null;
         _finished = false;
-        if (_menu != null) (_menu.Versus, _menu.NoRetry, _menu.NoReplay) = (null, false, false);
+        if (_menu != null) (_menu.Versus, _menu.NoRetry, _menu.NoReplay, _menu.Free, _menu.FreePause) = (null, false, false, false, false);
+    }
+
+    /// <summary>
+    ///     Free play online: the other cars' models follow the session (a newcomer's car is loaded, all of them again, since textures
+    ///     are freed from an index on), each mapped to its car in the session (none: not out on the course).
+    /// </summary>
+    private void SyncVersusCars()
+    {
+        var want = _net!.Players.Where(p => !p.IsLocal && p.Connected).Take(MaxVersusCars)
+            .Select(p => new VsCar(p.Id, p.Name, CarSpecs.All.ContainsKey(p.Car) ? p.Car : "AE86T", p.Paint)).ToList();
+        static (byte, string, string, int) Key(VsCar c) => (c.Id, c.Name, c.Car, c.Paint);
+        if (!want.Select(Key).SequenceEqual(_vsCars.Select(Key)))
+        {
+            Device.WaitIdle();
+            DisposeVersusCars();
+            _vsCars.Clear();
+            _vsCars.AddRange(want);
+            using var iso = new Iso9660(isoPath);
+            LoadVersusCars(iso);
+            _vsLoadedKey = null;
+        }
+        foreach (var c in _vsCars) c.Race = _netRace!.ByPlayer.GetValueOrDefault(c.Id);
+    }
+
+    /// <summary>Free runs: a car put somewhere else (back at the start, a circuit's next lap) — its HUD finds it again, its camera cuts.</summary>
+    private void FollowJumps()
+    {
+        if (!FreeRun) return;
+        var me = _vsRace!.Cars[0];
+        if (me.Jumps != _vsJumps.P1)
+        {
+            _hud.Retrack(me.Vehicle.Position, me.Along);
+            SyncPose();
+            Console.WriteLine($"\n[Frei] {_vsRace.Time:F1} s: {(_vsSplit ? "Spieler 1" : "eigenes Auto")} am Kursende ({me.CourseEnds}.), weiter bei {me.Along:F0} m");
+        }
+        var p2 = _vsSplit ? _vsCars[0].Race : null;
+        if (p2 != null && p2.Jumps != _vsJumps.P2)
+        {
+            _hud2?.Retrack(p2.Vehicle.Position, p2.Along);
+            _cam2.Snap = true;
+            Console.WriteLine($"\n[Frei] {_vsRace.Time:F1} s: Spieler 2 am Kursende ({p2.CourseEnds}.), weiter bei {p2.Along:F0} m");
+        }
+        _vsJumps = (me.Jumps, p2?.Jumps ?? 0);
     }
 
     /// <summary>EXIT from the pause menu: split screen back to its lobby; online the host takes everybody back to the lobby, a guest leaves.</summary>
@@ -521,6 +582,14 @@ public sealed partial class TougeGame
     {
         var ui = _versusUi!;
         _inRace = false;
+        if (_net is { IsHost: false, Free: true })
+        {
+            _net.LeaveRun();
+            _vsLoaded = -1;
+            EndVersusRace();
+            ui.BackToLobby();
+            return;
+        }
         if (_net is { IsHost: false })
         {
             CloseSession();
@@ -544,7 +613,7 @@ public sealed partial class TougeGame
             _p2Shift = 0;
         }
         // HUD clocks run from GO, not from each car's start-gate crossing: the same time for everybody, as on the result
-        if (_hud.Timer.Phase == LapTimer.State.Ready && (_netRace == null || _net!.RaceTime >= 0))
+        if (_hud.Timer.Phase == LapTimer.State.Ready && !FreeRun && (_netRace == null || _net!.RaceTime >= 0))
         {
             _hud.Timer.Go();
             if (_vsSplit) _hud2?.Timer.Go();
@@ -568,6 +637,7 @@ public sealed partial class TougeGame
             c.Lights.Tick(dt);
             OtherCarSound(c, dt);
         }
+        FollowJumps();
         if (_vsSplit && _vsCars[0].Race is { } p2Car) _hud2?.Tick(p2Car.Vehicle, dt);
         if (race.LastContact is { } hit) _audio?.Bump(hit.ImpactSpeed);
         return race.Cars[0].Input;
@@ -918,7 +988,7 @@ public sealed partial class TougeGame
     /// <summary>Versus HUD of view <paramref name="view"/> (0: player 1 / us, 1: player 2) and the verdict once decided.</summary>
     private void BuildVersusHud(Overlay o, int w, int h, int view)
     {
-        if (_vsRace == null) return;
+        if (_vsRace == null || FreeRun) return; // free runs: no places
         var me = view == 0 ? _vsRace.Cars[0] : _vsCars[0].Race;
         var players = new List<(string, float, bool, int?, bool)> { (_vsSplit ? "PLAYER 1" : MyName, _vsRace.Cars[0].Along, false, null, me == _vsRace.Cars[0]) };
         foreach (var c in _vsCars)

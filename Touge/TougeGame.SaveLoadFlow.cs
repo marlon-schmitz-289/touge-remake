@@ -48,7 +48,7 @@ public sealed partial class TougeGame
         // the career as the loaded profile has it: Legend ladder, REPLAY & RECORD's best runs and records
         .. Rep(2, "Modes", y: 1), S("Modes", 0.4f, null, y: 1), S("Modes", 0.6f, null, ok: true),
         S("LegendCourse", 1.2f, $"sl_courses_slot{slot}", ok: true), S("LegendRivals", 1.5f, $"sl_ladder_slot{slot}", back: true), S("LegendCourse", 0.8f, null, back: true),
-        .. Rep(4, "Modes", y: 1), S("Modes", 0.6f, null, ok: true),
+        .. Rep(5, "Modes", y: 1), S("Modes", 0.6f, null, ok: true),
         S("ReplayMenu", 1, $"sl_replays_slot{slot}", y: 1), S("ReplayMenu", 0.8f, $"sl_bestruns_slot{slot}", y: 1), S("ReplayMenu", 0.8f, $"sl_records_slot{slot}", back: true),
     ];
 
@@ -69,9 +69,9 @@ public sealed partial class TougeGame
         // Time Attack: a record and its best run (the ghost)
         S("Modes", 0.8f, null, y: 1), S("Modes", 0.6f, null, ok: true), .. SaveLoadRun("1"),
         // slot 2 holds all of it
-        .. Rep(5, "Modes", y: 1), S("Modes", 0.6f, null, ok: true),
+        .. Rep(6, "Modes", y: 1), S("Modes", 0.6f, null, ok: true),
         S("SaveLoad", 1, null, y: 1), S("SaveLoad", 0.5f, null, ok: true), S("SaveLoad", 0.6f, "sl_name_slot2", ok: true), S("SaveLoad", 1, "sl_slot2_saved", back: true),
-        // back to slot 1, then slot 2 (Modes on SAVE & LOAD = 6, after the look on REPLAY & RECORD = 4)
+        // back to slot 1, then slot 2 (Modes on SAVE & LOAD = 7, after the look on REPLAY & RECORD = 5)
         .. SaveLoadLoadAndLook(1, 0), .. SaveLoadLoadAndLook(2, 2),
         // RENAME slot 2, DELETE slot 1 (NO first, then YES), AUTOSAVE back on
         .. Rep(2, "Modes", y: 1), S("Modes", 0.6f, null, ok: true),
@@ -82,8 +82,8 @@ public sealed partial class TougeGame
         S("SaveLoad", 0.6f, "sl_delete_yes", ok: true), S("SaveLoad", 1, "sl_deleted", y: -1), S("SaveLoad", 0.4f, null, ok: true),
         S("SaveLoad", 0.6f, "sl_autosave_on", back: true),
         // a run with AUTOSAVE on: it lands in slot 2 (in use), slot 1 stays deleted
-        .. Rep(5, "Modes", y: -1), S("Modes", 0.6f, null, ok: true), .. SaveLoadRun("2"),
-        S("Modes", 1, "sl_modes_after_autosave", y: 1), .. Rep(4, "Modes", y: 1), S("Modes", 0.6f, null, ok: true),
+        .. Rep(6, "Modes", y: -1), S("Modes", 0.6f, null, ok: true), .. SaveLoadRun("2"),
+        S("Modes", 1, "sl_modes_after_autosave", y: 1), .. Rep(5, "Modes", y: 1), S("Modes", 0.6f, null, ok: true),
         S("SaveLoad", 1.2f, "sl_end", back: true), S("Modes", 1),
     ];
 

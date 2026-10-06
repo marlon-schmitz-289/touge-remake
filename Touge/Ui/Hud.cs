@@ -55,6 +55,10 @@ public sealed class Hud
     public (Vector3 Position, float Along)? Rival;
     public LapTimer Timer { get; }
     public DriftMeter Drift { get; } = new();
+    /// <summary>The timing panel top left (free play's TIMER OFF hides it).</summary>
+    public bool ShowTiming = true;
+    /// <summary>Runs can set records (free play: none, the goal's pop-up does not claim one).</summary>
+    public bool Records = true;
 
     /// <param name="start">Start line, m along <paramref name="line"/> (the car spawns behind it); timing and progress run from there.</param>
     public Hud(Vector3[] road, Vector3[] line, LinePilot pilot, float[]? best, float start = 0)
@@ -67,6 +71,9 @@ public sealed class Hud
     private static Vector2 Xz(Vector3 v) => new(v.X, v.Z);
 
     public void NextMode() => Mode = (MapMode)(((int)Mode + 1) % 3);
+
+    /// <summary>The car was put somewhere else on the course (free play's course end): the line tracking looks for it near <paramref name="along"/>.</summary>
+    public void Retrack(Vector3 position, float along) => _pilot.Nearest(position, along);
 
     /// <summary>
     ///     Per physics tick: position along the line, timing, drift combo, wrong way (driving against the line for 1 s),
@@ -119,7 +126,7 @@ public sealed class Hud
             _progress, (_pilot.Length - LapTimer.Gate - _start) * (1 - _progress), Timer, Cluster.Cars[carName], Night);
         if (!Dashboard) Cluster.Draw(o, gauge, new Vector2(g.Right, g.Bottom), k * Cluster.Fit(gauge, g), reading);
         var timingH = Drift.Total > 0 ? 186 : 150;
-        Timing(o, new Vector2(g.Left, g.Top), timingH, u, time);
+        if (ShowTiming) Timing(o, new Vector2(g.Left, g.Top), timingH, u, time);
         DriftPanel(o, new Vector2(width / 2f, DriftBox(width, height, Scale, timingH).Min.Y), u);
         Banners(o, width, height, u, time);
     }
@@ -256,7 +263,7 @@ public sealed class Hud
             Style.Slanted(o, new Vector2(cx - 210 * u, y - 44 * u), new Vector2(cx + 210 * u, y + 30 * u), Style.Fade(Overlay.Rgba(0.75f, 0.06f, 0.05f, 0.85f), a), 0.3f);
             Style.Label(o, "WRONG WAY", new Vector2(cx - 8 * u, y + 12 * u), 52 * u, Style.Fade(Style.Text, a), 0.5f, Style.Slant, 0.5f * u);
         }
-        if (Timer.Phase == LapTimer.State.Finished && Timer.SinceSplit < 6)
+        if (ShowTiming && Timer.Phase == LapTimer.State.Finished && Timer.SinceSplit < 6)
         {
             var a = Style.Ease(Timer.SinceSplit * 3) * Style.Ease((6 - Timer.SinceSplit) * 2);
             var y = height * 0.3f;
@@ -272,7 +279,7 @@ public sealed class Hud
                     Style.Slanted(o, min, max, Style.Fade(d <= 0 ? Style.Green : Style.Red, 0.85f * a), 0.3f);
                     o.Text($"S{i + 1} {Style.Delta(d)[..^1]}", new Vector2((min.X + max.X) / 2 - 2 * u, max.Y - 7 * u), 17 * u, Style.Fade(Style.Ink, a), 0.5f, 0.2f * u);
                 }
-            if (Timer.NewRecord) Style.Label(o, "NEW RECORD", new Vector2(cx - 206 * u, y + 116 * u), 22 * u, Style.Fade(Style.Green, a), 0, Style.Slant, 0.3f * u);
+            if (Timer.NewRecord && Records) Style.Label(o, "NEW RECORD", new Vector2(cx - 206 * u, y + 116 * u), 22 * u, Style.Fade(Style.Green, a), 0, Style.Slant, 0.3f * u);
             if (Drift.Total > 0)
                 Style.Label(o, $"DRIFT {Points(Drift.Total)}", new Vector2(cx + 206 * u, y + 116 * u), 22 * u, Style.Fade(Style.Amber, a), 1, Style.Slant, 0.3f * u);
         }

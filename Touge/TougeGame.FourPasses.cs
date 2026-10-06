@@ -101,7 +101,7 @@ public sealed partial class TougeGame
         ("Loading", 0.4f, null, 0, 0, false, false), ("Intro", 1, "fp_telop_4", 0, 0, false, false), ("Race", 1.5f, "fp_race_4", 0, 0, false, false),
         ("Finish", 1.2f, "fp_finish", 0, 0, false, false), ("Result", 4f, "fp_result", 1, 0, false, false), ("Result", 0.3f, null, 1, 0, false, false),
         ("Result", 0.3f, null, 1, 0, false, false), ("Result", 0.3f, null, 1, 0, false, false), ("Result", 0.5f, null, 0, 0, true, false),
-        ("Modes", 1, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 1, false, false), ("Modes", 0.5f, null, 0, 0, true, false),
+        ("Modes", 1, null, 0, 1, false, false), .. Enumerable.Repeat(("Modes", 0.5f, (string?)null, 0, 1, false, false), 3), ("Modes", 0.5f, null, 0, 0, true, false),
         ("ReplayMenu", 1, "fp_replays", 0, -1, false, false), ("ReplayMenu", 1, "fp_records", 0, 0, false, true), ("Modes", 1, "fp_back", 0, 0, false, false),
     ];
 

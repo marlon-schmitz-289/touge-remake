@@ -15,7 +15,7 @@ namespace Touge.Ui;
 /// </summary>
 public sealed class Versus(Catalog catalog)
 {
-    public enum Screen { None, Mode, Online, Connecting, Lobby, Loading, Result, Message, Cpu }
+    public enum Screen { None, Mode, Online, Connecting, Lobby, Loading, Result, Message, Cpu, Free }
 
     /// <summary>
     ///     Split: open the split-screen lobby (<see cref="OpenSplit"/>); Host/Join: open a session (<see cref="JoinAddress"/>/<see cref="JoinLan"/> for the target); Start: start the race (split:
@@ -23,13 +23,13 @@ public sealed class Versus(Catalog catalog)
     ///     ONLINE); Exit: back to the main menu.
     /// </summary>
     /// <remarks>PreviewCar: show <see cref="PickCarId"/>/<see cref="PickPaint"/> (the car select's highlighted car, <see cref="ShowsCar"/>).</remarks>
-    public enum Action { None, Split, Host, Join, Start, Rematch, ToLobby, Leave, Exit, Cpu, CpuStart, CpuLeave, PreviewCar }
+    public enum Action { None, Split, Host, Join, Start, Rematch, ToLobby, Leave, Exit, Cpu, CpuStart, CpuLeave, PreviewCar, FreeStart }
 
     // ---- the car select over a lobby (CAR + DECIDE): the same two steps as every car select, for one seat at a time
     private readonly CarPicker _picker = new(catalog);
     /// <summary>Whose car the select is choosing: -1 none, 0/1 the lobby's seats, <see cref="CpuSeat"/> the VS CPU lobby.</summary>
     private int _pickSeat = -1;
-    private const int CpuSeat = 2;
+    private const int CpuSeat = 2, FreeSeat = 3;
     private float _pickT;
     public bool Picking => _pickSeat >= 0 && Active;
     /// <summary>The car select is on its CAR step: the game turns the highlighted car behind it.</summary>
@@ -55,6 +55,7 @@ public sealed class Versus(Catalog catalog)
                 return _picker.Locked(_picker.Car) ? Action.None : Action.PreviewCar;
             case CarPicker.Result.Decide:
                 if (_pickSeat == CpuSeat) CpuLobby.SetCar(_picker.Car, _picker.Paint);
+                else if (_pickSeat == FreeSeat) FreeLobby.SetCar(_picker.Car, _picker.Paint);
                 else
                 {
                     (Seats[_pickSeat].Car, Seats[_pickSeat].Paint) = (_picker.Car, _picker.Paint);
@@ -79,6 +80,16 @@ public sealed class Versus(Catalog catalog)
         CpuLobby.CarLocked = CarLocked;
         CpuLobby.Open(saved, car, paint, manual);
         Enter(Screen.Cpu);
+    }
+
+    // ---- FREE PLAY from the main menu (Ui/FreePlay): FreeStart = load the run, BACK = Exit (main menu)
+    public FreePlay FreeLobby { get; } = new(catalog);
+
+    public void OpenFree(FreePlayChoice saved, string car, int paint, bool manual)
+    {
+        FreeLobby.CarLocked = CarLocked;
+        FreeLobby.Open(saved, car, paint, manual);
+        Enter(Screen.Free);
     }
 
     /// <summary>A local player's choice in the lobby.</summary>
@@ -291,8 +302,11 @@ public sealed class Versus(Catalog catalog)
                 var (_, time, fog) = cond[Wrap(ConditionIndex(c) + d, cond.Length)];
                 return c with { CourseTime = $"{course.Id}_{time}", Fog = fog };
             }
-            case Row.Rule:
-                return c with { Rule = c.Rule == NetRule.Battle ? NetRule.Race : NetRule.Battle };
+            case Row.Rule: // BATTLE → RACE → FREE RUN → FREE RUN with ghost cars
+            {
+                var i = Wrap((c.Rule == NetRule.Free ? c.Ghost ? 3 : 2 : (int)c.Rule) + d, 4);
+                return c with { Rule = i >= 2 ? NetRule.Free : (NetRule)i, Ghost = i == 3 };
+            }
         }
         return c;
     }
@@ -372,6 +386,16 @@ public sealed class Versus(Catalog catalog)
                     case FreeBattle.Result.Back:
                         Enter(Screen.Mode);
                         return Action.CpuLeave;
+                }
+                break;
+            case Screen.Free:
+                switch (FreeLobby.Update(k1, Sound))
+                {
+                    case FreePlay.Result.PickCar:
+                        OpenPicker(FreeSeat, FreeLobby.Car, FreeLobby.Paint);
+                        break;
+                    case FreePlay.Result.Start: return Action.FreeStart;
+                    case FreePlay.Result.Back: return Action.Exit;
                 }
                 break;
             case Screen.Result:
@@ -671,6 +695,11 @@ public sealed class Versus(Catalog catalog)
                 CpuLobby.Draw(c, _clock);
                 c.Marquee("VS CPU", false, _clock);
                 break;
+            case Screen.Free:
+                c.Backdrop(_clock);
+                FreeLobby.Draw(c, _clock);
+                c.Marquee("FREE PLAY", false, _clock);
+                break;
             case Screen.Loading:
                 c.Fill(Canvas.White);
                 c.Text("Now Loading...", 476, 428, 15, Overlay.Rgba(0.92f, 0.08f, 0.06f), 1, 0.22f, 0, 0.4f);
@@ -768,11 +797,13 @@ public sealed class Versus(Catalog catalog)
         return r switch
         {
             Row.Course => course.Name, Row.Route => Catalog.DirectionName(course, cfg.Reverse), Row.Conditions => Conditions(course)[ConditionIndex(cfg)].Label,
-            Row.Rule => cfg.Rule == NetRule.Battle ? "BATTLE" : "RACE", Row.Layout => Vertical ? "LEFT / RIGHT" : "TOP / BOTTOM",
+            Row.Rule => RuleName(cfg), Row.Layout => Vertical ? "LEFT / RIGHT" : "TOP / BOTTOM",
             Row.P2Pad => P2DeviceName, Row.Car => catalog.Cars[Seats[seat].Car].Name, Row.Colour => $"{Seats[seat].Paint + 1} / {catalog.Cars[Seats[seat].Car].Paints.Length}",
             _ => "",
         };
     }
+
+    public static string RuleName(RaceConfig c) => c.Rule switch { NetRule.Battle => "BATTLE", NetRule.Race => "RACE", _ => c.Ghost ? "FREE RUN - GHOSTS" : "FREE RUN" };
 
     private void LobbyScreen(Canvas c)
     {
@@ -795,7 +826,7 @@ public sealed class Versus(Catalog catalog)
             }
             if (r == Row.Go)
             {
-                var label = host ? "START" : Seats[0].Ready ? "READY!" : "READY?";
+                var label = host ? "START" : Net is { Free: true, Phase: Phase.Countdown or Phase.Race } ? Seats[0].Ready ? "DRIVING IN" : "DRIVE IN" : Seats[0].Ready ? "READY!" : "READY?";
                 var gy = 368f;
                 c.Button(42, gy - 20, 182, 30, label, host ? CanStart ? Canvas.ButtonKind.Positive : Canvas.ButtonKind.Neutral
                     : Seats[0].Ready ? Canvas.ButtonKind.Positive : Canvas.ButtonKind.Negative);
@@ -818,6 +849,8 @@ public sealed class Versus(Catalog catalog)
         }
         if (Config.Rule == NetRule.Battle && !Split && Net != null && Net.Players.Count > 2)
             c.Text("BATTLE needs 2 players: RACE rules", 30, 336, 9.5f, Overlay.Rgba(1, 0.6f, 0.3f), 0, 0.1f);
+        if (Config.Rule == NetRule.Free && !Split)
+            c.Text(Net is { Phase: Phase.Countdown or Phase.Race } ? "The run is on: DRIVE IN to join it" : "No race: join and leave any time", 30, 336, 9.5f, Overlay.Rgba(1, 0.6f, 0.3f), 0, 0.1f);
 
         // the players (right)
         if (Split) SplitCards(c);

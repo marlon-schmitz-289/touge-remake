@@ -100,6 +100,8 @@ public sealed class Settings
     public bool SplitVertical { get; set; }
     /// <summary>VERSUS → VS CPU: the last free battle lobby (Ui/FreeBattle).</summary>
     public FreeBattleChoice FreeBattle { get; set; } = new();
+    /// <summary>FREE PLAY: the last free play lobby (Ui/FreePlay).</summary>
+    public FreePlayChoice FreePlay { get; set; } = new();
 
     /// <summary>Best run per course and direction (<see cref="BestKey"/>): cumulative sector splits, last = total.</summary>
     public Dictionary<string, float[]> Best { get; set; } = [];

@@ -133,9 +133,28 @@ public sealed class NetSession : IDisposable
         if (IsHost && Phase == Phase.Lobby) Config = config;
     }
 
-    /// <summary>Host: every connected client is ready (the host is by starting), at least two players.</summary>
-    public bool CanStart => IsHost && Phase is Phase.Lobby or Phase.Results && Players.Count(p => p.Connected) >= 2
-                            && Players.All(p => p.IsLocal || !p.Connected || p.Ready);
+    /// <summary>Host: every connected client is ready (the host is by starting), at least two players; free play: any time (the others drive in when ready).</summary>
+    public bool CanStart => IsHost && Phase is Phase.Lobby or Phase.Results
+                            && (Free || Players.Count(p => p.Connected) >= 2 && Players.All(p => p.IsLocal || !p.Connected || p.Ready));
+
+    /// <summary>Free play (<see cref="NetRule.Free"/>): players come and go during the run, no result.</summary>
+    public bool Free => Config.Rule == NetRule.Free;
+
+    /// <summary>Free play: a player who joined (or came back from the lobby) during the run, once ready, loads and drives in.</summary>
+    public bool CanDriveIn => Free && Phase is Phase.Countdown or Phase.Race && (IsHost || Local.Ready);
+
+    /// <summary>Free play: back to this session's lobby without leaving it (another car); the others no longer see our car.</summary>
+    public void LeaveRun()
+    {
+        Local.LoadedRace = -1;
+        if (!IsHost) Local.Ready = false;
+    }
+
+    /// <summary>Lobby packets a player who missed the countdown sets its race clock by.</summary>
+    private const int LateEstimates = 16;
+
+    /// <summary>Countdown of a free play session: just enough for everybody's clock.</summary>
+    public const double FreeCountdown = 1;
 
     /// <summary>Host: everybody loads race <see cref="RaceId"/> + 1 (from the lobby, or a rematch from the results).</summary>
     public void StartRace()
@@ -185,7 +204,7 @@ public sealed class NetSession : IDisposable
             _goEstimates.Clear();
             foreach (var p in Players) p.Snapshots.Clear();
         }
-        if (IsHost && phase == Phase.Countdown) GoAt = _clock() + Countdown;
+        if (IsHost && phase == Phase.Countdown) GoAt = _clock() + (Free ? Math.Min(Countdown, FreeCountdown) : Countdown);
         _nextLobby = 0; // tell everybody now
     }
 
@@ -242,9 +261,10 @@ public sealed class NetSession : IDisposable
         }
         switch (Phase)
         {
-            case Phase.Loading when Players.All(p => !p.Connected || p.LoadedRace == RaceId) || now - _phaseSince > LoadTimeout:
+            // free play waits only for those who are ready (the others drive in later)
+            case Phase.Loading when Players.All(p => !p.Connected || p.LoadedRace == RaceId || Free && !p.Ready) || now - _phaseSince > LoadTimeout:
                 Enter(Phase.Countdown);
-                Say($"Alle geladen, GO in {Countdown:F1} s");
+                Say($"Alle geladen, GO in {GoAt - now:F1} s");
                 break;
             case Phase.Countdown when now >= GoAt:
                 Enter(Phase.Race);
@@ -254,7 +274,7 @@ public sealed class NetSession : IDisposable
         {
             _nextLobby = now + LobbyEvery;
             var players = Players.Where(p => p.Connected).Select(Info).ToArray();
-            var toGo = Phase == Phase.Countdown ? (float)(GoAt - now) : 0;
+            var toGo = Phase is Phase.Countdown or Phase.Race ? (float)(GoAt - now) : 0;
             foreach (var p in Players.Where(p => !p.IsLocal && p.Connected))
             {
                 _link.Send(Protocol.Encode(new Lobby(p.Id, Phase, RaceId, Config, players, toGo, ++_lobbySeq)), p.EndPoint!);
@@ -292,10 +312,11 @@ public sealed class NetSession : IDisposable
 
     private static PlayerInfo Info(NetPlayer p) => new(p.Id, p.Name, p.Car, p.Paint, p.Ready, p.PingMs, p.LoadedRace);
 
+    /// <summary>A player gone: off the list (during a race kept as not connected: it did not finish; free play: gone, its id free again).</summary>
     private void Drop(NetPlayer p)
     {
-        if (Phase is Phase.Lobby or Phase.Results) Players.Remove(p);
-        else p.Connected = false;
+        p.Connected = false;
+        if (Phase is Phase.Lobby or Phase.Results || Free) Players.Remove(p);
         _nextLobby = 0;
     }
 
@@ -318,7 +339,7 @@ public sealed class NetSession : IDisposable
                 sender ??= Players.FirstOrDefault(p => !p.IsLocal && p.Token == h.Token);
                 if (sender == null)
                 {
-                    var refuse = Players.Count(p => p.Connected) >= MaxPlayers ? "SESSION FULL" : Phase != Phase.Lobby ? "RACE IN PROGRESS" : null;
+                    var refuse = Players.Count(p => p.Connected) >= MaxPlayers ? "SESSION FULL" : Phase != Phase.Lobby && !Free ? "RACE IN PROGRESS" : null;
                     if (refuse != null)
                     {
                         _link.Send(Protocol.Encode(new Bye(0, refuse)), from);
@@ -417,8 +438,8 @@ public sealed class NetSession : IDisposable
         foreach (var p in Players.ToArray())
             if (!p.IsLocal && l.Players.All(i => i.Id != p.Id))
             {
-                if (Phase is Phase.Lobby or Phase.Results) Players.Remove(p);
-                else p.Connected = false;
+                p.Connected = false;
+                if (Phase is Phase.Lobby or Phase.Results || Free) Players.Remove(p);
             }
         Players.Sort((a, b) => a.Id.CompareTo(b.Id));
         // GO on our clock: the host's "seconds to go" when it sent, minus half the round trip it took; the median of all estimates
@@ -428,7 +449,13 @@ public sealed class NetSession : IDisposable
             var sorted = _goEstimates.Order().ToArray();
             GoAt = sorted[sorted.Length / 2];
         }
-        if (l.Phase == Phase.Race && double.IsNaN(GoAt)) GoAt = now - RttFloor / 2; // missed the whole countdown (packet loss): GO was just now
+        // missed the whole countdown (packet loss, or joined a free play session late): GO was that long ago, the median of the
+        // first estimates (the round trip is only known after a few pings)
+        if (l.Phase == Phase.Race && (double.IsNaN(GoAt) || _goEstimates.Count is > 0 and < LateEstimates))
+        {
+            _goEstimates.Add(now + l.SecondsToGo - RttFloor / 2);
+            GoAt = _goEstimates.Order().ElementAt(_goEstimates.Count / 2);
+        }
     }
 
     public void Dispose()

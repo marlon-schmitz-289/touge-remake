@@ -55,10 +55,11 @@ public static class Headless
                 if (net.Ended != null)
                 {
                     Console.WriteLine($"[{who}] Sitzung beendet: {net.Ended}");
-                    return races > 0 ? 0 : 2;
+                    return races > 0 || FreeDone(who, net, race) ? 0 : 2;
                 }
                 if (net.IsHost && net.Phase == Phase.Lobby && net.Players.Count >= o.MinPlayers && net.CanStart) net.StartRace();
-                if (net.Phase == Phase.Loading && loaded != net.RaceId)
+                // free play: a late joiner loads the run in progress and drives in
+                if ((net.Phase == Phase.Loading || net.CanDriveIn) && loaded != net.RaceId)
                 {
                     var c = net.Config;
                     var sw = Stopwatch.StartNew();
@@ -75,6 +76,7 @@ public static class Headless
                     Console.WriteLine($"[{who}] Startaufstellung: {string.Join(", ", race.ByPlayer.Select(kv => $"#{kv.Key} {net.NameOf(kv.Key)} bei {kv.Value.Along:F0} m / {kv.Value.Lateral:+0.0;-0.0}"))}");
                     Console.WriteLine($"[{who}]    t   eigene_m  km/h  | je Gegner: m  km/h  Abtastung  Korrektur_cm  Alter_ms  | ping_ms  gesendet/empfangen  verloren");
                 }
+                race?.Sync(); // free play: cars come and go
                 if (race != null && net.RaceTime >= 0)
                     for (; acc >= Touge.Drive.Dt; acc -= Touge.Drive.Dt)
                     {
@@ -113,12 +115,20 @@ public static class Headless
             }
             Console.WriteLine($"[{who}] Zeitlimit {o.Seconds:F0} s erreicht");
             net.Leave("TIME LIMIT");
-            return races > 0 ? 0 : 2;
+            return races > 0 || FreeDone(who, net, race) ? 0 : 2;
         }
         finally
         {
             net.Dispose();
         }
+    }
+
+    /// <summary>Free play has no result: it went well if we drove; a line on how often the car went back to the start.</summary>
+    private static bool FreeDone(string who, NetSession net, NetRace? race)
+    {
+        if (!net.Free || race == null) return false;
+        Console.WriteLine($"[{who}] Freies Fahren: {race.Local.CourseEnds} mal am Kursende (zurück zum Start), zuletzt {race.ByPlayer.Count - 1} andere Autos auf der Strecke");
+        return true;
     }
 
     private static void Log(string who, NetSession net, NetRace race)

@@ -171,6 +171,18 @@ Jede Phase endet mit etwas Sichtbarem/Fahrbarem.
   volle Sitzung, LAN-Suche, Kontakt mit fremdem Auto, geteilte Tastatur, Versus-Menüs, veraltete Lobby-Pakete (Folgenummer), Port-Eingabe, HUD-Uhr ab GO. Offen: Steam-Lobby/Einladen und NAT-Durchdringung
   (nur Portweiterleitung/VPN, README), Time Attack/Free Roam online, Ghost-Bestenliste, geteilter Bildschirm für 3–4, Lenkrad-FFB für Spieler 2,
   echtes Internet-Spiel mit Freunden (nur Loopback getestet), Bremslicht/Scheinwerferkegel fremder Autos beleuchten die Straße nicht.
+- Stand Free Play / Free Roam (`Ui/FreePlay`, `TougeGame.FreePlay`, `RaceSession.AtCourseEnd/Ghost`, `NetRule.Free`): Hauptmenü FREE PLAY (nach VERSUS) → Lobby
+  (Kurs inkl. Rundkurse, Route, Tageszeit/Wetter, Kursende TURN AROUND/RESTART/STOP, Zeit an/aus, 0–3 KI-Autos CRUISE…LEGEND, Auto über die Autowahl, Getriebe;
+  gemerkt in `settings.json`) → fahren ohne Ziel: hinter dem Ziel ausrollen, dann (Schwarzblende) umdrehen auf die Gegenrichtung, zurück zum Start oder stehen
+  bleiben; Rundkurse laufen weiter. Pause CONTINUE/RESET/CHANGE (Lobby, ohne Hauptmenü)/PHOTO/EXIT. Mehrspieler: VERSUS-Regel FREE RUN (± GHOSTS) im geteilten
+  Bildschirm und online (Host startet allein, Gäste treten jederzeit bei/aus, DRIVE IN aus der Lobby, eigene Autos, Rennuhr für Späteinsteiger aus dem Lobby-Paket,
+  `NetRace.Sync` lädt/entfernt Autos). Protokoll Version 3. Nebenbei: Effekt-Ring doppelt so groß (der geteilte Bildschirm zeichnet jeden Effekt zweimal je Bild;
+  eine lange Freifahrt füllt die Bremsspuren → Absturz „slab full“). Belege `out/proof/freeplay/` (`--flow --freeplay`, Split-Bild nach 312 s mit beiden Autos
+  auf der zweiten Runde, Fenster-Host + Headless-Bot, Headless-Sitzung mit drei Bots, die nacheinander kommen und gehen). Tests `FreePlayTests` (Kursende:
+  ausrollen → Entscheid → Start, STOP gibt das Auto zurück, Rundkurs, Geister, Lobby-Zeilen/KI-Feld, Regel/Protokoll, Loopback-Sitzung mit Beitritt und
+  Abgang während der Fahrt). Offen: TURN AROUND nur allein (im Mehrspieler zurück zum Start, weil sich die Autos Boden und Fahrlinie einer Richtung teilen);
+  ein Späteinsteiger erscheint an der Startaufstellung (kann auf einem dort stehenden Auto landen, GHOSTS hilft); Fotomodus online grau (die Sitzung liefe
+  ohne Abfrage weiter); KI-Autos fahren nur die eigene Richtung; online kein KI-Verkehr; keine eigene Freifahrt-Bestenliste.
 
 ### Phase 5 – Feinschliff
 - Alle Strecken/Varianten, alle Autos tunen
