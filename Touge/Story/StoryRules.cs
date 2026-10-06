@@ -93,39 +93,39 @@ public static class StoryRules
     /// <summary>Calibrated with --player-skill 0.2 (README, balanced cars): chapter → highest rival skill the beginner beats (missing: not even 0.1, see <see cref="Power"/>).</summary>
     private static readonly Dictionary<int, float> Beginner = new()
     {
-        [2] = 0.114f, [3] = 0.12f, [6] = 0.15f, [7] = 0.213f, [8] = 0.156f, [9] = 0.283f, [10] = 0.1f, [11] = 0.12f, [12] = 0.08f, [13] = 0.367f,
-        [15] = 0.297f, [16] = 0.297f, [17] = 0.184f, [19] = 0.311f, [20] = 0.1f, [22] = 0.17f, [23] = 0.255f, [24] = 0.156f, [25] = 0.142f,
-        [26] = 0.213f, [27] = 0.241f, [28] = 0.227f, [29] = 0.986f,
+        [3] = 0.156f, [6] = 0.17f, [7] = 0.213f, [8] = 0.184f, [9] = 0.297f, [11] = 0.184f, [12] = 0.08f, [13] = 0.367f, [15] = 0.297f, [16] = 0.297f,
+        [17] = 0.184f, [19] = 0.255f, [20] = 0.1f, [22] = 0.269f, [23] = 0.269f, [24] = 0.142f, [25] = 0.114f, [26] = 0.227f, [27] = 0.17f, [28] = 0.269f,
+        [29] = 0.986f,
     };
 
     /// <summary>Calibrated with --player-skill 0.55 (README, balanced cars): chapter → highest rival skill the NORMAL player beats.</summary>
     private static readonly Dictionary<int, float> Normal = new()
     {
-        [2] = 0.353f, [3] = 0.494f, [6] = 0.578f, [7] = 0.536f, [8] = 0.536f, [9] = 0.747f, [10] = 0.255f, [11] = 0.423f, [12] = 0.395f,
-        [13] = 0.958f, [15] = 0.93f, [16] = 0.677f, [17] = 0.508f, [19] = 0.634f, [20] = 0.395f, [21] = 0.156f, [22] = 0.494f, [23] = 0.831f,
-        [24] = 0.395f, [25] = 0.48f, [26] = 0.578f, [27] = 0.536f, [28] = 0.6f, [29] = 0.986f, [30] = 0.55f,
+        [2] = 0.297f, [3] = 0.522f, [6] = 0.55f, [7] = 0.578f, [8] = 0.508f, [9] = 0.789f, [10] = 0.269f, [11] = 0.438f, [12] = 0.395f,
+        [13] = 0.916f, [15] = 0.733f, [16] = 0.648f, [17] = 0.494f, [19] = 0.677f, [20] = 0.381f, [21] = 0.156f, [22] = 0.747f, [23] = 0.691f,
+        [24] = 0.494f, [25] = 0.423f, [26] = 0.663f, [27] = 0.536f, [28] = 0.648f, [29] = 0.986f, [30] = 0.522f,
     };
 
     /// <summary>Where 0.1 is still too strong for the beginner: chapter → torque factor he beats at 0.1 (--player-skill 0.2; 21: Seiji's Evo against Keisuke's FD).</summary>
-    private static readonly Dictionary<int, float> Power = new() { [21] = 0.8f };
+    private static readonly Dictionary<int, float> Power = new() { [2] = 0.95f, [10] = 0.96f, [21] = 0.775f };
 
     /// <summary>
     ///     The last battle (Bunta): a driver of skill 0.6 (clean lines, drifts) in a detuned car, calibrated with STORY_CAL_AT=0.65
-    ///     --player-skill 0.55 (torque 0.883 beaten): the NORMAL player wins it, but only just.
+    ///     --player-skill 0.55 (torque 0.836 beaten): the NORMAL player wins it, but only just.
     /// </summary>
-    public static readonly (int Chapter, float Skill, float Power) Finale = (30, 0.6f, 0.88f);
+    public static readonly (int Chapter, float Skill, float Power) Finale = (30, 0.6f, 0.83f);
 
     /// <summary>
     ///     Time limit of a run alone. The original's seconds (220/210/190) are for its own pace; ours: the player's time on the
     ///     course alone in the chapter's car (<c>--story-check calibrate</c>, AE86: Akina downhill 5'24 a beginner / 4'53 NORMAL,
-    ///     uphill 5'37 / 5'09), from the beginner's for the first chapter to NORMAL's for the last, times the original's limit /
+    ///     uphill 5'37 / 5'07), from the beginner's for the first chapter to NORMAL's for the last, times the original's limit /
     ///     200 s, at least 3 % over it (chapter 18's 190 s: nearly as fast as NORMAL).
     /// </summary>
     public static int Limit(StoryScript.Chapter c) =>
         Of(c.Rule, c.Rival >= 0) == Goal.TimeLimit && Par.TryGetValue((StoryScript.Courses[c.Course], c.Reverse), out var par)
             ? (int)MathF.Round(float.Lerp(par.Beginner, par.Normal, c.Index / 30f) * MathF.Max(1.03f, c.Param / 200f)) : c.Param;
 
-    private static readonly Dictionary<(string, bool), (float Beginner, float Normal)> Par = new() { [("AKINA", false)] = (323.8f, 293.3f), [("AKINA", true)] = (336.6f, 308.9f) };
+    private static readonly Dictionary<(string, bool), (float Beginner, float Normal)> Par = new() { [("AKINA", false)] = (324.1f, 293f), [("AKINA", true)] = (337.1f, 307.1f) };
 
     public static Goal Of(int rule, bool rival) => (rule, rival) switch
     {

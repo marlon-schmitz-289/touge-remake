@@ -57,44 +57,45 @@ public static class CarSpecs
     /// <summary>
     ///     Balance of performance (BoP, the arcade's way): per car a factor on the engine torque so every car is competitive on
     ///     the passes. Only the power is evened out — weight, tyres, gearing, drivetrain and drift layer stay real, so the cars
-    ///     keep their character (where on a course they gain and lose), just not 70 PS more or less. Calibrated with --ai-bench solo, all 32 cars × 9 courses ×
-    ///     both ways at the reference driver H and the autopilot (README "Balance"): mean lap time within ±0.3 % of the field,
-    ///     no car more than 4 % off on any course. Missing = 1.
+    ///     keep their character (where on a course they gain and lose), just not 70 PS more or less. Calibrated with --ai-bench solo, all 32 cars × the 11 Legend
+    ///     courses (circuits MYOGI/USUI too) × both ways at the reference driver H and the autopilot (README "Balance"): mean lap
+    ///     time within ±0.4 % of the field, no car more than 3 % off on any course except IROHA uphill (front-drivers up to
+    ///     +4.8 %, MR2 −3.3 %) and the Cappuccino on the MYOGI circuit (+3.4 %). Missing = 1.
     /// </summary>
     public static readonly IReadOnlyDictionary<string, float> Bop = new Dictionary<string, float>
     {
-        ["AE86T"] = 1.087f,
-        ["AE86L"] = 1.087f,
-        ["AE85"] = 1.546f,
-        ["MR2"] = 1.002f,
-        ["MRS"] = 1.189f,
-        ["ALTEZ"] = 1.224f,
-        ["GT-4"] = 1.154f,
-        ["R32"] = 0.916f,
-        ["R34"] = 0.997f,
+        ["AE86T"] = 1.057f,
+        ["AE86L"] = 1.057f,
+        ["AE85"] = 1.552f,
+        ["MR2"] = 1.035f,
+        ["MRS"] = 1.183f,
+        ["ALTEZ"] = 1.184f,
+        ["GT-4"] = 1.168f,
+        ["R32"] = 0.956f,
+        ["R34"] = 1.054f,
         ["ER34"] = 0.903f,
-        ["S13"] = 0.802f,
-        ["S14Q"] = 1.131f,
-        ["S14"] = 0.867f,
-        ["S15"] = 0.838f,
-        ["ONE80"] = 0.864f,
-        ["SIL80"] = 0.830f,
-        ["EK9"] = 1.039f,
-        ["EG6"] = 1.171f,
-        ["INTGR"] = 0.997f,
-        ["S2000"] = 1.065f,
+        ["S13"] = 0.826f,
+        ["S14Q"] = 1.133f,
+        ["S14"] = 0.862f,
+        ["S15"] = 0.803f,
+        ["ONE80"] = 0.884f,
+        ["SIL80"] = 0.849f,
+        ["EK9"] = 0.997f,
+        ["EG6"] = 1.109f,
+        ["INTGR"] = 0.957f,
+        ["S2000"] = 1.013f,
         ["EVO3"] = 0.922f,
-        ["EVO4"] = 0.948f,
-        ["EVO7"] = 0.893f,
+        ["EVO4"] = 0.975f,
+        ["EVO7"] = 0.943f,
         ["FD3S"] = 0.802f,
-        ["FD3SA"] = 0.751f,
-        ["FC3S"] = 0.885f,
-        ["NA6C"] = 1.353f,
-        ["NB8C"] = 1.145f,
-        ["IMP"] = 0.741f,
-        ["IMP2"] = 0.906f,
-        ["IMP3"] = 0.738f,
-        ["CAPPU"] = 1.384f,
+        ["FD3SA"] = 0.753f,
+        ["FC3S"] = 0.915f,
+        ["NA6C"] = 1.307f,
+        ["NB8C"] = 1.104f,
+        ["IMP"] = 0.769f,
+        ["IMP2"] = 0.954f,
+        ["IMP3"] = 0.767f,
+        ["CAPPU"] = 1.440f,
     };
 
     /// <summary>The cars as driven: <see cref="Real"/> with <see cref="Bop"/> applied.</summary>

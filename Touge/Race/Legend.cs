@@ -50,8 +50,8 @@ public static class Legend
         // MYOGI (Takumi in Itsuki's AE85 is row 1 of the original, the remake's ladder has him last: the hero is the course's boss, not its second rung)
         E(0, "itsuki", R("itsuki", "ITSUKI TAKEUCHI", "AKINA SPEEDSTARS", "AE85", 0.1f, 0.2f, 0.3f), false, false, false, 0, "ITSUKI.adx"),
         E(0, "shingo", R("shingo", "SHINGO SHOJI", "MYOGI NIGHTKIDS", "EG6", 0.25f, 0.95f, 0.2f), false, false, true, 2, "SHINGO.adx"),
-        E(0, "takeshi", R("takeshi", "TAKESHI NAKAZATO", "MYOGI NIGHTKIDS", "R32", 0.35f, 0.55f, 0.1f), true, false, true, 3, "NAKAZATO.adx"),
-        E(0, "takumi", R("takumi", "TAKUMI FUJIWARA", "AKINA SPEEDSTARS", "AE85", 0.45f, 0.4f, 0.85f), true, false, false, 1, "TAKUMI01.adx"),
+        E(0, "takeshi", R("takeshi", "TAKESHI NAKAZATO", "MYOGI NIGHTKIDS", "R32", 0.3f, 0.55f, 0.1f), true, false, true, 3, "NAKAZATO.adx"),
+        E(0, "takumi", R("takumi", "TAKUMI FUJIWARA", "AKINA SPEEDSTARS", "AE85", 0.4f, 0.4f, 0.85f), true, false, false, 1, "TAKUMI01.adx"),
         // USUI
         E(1, "tokyo", R("tokyo", "THE TWO FROM TOKYO", "TOKYO", "S15", 0.12f, 0.55f, 0.4f), false, false, false, 4, "DEBU.adx"),
         E(1, "nobuhiko", R("nobuhiko", "NOBUHIKO AKIYAMA", "SAITAMA", "ALTEZ", 0.25f, 0.45f, 0.35f), true, false, false, 5, "NOBUHIKO.adx"),

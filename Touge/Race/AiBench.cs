@@ -21,8 +21,8 @@ public static class AiBench
 {
     private const float Dt = Drive.Dt, Deg = 180 / MathF.PI;
 
-    /// <summary>The 9 mountain courses (day versions).</summary>
-    public static readonly string[] Courses = ["AKINA", "AKAGI", "IROHA", "MYOUGI", "USUI", "HAPPOU", "SHOMARU", "MOMIJI", "SHIONA"];
+    /// <summary>The 11 Legend courses: the two circuits and the 9 mountain courses (day versions).</summary>
+    public static readonly string[] Courses = ["MYOUGI0", "USUI0", "AKINA", "AKAGI", "IROHA", "MYOUGI", "USUI", "HAPPOU", "SHOMARU", "MOMIJI", "SHIONA"];
 
     public static readonly string[] Cars = ["AE86T", "R34", "EK9"];
 

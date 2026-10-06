@@ -197,7 +197,10 @@ public sealed partial class Vehicle
         else if (AutomaticGearbox && Gear >= 1 && _clutch >= 1 && !clutchOpen) // shifts on gearbox speed: free revs are no reason to shift
         {
             if (_gearRpm > Spec.AutoUpRpm && Gear < Spec.Gears.Length) target++;
-            else if (Gear > 1 && _shiftTimer < -0.5f && _gearRpm < Spec.AutoDownRpm && _gearRpm * Spec.Gears[Gear - 2] / Spec.Gears[Gear - 1] < Spec.AutoUpRpm) target--;
+            else if (Gear > 1 && _shiftTimer < -0.5f && _gearRpm * Spec.Gears[Gear - 2] / Spec.Gears[Gear - 1] is var low && low < Spec.AutoUpRpm &&
+                     (_gearRpm < Spec.AutoDownRpm || // kickdown: full throttle and the lower gear pulls clearly harder (an AE86 lugging up a climb in 4th at 3100 rpm)
+                      Throttle > 0.9f && low < 0.85f * Spec.AutoUpRpm && EngineTorque(low) * Spec.Gears[Gear - 2] > 1.1f * EngineTorque(_gearRpm) * Spec.Gears[Gear - 1]))
+                target--;
         }
 
         if (target == Gear) return;

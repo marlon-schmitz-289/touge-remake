@@ -293,12 +293,13 @@ CAR SELECT / EXIT. Rivalen und Bedingungen aus dem Original (34 Rivalen auf 11 K
 je Kurs eine Leiter (der nächste Rivale nach einem Sieg über den vorigen), die fünf Zusatzkurse (MYOGI+ … SHIONA) ab 3 geschafften Hauptkursen,
 Bunta (Akina) nach allen 24 Rivalen der Hauptkurse, Takumi von Project D (Irohazaka) nach allen anderen außer Bunta; ein Sieg über Bunta schaltet
 sein Impreza (IMP3) frei – wie im Original auch das Schlusskapitel von STORY; bis dahin ist es in jeder Autowahl (Time Attack, Legend, Versus-Lobby) „?????“ mit dem Hinweis, wie man es bekommt. Revanche gegen einen besiegten Rivalen im Regen (wie das Original). Die vier
-Rivalen eines Hauptkurses fahren mit 60/78/95/100 % Motormoment (auf ihr ausgeglichenes Auto) und Können je Sprosse (0,1–0,2 / ~0,3 / 0,3–0,45 / 0,3–0,5, in den starken
+Rivalen eines Hauptkurses fahren mit 60/78/95/100 % Motormoment (auf ihr ausgeglichenes Auto) und Können je Sprosse (0,1–0,2 / ~0,3 / 0,3–0,45 / 0,3–0,5; MYOGI 0,1 / 0,25 / 0,3 / 0,4; in den starken
 Autos niedriger; Zusatzkurse 0,65–0,8, PD-Takumi 0,9, Bunta 1) – eigene Abstimmung. MYOGI: Takumi im AE85 (im Original Zeile 1) ist die
 letzte Sprosse statt der zweiten (vorher 72 % auf den 83 PS des AE85 bergauf = ~60 PS: der Autopilot im FD3S war nach 29 s 8 s weg).
-`--legend-sim --player-skill k` (Leiter wie ein Spieler; Trueno / FD3S / R34 / S15 / AE85): Anfänger 0,2 13 / 11 / 15 / 11 / 12 Rivalen
-(vorher 12 / 17 / 16 / 17 / 6), NORMAL 0,5 20 / 18 / 24 / 17 / 24 (vorher 21 / 29 / 25 / 26 / 12), HARD 0,8 26 / 27 / 30 / 28 / 31
-(vorher 27 / 31 / 31 / 31 / 13) – das Auto entscheidet nicht mehr. `LEGEND_ALL=1` fährt jeden Rivalen einmal (Kalibrierung).
+`--legend-sim --player-skill k` (Leiter wie ein Spieler; Trueno / FD3S / R34 / S15 / AE85): Anfänger 0,2 11 / 11 / 13 / 11 / 13 Rivalen
+(vor BoP 12 / 17 / 16 / 17 / 6), NORMAL 0,5 18 / 18 / 25 / 17 / 23 (vorher 21 / 29 / 25 / 26 / 12), HARD 0,8 27 / 25 / 30 / 27 / 30
+(vorher 27 / 31 / 31 / 31 / 13) – das Auto entscheidet nicht mehr. MYOGI-Takumi: Anfänger verlieren (außer R34 +0,7 s), NORMAL meist knapp
+im Ziel, HARD gewinnt (Trueno −0,7 s knapp verloren). `LEGEND_ALL=1` fährt jeden Rivalen einmal (Kalibrierung).
 Nach einem Battle steht der Cursor auf dem nächsten Rivalen, Neues (Rivalen, Kurse, Auto) läuft unten als rotes Band ein. Fortschritt in
 `progress.json` neben `settings.json` (`Rivals`: Siege, Niederlagen, bester Abstand je Rivale; dieselbe Datei wie Story, `Progress`; ein altes
 `legend.json` wird beim Laden übernommen und beim nächsten Speichern gelöscht). Pause-Exit und Zurück aus der
@@ -324,10 +325,10 @@ Ohne die Medien (Manga-Tabellen nicht lesbar) Textpanels über dem Flug wie bish
 und überholen (auch: in 120 s); 100 s dranbleiben; allein mit Zeitgrenze, Tofu bergauf mit höchstens 3 Wandtreffern, Mitfahrer mit 10.000 Driftpunkten –
 im Rennen oben rechts eine Tafel mit Restzeit/Wandtreffern/Drift. Rivalenstärke je Kapitel aus zwei Kalibrierungen
 (Autopilot als Spieler mit seinen Fehlern, `--story-check calibrate --player-skill k`): am Anfang gegen einen Anfänger (0,2), zum Ende hin
-gegen einen NORMAL-Spieler (0,55), Gewicht (Kapitel/30)², minus 0,03 (mit den ausgeglichenen Autos neu gemessen; Kapitel 3, 6, 11, 12, 28
-etwas tiefer, weil die Bisektion nicht monoton ist); wo selbst 0,1 für den Anfänger zu stark ist (Kapitel 21, Seijis Evo gegen Keisukes FD)
-fährt der Rivale gedrosselt; das Finale (Bunta) ist ein starker Fahrer (0,6) im gedrosselten Impreza (88 %, `STORY_CAL_AT=0.65`), den
-NORMAL schlägt (+4,2 s). Zeitgrenzen vom Anfänger- zur NORMAL-Zeit (Akina bergab 5'24 → 4'53, bergauf 5'37 → 5'09). Anfänger (0,2)
+gegen einen NORMAL-Spieler (0,55), Gewicht (Kapitel/30)², minus 0,03 (mit den ausgeglichenen Autos und dem Kickdown neu gemessen; Kapitel 12
+etwas tiefer, weil die Bisektion nicht monoton ist); wo selbst 0,1 für den Anfänger zu stark ist (Kapitel 2 95 %, 10 96 %, 21 Seijis Evo gegen
+Keisukes FD 78 %) fährt der Rivale gedrosselt; das Finale (Bunta) ist ein starker Fahrer (0,6) im gedrosselten Impreza (83 %, `STORY_CAL_AT=0.65`), den
+NORMAL schlägt (+6,1 s). Zeitgrenzen vom Anfänger- zur NORMAL-Zeit (Akina bergab 5'24 → 4'53, bergauf 5'37 → 5'07). Anfänger (0,2)
 schafft 14 von 31 Kapiteln (0–14 außer 4 Driftpunkte und 13), 0,25 14, NORMAL 30 (nicht: 4), 0,8 30. Pause → Exit führt zur Kapitelwahl zurück. Regen bei Nacht (Kapitel 11, MYOGI) gibt es auf der Disc nicht: der Nachtkurs bekommt
 Regen (Tropfen, nasse Spiegelungen, Gischt, Regen-Sound, Telop WET); die Haftung ist wie auf den _RIN-Kursen unverändert. Fortschritt in `progress.json` neben den Einstellungen (Schlüssel `story/nn`, Zähler
 `…/tries`, `…/wins`; dieselbe Datei hält Legend of the Streets); Story-Läufe zählen nicht als Time-Attack-Rekord.
@@ -359,10 +360,14 @@ Auto aus der Original-Zuordnung (FORMATS.md, AE86T/AE86L mit der voll getunten `
 Balance (BoP, wie die Arcade-Reihe): `CarSpecs.Real` sind die echten Autos (Datenblatt, Car Guide, Autowahl zeigen sie), gefahren wird
 `CarSpecs.All` = echtes Auto mit einem Faktor je Auto auf das Motormoment (`CarSpecs.Bop`, sonst nichts: Gewicht, Reifen, Übersetzung,
 Antrieb, Driftschicht bleiben echt – der R34 zieht weiter in 5,7 s auf 100, der Trueno in 7,9 s, verliert aber in den Kurven nicht mehr
-gegen 280 PS). Faktoren 0,74 (Impreza, FD3SA) … 1,55 (AE85, 83 → 128 PS), AE86 1,09 (130 → 141 PS), R34 1,0; kg/PS 4,5–11,1 → 4,7–7,9.
-Kalibriert mit `--ai-bench solo` (alle 32 Autos × 9 Kurse × beide Richtungen, Referenzfahrer H und Autopilot 0,8; Newton-Schritte auf
-die mittlere Feldzeit je Kurs): mittlere Zeit je Auto best→schlechtestes 11,5 % → 0,5 % (H; Autopilot 10,2 → 0,9 %), größte Abweichung
-eines Autos auf einem Kurs vom Feld 13,6 % (AE85 AKAGI bergauf) → 4,0 % (EK9 IROHA bergauf: FF in engen Bergauf-Haarnadeln; Autopilot 3,8 %).
+gegen 280 PS). Faktoren 0,75 (FD3SA, 280 → 211 PS) … 1,55 (AE85, 83 → 129 PS), AE86 1,06 (130 → 137 PS), R34 1,05; kg/PS 4,5–11,1 → 4,8–7,6.
+Kalibriert mit `--ai-bench solo` (alle 32 Autos × alle 11 Legend-Kurse, also auch die Rundkurse MYOGI/USUI, × beide Richtungen,
+Referenzfahrer H und Autopilot 0,8; Newton-Schritte auf die mittlere Feldzeit je Kurs): mittlere Zeit je Auto best→schlechtestes
+12,6 % → 0,7 % (H; Autopilot 11,6 → 0,6 %, Anfänger 0,2 2,0 %), größte Abweichung eines Autos auf einem Kurs vom Feld 15,2 % → 4,8 %
+(EK9 IROHA bergauf: FF in engen Bergauf-Haarnadeln, EG6/INTGR +4, MR2 −3,3; sonst nur der Cappuccino auf dem MYOGI-Rundkurs +3,4, alle
+anderen ≤ 3 %). Automatik mit Kickdown: bei Vollgas schaltet sie zurück, sobald der kleinere Gang klar (> 10 %) mehr zieht – vorher erst
+unter 40 % der Abregeldrehzahl, der Trueno kroch auf dem MYOGI-Rundkurs bergauf im 4. mit 3100/min und 78 km/h (R34: 115) und verlor dort
+allein ~7 s; das war der eigentliche Grund für 8 % Streuung auf MYOGI (jetzt ~3 %, ohne Cappuccino 2 %).
 Ein Grip-Faktor dazu drückte die Streuung kaum weiter (0,8 / 2,9 %), hätte aber dem Trueno Grip genommen und den 4WDs gegeben – verworfen.
 Der Cappuccino (Spur 1,18 m) fiel vorher in 18 von 36 Läufen von der Straße; sein Schwerpunkt sinkt jetzt mit der schmaleren Spur (2 von 36).
 Pad: linker Stick lenken, Trigger Gas/Bremse, A Handbremse, Schultertasten schalten, Y zurück auf die Straße, BACK Kamera, D-Pad hoch Licht, runter Fernlicht, rechts nächster Musiktitel (nicht, wenn D-Pad rechts unter CONTROLLER belegt ist), START Pause.
