@@ -37,6 +37,7 @@ public static class KanseiApp
         if (settings.Backend == GraphicsBackend.OpenGL && OperatingSystem.IsMacOS())
             throw new PlatformNotSupportedException("OpenGL needs a 4.5 core context, macOS only offers 4.1: use --backend metal or vulkan (MoltenVK).");
         var sdl = Sdl.GetApi();
+        if (settings.Hidden) sdl.SetHint("SDL_MAC_BACKGROUND_APP", "1"); // no Dock icon, no focus steal
         if (sdl.Init(Sdl.InitVideo | Sdl.InitGamecontroller | Sdl.InitHaptic) < 0)
             throw new Exception($"SDL init failed: {sdl.GetErrorS()}");
         try
@@ -44,6 +45,7 @@ public static class KanseiApp
             using var window = new GameWindow(sdl, settings);
             var input = new InputSnapshot(sdl);
             using var device = CreateDevice(sdl, window, settings);
+            if (settings.Hidden) device.Offscreen = true; // no drawable from a hidden window
             Console.WriteLine($"[Kansei] Backend: {settings.Backend} — {device.Adapter.DeviceName}");
 
             game.Window = window;

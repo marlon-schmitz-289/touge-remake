@@ -59,7 +59,7 @@ public sealed class GameWindow : IDisposable
         var initW = settings.InitialWindowWidth;
         var initH = settings.InitialWindowHeight;
 
-        var flags = (uint)(WindowFlags.Shown | WindowFlags.Resizable);
+        var flags = (uint)((settings.Hidden ? WindowFlags.Hidden : WindowFlags.Shown) | WindowFlags.Resizable);
         flags |= Backend switch
         {
             GraphicsBackend.Vulkan => (uint)WindowFlags.Vulkan,

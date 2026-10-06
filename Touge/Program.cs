@@ -82,6 +82,8 @@ var iso = args.Where((a, i) => i == 0 || args[i - 1] is not ("--drop" or "--brow
 string? badIso = null;
 if (args is [var isoArg] && isoArg == iso && !Disc.Check(iso).Ok) (badIso, iso) = (iso, "");
 var launcher = iso == "";
+// --hidden or TOUGE_HIDDEN=1 (the agents' run wrapper): window never shown, no focus steal, frames rendered offscreen (Metal only)
+var hidden = (args.Contains("--hidden") || Environment.GetEnvironmentVariable("TOUGE_HIDDEN") == "1") && KanseiApp.ResolveBackend(args) == GraphicsBackend.Metal;
 Kansei.Input.GamepadState.Trace = args.Contains("--dualsense-log") || args.Contains("--dualsense-test");
 string[] launcherFlags = ["--launcher", "--menu", "--shot", "--shot-size", "--data-dir", "--backend", "--drop", "--browse", "--input-debug", "--sim-wheel", "--hint-device", "--dualsense-log"];
 string[] valueFlags = ["--drop", "--browse", "--story-check", "--progress", "--battle", "--rule", "--lead", "--flow", "--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--hud-scale", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture", "--lights", "--render-scale", "--jukebox", "--legend-progress",
@@ -299,7 +301,7 @@ TougeGame NewGame(string isoPath, Action? changeDisc) => new TougeGame(isoPath, 
       SaveRuns = Arg("--data-dir") != null, ReplayFile = Arg("--replay"), GhostFile = Arg("--ghost"), ReplayAt = Arg("--replay-at") is { } ra ? float.Parse(ra, CultureInfo.InvariantCulture) : 0,
       ReplayCam = Enum.TryParse<Touge.Ui.ReplayViewer.Camera>(Arg("--replay-cam") ?? "tv", true, out var rc) ? rc : Touge.Ui.ReplayViewer.Camera.Tv,
       ReplayFocus = int.Parse(Arg("--replay-focus") ?? "0"),
-      UseMenus = plain || changeDisc != null, StartMenu = changeDisc != null && Arg("--menu") == "browse" ? null : Arg("--menu"), ChangeDisc = changeDisc, Flow = Arg("--flow"), Offscreen = args.Contains("--offscreen"),
+      UseMenus = plain || changeDisc != null, StartMenu = changeDisc != null && Arg("--menu") == "browse" ? null : Arg("--menu"), ChangeDisc = changeDisc, Flow = Arg("--flow"), Offscreen = hidden || args.Contains("--offscreen"),
       StoryFlow = args.Contains("--story"), SaveLoadFlow = args.Contains("--saveload"), FreeBattleFlow = args.Contains("--freebattle"), FourPassFlow = args.Contains("--fourpasses") || args.Contains("--fourpasses-wet"), FourPassWet = args.Contains("--fourpasses-wet"), StoryProgress = int.TryParse(Arg("--progress"), out var progress) ? progress : 0,
       ShotSize = shotSize };
 KanseiApp.Run(launcher ? new LauncherGame(NewGame, args.Contains("--launcher"), shot, shotSize, Arg("--menu"), Arg("--drop") ?? badIso, Arg("--browse")) : NewGame(iso, null), new WindowSettings
@@ -308,6 +310,7 @@ KanseiApp.Run(launcher ? new LauncherGame(NewGame, args.Contains("--launcher"), 
     WindowPixelWidth = saved.Width,
     WindowPixelHeight = saved.Height,
     VSync = saved.VSync,
+    Hidden = hidden,
     FullscreenMode = saved.Display switch
     {
         Touge.Ui.Settings.DisplayMode.Borderless => FullscreenMode.Borderless,

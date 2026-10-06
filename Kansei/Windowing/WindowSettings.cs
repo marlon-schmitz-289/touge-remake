@@ -42,6 +42,9 @@ public sealed record WindowSettings
     public int BaseHeight { get; init; } = 288;
     public int ScaleFactor { get; init; } = 3;
     public bool VSync { get; init; } = true;
+
+    /// <summary>Window never shown and the app never activated (test/screenshot runs in the background; render offscreen).</summary>
+    public bool Hidden { get; init; }
     public FullscreenMode FullscreenMode { get; init; } = FullscreenMode.Windowed;
     public GraphicsBackend Backend { get; init; } = GraphicsBackend.Vulkan;
 

@@ -349,6 +349,7 @@ public sealed class LauncherGame(Func<string, Action, TougeGame> newGame, bool p
             return;
         }
         var cap = _shotState == 1 ? _capture : null;
+        if (cap == null && Device.Offscreen) return; // hidden run: nothing to show until the screenshot
         var (w, h) = cap != null ? (cap.Width, cap.Height) : (Device.SwapchainWidth, Device.SwapchainHeight);
         var target = cap?.View ?? Device.CurrentSwapchainView;
         _overlay.Clear();
