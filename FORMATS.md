@@ -203,7 +203,7 @@ Eine ferne Verfolgerkamera gibt es im Original nicht. Remake (`CameraRig.Place`)
 dem Ursprung (Modellmatrix des Autos), Blick 3° unter der Fahrzeugachse (Auto ganz in der unteren Bildhälfte), Blickwinkel aus der
 Einstellung × 0,75·0,92502/tan 30° = 1,2017 in tan ½ (bei 60° die 69,5° des Originals). **Kein Nachlauf, keine Driftblende**: der
 Blickrahmen dreht starr mit der Gier des Autos; nur die Neigung folgt der Karosserie leicht gefiltert (12/s, Federn raus), kein Rollen.
-FAR = CHASE × 1,5; die Kurs-Kollision zieht das Auge heran (höchstens 80 m/s) und lässt es mit 4/s wieder heraus.
+FAR = CHASE × 1,5; die Kurs-Kollision zieht das Auge heran (weiter Sweep 1,2 m federt es vorab ein, die harte Grenze höchstens 30 m/s) und lässt es mit 3/s wieder heraus.
 
 ## Replay-Datei (eigenes Format, `.rpl`)
 gzip von: `"IDRP"`, u16 Version (1), u16 Zustandsgröße (`Vehicle.StateBytes`, 314), i32 Länge + Kopf als JSON (`ReplayInfo`: Kurs, Richtung,

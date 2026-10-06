@@ -103,7 +103,7 @@ public static class CameraRig
     /// </summary>
     public struct Follow
     {
-        public float Pitch, PitchRate, Reach;
+        public float Pitch, PitchRate, Reach, ReachRate;
         public Vector3 Car;
         public bool Set;
     }
@@ -135,11 +135,17 @@ public static class CameraRig
     /// <summary>Height (m) of the pivot over the car's centre the eye is pulled in towards: under the roof.</summary>
     public const float Pivot = 0.9f;
 
-    /// <summary>Fastest the course pulls the chase eye in (m/s): a wall grazed edge-on takes a few frames, not one.</summary>
-    private const float MaxIn = 80;
+    /// <summary>
+    ///     Fastest the hard limit pulls the chase eye in (m/s): a surface the <see cref="Sweep"/> did not see coming (grazed
+    ///     edge-on) takes a few frames, not one — 80 jerked the eye at 11 500 m/s² (--cam-bench), 30 stays under the original's.
+    /// </summary>
+    private const float MaxIn = 30;
 
-    /// <summary>Rate (1/s) a pulled-in eye goes back out once the course lets it.</summary>
-    private const float OutRate = 4;
+    /// <summary>Rates (1/s, critically damped) the eye eases in towards the <see cref="Sweep"/>'s reach and back out.</summary>
+    private const float InRate = 12, OutRate = 3;
+
+    /// <summary>Radius (m) of the easing sweep: wider than <see cref="CameraHull.Radius"/>, a surface near the line is felt early.</summary>
+    private const float Sweep = 1.2f;
 
     /// <summary>
     ///     Eye, aim and field of view of <paramref name="view"/> for a car at physics pose <paramref name="pose"/> (CoG) with
@@ -148,7 +154,7 @@ public static class CameraRig
     ///     to the car's heading, and looks along it (<see cref="Tilt"/> down) — no heading lag, no drift turn, the car stays at one place in the picture.
     ///     Only the pitch follows the body through a light filter (<see cref="PitchRate"/>, no roll), and the course
     ///     (<paramref name="hull"/>) pulls the eye in towards the pivot over the car (at most <see cref="MaxIn"/> fast) and lets
-    ///     it out at <see cref="OutRate"/>. <paramref name="snap"/> or a jump of the car (reset, another car) starts over.
+    ///     it out again, both eased (<see cref="Sweep"/>). <paramref name="snap"/> or a jump of the car (reset, another car) starts over.
     /// </summary>
     public static (Vector3 Pos, Vector3 Look, float Fov) Place(CameraView view, ref Follow f, bool snap, float dt,
         in Matrix4x4 pose, in Matrix4x4 body, in Mounts m, float fov, CameraHull? hull = null)
@@ -183,10 +189,17 @@ public static class CameraRig
         Eye(car, heading, f.Pitch - Tilt, rig, out var dir);
         var pivot = pose.Translation + Vector3.UnitY * Pivot;
         var full = Vector3.Distance(pivot, want);
+        // a wider sweep eases the eye in before the hard limit (never through a surface after MaxIn) has to clamp it
         var hard = hull?.Reach(pivot, want) ?? full;
-        f.Reach = snap ? hard
-            : hard < f.Reach ? MathF.Max(hard, f.Reach - MaxIn * dt) // in fast, never in one frame
-            : f.Reach + (hard - f.Reach) * (1 - MathF.Exp(-OutRate * dt)); // out smoothly
+        var soft = hull == null ? full : MathF.Min(hard, hull.Reach(pivot, want, Sweep));
+        if (snap) (f.Reach, f.ReachRate) = (soft, 0);
+        else
+        {
+            Vector3 x = new(f.Reach), v = new(f.ReachRate);
+            Spring(ref x, ref v, new Vector3(soft), soft < f.Reach ? InRate : OutRate, dt);
+            var reach = MathF.Max(MathF.Min(x.X, hard), f.Reach - MaxIn * dt);
+            (f.Reach, f.ReachRate) = (reach, x.X > reach ? 0 : v.X);
+        }
         var pos = full > 1e-3f ? pivot + (want - pivot) * (MathF.Min(f.Reach, full) / full) : want;
         return (pos, want + dir * 10, 2 * MathF.Atan(MathF.Tan(fov / 2) * Widen));
     }
