@@ -474,7 +474,6 @@ public sealed partial class TougeGame
     private Effects? _liveFx;
     private TvCameras? _tv;
     private float _replayAcc;
-    private int _tvIndex = -1;
     private readonly FreeCam _viewerCam = new();
 
     /// <summary>
@@ -525,7 +524,6 @@ public sealed partial class TougeGame
         var cars = _player!.Cars;
         _player = null;
         _viewer.Close();
-        _tvIndex = -1;
         if (back != Back.Menu && _liveStates != null)
         {
             for (var i = 0; i < cars.Length; i++) cars[i].LoadState(_liveStates[i]);
@@ -687,16 +685,11 @@ public sealed partial class TougeGame
         if (_player == null) return false;
         var pose = FocusPose();
         var car = pose.Translation;
-        var fwd = Vector3.TransformNormal(Vector3.UnitZ, pose);
         switch (_viewer.Cam)
         {
             case ReplayViewer.Camera.Tv:
-                var (eye, fov, index) = _tv!.At(car);
-                var snap = index != _tvIndex || _camSnap;
-                _tvIndex = index;
-                var look = car + Vector3.UnitY * 0.5f;
-                // a TV operator: the aim lags a touch behind the car, cuts are hard
-                (_pos, _camLook, _fov) = (eye, snap ? look : Vector3.Lerp(_camLook, look, 1 - MathF.Exp(-14 * dt)), fov * MathF.PI / 180);
+                (_pos, _camLook, var tvFov) = _tv!.Update(car, dt, _camSnap);
+                _fov = tvFov * MathF.PI / 180;
                 break;
             case ReplayViewer.Camera.Free:
                 (_pos, _camLook, _fov) = (_viewerCam.Position, _viewerCam.Position + _viewerCam.Forward, MathF.PI / 3);

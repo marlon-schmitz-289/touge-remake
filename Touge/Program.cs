@@ -63,6 +63,7 @@ using Touge;
 // --ghost <datei.rpl>: dieser Lauf fährt als Geist mit (sonst mit Menüs der Bestzeit-Lauf); --data-dir <ordner>: anderer App-Daten-Ordner (Einstellungen samt Rekorden, Fortschritt, Replays, Spielstände, Fotos) wie ein echtes Profil, auch in Testläufen;
 //   ohne --data-dir schreibt nur ein schlichter Start (ISO [--menu x]) ins echte Profil, jeder andere Lauf in einen Wegwerf-Ordner im Temp-Verzeichnis.
 // --menu replay|replay-best|replay-records|replay-delete|saveload|saveload-actions|saveload-name|photo: REPLAY & RECORD, SAVE & LOAD, Fotomodus (Bilder).
+// --cam-bench [KURS_ZEIT,…] [--car X]: Kameras ohne Fenster (Pilot mit Drifts bis ins Ziel, beide Richtungen): Bilder hinter/in Geometrie, über dem Nichts, Straße verdeckt, Ruckeln; Replay-Schritte, TV-Schnitte.
 // --cam chase|far|hood|cockpit|bumper: Startkamera (sonst Einstellung bzw. Verfolger), im Spiel C / Pad BACK.
 // --drift: Pilot reißt alle 7 s (ab 4,5 s) einen 2,5-s-Handbremsdrift (Reifenrauch/Bremsspuren testen), z. B. --autodrive 6.3 --drift --shot.
 // Ohne ISO (weder Argument noch INITIALD_ISO): Launcher im Fenster (Touge/Launcher, Ui/LauncherScreen) – startet die zuletzt gewählte Disc direkt,
@@ -82,7 +83,7 @@ var launcher = iso == "";
 string[] launcherFlags = ["--launcher", "--menu", "--shot", "--shot-size", "--data-dir", "--backend", "--drop", "--browse", "--input-debug", "--sim-wheel", "--hint-device"];
 string[] valueFlags = ["--drop", "--browse", "--story-check", "--progress", "--battle", "--rule", "--lead", "--flow", "--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--hud-scale", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture", "--lights", "--render-scale", "--jukebox", "--legend-progress",
     "--join", "--port", "--name", "--net-sim", "--players", "--races", "--seconds", "--net-rule", "--versus", "--split", "--car2", "--shot-after",
-    "--replay-test", "--ai-bench", "--replay", "--replay-at", "--replay-cam", "--replay-focus", "--save", "--data-dir", "--ghost", "--hint-device", "--cam", "--player-skill", "--ai-level"];
+    "--replay-test", "--ai-bench", "--replay", "--replay-at", "--replay-cam", "--replay-focus", "--save", "--data-dir", "--ghost", "--hint-device", "--cam", "--player-skill", "--ai-level", "--cam-bench"];
 string? Arg(string flag) { var i = Array.IndexOf(args, flag); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
 if (launcher ? badIso == null && !args.Where((a, i) => i == 0 || !valueFlags.Contains(args[i - 1])).All(launcherFlags.Contains) : !File.Exists(iso))
 {
@@ -227,6 +228,13 @@ if (Arg("--ai-bench") is { } bench1)
     using var isoFile = new Touge.Formats.Iso9660(iso);
     var parts = bench1.Split(':');
     return Touge.Race.AiBench.Run(isoFile, parts[0], parts.Length > 1 ? parts[1].Split(',') : [], Arg("--car")) ? 0 : 2;
+}
+// --cam-bench [KURS_ZEIT,…] [--car X]: Kameras ohne Fenster vermessen (Touge/CameraBench)
+if (args.Contains("--cam-bench"))
+{
+    using var isoFile = new Touge.Formats.Iso9660(iso);
+    var list = Arg("--cam-bench") is { } cb && !cb.StartsWith("--") ? cb.Split(',') : [];
+    return CameraBench.Run(isoFile, list, car) ? 0 : 2;
 }
 // --legend-sim [--legend-progress <json>] [--car X] [--autodrive <s per battle>]: Legend of the Streets headless, the autopilot up every ladder
 if (args.Contains("--legend-sim"))

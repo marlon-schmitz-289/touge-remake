@@ -13,7 +13,8 @@ public sealed class TvCameras
     private readonly ReplayCameras.Cam[] _cams;
     private readonly Vector3[] _road;
     private readonly bool _reverse;
-    private int _seg;
+    private int _seg, _index = -1;
+    private Vector3 _look;
 
     public TvCameras(ReplayCameras.Cam[] cams, Vector3[] road, bool reverse)
     {
@@ -81,5 +82,19 @@ public sealed class TvCameras
         var c = _cams[index];
         var t = Math.Clamp((p - c.From) / MathF.Max(c.To - c.From, 1), 0, 1);
         return (Vector3.Lerp(c.A.Eye, c.B.Eye, t), Math.Clamp(float.Lerp(c.A.Fov, c.B.Fov, t), 3, 60), index);
+    }
+
+    /// <summary>
+    ///     One frame of the TV view on the car at <paramref name="car"/>: eye, aim and vertical FOV (degrees). A TV operator: the aim
+    ///     lags a touch behind the car, cuts (another camera, or <paramref name="snap"/>) are hard.
+    /// </summary>
+    public (Vector3 Eye, Vector3 Look, float Fov) Update(Vector3 car, float dt, bool snap)
+    {
+        var (eye, fov, index) = At(car);
+        snap |= index != _index;
+        _index = index;
+        var look = car + Vector3.UnitY * 0.5f;
+        _look = snap ? look : Vector3.Lerp(_look, look, 1 - MathF.Exp(-14 * dt));
+        return (eye, _look, fov);
     }
 }
