@@ -59,6 +59,8 @@ public sealed class Hud
     public bool ShowTiming = true;
     /// <summary>Runs can set records (free play: none, the goal's pop-up does not claim one).</summary>
     public bool Records = true;
+    /// <summary>A free run: the old goal is only a split ("COURSE END"), no race ends there.</summary>
+    public bool Free;
 
     /// <param name="start">Start line, m along <paramref name="line"/> (the car spawns behind it); timing and progress run from there.</param>
     public Hud(Vector3[] road, Vector3[] line, LinePilot pilot, float[]? best, float start = 0)
@@ -268,7 +270,7 @@ public sealed class Hud
             var a = Style.Ease(Timer.SinceSplit * 3) * Style.Ease((6 - Timer.SinceSplit) * 2);
             var y = height * 0.3f;
             Style.Slanted(o, new Vector2(cx - 260 * u, y - 76 * u), new Vector2(cx + 260 * u, y + 128 * u), Style.Fade(Overlay.Rgba(0.02f, 0.03f, 0.05f, 0.8f), a), 0.12f);
-            Style.Label(o, "FINISH", new Vector2(cx, y), 72 * u, Style.Fade(Style.Amber, a), 0.5f, Style.Slant, 0.6f * u);
+            Style.Label(o, Free ? "COURSE END" : "FINISH", new Vector2(cx, y), 72 * u, Style.Fade(Style.Amber, a), 0.5f, Style.Slant, 0.6f * u);
             Style.Label(o, Style.Time(Timer.Time), new Vector2(cx, y + 46 * u), 36 * u, Style.Fade(Style.Text, a), 0.5f, Style.Slant);
             // sector deltas against the best run this one was compared with
             if (Timer.Delta(0) != null)

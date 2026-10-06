@@ -915,6 +915,10 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             case Menu.Action.Exit when _free != null:
                 ExitFreePlay();
                 break;
+            case Menu.Action.TurnAround:
+                TurnFreeHere();
+                (_inRace, _camSnap, _fly) = (true, true, false);
+                break;
             case Menu.Action.ResetCar:
                 _drive.ResetNearest();
                 SyncPose();
@@ -1420,7 +1424,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             _drive.ResetNearest();
             SyncPose();
         }
-        if (k.IsKeyPressed(Key.B) && _free != null && _freePending == null) TurnFree(atEnd: false); // free play: turned where the car is, AI cars set off again
+        if (k.IsKeyPressed(Key.B) && _free != null) TurnFreeHere(); // free play: turned where the car is (behind the fade), AI cars set off again
         else if (k.IsKeyPressed(Key.B) && _race == null && _vsRace == null)
         {
             using (var iso = new Iso9660(isoPath)) _drive.SetDirection(iso, !_drive.Reverse);
@@ -1563,7 +1567,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         else if (hudShown)
         {
             var (hw, hh) = split is var (v0, _) ? (v0.Width, v0.Height) : (w, h);
-            (_hud.Lights, _hud.Dashboard) = (_lights.State, _onBoard == CameraView.Cockpit && !_fly);
+            (_hud.Lights, _hud.Dashboard, _hud.Free) = (_lights.State, _onBoard == CameraView.Cockpit && !_fly, FreeRun);
             _hud.Rival = _race is { } race ? (_rivalPose.Translation, race.Cars[1].Along) : VersusRival(0);
             _hud.Build(_overlay, hw, hh, _carPose.Translation, Vector3.TransformNormal(Vector3.UnitZ, _carPose), _drive.Car, _carName, _menuTime);
             BuildBattleHud(hw, hh);

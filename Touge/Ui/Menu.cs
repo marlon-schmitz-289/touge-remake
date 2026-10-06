@@ -29,7 +29,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     ///     Rivals: back to the Legend of the Streets rival ladder.
     /// </summary>
     /// <remarks>ResetCar: free play's pause RESET (back onto the road where the car is).</remarks>
-    public enum Action { None, Load, Resume, Restart, Exit, PreviewCar, SettingsChanged, Quit, Replay, Photo, Rivals, ResetCar }
+    public enum Action { None, Load, Resume, Restart, Exit, PreviewCar, SettingsChanged, Quit, Replay, Photo, Rivals, ResetCar, TurnAround }
 
     /// <summary>A finished run for the result sheet.</summary>
     /// <param name="Deltas">Per sector against the best run it was compared with (null without one).</param>
@@ -53,13 +53,15 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     public static readonly string[] PauseButtons = ["Continue", "Retry", "Replay", "Photo", "Exit", .. QuitPrompt.Available ? new[] { "Quit Game" } : []],
         ResultButtons = ["RETRY", "REPLAY", "COURSE SELECT", "CAR SELECT", "EXIT"],
         /// <summary>Free play's pause: back onto the road, CHANGE (the free play lobby: course, time, weather, car …), photo.</summary>
-        FreePauseButtons = ["Continue", "Reset", "Change", "Photo", "Exit", .. QuitPrompt.Available ? new[] { "Quit Game" } : []];
+        FreePauseButtons = ["Continue", "Reset", "Change", "Turn", "Photo", "Exit", .. QuitPrompt.Available ? new[] { "Quit Game" } : []];
     private static readonly Dictionary<string, string> PauseCaptions = new()
     {
         ["Continue"] = "Return to the race.", ["Retry"] = "Restart the race from the beginning.", ["Replay"] = "Watch the run so far.",
         ["Photo"] = "Free camera, take a picture.", ["Exit"] = "Quit this race.", ["Quit Game"] = "Close the game.",
-        ["Reset"] = "Back onto the road where you are.", ["Change"] = "Course, time, weather, car, AI cars: change and drive on.",
+        ["Reset"] = "Back onto the road where you are.", ["Turn"] = "Turn around: drive the other way from here.", ["Change"] = "Course, time, weather, car, AI cars: change and drive on.",
     };
+    /// <summary>Free play's captions where the race's would say "race".</summary>
+    private static readonly Dictionary<string, string> FreeCaptions = new() { ["Continue"] = "Back to driving.", ["Exit"] = "Back to the main menu." };
     private string[] Pause => FreePause ? FreePauseButtons : PauseButtons;
     private readonly QuitPrompt _quit = new();
 
@@ -409,6 +411,9 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                         case "Reset":
                             Resume();
                             return Action.ResetCar;
+                        case "Turn":
+                            Resume();
+                            return Action.TurnAround;
                         case "Change":
                             Leave(Screen.None, Action.Rivals);
                             break;
@@ -748,7 +753,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
         var step = MathF.Min(86, 470f / buttons.Length);
         var x0 = 256 - (buttons.Length * step - 10) / 2f;
         c.Carbon(x0 - 16, 328, 512 - x0 + 16, 352, 1, false);
-        c.Text(PauseCaptions[buttons[_row]], 256, 345, 12, Canvas.White, 0.5f, 0.12f);
+        c.Text(FreePause && FreeCaptions.TryGetValue(buttons[_row], out var fc) ? fc : PauseCaptions[buttons[_row]], 256, 345, 12, Canvas.White, 0.5f, 0.12f);
         var grey = Canvas.Shade(0.08f, 0.08f, 0.08f, 1, 0.4f);
         c.Carbon(x0 - 16, 358, 512 - x0 + 16, 412, 1, false);
         c.Text("Pause", x0 - 6, 372, 11, Canvas.White, 0, 0.2f);

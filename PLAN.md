@@ -183,6 +183,9 @@ Jede Phase endet mit etwas Sichtbarem/Fahrbarem.
   Abgang während der Fahrt). Offen: TURN AROUND nur allein (im Mehrspieler zurück zum Start, weil sich die Autos Boden und Fahrlinie einer Richtung teilen);
   ein Späteinsteiger erscheint an der Startaufstellung (kann auf einem dort stehenden Auto landen, GHOSTS hilft); Fotomodus online grau (die Sitzung liefe
   ohne Abfrage weiter); KI-Autos fahren nur die eigene Richtung; online kein KI-Verkehr; keine eigene Freifahrt-Bestenliste.
+- Stand Free Play, Nachbesserung (Review): am alten Ziel zeigt die Zeittafel COURSE END statt FINISH (`Hud.Free`, auch geteilter Bildschirm/online); Pause → TURN
+  wendet auch mit Pad/Lenkrad (vorher nur Taste B); B und TURN wenden hinter derselben Schwarzblende wie das Kursende (verdeckt das Laden der Gegenrichtung aus
+  der ISO); Pause-Texte der Freifahrt ohne „race“ (CONTINUE „Back to driving.“, EXIT „Back to the main menu.“); `--flow --freeplay` prüft TURN mitten auf der Strecke. Story-, Four-Passes- und Save-&-Load-Skripte nach der Menüverschiebung neu durchlaufen.
 
 ### Phase 5 – Feinschliff
 - Alle Strecken/Varianten, alle Autos tunen

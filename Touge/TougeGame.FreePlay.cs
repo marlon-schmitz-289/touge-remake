@@ -25,7 +25,7 @@ public sealed partial class TougeGame
     private FreePlayChoice? _free;
     private Rivals.Rival[] _freeField = [];
     private int _freeLegs;
-    private bool _fpLoadPending, _freeActed;
+    private bool _fpLoadPending, _freeActed, _freeTurnHere;
     /// <summary>What the course end asked for, done at the middle of the fade (<see cref="FreeFade"/> s out, as long back in).</summary>
     private CourseEndAction? _freePending;
     private float _freeFade;
@@ -137,7 +137,7 @@ public sealed partial class TougeGame
     {
         if (car != _vsRace!.Cars[0]) return _vsRace.BackToStart(car);
         if (_free!.End == CourseEndAction.Stop || _freePending != null) return false; // stays: its driver's again (R, B, drive back)
-        (_freePending, _freeFade, _freeActed) = (_free.End, 0, false);
+        (_freePending, _freeFade, _freeActed, _freeTurnHere) = (_free.End, 0, false, false);
         return false;
     }
 
@@ -149,7 +149,7 @@ public sealed partial class TougeGame
         if (!_freeActed && _freeFade >= FreeFade)
         {
             _freeActed = true;
-            if (action == CourseEndAction.TurnAround) TurnFree(atEnd: true);
+            if (action == CourseEndAction.TurnAround) TurnFree(atEnd: !_freeTurnHere);
             else
             {
                 _drive.ResetTo(0);
@@ -159,6 +159,12 @@ public sealed partial class TougeGame
             }
         }
         if (_freeFade >= 2 * FreeFade) _freePending = null;
+    }
+
+    /// <summary>B or pause → TURN: turned where the car is, behind the same fade as the course end (hides the ISO read).</summary>
+    private void TurnFreeHere()
+    {
+        if (_free != null && _freePending == null) (_freePending, _freeFade, _freeActed, _freeTurnHere) = (CourseEndAction.TurnAround, 0, false, true);
     }
 
     /// <summary>Turned onto the other direction's line: at the course end its start (where the car stopped), else (B) where the car is.</summary>
@@ -215,7 +221,7 @@ public sealed partial class TougeGame
     /// <summary>
     ///     --flow … --freeplay: main menu → FREE PLAY → lobby (AI CARS 1, CAR → maker → car) → START → telop → free run (autopilot, 16×)
     ///     past the goal → stopped → turned around (fade) → back up the other way → pause → CHANGE → lobby (NIGHT) → START → night run →
-    ///     pause → EXIT → main menu.
+    ///     pause → TURN (turned where the car is) → pause → EXIT → main menu.
     /// </summary>
     private static readonly (string At, float Wait, string? Shot, int X, int Y, bool Ok, bool Back)[] FreePlayFlowScript =
     [
@@ -237,7 +243,9 @@ public sealed partial class TougeGame
         ("VsFree", 0.5f, null, 1, 0, false, false), ("VsFree", 0.6f, "fp_change_night", 0, 1, false, false),
         .. Enumerable.Repeat(("VsFree", 0.25f, (string?)null, 0, 1, false, false), 7), ("VsFree", 0.5f, null, 0, 0, true, false),
         ("VsLoading", 0.3f, null, 0, 0, false, false), ("Intro", 1, null, 0, 0, false, false), ("Race", 3, "fp_race_night", 0, 0, false, true),
-        ("Pause", 0.6f, null, 1, 0, false, false), .. Enumerable.Repeat(("Pause", 0.25f, (string?)null, 1, 0, false, false), 3), ("Pause", 0.5f, "fp_pause_exit", 0, 0, true, false),
+        ("Pause", 0.6f, null, 1, 0, false, false), .. Enumerable.Repeat(("Pause", 0.25f, (string?)null, 1, 0, false, false), 2), ("Pause", 0.5f, "fp_pause_turn", 0, 0, true, false),
+        ("FreeTurn", 0, null, 0, 0, false, false), ("FreeLeg1", 1.5f, "fp_turned_here", 0, 0, false, true),
+        ("Pause", 0.6f, null, 1, 0, false, false), .. Enumerable.Repeat(("Pause", 0.25f, (string?)null, 1, 0, false, false), 4), ("Pause", 0.5f, "fp_pause_exit", 0, 0, true, false),
         ("Modes", 1.2f, "fp_modes_back", 0, 0, false, false),
     ];
 }

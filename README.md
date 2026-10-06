@@ -114,7 +114,7 @@ dotnet run --project Touge -- "<iso>" AKINA_NIT --versus split [--bot] [--split 
 dotnet run --project Touge -- "<iso>" AKINA_DAY --versus host|join:<ip[:port]>|online|menu [--bot] [--port 47860] [--name TAKUMI] [--players 2] [--net-sim 80:5%:20] [--menu pause] [--shot-after 40 --shot out/proof/o.png]   # online im Fenster (--bot: Lobby läuft von selbst, Autopilot fährt; --menu pause: Pause über dem laufenden Rennen fürs Bild)
 dotnet run --project Touge -- "<iso>" --menu freebattle --shot out/proof/freebattle/lobby.png   # VERSUS → VS CPU: Lobby des freien Battles gegen die KI als Bild
 dotnet run --project Touge -- "<iso>" --menu freeplay --shot out/proof/freeplay/lobby.png   # FREE PLAY: Lobby als Bild
-dotnet run --project Touge -- "<iso>" AKINA_DAY --flow out/proof/freeplay/flow --freeplay   # FREE PLAY per Skript: Hauptmenü → FREE PLAY → Lobby (1 KI-Auto, Autowahl) → Fahrt (Pilot, 16×) über das Ziel → ausrollen → umdrehen → bergauf → Pause → CHANGE → NIGHT → weiter → EXIT
+dotnet run --project Touge -- "<iso>" AKINA_DAY --flow out/proof/freeplay/flow --freeplay   # FREE PLAY per Skript: Hauptmenü → FREE PLAY → Lobby (1 KI-Auto, Autowahl) → Fahrt (Pilot, 16×) über das Ziel → ausrollen → umdrehen → bergauf → Pause → CHANGE → NIGHT → weiter → Pause → TURN (wenden, wo das Auto steht) → EXIT
 dotnet run --project Touge -- "<iso>" AKINA_DAY --versus split --bot --net-rule free [--ghost-cars] --autodrive 312 --shot out/proof/freeplay/split.png   # geteilter Bildschirm FREE RUN: beide Autopiloten über das Kursende und wieder vom Start ([Frei]-Zeilen im Log)
 dotnet run --project Touge -- "<iso>" AKINA_DAY --headless --host --bot --net-rule free --players 1 [--ghost-cars]   # Online-Freifahrt ohne Fenster: Host fährt allein los, Bots (--headless --join … --bot) kommen und gehen (--seconds)
 dotnet run --project Touge -- "<iso>" --flow out/proof/freebattle/flow --freebattle   # freies Battle per Skript: Hauptmenü → VERSUS → VS CPU → Lobby (LEAD/CHASE, du führst, Ryosuke, CAR → Autowahl MAZDA → FD3S, Lack 2) → Battle (Autopilot, 16×) → Ergebnis → RETRY → Pause-Exit → Lobby → RACE → Battle → EXIT
@@ -247,12 +247,12 @@ Die letzte Wahl merkt sich `settings.json` (`FreePlay`, Auto/Lack/Getriebe wie �
 fahren. Hinter dem Zielbogen rollt das Auto wie nach einem Lauf auf dem Auslauf aus (`Drive.Coast`-Art, `RaceSession.AtCourseEnd`), dann – hinter einer kurzen
 Schwarzblende – TURN AROUND (Standard, wie ein Arcade-Freilauf: die Straße hört nie auf): umgedreht auf die Fahrlinie der Gegenrichtung an genau diesem Ende
 (deren Start), weiter bergauf bzw. bergab; RESTART: zurück an den Start; STOP: das Auto bleibt dort stehen und gehört wieder dem Fahrer (wenden, R, B). Auf den
-Rundkursen geht es einfach weiter (Runde um Runde). B wendet überall (Gegenrichtung, wo das Auto steht), R setzt auf die Straße. Die Zeit (TIMER ON) läuft je Lauf
+Rundkursen geht es einfach weiter (Runde um Runde). B oder Pause → TURN wendet überall (Gegenrichtung, wo das Auto steht, hinter derselben Schwarzblende; so auch mit Pad/Lenkrad), R setzt auf die Straße. Am alten Ziel zeigt die Zeittafel COURSE END statt FINISH. Die Zeit (TIMER ON) läuft je Lauf
 vom Startbogen wie in Time Attack, mit Sektoren gegen die Bestzeit dieser Richtung und der besten Zeit der Sitzung, setzt aber keinen Rekord (kein NEW RECORD,
 nichts gespeichert); OFF blendet die Zeittafel aus. KI-Autos (Rivalen aus `--battle`, Auswahl fest je Kurs, mit ihrer Lackierung, Licht und Ton): sie starten
 45 m + 40 m je Auto vor dem Spieler (bei jedem Wenden/Neustart neu), fahren den Kurs ab und am Kursende zurück an den Start; CRUISE = Verkehr (Können 0, 75 %
 Motormoment), die Stufen wie bei VS CPU. Pause: CONTINUE / RESET (zurück auf die Straße) / CHANGE (zurück in die Lobby: Kurs, Zeit, Wetter, Auto, KI ändern,
-START fährt sofort weiter, ohne Hauptmenü) / PHOTO (Fotomodus) / EXIT (Hauptmenü) / QUIT GAME. Nicht aufgezeichnet (kein Replay).
+START fährt sofort weiter, ohne Hauptmenü) / TURN (wenden) / PHOTO (Fotomodus) / EXIT (Hauptmenü) / QUIT GAME. Nicht aufgezeichnet (kein Replay).
 Zu zweit oder online: VERSUS, Regel **FREE RUN** bzw. **FREE RUN - GHOSTS** (RULE-Zeile: BATTLE → RACE → FREE RUN → FREE RUN - GHOSTS; GHOSTS = die Autos fahren
 durcheinander durch, `RaceSession.Ghost`). Kein Rennzustand: keine Plätze im HUD, kein Ergebnis, kein Countdown (online 1 s für die gemeinsame Uhr), am Kursende
 rollt jedes Auto aus und kommt zurück an den Start (Rundkurse: weiter), RETRY im geteilten Bildschirm stellt beide neu auf. Online: der Host wählt Kurs/Zeit/Wetter
