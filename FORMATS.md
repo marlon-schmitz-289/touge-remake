@@ -168,6 +168,42 @@ Stichprobe (WAV-Export + Spektrum, Python/numpy): alle Exporte nicht still (RMS 
 Schlüssel, während das Auto den Bereich durchfährt; das Ziel des zweiten Schlüssels liegt am Bereichsende auf der Straße. Der Remake
 interpoliert Auge und Zoom genauso und schaut immer aufs Auto (`Touge/Replay/TvCameras`, Reader `ReplayCameras`).
 
+## Fahrkameras (ELF) – geknackt
+Gefunden über die View-Matrix (`sub_1486D0`: View = Inverse der Kameramatrix) rückwärts; Disassembly aus den Kommentaren des Recomp
+(`~/dev/initiald-special-stage-pc/generated`). Alle Werte im ELF fest, nichts je Auto oder Tempo.
+- **Kamera-Objekt** (0x1B0 B, `sub_175060`, Update `sub_175270` als Task-Funktion +0x14, Objektliste `0x32BD10` + 64·ID): drei Zustände
+  à 0x50 B – aktuell +0xA0, vorher +0xF0, Ziel +0x140 –, je Auge xyzw, Zielpunkt xyzw, Blickrichtung, Winkel (Neigung°, Gier°, Rollen°),
+  f32 Abstand, f32 Versatz entlang des Blicks, f32 FOV. Modus +0x196: 0x100 sofort, 0x300 Übergang über +0x19C Frames (Zähler +0x19A),
+  0x400 Nachlauf: je Frame `aktuell += (Ziel − aktuell) · f` mit f = +0x1A0; Bit 1 Auge, 2 Winkel, 4 Zielpunkt, 8 Abstand, 0x10 Versatz
+  (`sub_175510`), Winkel den kurzen Weg (`sub_1737B0`). Ergebnis-Matrix nach `0x1694C80` + 64·Kamera.
+- **API**: `sub_175C30(Nr, Auge, Winkel)`, `sub_175CB0(Nr, Auge, Zielpunkt)`, `sub_175D30(Nr, Zielpunkt, Winkel, f12 Abstand)` (Orbit),
+  `sub_175840(Nr, Modus, f12)` Übergang/Nachlauf, `sub_175730(Nr, near, far, FOV°)`; Projektion direkt `sub_148300`/`sub_148460`.
+- **Winkel**: Richtung (`sub_173A70`) d = (−sin Gier·cos Neigung, sin Neigung, −cos Gier·cos Neigung) – Blick entlang −Z; Matrix
+  (`sub_174130`) = Rz(Rollen)·Rx(Neigung)·Ry(Gier) (Zeilenvektoren).
+- **Projektion** (`sub_148460`, Parameter in `0x2E8870`): der FOV-Wert p ist tan(½ horizontaler Blickwinkel) bei 4:3, vertikal 0,75·p
+  (16:9: horizontal 1,333·p, vertikal gleich); near 0,1, far 5000.
+- **Auto** (`0x2EBFE0` + 0x17C0·i, Spieler i = 0): Position +0x16D0 = Modell-Ursprung (Höhe der Radmitten: die Radknoten in CAR.AFS
+  liegen bei y = 0), Winkel +0x1730 (Neigung, Gier, Rollen in °). Neigung und Rollen kommen aus dem Boden unter dem Auto
+  (`sub_1517B0`, ab 0x154B90 ·57,2958), auf ±30° (0x154C40) bzw. ±10° (0x154CBC) begrenzt.
+- **Ansichten** (`sub_1669A0` meldet sie mit `sub_174E60` an; Replay `sub_194450` dieselben + REPCAM `sub_196A80`/`sub_196D70`):
+
+| ID | Update | Auge | Blick | p (tan ½ H) | Nachlauf |
+|---|---|---|---|---|---|
+| 0x20110 | `sub_16FA10`/`16FB50` | Startaufstellung: Orbit, Abstand 5, Gier in Schritten +60° | aufs Auto | – | Übergänge 0x302 |
+| 0x20120 | `sub_16FDF0`/`16FE30` | Pos + R(Autowinkel)·(0, 1, −1): 1 m vor und 1 m über dem Ursprung | Autowinkel | 0x3F4D87AC = 0,80285 (H 77,5°, V 62,1°) | 0x100 sofort |
+| 0x20130 | `sub_16FFA0`/`16FFE0` | Pos + R(**aktuelle** Kamerawinkel)·(0, 1,7, 4,6) (0x3FD9999A, 0x40933333 bei 0x170090/0x17009C): 4,6 m hinter, 1,7 m über dem Ursprung im Blickrahmen | Kamerawinkel, kein Zielpunkt | 0x3F6CCE68 = 0,92502 (H 85,6°, V 69,5°) | 0x402: nur die Winkel, f = 0x3D842108 = 0,064516 (2/31) je 60-Hz-Frame zum Autowinkel (alle drei, also auch Rollen) |
+| 0x20180 | `sub_170160`/`1701C0` | Pos + (0, 0,8, 0) | gegen die Geschwindigkeit (+0x1770): Rückspiegel, Kamera-Slot 1 | – | 0x100 |
+| Ziel | `sub_19B9D0`/`19BCC0` | Orbit um Pos + (0, 0,7, 0), Winkel (−12°, −120°), Abstand 3 | aufs Auto | 0,7854 | 0x8000 |
+| REPCAM Art 1, Flag +0x44 | `sub_196D70` (0x196FD8) | Pos + R(Autowinkel)·(0, 1,25, −1,5) | Autowinkel | 46° | – |
+
+Der Verfolger hat also **keine Kollision, keinen Zielpunkt, keine Geschwindigkeit**: das Auge hängt starr am Auto-Ursprung, nur seine
+Ausrichtung läuft dem Auto mit Zeitkonstante 1/(−60·ln(1 − 2/31)) = 0,25 s nach (Gier im Drift: Nachlauf = Gierrate · 0,25 s). Das Auto
+steht genau in der Bildmitte, atan(1,7/4,6) = 20,3° unter der Achse, also bei 0,37/0,69 = 53 % der unteren Bildhälfte (≈ 77 % von oben).
+Eine ferne Verfolgerkamera gibt es im Original nicht. Remake (`CameraRig.Place`): CHASE genau so (Ursprung = Modellmatrix des Autos,
+Blickwinkel aus der Einstellung × 0,75·0,92502/tan 30° = 1,2017 in tan ½, also bei 60° genau die 69,5° des Originals), statt des Lerps eine kritisch gedämpfte Feder mit 2·4,0/s (gleicher
+Nachlauf, ohne Knick), ohne Rollen (Neigung aus der Karosserie statt dem Boden, darum gefiltert); FAR = CHASE × 1,5; die Kurs-Kollision
+bleibt als Sicherheitsnetz.
+
 ## Replay-Datei (eigenes Format, `.rpl`)
 gzip von: `"IDRP"`, u16 Version (1), u16 Zustandsgröße (`Vehicle.StateBytes`, 314), i32 Länge + Kopf als JSON (`ReplayInfo`: Kurs, Richtung,
 Nebel, Datum, Modus, Zeit, Ausgang, Autos mit Auto/Lack/Hilfen), i32 Ticks, i32 Autos, Ticks × Autos × 18 B Eingabe (f32 Gas, Bremse,

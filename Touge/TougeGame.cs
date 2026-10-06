@@ -1487,7 +1487,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     /// <summary>The driving camera of <paramref name="car"/> at its interpolated <paramref name="carPose"/>/<paramref name="carBody"/> (split screen: player 2's too).</summary>
     private void UpdateDriveCamera(float dt, Vehicle car, Matrix4x4 carPose, Matrix4x4 carBody, CarModel model)
     {
-        (_pos, _camLook, _fov) = CameraRig.Place(_camView, ref _follow, _camSnap, dt, carPose, carBody, model.Mounts, car.Velocity, _settings.Fov * MathF.PI / 180, _course.Hull);
+        (_pos, _camLook, _fov) = CameraRig.Place(_camView, ref _follow, _camSnap, dt, carPose, carBody, model.Mounts, _settings.Fov * MathF.PI / 180, _course.Hull);
         _onBoard = _camView is CameraView.Hood or CameraView.Cockpit ? _camView : null;
         _camSnap = false;
         // wall hits shake the camera briefly (up to 12 cm, decays in ~0.3 s)
