@@ -144,7 +144,8 @@ void main()
         {
             float red = smoothstep(0.75, 0.9, (e.r - max(e.g, e.b)) / max(e.r, 1e-3)); // hue, not brightness: dark day lenses too
             float white = smoothstep(0.45, 0.75, min(e.r, min(e.g, e.b)));
-            c += e * (red * (1.5 * step(0.001, glow) + 8.0 * pc.uParams.w) + white * 5.0 * pc.uSpotDir[1].w);
+            // the red glow pure red (the lit textures are pinkish, bright pink tonemaps to white): a red lamp, not a pale blob
+            c += e * red * vec3(1.0, 0.18, 0.12) * (0.5 * step(0.001, glow) + 4.0 * pc.uParams.w) + e * white * 5.0 * pc.uSpotDir[1].w;
         }
     }
     vec3 fogged = applyFog(c, vPos);
