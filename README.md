@@ -89,7 +89,7 @@ dotnet run --project Touge -- "<iso>" AKINA_DAY --reverse [--autodrive 60|--shot
 dotnet run --project Touge -- "<iso>" --hud overview --shot out/map.png   # Minimap-Modus beim Start (north|overview|off)
 dotnet run --project Touge -- "<iso>" --hud-scale 130 --shot-size 1920x1080 --shot out/h.png   # HUD-Größe 80–130 % (Menü: Options → HUD SIZE)
 dotnet run --project Touge -- "<iso>" AKINA_NIT --bench 900 [--quality off] [--offscreen]   # Pilot fährt in Echtzeit (Fenster) bis ins Ziel (höchstens 900 s): pro Sekunde Position, fps, Frametime, CPU-ms, Draws, Effekte, GC, Speicher, macOS-Wärmezustand; am Ende avg/p99/max, Frames > 18/25 ms, je 500 m. --offscreen (Metal): ohne Display-Takt, Frametime = GPU-Zeit
-dotnet run --project Touge -- "<iso>" … --hidden   # oder TOUGE_HIDDEN=1: Fenster nie sichtbar, App ohne Dock-Symbol/Fokus, Bild offscreen (Metal) – für Screenshot-/Test-Läufe im Hintergrund
+dotnet run --project Touge -- "<iso>" … --hidden   # oder TOUGE_HIDDEN=1: Fenster nie sichtbar, App ohne Dock-Symbol/Fokus, Bild offscreen (Metal), stumm (auch --mute allein) – für Screenshot-/Test-Läufe im Hintergrund
 dotnet run --project Touge -- "<iso>" AKINA_RIN --flow out/proof --bench 900   # wie ein Spieler: Front-End → Kurs/Zeit/Wetter wie angegeben → 24 Autovorschauen + Lackwechsel → Rennen mit --bench-Log
 dotnet run --project Touge -- "<iso>" --at 300 --autodrive 5.2 --drift --shot out/drift.png   # --drift: Pilot reißt alle 7 s (ab 4,5 s) einen Handbremsdrift (auch mit --bench)
 dotnet run --project Touge -- "<iso>" --autodrive 30 --audio-capture out/a.wav 30 [--no-music]   # Spielton offline als WAV + Auswertung (Pitch↔Drehzahl, Quietschen↔Schlupf, Pegel, Allokationen)

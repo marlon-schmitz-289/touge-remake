@@ -84,6 +84,7 @@ if (args is [var isoArg] && isoArg == iso && !Disc.Check(iso).Ok) (badIso, iso) 
 var launcher = iso == "";
 // --hidden or TOUGE_HIDDEN=1 (the agents' run wrapper): window never shown, no focus steal, frames rendered offscreen (Metal only)
 var hidden = (args.Contains("--hidden") || Environment.GetEnvironmentVariable("TOUGE_HIDDEN") == "1") && KanseiApp.ResolveBackend(args) == GraphicsBackend.Metal;
+Kansei.Audio.AudioDevice.Silent = hidden || args.Contains("--mute"); // background runs make no sound
 Kansei.Input.GamepadState.Trace = args.Contains("--dualsense-log") || args.Contains("--dualsense-test");
 string[] launcherFlags = ["--launcher", "--menu", "--shot", "--shot-size", "--data-dir", "--backend", "--drop", "--browse", "--input-debug", "--sim-wheel", "--hint-device", "--dualsense-log"];
 string[] valueFlags = ["--drop", "--browse", "--story-check", "--progress", "--battle", "--rule", "--lead", "--flow", "--shot", "--at", "--orbit", "--ground", "--autodrive", "--backend", "--bench", "--quality", "--audio-capture", "--zfight", "--flicker", "--hud", "--hud-scale", "--car", "--paint", "--cars", "--menu", "--shot-size", "--livery", "--frontend-capture", "--lights", "--render-scale", "--jukebox", "--legend-progress",

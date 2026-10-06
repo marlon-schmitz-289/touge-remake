@@ -74,16 +74,20 @@ public sealed unsafe class AudioDevice : IDisposable
         Console.WriteLine($"[Kansei] Audio: {_alc.GetContextProperty(_device, GetContextString.DeviceSpecifier)}, {_al.GetStateProperty(StateString.Renderer)}, Loop-Punkte {(_loopPoints ? "ja" : "nein")}");
         for (var i = 0; i < SfxVoices; i++) _sfx[i] = _al.GenSource();
         _musicSource = _al.GenSource();
+        if (Silent && loopbackRate == 0) _al.SetListenerProperty(ListenerFloat.Gain, 0);
         for (var i = 0; i < StreamBuffers; i++) _streamBuffers[i] = _al.GenBuffer();
         if (loopbackRate > 0) return;
         _feeder = new Thread(Feed) { IsBackground = true, Name = "Kansei music" };
         _feeder.Start();
     }
 
+    /// <summary>Test runs in the background (--hidden): speakers silent whatever the volumes; loopback capture unaffected.</summary>
+    public static bool Silent { get; set; }
+
     public float Master
     {
         get => _master;
-        set { _master = value; if (Enabled) _al.SetListenerProperty(ListenerFloat.Gain, value); }
+        set { _master = value; if (Enabled) _al.SetListenerProperty(ListenerFloat.Gain, Silent && _renderSamples == null ? 0 : value); }
     }
 
     public float Music
