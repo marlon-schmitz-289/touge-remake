@@ -68,6 +68,7 @@ public sealed partial class TougeGame
         public bool Snap;
         public CameraView View;
         public CameraView? OnBoard;
+        public CameraRig.Follow Follow;
     }
 
     private Versus? _versusUi;
@@ -835,10 +836,10 @@ public sealed partial class TougeGame
         var c = _cam2;
         _cam2 = new CamState
         {
-            Pos = _pos, Look = _camLook, Fov = _fov, Snap = _camSnap, Shake = _shake, ShakeOffset = _shakeOffset, Velocity = _camVelocity, Last = _lastCamPos, View = _camView, OnBoard = _onBoard,
+            Pos = _pos, Look = _camLook, Fov = _fov, Snap = _camSnap, Shake = _shake, ShakeOffset = _shakeOffset, Velocity = _camVelocity, Last = _lastCamPos, View = _camView, OnBoard = _onBoard, Follow = _follow,
         };
-        (_pos, _camLook, _fov, _camSnap, _shake, _shakeOffset, _camVelocity, _lastCamPos, _camView, _onBoard) =
-            (c.Pos, c.Look, c.Fov, c.Snap, c.Shake, c.ShakeOffset, c.Velocity, c.Last, c.View, c.OnBoard);
+        (_pos, _camLook, _fov, _camSnap, _shake, _shakeOffset, _camVelocity, _lastCamPos, _camView, _onBoard, _follow) =
+            (c.Pos, c.Look, c.Fov, c.Snap, c.Shake, c.ShakeOffset, c.Velocity, c.Last, c.View, c.OnBoard, c.Follow);
     }
 
     /// <summary>Player 2's view: its chase camera, its car's lamps lighting the road, player 1's car as one of the others.</summary>

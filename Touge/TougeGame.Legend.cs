@@ -156,7 +156,7 @@ public sealed partial class TougeGame
         var target = Vector3.Transform(new Vector3(0, 0.4f, 0), _rivalBody);
         var angle = -MathF.PI / 2 + 1.1f * MathF.Sin(0.6f + _menuTime * 0.22f);
         var dir = Vector3.TransformNormal(new Vector3(MathF.Sin(angle), 0, MathF.Cos(angle)), _rivalBody);
-        _pos = target + Vector3.Normalize(dir with { Y = 0 }) * 6.2f + Vector3.UnitY * 1.1f;
+        _pos = CameraRig.Clip(target, target + Vector3.Normalize(dir with { Y = 0 }) * 6.2f + Vector3.UnitY * 1.1f, _course.Hull);
         (_camLook, _fov) = (target - Vector3.UnitY * 0.35f, MathF.PI / 4);
     }
 

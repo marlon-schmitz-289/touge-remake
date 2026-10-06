@@ -4,13 +4,15 @@ using Kansei.Input;
 namespace Touge.Replays;
 
 /// <summary>
-///     Free camera of the replay viewer and photo mode. Keyboard: W/A/S/D move, Q/E down/up, I/J/K/L look, Shift fast,
+///     Free camera of the replay viewer and photo mode, held inside the course (<see cref="Hull"/>). Keyboard: W/A/S/D move, Q/E down/up, I/J/K/L look, Shift fast,
 ///     right mouse drag look. Pad: left stick move, right stick look, triggers down/up, left stick click fast.
 /// </summary>
 public sealed class FreeCam
 {
     public Vector3 Position;
     public float Yaw, Pitch;
+    /// <summary>The course it may not fly through or out of (<see cref="CameraHull.Reach"/>): it stops before surfaces and the edge.</summary>
+    public CameraHull? Hull { get; set; }
     private int _mouseX, _mouseY;
 
     public Vector3 Forward => new(MathF.Sin(Yaw) * MathF.Cos(Pitch), MathF.Sin(Pitch), MathF.Cos(Yaw) * MathF.Cos(Pitch));
@@ -52,6 +54,8 @@ public sealed class FreeCam
         var right = Vector3.Normalize(Vector3.Cross(fwd, Vector3.UnitY));
         var v = fwd * move.Y + right * move.X + Vector3.UnitY * up;
         if (v.LengthSquared() > 1) v = Vector3.Normalize(v);
-        Position += v * (fast ? 60f : 12f) * dt;
+        var step = v * (fast ? 60f : 12f) * dt;
+        var len = step.Length();
+        if (len > 0) Position += step * (MathF.Min(len, Hull?.Reach(Position, Position + step) ?? len) / len);
     }
 }

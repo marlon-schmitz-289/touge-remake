@@ -473,8 +473,8 @@ public sealed partial class TougeGame
     private byte[][]? _liveStates;
     private Effects? _liveFx;
     private TvCameras? _tv;
+    private ReplayViewer.Camera? _shownCam;
     private float _replayAcc;
-    private int _tvIndex = -1;
     private readonly FreeCam _viewerCam = new();
 
     /// <summary>
@@ -511,7 +511,7 @@ public sealed partial class TougeGame
         _menu?.Close();
         _replayMenu?.Close();
         _player = new ReplayPlayer(replay, cars, _drive.Ground);
-        _tv = new TvCameras(ReplayCameras.Load(iso, _courseTime[.._courseTime.LastIndexOf('_')], _drive.Reverse), _course.Road, _drive.Reverse);
+        _tv = new TvCameras(ReplayCameras.Load(iso, _courseTime[.._courseTime.LastIndexOf('_')], _drive.Reverse), _course.Road, _drive.Reverse, _course.Hull);
         Console.WriteLine($"\n[Replay] {replay.Info.Course} {replay.Seconds:F1} s, {replay.CarCount} Autos, {_tv.Count} TV-Kameras");
         _fly = false;
         _viewer.Open();
@@ -525,7 +525,6 @@ public sealed partial class TougeGame
         var cars = _player!.Cars;
         _player = null;
         _viewer.Close();
-        _tvIndex = -1;
         if (back != Back.Menu && _liveStates != null)
         {
             for (var i = 0; i < cars.Length; i++) cars[i].LoadState(_liveStates[i]);
@@ -560,12 +559,16 @@ public sealed partial class TougeGame
         if (_player == null) return false;
         if (_photo.Active) return true;
         _replayAcc += _viewer.Speed;
-        for (; _replayAcc >= 1; _replayAcc--)
+        for (var n = 0; _replayAcc >= 1; _replayAcc--, n++)
+        {
+            _player.KeepPrev = n > 0; // 2×/4×: the picture glides over all ticks of this game tick
             if (!StepReplay(dt))
             {
                 (_viewer.Paused, _replayAcc) = (true, 0); // the end: stops there
                 break;
             }
+        }
+        _player.KeepPrev = false;
         return true;
     }
 
@@ -685,18 +688,14 @@ public sealed partial class TougeGame
             return true;
         }
         if (_player == null) return false;
+        if (_viewer.Cam != _shownCam) (_shownCam, _camSnap) = (_viewer.Cam, true); // another camera starts fresh, no glide from the last one
         var pose = FocusPose();
         var car = pose.Translation;
-        var fwd = Vector3.TransformNormal(Vector3.UnitZ, pose);
         switch (_viewer.Cam)
         {
             case ReplayViewer.Camera.Tv:
-                var (eye, fov, index) = _tv!.At(car);
-                var snap = index != _tvIndex || _camSnap;
-                _tvIndex = index;
-                var look = car + Vector3.UnitY * 0.5f;
-                // a TV operator: the aim lags a touch behind the car, cuts are hard
-                (_pos, _camLook, _fov) = (eye, snap ? look : Vector3.Lerp(_camLook, look, 1 - MathF.Exp(-14 * dt)), fov * MathF.PI / 180);
+                (_pos, _camLook, var tvFov, _) = _tv!.Update(car, dt, _camSnap);
+                _fov = tvFov * MathF.PI / 180;
                 break;
             case ReplayViewer.Camera.Free:
                 (_pos, _camLook, _fov) = (_viewerCam.Position, _viewerCam.Position + _viewerCam.Forward, MathF.PI / 3);
@@ -704,8 +703,8 @@ public sealed partial class TougeGame
             default: // the driving cameras on the focused car
                 var view = ReplayViewer.Driving(_viewer.Cam)!.Value;
                 var (body, model) = FocusModel();
-                (_pos, _camLook, _fov) = CameraRig.Place(view, _pos, _camLook, _camSnap, dt, pose, body, model.Mounts,
-                    _player.Cars[Math.Min(_viewer.Focus, _player.Cars.Length - 1)].SpeedKmh, _settings.Fov * MathF.PI / 180);
+                (_pos, _camLook, _fov) = CameraRig.Place(view, ref _follow, _camSnap, dt, pose, body, model.Mounts,
+                    _player.Cars[Math.Min(_viewer.Focus, _player.Cars.Length - 1)].Velocity, _settings.Fov * MathF.PI / 180, _course.Hull);
                 _onBoard = view is CameraView.Hood or CameraView.Cockpit ? view : null;
                 break;
         }

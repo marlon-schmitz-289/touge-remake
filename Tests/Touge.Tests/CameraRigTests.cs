@@ -74,20 +74,22 @@ public class CameraRigTests
         var model = Matrix4x4.CreateTranslation(0, -0.07f, 0.1f) * pose;
         foreach (var view in new[] { CameraView.Hood, CameraView.Cockpit })
         {
-            var (pos, look, _) = CameraRig.Place(view, Vector3.Zero, Vector3.Zero, false, 1 / 60f, pose, model, m, 100, 1);
+            var f = new CameraRig.Follow();
+            var (pos, look, _) = CameraRig.Place(view, ref f, false, 1 / 60f, pose, model, m, Vector3.UnitZ * 28, 1);
             Assert.True(Vector3.Distance(pos, Vector3.Transform(view == CameraView.Hood ? m.Hood : m.Eye, model)) < 1e-4f);
             Assert.True(Vector3.Dot(Vector3.Normalize(look - pos), Vector3.TransformNormal(Vector3.UnitZ, pose)) > 0.99f);
             Assert.Equal(0.05f, CameraRig.Near(view));
         }
         Assert.Equal(0.3f, CameraRig.Near(CameraView.Chase));
-        // snapped: far chase stands further back and higher than chase; one frame later it has only started to follow a jump
-        var (chase, _, _) = CameraRig.Place(CameraView.Chase, default, default, true, 0, pose, model, m, 0, 1);
-        var (far, _, farFov) = CameraRig.Place(CameraView.Far, default, default, true, 0, pose, model, m, 0, 1);
-        Assert.True(Vector3.Distance(far, pose.Translation) > Vector3.Distance(chase, pose.Translation) + 3 && far.Y > chase.Y + 1);
+        // snapped: far chase stands further back and higher than chase; one frame after the car turned 90° it has only started to turn
+        CameraRig.Follow c = default, fa = default;
+        var (chase, _, _) = CameraRig.Place(CameraView.Chase, ref c, true, 0, pose, model, m, default, 1);
+        var (far, _, farFov) = CameraRig.Place(CameraView.Far, ref fa, true, 0, pose, model, m, default, 1);
+        Assert.True(Vector3.Distance(far, pose.Translation) > Vector3.Distance(chase, pose.Translation) + 2 && far.Y > chase.Y + 0.7f);
         Assert.Equal(1, farFov, 4);
-        var moved = pose * Matrix4x4.CreateTranslation(10, 0, 0);
-        var (lag, _, _) = CameraRig.Place(CameraView.Far, far, default, false, 1 / 60f, moved, model, m, 0, 1);
-        Assert.InRange(Vector3.Distance(lag, far), 0.2f, 1);
+        var turned = Matrix4x4.CreateRotationY(MathF.PI / 2) * pose;
+        var (lag, _, _) = CameraRig.Place(CameraView.Far, ref fa, false, 1 / 60f, turned, model, m, default, 1);
+        Assert.InRange(Vector3.Distance(lag, far), 0.01f, 0.5f);
     }
 
     [Fact]

@@ -16,6 +16,9 @@ public static class CourseLoader
     public sealed record Course(StaticMesh World, StaticMesh Sky, Vector3[] DrivingLine, Vector3[] Road, int[][]? Env, Vector3[] Lights, Vector3? FogColour,
         (float Start, float End)? Fog, Vector3? SunDirection)
     {
+        /// <summary>The course as solid for the cameras (<see cref="CameraHull"/>).</summary>
+        public CameraHull? Hull { get; init; }
+
         /// <summary>Index of the road point nearest to <paramref name="p"/>.</summary>
         public int NearestRoadPoint(Vector3 p)
         {
@@ -79,7 +82,8 @@ public static class CourseLoader
         var road = CourseRoad.Read(Data($"CRS_ROAD_{course}.BIN") ?? throw new FileNotFoundException($"CRS_ROAD_{course}.BIN"));
 
         // lod/shd are not drawn; the tree templates are placed from TREE_* (baked into the world)
-        var world = Build(renderer.Device, [.. Meshes(pac, false).Where(m => RaceGates(m.Name, reverse)), .. Trees(pac, course, Data, road)], textures, cutout, white, true);
+        List<(string Name, Mesh Mesh)> meshes = [.. Meshes(pac, false).Where(m => RaceGates(m.Name, reverse)), .. Trees(pac, course, Data, road)];
+        var world = Build(renderer.Device, meshes, textures, cutout, white, true);
         var sky = Build(renderer.Device, Meshes(pac, true), textures, cutout, white, false); // no depth: paint order stays file order
 
         var lights = Data($"CRS_LIGHT_{course}.BIN") is { } l ? CourseRoad.ReadLights(l) : [];
@@ -87,7 +91,26 @@ public static class CourseLoader
         var cif = Data($"CRS_INFO_{course}.BIN");
         return new Course(world, sky, ReadDrivingLine(iso, course), road, LoadEnv(models, Data($"CRS_ENV_{course}.BIN"), courseTime, road.Length, renderer), lights,
             cif == null ? null : CourseInfo.FogColour(cif, slot), cif == null ? null : CourseInfo.FogRange(cif, slot),
-            cif == null ? null : -CourseInfo.KeyLight(cif, slot).Direction);
+            cif == null ? null : -CourseInfo.KeyLight(cif, slot).Direction) { Hull = CameraHull.Of(meshes, cutout) };
+    }
+
+    /// <summary>The <see cref="CameraHull"/> of a course without a renderer (headless measurements): textures decoded only for their alpha.</summary>
+    public static CameraHull Hull(Iso9660 iso, string courseTime, bool reverse)
+    {
+        var models = Afs.FromBytes(iso.ReadFile("CDVD/DATA/MODEL/COURSE.AFS"), iso.ReadFile("CDVD/DATA/MODEL/COURSE.TBL"));
+        var pac = models.Read(models.Find(courseTime + ".PAC") ?? throw new FileNotFoundException(courseTime + ".PAC"));
+        var cutout = new HashSet<string>();
+        foreach (var e in Pac.Entries(pac).Where(e => e.Type == 1))
+        {
+            var (_, _, rgba) = Gim.Decode(pac.AsSpan(e.Offset, e.Size));
+            for (var i = 3; i < rgba.Length; i += 4)
+                if (rgba[i] < 255 && cutout.Add(e.Name)) break;
+        }
+        var data = Afs.FromBytes(iso.ReadFile("CDVD/DATA/COURSE/CRS_DATA.AFS"), iso.ReadFile("CDVD/DATA/COURSE/CRS_DATA.TBL"));
+        byte[]? Data(string name) => data.Find(name) is { } e ? data.Read(e) : null;
+        var course = courseTime[..courseTime.LastIndexOf('_')];
+        var road = CourseRoad.Read(Data($"CRS_ROAD_{course}.BIN") ?? throw new FileNotFoundException($"CRS_ROAD_{course}.BIN"));
+        return CameraHull.Of([.. Meshes(pac, false).Where(m => RaceGates(m.Name, reverse)), .. Trees(pac, course, Data, road)], cutout);
     }
 
     /// <summary>

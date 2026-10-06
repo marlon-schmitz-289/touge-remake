@@ -151,6 +151,8 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     /// <summary>--cam: start camera instead of the setting.</summary>
     public CameraView? StartCamera { get; init; }
     private Vector3 _pos, _camLook;
+    /// <summary>The chase views' state (<see cref="CameraRig.Follow"/>).</summary>
+    private CameraRig.Follow _follow;
     private float _yaw, _pitch, _fov = MathF.PI / 3;
     private int _lastMouseX, _lastMouseY, _linePoint;
     private double _statusTime;
@@ -386,6 +388,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         ApplyGraphics();
         var sw = System.Diagnostics.Stopwatch.StartNew();
         _course = CourseLoader.Load(iso, courseTime, _renderer, reverse);
+        _viewerCam.Hull = _photo.Cam.Hull = _course.Hull;
         SetupFog(_renderer.Atmosphere);
         if (_fog) _renderer.Atmosphere = FogAtmosphere(courseTime.EndsWith("_NIT"));
         if (!courseTime.EndsWith("_NIT") && _course.SunDirection is { } sun) _renderer.Atmosphere.SunDirection = sun; // the original's key light
@@ -622,11 +625,10 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         _pitch = 0;
     }
 
-    private void OrbitCar(float angle)
+    /// <param name="further">Metres further out along the view (the showcase stands back to show the whole car).</param>
+    private void OrbitCar(float angle, float further = 0)
     {
-        var target = Vector3.Transform(new Vector3(0, 0.4f, 0), _carBody);
-        var dir = Vector3.TransformNormal(new Vector3(MathF.Sin(angle), 0, MathF.Cos(angle)), _carBody);
-        _pos = target + dir * OrbitDistance + new Vector3(0, 1.3f * OrbitDistance / 5.5f, 0);
+        (_pos, var target) = CameraRig.Orbit(_carBody, angle, OrbitDistance + further, _course.Hull); // not into the hillside or out over the edge
         var look = Vector3.Normalize(target - _pos);
         (_yaw, _pitch) = (MathF.Atan2(look.X, look.Z), MathF.Asin(look.Y));
     }
@@ -659,6 +661,8 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         var k = Input.Keyboard;
         var dt = time.DeltaTime;
         _menuTime += dt;
+        // --replay --shot-after: the replay plays that long, then the picture (versus mode has its own trigger)
+        if (shotPath != null && ShotAfter > 0 && _player != null && _versusUi == null && !_vsShotTaken && _menuTime >= ShotAfter && _shotState == 0) (_shotState, _vsShotTaken) = (1, true);
         SyncAudio();
         _jukebox?.Update(dt, hold: _menu?.Current == Menu.Screen.Pause);
         if (_simWheel != null) InputDebugView.Simulate(_simWheel, time.TotalTime);
@@ -1043,7 +1047,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             var target = _drive.Car.Position + Vector3.UnitY * 0.15f;
             var fwd = Vector3.Normalize(Vector3.Transform(Vector3.UnitZ, _drive.Car.Orientation) with { Y = 0 });
             var right = Vector3.Cross(fwd, Vector3.UnitY);
-            _pos = target - fwd * back + Vector3.UnitY * 1.5f;
+            _pos = CameraRig.Clip(target + Vector3.UnitY, target - fwd * back + Vector3.UnitY * 1.5f, _course.Hull);
             (_camLook, _fov) = (target - right * (0.19f * back * _guide.Shift), MathF.PI / 4);
             return true;
         }
@@ -1051,9 +1055,8 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         if (!front && !showcase && screen is Menu.Screen.None or Menu.Screen.Intro or Menu.Screen.Finish) return false;
         if (!front && (showcase || screen is Menu.Screen.Car or Menu.Screen.Gearbox or Menu.Screen.Result))
         {
-            OrbitCar(0.6f + _menuTime * 0.35f);
+            OrbitCar(0.6f + _menuTime * 0.35f, 1.5f); // further out and looking down: the whole car above the info panel
             var fwd = Forward();
-            _pos -= fwd * 1.5f; // further out and looking down: the whole car above the info panel
             (_camLook, _fov) = (_pos + fwd - Vector3.UnitY * 0.1f, MathF.PI / 4);
             return true;
         }
@@ -1478,7 +1481,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     /// <summary>The driving camera of <paramref name="car"/> at its interpolated <paramref name="carPose"/>/<paramref name="carBody"/> (split screen: player 2's too).</summary>
     private void UpdateDriveCamera(float dt, Vehicle car, Matrix4x4 carPose, Matrix4x4 carBody, CarModel model)
     {
-        (_pos, _camLook, _fov) = CameraRig.Place(_camView, _pos, _camLook, _camSnap, dt, carPose, carBody, model.Mounts, car.SpeedKmh, _settings.Fov * MathF.PI / 180);
+        (_pos, _camLook, _fov) = CameraRig.Place(_camView, ref _follow, _camSnap, dt, carPose, carBody, model.Mounts, car.Velocity, _settings.Fov * MathF.PI / 180, _course.Hull);
         _onBoard = _camView is CameraView.Hood or CameraView.Cockpit ? _camView : null;
         _camSnap = false;
         // wall hits shake the camera briefly (up to 12 cm, decays in ~0.3 s)
