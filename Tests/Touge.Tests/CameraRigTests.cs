@@ -66,7 +66,7 @@ public class CameraRigTests
         p.X > m.Min.X && p.X < m.Max.X && p.Y > m.Min.Y && p.Y < m.Max.Y && p.Z > m.Min.Z && p.Z < m.Max.Z;
 
     [Fact]
-    public void On_board_views_ride_with_the_body_and_chase_views_spring()
+    public void On_board_and_chase_views_ride_with_the_body()
     {
         var (body, wind) = BoxCar();
         var m = CameraRig.Measure([body], wind, 0);
@@ -81,15 +81,15 @@ public class CameraRigTests
             Assert.Equal(0.05f, CameraRig.Near(view));
         }
         Assert.Equal(0.3f, CameraRig.Near(CameraView.Chase));
-        // snapped: far chase stands further back and higher than chase; one frame after the car turned 90° it has only started to turn
+        // snapped: far chase stands further back and higher than chase; one frame after the car turned 90° it is behind it again (rigid)
         CameraRig.Follow c = default, fa = default;
         var (chase, _, _) = CameraRig.Place(CameraView.Chase, ref c, true, 0, pose, model, m, 1);
         var (far, _, farFov) = CameraRig.Place(CameraView.Far, ref fa, true, 0, pose, model, m, 1);
         Assert.True(Vector3.Distance(far, pose.Translation) > Vector3.Distance(chase, pose.Translation) + 2 && far.Y > chase.Y + 0.7f);
         Assert.Equal(MathF.Tan(0.5f) * CameraRig.Widen, MathF.Tan(farFov / 2), 4);
         var turned = Matrix4x4.CreateRotationY(MathF.PI / 2) * pose;
-        var (lag, _, _) = CameraRig.Place(CameraView.Far, ref fa, false, 1 / 60f, turned, model, m, 1);
-        Assert.InRange(Vector3.Distance(lag, far), 0.01f, 0.5f);
+        var (now, look2, _) = CameraRig.Place(CameraView.Far, ref fa, false, 1 / 60f, turned, model, m, 1);
+        Assert.True(Vector3.Dot(Vector3.Normalize(look2 - now), Vector3.TransformNormal(Vector3.UnitZ, turned)) > 0.9999f);
     }
 
     [Fact]
