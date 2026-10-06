@@ -97,52 +97,31 @@ public static class CameraRig
     }
 
     /// <summary>
-    ///     State of the chase views between frames: the view's heading <see cref="Yaw"/> and <see cref="Pitch"/> (rad) and their
-    ///     rates, where the car was (its motion gives the slide's turn <see cref="Drift"/>), and <see cref="Reach"/> — how far from the pivot over the car the eye may stand (pulled in by the
-    ///     course, <see cref="CameraHull.Reach"/>). Default = not set: the next frame snaps.
+    ///     State of the chase views between frames: the view's <see cref="Pitch"/> (rad) and its rate, how far from the pivot over
+    ///     the car the eye may stand (<see cref="Reach"/>, pulled in by the course: <see cref="CameraHull.Reach"/>) and where the
+    ///     car was (a jump starts over). Default = not set: the next frame snaps.
     /// </summary>
     public struct Follow
     {
-        public float Yaw, Pitch, Drift;
-        public Vector3 Turn, Car;
-        public float Reach, ReachRate;
+        public float Pitch, PitchRate, Reach;
+        public Vector3 Car;
         public bool Set;
     }
 
-    /// <summary>Chase view: metres behind and above the car's origin in the view's own frame (FORMATS.md „Fahrkameras“).</summary>
+    /// <summary>Chase view: metres behind and above the car's origin in the view's own frame.</summary>
     private readonly record struct Rig(float Back, float Up);
 
-    /// <summary>CHASE as the original (<c>0x16FFE0</c>: eye at (0, 1.7, 4.6) in the view frame); the original has no far view: FAR is CHASE 1.5× further.</summary>
-    private static readonly Rig ChaseRig = new(4.6f, 1.7f), FarRig = new(6.9f, 2.55f);
+    /// <summary>CHASE close behind the car (the original stands at 4.6 m / 1.7 m, <c>0x16FFE0</c>: same angle down, nearer); FAR 1.5× further.</summary>
+    private static readonly Rig ChaseRig = new(4.2f, 1.5f), FarRig = new(6.3f, 2.25f);
+
+    /// <summary>The chase views aim this much (rad) under the car's axis: the nearer car sits whole in the lower half, bumper in the picture.</summary>
+    public const float Tilt = 3 * MathF.PI / 180;
 
     /// <summary>
-    ///     Rate (1/s) the original's view turns to the car's heading: 6.45 % of the angle per 60-Hz frame (<c>0x170130</c>), a
-    ///     quarter second behind a steady turn. Only CAMERA SMOOTHING at its maximum lags like that (<see cref="Place"/>); by default the heading is rigid.
+    ///     Rate (1/s, critically damped) the view's pitch follows the body's: just enough to take the bounce on bumps (~2 Hz) out
+    ///     of the horizon, a slope is followed within a few tenths of a second.
     /// </summary>
-    public static readonly float TurnRate = -60 * MathF.Log(1 - 0.064516f);
-
-    /// <summary>
-    ///     Rate (1/s, critically damped) the view's pitch follows the body's: it filters the bounce on bumps (~2 Hz) so the
-    ///     horizon stays calm; a slope, seconds long, is followed within a fraction of a second.
-    /// </summary>
-    public const float PitchRate = 8;
-
-    /// <summary>Fastest the course pulls the chase eye in (m/s): 2 m in 1/40 s, the FAR eye's jumps at walls.</summary>
-    private const float MaxIn = 80;
-
-    /// <summary>
-    ///     How far the view turns from the body towards where the car is going in a slide: <c>DriftShare · sin(slip)</c> rad —
-    ///     a third of a small slip angle, at most 20° side-on, none rolling backwards. No heading lag: only the slip itself is
-    ///     calmed (<see cref="SlipRate"/>).
-    /// </summary>
-    public const float DriftShare = 0.35f;
-
-    /// <summary>
-    ///     Rate (1/s, critically damped) the slide's turn follows the slip measured from the car's motion: the motion between
-    ///     frames on the ticks' interpolated path steps at every tick, unfiltered the view shimmers (--cam-bench: eye in the car
-    ///     frame 215 → 14 m/s² RMS). 0.1 s, far under how fast a slip angle builds.
-    /// </summary>
-    public const float SlipRate = 20;
+    public const float PitchRate = 12;
 
     /// <summary>
     ///     Chase views' tan(½ vertical fov) over the setting's: the original's chase tan(½ H) 0.92502 (<c>0x170028</c>), vertical
@@ -156,23 +135,23 @@ public static class CameraRig
     /// <summary>Height (m) of the pivot over the car's centre the eye is pulled in towards: under the roof.</summary>
     public const float Pivot = 0.9f;
 
-    /// <summary>A pulled-in eye only goes back out once the course lets it out this much further (m): no in-out flicker.</summary>
-    private const float Hold = 0.25f;
+    /// <summary>Fastest the course pulls the chase eye in (m/s): a wall grazed edge-on takes a few frames, not one.</summary>
+    private const float MaxIn = 80;
+
+    /// <summary>Rate (1/s) a pulled-in eye goes back out once the course lets it.</summary>
+    private const float OutRate = 4;
 
     /// <summary>
     ///     Eye, aim and field of view of <paramref name="view"/> for a car at physics pose <paramref name="pose"/> (CoG) with
     ///     model matrix <paramref name="body"/>, both interpolated like the car is drawn; the on-board views are rigid. The chase
-    ///     views are fixed to the car too: the eye stands 4.6 m back and 1.7 m up from the model's origin (axle height) in a
-    ///     frame turned to the car's heading (the original's rig) and looks along it, so the car stays at the same place in the
-    ///     picture at any speed. Only three things move the view against the body: in a slide it turns <see cref="DriftShare"/>
-    ///     of the way to where the car is going (from the car's motion, within 0.1 s); its pitch follows the body's at
-    ///     <see cref="PitchRate"/> (no bounce, no roll: the horizon stays level); and the course (<paramref name="hull"/>) pulls
-    ///     the eye in towards the pivot over the car (at most <see cref="MaxIn"/> fast, then never through a surface) and lets it out slowly.
-    ///     <paramref name="smoothing"/> 0..1 (Options CAMERA SMOOTHING) adds a heading lag up to the original's quarter second
-    ///     (<see cref="TurnRate"/>). <paramref name="snap"/> or a jump of the car (reset, another car) starts over.
+    ///     views are fixed to the car: the eye stands <see cref="ChaseRig"/> back and up from the model's origin in a frame turned
+    ///     to the car's heading, and looks along it (<see cref="Tilt"/> down) — no heading lag, no drift turn, the car stays at one place in the picture.
+    ///     Only the pitch follows the body through a light filter (<see cref="PitchRate"/>, no roll), and the course
+    ///     (<paramref name="hull"/>) pulls the eye in towards the pivot over the car (at most <see cref="MaxIn"/> fast) and lets
+    ///     it out at <see cref="OutRate"/>. <paramref name="snap"/> or a jump of the car (reset, another car) starts over.
     /// </summary>
     public static (Vector3 Pos, Vector3 Look, float Fov) Place(CameraView view, ref Follow f, bool snap, float dt,
-        in Matrix4x4 pose, in Matrix4x4 body, in Mounts m, float fov, CameraHull? hull = null, float smoothing = 0)
+        in Matrix4x4 pose, in Matrix4x4 body, in Mounts m, float fov, CameraHull? hull = null)
     {
         var fwd = Vector3.TransformNormal(Vector3.UnitZ, pose);
         var up = Vector3.TransformNormal(Vector3.UnitY, pose);
@@ -188,63 +167,28 @@ public static class CameraRig
                 var nose = Vector3.Transform(m.Nose, body);
                 return (nose, nose + fwd * 10, fov);
         }
-        var r = view == CameraView.Far ? FarRig : ChaseRig;
         var car = body.Translation;
         float heading = MathF.Atan2(fwd.X, fwd.Z), pitch = Math.Clamp(MathF.Asin(Math.Clamp(fwd.Y, -1, 1)), -MaxPitch, MaxPitch);
-        snap |= !f.Set || Vector3.DistanceSquared(car, f.Car) > 8 * 8 || !float.IsFinite(f.Yaw + f.Pitch + f.Drift);
-        if (snap) f.Drift = 0;
-        else if (dt > 0)
-        {
-            // the slip from the car's motion since the last frame; standing still (a paused replay) or a jump (a reset the replay
-            // glides across, over 100 m/s) keeps the last
-            var v = (car - f.Car) / dt;
-            var speed = MathF.Sqrt(v.X * v.X + v.Z * v.Z);
-            if (speed is > 0.5f and < 100)
-            {
-                Vector3 x = new(f.Drift, 0, 0), rate = new(f.Turn.Z, 0, 0);
-                Spring(ref x, ref rate, new Vector3(DriftShare * MathF.Sin(Wrap(MathF.Atan2(v.X, v.Z) - heading)) * Math.Clamp((speed - 2) / 6, 0, 1), 0, 0), SlipRate, dt);
-                (f.Drift, f.Turn.Z) = (x.X, rate.X);
-            }
-        }
-        var yaw = heading + f.Drift;
-        smoothing = Math.Clamp(smoothing, 0, 1);
-        if (snap) (f.Yaw, f.Pitch, f.Turn) = (yaw, pitch, Vector3.Zero);
+        snap |= !f.Set || Vector3.DistanceSquared(car, f.Car) > 8 * 8 || !float.IsFinite(f.Pitch + f.Reach);
+        if (snap) (f.Pitch, f.PitchRate) = (pitch, 0);
         else
         {
-            // the heading rigid unless smoothed (a critically damped spring lags 2 / omega behind a steady turn: TurnRate at the maximum)
-            var omega = smoothing > 0.01f ? 2 * TurnRate / smoothing : float.PositiveInfinity;
-            if (float.IsFinite(omega))
-            {
-                Vector3 x = new(f.Yaw, 0, 0), v = new(f.Turn.X, 0, 0);
-                Spring(ref x, ref v, new Vector3(f.Yaw + Wrap(yaw - f.Yaw), 0, 0), omega, dt);
-                (f.Yaw, f.Turn.X) = (Wrap(x.X), v.X);
-            }
-            else (f.Yaw, f.Turn.X) = (yaw, 0);
-            Vector3 px = new(f.Pitch, 0, 0), pv = new(f.Turn.Y, 0, 0);
-            Spring(ref px, ref pv, new Vector3(pitch, 0, 0), MathF.Min(PitchRate, omega), dt);
-            (f.Pitch, f.Turn.Y) = (px.X, pv.X);
+            Vector3 x = new(f.Pitch, 0, 0), v = new(f.PitchRate, 0, 0);
+            Spring(ref x, ref v, new Vector3(pitch, 0, 0), PitchRate, dt);
+            (f.Pitch, f.PitchRate) = (x.X, v.X);
         }
         (f.Car, f.Set) = (car, true);
-        var want = Eye(car, f.Yaw, f.Pitch, r, out var dir);
-        var look = want + dir * 10;
+        var rig = view == CameraView.Far ? FarRig : ChaseRig;
+        var want = Eye(car, heading, f.Pitch, rig, out _);
+        Eye(car, heading, f.Pitch - Tilt, rig, out var dir);
         var pivot = pose.Translation + Vector3.UnitY * Pivot;
         var full = Vector3.Distance(pivot, want);
-        // hard limit: never through a surface (after MaxIn); a wider sweep, also where the view is turning to, eases the eye in before (no jump)
-        float hard = hull?.Reach(pivot, want) ?? full, soft = full;
-        if (hull != null) soft = MathF.Min(hard, MathF.Min(hull.Reach(pivot, want, 1.2f), hull.Reach(pivot, Eye(car, yaw, pitch, r, out _), 1.2f)));
-        // out again only past the hold (or all the way): a sweep grazing a surface does not pump the eye in and out
-        var goal = soft < f.Reach || soft > f.Reach + Hold || soft >= full - 1e-3f ? soft : f.Reach;
-        if (snap) (f.Reach, f.ReachRate) = (soft, 0);
-        else
-        {
-            Vector3 x = new(f.Reach), v = new(f.ReachRate);
-            Spring(ref x, ref v, new Vector3(goal), goal < f.Reach ? 12 : 3, dt); // in quickly, out slowly
-            // a surface popping up between pivot and eye (a wall grazed edge-on) pulls the eye in over a few frames, not in one
-            var reach = MathF.Max(MathF.Min(x.X, hard), f.Reach - MaxIn * dt);
-            (f.Reach, f.ReachRate) = (reach, x.X > reach ? 0 : v.X);
-        }
+        var hard = hull?.Reach(pivot, want) ?? full;
+        f.Reach = snap ? hard
+            : hard < f.Reach ? MathF.Max(hard, f.Reach - MaxIn * dt) // in fast, never in one frame
+            : f.Reach + (hard - f.Reach) * (1 - MathF.Exp(-OutRate * dt)); // out smoothly
         var pos = full > 1e-3f ? pivot + (want - pivot) * (MathF.Min(f.Reach, full) / full) : want;
-        return (pos, look, 2 * MathF.Atan(MathF.Tan(fov / 2) * Widen));
+        return (pos, want + dir * 10, 2 * MathF.Atan(MathF.Tan(fov / 2) * Widen));
     }
 
     /// <summary>The chase eye of rig <paramref name="r"/> for a view at <paramref name="yaw"/>/<paramref name="pitch"/> from <paramref name="car"/>, its direction <paramref name="dir"/>.</summary>
@@ -254,8 +198,6 @@ public static class CameraRig
         dir = new Vector3(sy * cp, sp, cy * cp);
         return car - dir * r.Back + new Vector3(-sy * sp, cp, -cy * sp) * r.Up;
     }
-
-    private static float Wrap(float a) => MathF.IEEERemainder(a, MathF.Tau);
 
     /// <summary>
     ///     Critically damped spring of <paramref name="x"/> (velocity <paramref name="v"/>) to <paramref name="target"/> at

@@ -69,8 +69,6 @@ public sealed class Settings
     public int Fov { get; set; } = 60;
     /// <summary>Camera shake on wall hits 0..1.</summary>
     public float CameraShake { get; set; } = 1;
-    /// <summary>Chase camera heading lag 0..1: 0 fixed to the car, 1 the original's quarter second (<see cref="CameraRig.Place"/>).</summary>
-    public float CameraSmoothing { get; set; }
     public const int FovMin = 50, FovMax = 90;
 
     // ------------------------------------------------------------ HUD (Options: HUD)
@@ -259,7 +257,6 @@ public sealed class Settings
         static float Unit(float v) => float.IsFinite(v) ? Math.Clamp(v, 0, 1) : 1;
         (MasterVolume, MusicVolume, SoundVolume, EngineVolume, MenuVolume, VoiceVolume, CameraShake) =
             (Unit(MasterVolume), Unit(MusicVolume), Unit(SoundVolume), Unit(EngineVolume), Unit(MenuVolume), Unit(VoiceVolume), Unit(CameraShake));
-        CameraSmoothing = float.IsFinite(CameraSmoothing) ? Math.Clamp(CameraSmoothing, 0, 1) : 0;
         if (!Enum.IsDefined(Display)) Display = DisplayMode.Window;
         if (!Enum.IsDefined(MapMode)) MapMode = Hud.MapMode.Rotating;
         if (!Enum.IsDefined(Camera)) Camera = CameraView.Chase;

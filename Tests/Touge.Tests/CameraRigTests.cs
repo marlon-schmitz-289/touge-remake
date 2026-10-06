@@ -89,7 +89,7 @@ public class CameraRigTests
         Assert.Equal(MathF.Tan(0.5f) * CameraRig.Widen, MathF.Tan(farFov / 2), 4);
         var turned = Matrix4x4.CreateRotationY(MathF.PI / 2) * pose;
         var (now, look2, _) = CameraRig.Place(CameraView.Far, ref fa, false, 1 / 60f, turned, model, m, 1);
-        Assert.True(Vector3.Dot(Vector3.Normalize(look2 - now), Vector3.TransformNormal(Vector3.UnitZ, turned)) > 0.9999f);
+        Assert.True(Vector3.Dot(Vector3.Normalize(look2 - now), CameraHullTests.Along(Vector3.TransformNormal(Vector3.UnitZ, turned))) > 0.9999f);
     }
 
     [Fact]
