@@ -66,6 +66,7 @@ public sealed unsafe partial class OpenGLDevice
         // to this slot, BeginFrame waits on this fence before reusing slot resources.
         _slotFences[_frameSlot] = Gl.FenceSync(SyncCondition.SyncGpuCommandsComplete, SyncBehaviorFlags.None);
         _frameSlot = (_frameSlot + 1) % FramesInFlightCount;
+        FrameCount++;
 
         _frameActive = false;
     }

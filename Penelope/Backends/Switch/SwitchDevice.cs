@@ -58,6 +58,7 @@ public sealed unsafe partial class SwitchDevice : IPenelopeDevice
     // slot's prior NVNsync at BeginFrame the same way Vulkan does.
     public int FramesInFlight => 2;
     public int CurrentFrameSlot => 0;
+    public long FrameCount => 0;
     public AdapterInfo Adapter { get; private set; }
     public DeviceFeatures Features { get; private set; }
     public DeviceLimits Limits { get; private set; }

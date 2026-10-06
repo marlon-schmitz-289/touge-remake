@@ -67,6 +67,7 @@ public sealed unsafe partial class VulkanDevice : IPenelopeDevice
     public BackendKind Backend => BackendKind.Vulkan;
     public int FramesInFlight => FramesInFlightCount;
     public int CurrentFrameSlot => _frameIndex;
+    public long FrameCount { get; private set; }
     public AdapterInfo Adapter { get; }
     public DeviceFeatures Features { get; }
     public DeviceLimits Limits { get; }

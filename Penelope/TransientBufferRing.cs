@@ -24,7 +24,7 @@ public sealed class TransientBufferRing : IDisposable
     private readonly int _slabSizeBytes;
     private readonly int _framesInFlight;
     private readonly int[] _cursors;
-    private int _lastSeenSlot = -1;
+    private long _lastFrame = -1;
     private bool _disposed;
 
     /// <summary>
@@ -78,12 +78,13 @@ public sealed class TransientBufferRing : IDisposable
 
         var slot = _device.CurrentFrameSlot;
 
-        // Lazy reset: first allocation in a new slot rewinds that slot's cursor. The device's
+        // Lazy reset: first allocation in a new frame rewinds that slot's cursor. Keyed on the frame, not the slot:
+        // a ring unused for FramesInFlight-1 frames comes back to the same slot in a new frame. The device's
         // BeginFrame already waited on the slot's prior frame, so the slab is GPU-free.
-        if (slot != _lastSeenSlot)
+        if (_device.FrameCount != _lastFrame)
         {
             _cursors[slot] = 0;
-            _lastSeenSlot = slot;
+            _lastFrame = _device.FrameCount;
         }
 
         var slabBase = slot * _slabSizeBytes;

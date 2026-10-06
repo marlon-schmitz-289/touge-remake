@@ -220,5 +220,6 @@ public sealed unsafe partial class VulkanDevice
             _needsRecreate = true;
         _frameActive = false;
         _frameIndex = (_frameIndex + 1) % FramesInFlightCount;
+        FrameCount++;
     }
 }

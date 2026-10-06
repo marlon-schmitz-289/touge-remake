@@ -77,6 +77,7 @@ public sealed unsafe partial class MetalDevice
         // same slot can wait on it before reusing slot-owned per-frame buffers.
         _slotBuffers[_frameSlot] = _currentCommandBuffer;
         _frameSlot = (_frameSlot + 1) % FramesInFlightCount;
+        FrameCount++;
 
         _frameActive = false;
         _currentDrawable = default;

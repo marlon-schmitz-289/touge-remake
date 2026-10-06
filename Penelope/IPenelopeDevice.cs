@@ -30,6 +30,9 @@ public interface IPenelopeDevice : IDisposable
     /// </summary>
     int CurrentFrameSlot { get; }
 
+    /// <summary>Frames ended so far (advances in <see cref="EndFrame"/>); tells a slot reused after skipped frames from the same frame.</summary>
+    long FrameCount { get; }
+
     // ---- Swapchain ----
 
     int SwapchainWidth { get; }

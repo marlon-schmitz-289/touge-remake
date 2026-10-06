@@ -106,6 +106,7 @@ public sealed unsafe partial class OpenGLDevice : IPenelopeDevice
     public BackendKind Backend => BackendKind.OpenGL;
     public int FramesInFlight => FramesInFlightCount;
     public int CurrentFrameSlot => _frameSlot;
+    public long FrameCount { get; private set; }
     public AdapterInfo Adapter { get; private set; }
     public DeviceFeatures Features { get; private set; }
     public DeviceLimits Limits { get; private set; }

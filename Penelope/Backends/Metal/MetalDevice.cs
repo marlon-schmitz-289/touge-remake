@@ -80,6 +80,7 @@ public sealed unsafe partial class MetalDevice : IPenelopeDevice
     public BackendKind Backend => BackendKind.Metal;
     public int FramesInFlight => FramesInFlightCount;
     public int CurrentFrameSlot => _frameSlot;
+    public long FrameCount { get; private set; }
     public AdapterInfo Adapter { get; private set; }
     public DeviceFeatures Features { get; private set; }
     public DeviceLimits Limits { get; private set; }
