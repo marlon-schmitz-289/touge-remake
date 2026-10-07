@@ -6,8 +6,8 @@ namespace Touge.Story;
 ///     <see cref="Formats.StoryScript.ParseScript"/>) one utterance for one, in the original's order and split into the same parts
 ///     (before the battle, after it; chapter 30 has an epilogue). The disc names a speaker only now and then (F_…); the
 ///     English names every one. Chapters 0 and 1 have no script on the disc: their short scenes are the remake's own.
-///     Each line is "SPEAKER|text"; text in parentheses is a thought. The translated scenes are not in the repo (the original's
-///     script): <c>StoryText.Local.cs</c> next to this file (gitignored) fills them in, without it those chapters show a placeholder.
+///     Each line is "SPEAKER|text"; text in parentheses is a thought. The scenes are not in the repo (the original's
+///     script): <c>StoryText.Local.cs</c> next to this file (gitignored) fills them in, without it every chapter shows a placeholder.
 /// </summary>
 public static partial class StoryText
 {
@@ -32,7 +32,7 @@ public static partial class StoryText
         ["走り屋２"] = "GALLERY 2", ["走り屋３"] = "GALLERY 3", ["ＯＢ１"] = "TODO OB 1", ["ＯＢ２"] = "TODO OB 2", ["ＯＢ３"] = "TODO OB 3", ["社長"] = "PRESIDENT",
     };
 
-    /// <summary>The translated scenes of chapters 2–30 by chapter, from the local <c>StoryText.Local.cs</c> (empty without it).</summary>
+    /// <summary>The scenes by chapter, from the local <c>StoryText.Local.cs</c> (empty without it).</summary>
     private static readonly Dictionary<int, string[][]> Translated = Local();
 
     private static Dictionary<int, string[][]> Local()
@@ -52,22 +52,8 @@ public static partial class StoryText
 
     public static readonly Chapter[] Chapters =
     [
-        // 0: no script on the disc (own text)
-        new("THE TOFU DELIVERY", Takumi, null, "Four in the morning. The tofu has to reach the hotel at Lake Akina - up the mountain, the same as every day.",
-        [
-            [
-            ],
-            [
-            ],
-        ]),
-        // 1: no script on the disc (own text)
-        new("A CUP OF WATER", Takumi, null, "Bunta puts a paper cup of water in the holder. Down the mountain without spilling a drop - and before his cigarette burns out.",
-        [
-            [
-            ],
-            [
-            ],
-        ]),
+        new("THE TOFU DELIVERY", Takumi, null, "Four in the morning. The tofu has to reach the hotel at Lake Akina - up the mountain, the same as every day.", Scene(0, 2)),
+        new("A CUP OF WATER", Takumi, null, "Bunta puts a paper cup of water in the holder. Down the mountain without spilling a drop - and before his cigarette burns out.", Scene(1, 2)),
         new("THE GHOST OF AKINA", Takumi, "keisuke", "Keisuke of the Red Suns owns Akina tonight. Then a pair of headlights closes in from behind - an old Hachi-Roku.", Scene(2, 2)),
         new("DOWNHILL SPECIALIST", Takumi, "keisuke", "The Red Suns challenge the Speed Stars to a downhill battle. Iketani is counting on Bunta - but Bunta sends his son.", Scene(3, 2)),
         new("ROLLER COASTER", Takumi, null, "Iketani and Itsuki beg for a ride down Akina. They want to see the downhill specialist flat out.", Scene(4, 2)),
