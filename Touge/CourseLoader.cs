@@ -68,12 +68,16 @@ public static class CourseLoader
         var white = renderer.AddTexture(1, 1, [255, 255, 255, 255], "white");
         var textures = new Dictionary<string, int>();
         var cutout = new HashSet<string>(); // textures with any alpha below 1 (foliage, fences)
+        var soft = new HashSet<string>();   // translucent everywhere (no texel near opaque): the PS2's blended glow cards
         foreach (var e in entries.Where(e => e.Type == 1))
         {
             var (w, h, rgba) = Gim.Decode(pac.AsSpan(e.Offset, e.Size));
             textures[e.Name] = renderer.AddTexture(w, h, rgba, e.Name);
             for (var i = 3; i < rgba.Length; i += 4)
                 if (rgba[i] < 255 && cutout.Add(e.Name)) break;
+            var opaque = false;
+            for (var i = 3; i < rgba.Length && !opaque; i += 4) opaque = rgba[i] >= 250;
+            if (!opaque) soft.Add(e.Name);
         }
 
         var course = courseTime[..courseTime.LastIndexOf('_')];
@@ -85,7 +89,7 @@ public static class CourseLoader
         List<(string Name, Mesh Mesh)> meshes = [.. Meshes(pac, false).Where(m => RaceGates(m.Name, reverse)), .. Trees(pac, course, Data, road)];
         var night = courseTime.EndsWith("_NIT");
         var lights = CourseLamps.Find(meshes, road, Data($"CRS_LIGHT_{course}.BIN") is { } l ? CourseRoad.ReadLights(l) : [], night);
-        if (night) CourseLamps.HideGlass(meshes, lights);
+        if (night) CourseLamps.HideGlowCards(meshes, lights, soft);
         var world = Build(renderer.Device, meshes, textures, cutout, white, true);
         var sky = Build(renderer.Device, Meshes(pac, true), textures, cutout, white, false); // no depth: paint order stays file order
 

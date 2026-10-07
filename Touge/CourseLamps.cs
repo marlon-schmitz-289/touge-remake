@@ -18,21 +18,22 @@ public static class CourseLamps
     public static readonly string[] DarkHeads = ["KINA_NIT117_015"];
 
     /// <summary>
-    ///     Night: the lit glass of every lamp in <paramref name="lamps"/> — the original's flat, ragged near-white card (the
-    ///     near-white triangles within 2 m) — is hidden (vertex alpha 0); the renderer draws a round glare at the lamp instead
-    ///     (lighting.glsl lampGlare). Drawn as bright HDR it looked like a torn paper patch and flickered in the bloom.
+    ///     Night: hides the lamps' glow cards — triangles within 2 m of a lamp in <paramref name="lamps"/> whose texture is
+    ///     translucent everywhere (<paramref name="soft"/>; AKINA's <c>KINA_NIT017_074</c>: a pink-white ramp, PS2 alpha 8–128). The
+    ///     PS2 blended them softly under the lamp; alpha-tested they became a ragged white sheet. The renderer's round glare
+    ///     (lighting.glsl lampGlare) takes their place; the lamp's own glass (near-white, untextured) stays.
     /// </summary>
-    public static void HideGlass(IReadOnlyList<(string Name, Mesh Mesh)> meshes, Vector3[] lamps)
+    public static void HideGlowCards(IReadOnlyList<(string Name, Mesh Mesh)> meshes, Vector3[] lamps, IReadOnlySet<string> soft)
     {
-        foreach (var (_, mesh) in meshes.Where(m => m.Name.StartsWith("crs")))
+        foreach (var (_, mesh) in meshes)
         foreach (var m in mesh.Materials)
         {
+            if (m.Texture < 0 || m.Texture >= mesh.Textures.Length || !soft.Contains(mesh.Textures[m.Texture])) continue;
             var t = m.Triangles;
             for (var i = 0; i + 2 < t.Count; i += 3)
             {
                 var p = (t[i].Position + t[i + 1].Position + t[i + 2].Position) / 3;
-                var c = (t[i].Color + t[i + 1].Color + t[i + 2].Color) / 3;
-                if ((c.X + c.Y + c.Z) / 3 < 0.7f || !lamps.Any(l => Vector3.DistanceSquared(l, p) < 4)) continue;
+                if (!lamps.Any(l => Vector3.DistanceSquared(l, p) < 4)) continue;
                 for (var k = 0; k < 3; k++) t[i + k] = t[i + k] with { Color = t[i + k].Color with { W = 0 } };
             }
         }
@@ -44,7 +45,6 @@ public static class CourseLamps
         var crs = meshes.Where(m => m.Name.StartsWith("crs")).ToArray();
         var seen = new HashSet<Vector3>();
         var points = new List<Vector3>();
-        var darkPoints = new HashSet<Vector3>();
         foreach (var (_, mesh) in crs)
         foreach (var m in mesh.Materials)
         {
@@ -58,7 +58,6 @@ public static class CourseLamps
                 var r = road.MinBy(q => Vector3.DistanceSquared(q, p));
                 if (p.Y - r.Y is < 3 or > 12 || Vector2.Distance(new(r.X, r.Z), new(p.X, p.Z)) > 15) continue;
                 points.Add(p);
-                if (dark) darkPoints.Add(p);
             }
         }
         // single-link clusters within 2.5 m
@@ -75,9 +74,8 @@ public static class CourseLamps
             }
             into.Add(p);
         }
-        // a lit card: its centre is the glass; a dark housing: just under its lowest point (from inside, it would shadow everything)
-        var heads = groups.Where(g => g.Count >= 8).Select(g => g.Aggregate(Vector3.Zero, (a, q) => a + q) / g.Count is var c && darkPoints.Contains(g[0])
-            ? c with { Y = g.Min(q => q.Y) - 0.1f } : c).ToList();
+        // the bulb: just under the shade's lowest point (from inside the shade or housing it would shadow everything)
+        var heads = groups.Where(g => g.Count >= 8).Select(g => (g.Aggregate(Vector3.Zero, (a, q) => a + q) / g.Count) with { Y = g.Min(q => q.Y) - 0.15f }).ToList();
 
         bool Standing(Vector3 p) => float.IsFinite(p.X + p.Y + p.Z) && crs.Any(m => m.Mesh.Materials.Any(x => x.Triangles.Any(v => Vector3.DistanceSquared(v.Position, p) < 1.5f * 1.5f)));
         // the heads first: the light sits at the lit glass (CRS_LIGHT points sit ~0.4 m above it, inside the housing, which then

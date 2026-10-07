@@ -162,6 +162,7 @@ vec3 lightIn(int i, vec3 p, bool mirror, out vec3 l)
     if (spot) att *= beam(i, -l);
     // lamp shadows (headlights: tile 0, street lights 2–5: tiles 1–4; rear lamps none); the bias grows with the distance like a texel
     if (i < 6) att *= localShadow(spot ? 0 : i - 1, p, 0.05 + 0.004 * sqrt(d2));
+    if (i >= 2 && i < 6) att *= smoothstep(0.6, 1.2, sqrt(d2)); // a street lamp does not light its own fixture
     if (att <= 0.0) return vec3(0.0);
     vec3 e = colour * att;
     if (pc.uTailPos[0].w <= 0.0) return e;
