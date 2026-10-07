@@ -257,7 +257,7 @@ public sealed partial class TougeGame
             Chapter = _story is { InRun: true } s ? s.Chapter + 1 : null, Title = _story is { InRun: true } t ? t.Text.Title : null,
             Cars = [new ReplayCar("YOU", _carName, _paint, _settings.SteerAssist, _settings.DriftAssist)],
         };
-        if (_race != null && Battle != null) info.Cars.Add(new ReplayCar(Battle.Rival.Name, Battle.Rival.Car, 0));
+        if (_race != null && Battle != null) info.Cars.Add(new ReplayCar(Battle.Rival.Name, Battle.Rival.Car, 0, Power: Battle.Rival.Power));
         (_rec, _recDrive, _recReverse, _recLast, _recBestKey, _recEnd) = (new ReplayRecorder(new Replay { Info = info }, cars), _drive, _drive.Reverse, [.. cars.Select(c => c.Position)], null, -1);
         _recRespawns = Respawns();
     }
@@ -374,7 +374,7 @@ public sealed partial class TougeGame
     }
 
     private static CarSpec SpecOf(ReplayCar c) =>
-        new Settings { SteerAssist = c.SteerAssist, DriftAssist = c.DriftAssist }.Assisted(CarSpecs.All[c.Car]);
+        CarSpecs.Balanced(new Settings { SteerAssist = c.SteerAssist, DriftAssist = c.DriftAssist }.Assisted(CarSpecs.All[c.Car]), c.Power);
 
     /// <summary>
     ///     Time attack with GHOST on: the best run of this course, route and assists (<see cref="ReplayStore.BestPath"/>) drives

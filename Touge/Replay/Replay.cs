@@ -7,7 +7,8 @@ using Kansei.Physics;
 namespace Touge.Replays;
 
 /// <summary>A car of a replay: who drove it, model/paint, and the assists its physics ran with (<see cref="Ui.Settings.Assisted"/>).</summary>
-public sealed record ReplayCar(string Name, string Car, int Paint, int SteerAssist = 2, int DriftAssist = 1);
+/// <summary>A car of a replay; <see cref="Power"/>: its engine's share (a rival's <see cref="Race.Rivals.Rival.Power"/>), else it drives off from the recording.</summary>
+public sealed record ReplayCar(string Name, string Car, int Paint, int SteerAssist = 2, int DriftAssist = 1, float Power = 1);
 
 /// <summary>What a replay shows (the file header, readable without the tick data for the lists).</summary>
 public sealed class ReplayInfo

@@ -23,7 +23,7 @@ public static class ReplayProof
             Info =
             {
                 Course = course, Reverse = reverse, Date = DateTime.Now, Mode = battle != null ? "BATTLE" : "TIME ATTACK",
-                Cars = [new ReplayCar("YOU", car, 0), .. battle != null ? new[] { new ReplayCar(battle.Rival.Name, battle.Rival.Car, 0) } : []],
+                Cars = [new ReplayCar("YOU", car, 0), .. battle != null ? new[] { new ReplayCar(battle.Rival.Name, battle.Rival.Car, 0, Power: battle.Rival.Power) } : []],
             },
         };
         var rec = new ReplayRecorder(replay, cars);

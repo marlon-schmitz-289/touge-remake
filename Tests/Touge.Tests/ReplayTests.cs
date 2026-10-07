@@ -42,7 +42,7 @@ public class ReplayTests
     private static (Replay Replay, byte[][] Final, byte[] Mid) Record(IGround ground)
     {
         var cars = Cars();
-        var replay = new Replay { Info = { Course = "AKINA_DAY", Cars = [new("YOU", "AE86T", 0), new("RIVAL", "FD3S", 1, 2, 1)] } };
+        var replay = new Replay { Info = { Course = "AKINA_DAY", Cars = [new("YOU", "AE86T", 0), new("RIVAL", "FD3S", 1, 2, 1, 0.78f)] } };
         var rec = new ReplayRecorder(replay, cars);
         Span<VehicleInput> inputs = stackalloc VehicleInput[2];
         Span<Vector3> prev = stackalloc Vector3[2];
@@ -79,7 +79,7 @@ public class ReplayTests
         var ms = new MemoryStream();
         replay.Write(ms);
         ms.Position = 0;
-        Assert.Equal("FD3S", Replay.ReadInfo(ms).Cars[1].Car);
+        Assert.Equal(replay.Info.Cars[1], Replay.ReadInfo(ms).Cars[1]); // with the rival's engine share: without it the replay drives off
         ms.Position = 0;
         var back = Replay.Read(ms);
         Assert.Equal(replay.Inputs, back.Inputs);
