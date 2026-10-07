@@ -18,8 +18,8 @@ public static class CourseLamps
     public static readonly string[] DarkHeads = ["KINA_NIT117_015"];
 
     /// <summary>
-    ///     Night: hides the lamps' glow cards — triangles within 2 m of a lamp in <paramref name="lamps"/> whose texture is
-    ///     translucent everywhere (<paramref name="soft"/>; AKINA's <c>KINA_NIT017_074</c>: a pink-white ramp, PS2 alpha 8–128). The
+    ///     Night: hides the lamps' glow cards — triangles of a lamp in <paramref name="lamps"/> whose texture is
+    ///     translucent everywhere, within 3 m (<paramref name="soft"/>; AKINA's <c>KINA_NIT017_074</c>: a pink-white ramp, PS2 alpha 8–128). The
     ///     PS2 blended them softly under the lamp; alpha-tested they became a ragged white sheet. The renderer's round glare
     ///     (lighting.glsl lampGlare) takes their place; the lamp's own glass (near-white, untextured) stays.
     /// </summary>
@@ -56,7 +56,7 @@ public static class CourseLamps
             for (var i = 0; i + 2 < t.Count; i += 3)
             {
                 var p = (t[i].Position + t[i + 1].Position + t[i + 2].Position) / 3;
-                if (!lamps.Any(l => Vector3.DistanceSquared(l, p) < 4)) continue;
+                if (!lamps.Any(l => Vector3.DistanceSquared(l, p) < 9)) continue; // up to 2.3 m from the bulb (AKINA); lamps stand ≥ 20 m apart
                 for (var k = 0; k < 3; k++) t[i + k] = t[i + k] with { Color = t[i + k].Color with { W = 0 } };
             }
         }

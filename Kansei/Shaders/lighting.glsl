@@ -262,14 +262,14 @@ vec3 lampGlare(vec3 p, bool sky)
     return sum * 0.3; // colour ≈ 50 × tint at night: a core of ~15, a glare for the bloom
 }
 
-// Light scattered towards the camera by the fog between the eye and p. Thin haze (σ = 0 at the eye): the street lights'
+// Light scattered towards the camera by the fog between the eye and p (`lamps`: the street lights' glow, `beams`: the headlights'). Thin haze (σ = 0 at the eye): the street lights'
 // glow only, point sources, ∫ I / (h² + t²) dt along the ray solved exactly; headlights are left to the bloom on their lenses.
 // Dense fog: volumetric — the light scatters in the local density (fogDensity: height and drifting banks, relative to
 // the eye's, which the overall strength is tuned for) and is dimmed on its way from the lamp and on to the eye. Street
 // lights: the exact integral, scaled by the density where the ray passes the lamp closest. Headlight beams (beamVeil):
 // 16 steps over the first 60 m with the optical depth summed from the samples, softly capped (a lit cone in the mist,
 // never a white wall; brighter fog by day raises the cap). Both saturate like surface irradiance.
-vec3 lightGlow(vec3 p)
+vec3 lightGlow(vec3 p, bool lamps, bool beams)
 {
     if (pc.uFog.a <= 0.0) return vec3(0.0);
     vec3 o = pc.uEye.xyz;
@@ -278,7 +278,7 @@ vec3 lightGlow(vec3 p)
     vec3 rd = d / max(len, 1e-4);
     vec3 sum = vec3(0.0);
     float sigma = pc.uTailPos[0].w; // fog extinction at the eye (0 = thin haze)
-    for (int j = 0; j < 4; j++)
+    for (int j = 0; j < (lamps ? 4 : 0); j++)
     {
         vec3 colour;
         vec4 lp = pointLight(j, false, colour);
@@ -286,14 +286,26 @@ vec3 lightGlow(vec3 p)
         vec3 ol = lp.xyz - o;
         float tc = dot(ol, rd);
         float h = sqrt(max(dot(ol, ol) - tc * tc, 0.0)) + 0.1;
-        float glow = (atan((len - tc) / h) + atan(tc / h)) / h; // no shadows in the fog: a handful of taps per ray flickered as edges crossed them
-        vec3 near = o + rd * clamp(tc, 0.0, len);
-        glow *= streetCone(normalize(near - lp.xyz + vec3(0.0, -0.3, 0.0))); // the mist lights up under the lamp, not above
-        if (sigma > 0.0) glow *= fogDensity(near) / sigma * exp(-sigma * length(ol));
+        float ta = -atan(tc / h), tb = atan((len - tc) / h);
+        float glow = (tb - ta) / h; // no shadows in the fog: a handful of taps per ray flickered as edges crossed them
+        float wh = sqrt(h * h + 64.0), wide = sigma > 0.0 ? 0.6 * (atan((len - tc) / wh) + atan(tc / wh)) / wh : 0.0;
+        float fade = sigma > 0.0 ? exp(-sigma * length(ol)) : 1.0;
+        if ((glow + wide) * fade * dot(colour, vec3(0.2126, 0.7152, 0.0722)) * pc.uFog.a < 2e-4) continue; // too faint to see: skip the cone
+        // the mist lights up under the lamp, not above: the cone averaged along the ray, 6 points spread like the integrand
+        // (uniform in the angle seen from the lamp) — at the closest point alone a ray to the sky (closest above the lamp)
+        // got nothing and one ending at a leaf all, so foliage against the sky flickered
+        float cone = 0.0;
+        for (int k = 0; k < 6; k++)
+            cone += streetCone(normalize(rd * (tc + h * tan(mix(ta, tb, (float(k) + 0.5) / 6.0))) - ol + vec3(0.0, -0.3, 0.0)));
+        // dense fog scatters the light more than once (`wide`): a soft dome around the lamp (the same integral with the ray's
+        // distance to the lamp softened by ~8 m), lighting the sky between lit leaves as well — single scattering alone left a
+        // narrow halo, and leaves lit by the lamp stood out against black sky and shimmered at every edge while driving
+        glow = (glow + wide) * cone / 6.0 * fade;
+        if (sigma > 0.0) glow *= fogDensity(o + rd * clamp(tc, 0.0, len)) / sigma;
         sum += colour * glow;
     }
     vec3 veil = vec3(0.0);
-    if (sigma > 0.0 && dot(pc.uSpotColor.rgb, pc.uSpotColor.rgb) > 0.0)
+    if (beams && sigma > 0.0 && dot(pc.uSpotColor.rgb, pc.uSpotColor.rgb) > 0.0)
     {
         float reach = min(len, 60.0), step = reach / 16.0, optical = 0.0;
         // both lamps share the axis and sit 1.2 m apart: one source between them, twice as strong (the + 9 below already
