@@ -9,8 +9,8 @@ namespace Touge;
 ///     geometry decides: a lit lamp head is a cluster of ≥ 8 near-white prelit triangles (mean RGB ≥ 0.7; the rest of a night
 ///     course is ~0.12) in a <c>crs</c> mesh 3–12 m above the nearest road point and within 15 m of it. Lamps the original
 ///     leaves dark are lit too where their housing is known (<see cref="DarkHeads"/>). A CRS_LIGHT point counts where a lamp
-///     model stands (geometry within 1.5 m; IROHA has 3 with dark heads), one per 3 m, and wins over a head found within 3 m (its exact
-///     light position). By day the course's lights are off anyway: CRS_LIGHT as it is.
+///     model stands (geometry within 1.5 m; IROHA has 3 with dark heads) and no head was found within 3 m. By day the course's
+///     lights are off anyway: CRS_LIGHT as it is.
 /// </summary>
 public static class CourseLamps
 {
@@ -55,10 +55,11 @@ public static class CourseLamps
         var heads = groups.Where(g => g.Count >= 8).Select(g => g.Aggregate(Vector3.Zero, (a, q) => a + q) / g.Count).ToList();
 
         bool Standing(Vector3 p) => float.IsFinite(p.X + p.Y + p.Z) && crs.Any(m => m.Mesh.Materials.Any(x => x.Triangles.Any(v => Vector3.DistanceSquared(v.Position, p) < 1.5f * 1.5f)));
-        var lamps = new List<Vector3>();
+        // the heads first: the light sits at the lit glass (CRS_LIGHT points sit ~0.4 m above it, inside the housing, which then
+        // shadowed everything under the lamp); a CRS_LIGHT point only where no head is found (IROHA's dark ones), one per 3 m
+        var lamps = new List<Vector3>(heads);
         foreach (var p in crsLight.Where(Standing))
-            if (lamps.All(l => Vector3.Distance(l, p) > 3)) lamps.Add(p); // one lamp, one light (AKINA's broken point hangs at the 2nd's pole)
-        lamps.AddRange(heads.Where(h => lamps.All(l => Vector3.Distance(l, h) > 3)));
+            if (lamps.All(l => Vector3.Distance(l, p) > 3)) lamps.Add(p);
         return [.. lamps];
     }
 }

@@ -248,16 +248,7 @@ vec3 lightGlow(vec3 p)
         vec3 ol = lp.xyz - o;
         float tc = dot(ol, rd);
         float h = sqrt(max(dot(ol, ol) - tc * tc, 0.0)) + 0.1;
-        float ta = -atan(tc / h), tb = atan((len - tc) / h);
-        float glow = (tb - ta) / h;
-        // the share of it that is lit (shadows): 4 points spread like the integrand (uniform in the angle seen from the
-        // lamp), so the lamp's own neighbourhood counts most; in dense fog × the density where the ray passes it closest
-        if (pc.uLocal.x > 0.5 && glow * dot(colour, vec3(0.2126, 0.7152, 0.0722)) * pc.uFog.a > 1e-4) // skip where it adds nothing visible
-        {
-            float lit = 0.0;
-            for (int k = 0; k < 4; k++) lit += localShadow(j + 1, o + rd * (tc + h * tan(mix(ta, tb, (float(k) + 0.5) / 4.0))), 0.0);
-            glow *= lit / 4.0;
-        }
+        float glow = (atan((len - tc) / h) + atan(tc / h)) / h; // no shadows in the fog: a handful of taps per ray flickered as edges crossed them
         if (sigma > 0.0) glow *= fogDensity(o + rd * clamp(tc, 0.0, len)) / sigma * exp(-sigma * length(ol));
         sum += colour * glow;
     }
@@ -278,7 +269,7 @@ vec3 lightGlow(vec3 p)
                 // + 9: the lamps are lenses, not points — no hot spot in the mist right at the bumper
                 lit += beamVeil(i, dl * inversesqrt(max(d2, 1e-4))) * exp(-s * sqrt(d2)) / (d2 + 9.0);
             }
-            if (lit > 0.0) veil += vec3(lit * localShadow(0, q, 0.0) * (s / sigma) * exp(-optical) * step); // the shadow only inside the beam
+            veil += vec3(lit * (s / sigma) * exp(-optical) * step);
             optical += s * step * 0.5;
         }
         veil *= pc.uSpotColor.rgb * (pc.uFog.a * HeadVeil);
