@@ -79,6 +79,8 @@ public sealed class Settings
     /// <summary>The race music's NOW PLAYING toast (Options → HUD).</summary>
     public enum Toast { On, Off, PauseOnly }
     public Toast NowPlaying { get; set; }
+    /// <summary>Language of the story scenes and manga dramas: a <see cref="Story.Translation"/> file (<c>Translations/&lt;code&gt;.json</c>).</summary>
+    public string Language { get; set; } = "en";
     /// <summary>Stickers and plates of the car.</summary>
     public Touge.Formats.Livery Livery { get; set; } = Touge.Formats.Livery.Rival;
 

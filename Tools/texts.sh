@@ -1,6 +1,6 @@
 #!/bin/sh
-# Übersetzte Originaltexte (Story-Szenen, Manga-Hörspiele) aus dem privaten Repo nach texts/ holen bzw. aktualisieren.
-# Touge.csproj kompiliert texts/*.Local.cs mit. Braucht Lesezugriff auf touge-remake-texts (Collaborator).
+# Übersetzungen (Story-Szenen, Manga-Hörspiele; texts/<sprache>.json) aus dem privaten Repo nach texts/ holen bzw. aktualisieren.
+# Der Build kopiert sie nach Translations/ neben das Programm. Braucht Lesezugriff auf touge-remake-texts (Collaborator).
 # Eigene Änderungen an den Texten: in texts/ committen und pushen wie in jedem Repo.
 set -e
 cd "$(dirname "$0")/.."

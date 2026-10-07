@@ -181,6 +181,34 @@ public class StoryTests
         Assert.Equal([0, 19, 24], StoryText.Parts.Select(p => p.First));
     }
 
+    /// <summary>A language file next to the program gives the scenes and dramas; a missing or broken one leaves placeholders (one line per part).</summary>
+    [Fact]
+    public void Translation_LoadsFileOrPlaceholders()
+    {
+        var dir = Path.Combine(AppContext.BaseDirectory, "Translations");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "zz.json"), """{ "name": "Test", "scenes": { "2": [["A|one"], ["B|two"]] }, "manga": { "0": ["1.5|A|hi"] } }""");
+        File.WriteAllText(Path.Combine(dir, "zy.json"), "{ broken");
+        try
+        {
+            var t = Translation.Load("zz");
+            Assert.Equal(("Test", "B|two", "1.5|A|hi"), (t.Name, t.Scenes[2][1][0], t.Manga[0][0]));
+            Assert.Empty(Translation.Load("zy").Scenes);
+            Assert.Empty(Translation.Load("nope").Scenes);
+            Translation.Use("zz"); // through Current as the game reads it
+            Assert.Equal("A|one", StoryText.Chapters[2].Scene[0][0]);
+            Translation.Use("en");
+            var placeholder = new StoryText.Chapter("T", "H", null, "B", 99, 3).Scene;
+            Assert.Equal(3, placeholder.Length);
+            Assert.All(placeholder, p => Assert.Matches(@"^[A-Z0-9 &]+\|\S", Assert.Single(p)));
+        }
+        finally
+        {
+            File.Delete(Path.Combine(dir, "zz.json"));
+            File.Delete(Path.Combine(dir, "zy.json"));
+        }
+    }
+
     private static (StoryMode Story, List<string> Sounds) NewStory()
     {
         Vector2[] line = [new(0, 0), new(100, 0)];

@@ -9,6 +9,6 @@
 cache/
 out/
 .claude/
-# Übersetzte Originaltexte (Story-Skript, Manga-Hörspiele): nur lokal
-*.Local.cs
+# Übersetzte Originaltexte (Story-Skript, Manga-Hörspiele): nur lokal, privates Repo (Tools/texts.sh)
 texts/
+Translations/

@@ -9,7 +9,7 @@ namespace Touge.Story;
 ///     voices the drama does not name). Keyed by panel timeline (KOMATCn = chapter n; 32 = chapter 9 after the race; 27 and
 ///     30 have no speech). Also the English of the title cards (MTnn episode titles, the M… part/date cards).
 /// </summary>
-public static partial class MangaText
+public static class MangaText
 {
     public static IReadOnlyList<ShowLine> Lines(int timeline) =>
         Koma.TryGetValue(timeline, out var lines) ? [.. lines.Select(Parse)] : [];
@@ -39,15 +39,6 @@ public static partial class MangaText
         ["M31A"] = "APRIL", ["M31B"] = "APRIL - THE GUNMA AREA",
     };
 
-    /// <summary>The dramas' lines by timeline, from <c>texts/MangaText.Local.cs</c> (private repo, <c>Tools/texts.sh</c>; a translation of the original's audio); empty without it.</summary>
-    public static readonly Dictionary<int, string[]> Koma = Local();
-
-    private static Dictionary<int, string[]> Local()
-    {
-        var koma = new Dictionary<int, string[]>();
-        LocalKoma(koma);
-        return koma;
-    }
-
-    static partial void LocalKoma(Dictionary<int, string[]> koma);
+    /// <summary>The dramas' lines by timeline in the current <see cref="Translation"/> (a translation of the original's audio); empty without one.</summary>
+    public static Dictionary<int, string[]> Koma => Translation.Current.Manga;
 }

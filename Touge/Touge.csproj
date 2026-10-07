@@ -15,9 +15,9 @@
         <None Include="Assets\**" CopyToOutputDirectory="PreserveNewest"/>
     </ItemGroup>
 
-    <!-- übersetzte Originaltexte (StoryText/MangaText): privates Repo touge-remake-texts in texts/, Tools/texts.sh; fehlt es, Platzhalter -->
-    <ItemGroup Condition="Exists('..\texts')">
-        <Compile Include="..\texts\*.Local.cs"/>
+    <!-- Übersetzungen der Story (Story/Translation): privates Repo touge-remake-texts in texts/ (Tools/texts.sh), landen neben dem Programm -->
+    <ItemGroup>
+        <None Include="..\texts\*.json" Link="Translations\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest"/>
     </ItemGroup>
 
     <ItemGroup>
