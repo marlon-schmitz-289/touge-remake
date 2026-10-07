@@ -101,6 +101,7 @@ var plain = args.Where((a, i) => a != iso && a != badIso && a != "--backend" && 
 // app data (settings, records, progress, replays, save slots, photos): --data-dir, the real profile for a plain start, a throwaway folder for any other run
 Touge.Ui.Settings.FilePath = Touge.Ui.Settings.RunFile(Arg("--data-dir"), plain);
 AppDomain.CurrentDomain.ProcessExit += (_, _) => Touge.Story.Translation.SaveMissing(); // texts the language lacks, for the translator
+if (plain) Updater.Check(); // a newer release: UPDATE TO … on the main menu (packaged builds only)
 // --car: HCAR name (AE86T, FD3S, R32, EVO3, …) or index 0–31 in that list (Touge.Formats.CarPaint.Cars)
 var carArg = Arg("--car") ?? "AE86T";
 var carIndex = int.TryParse(carArg, out var ci) ? ci : Array.FindIndex(Touge.Formats.CarPaint.Cars, c => c.Equals(carArg, StringComparison.OrdinalIgnoreCase));

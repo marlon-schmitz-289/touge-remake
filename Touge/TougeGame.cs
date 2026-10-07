@@ -795,8 +795,19 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     /// <summary>Front-end input; its results open the game-flow menus behind the main menu or quit.</summary>
     private void UpdateFrontEnd((int X, int Y, bool Ok, bool Back) keys, float dt)
     {
-        switch (_front!.Update(keys, dt))
+        _front!.UpdateRow = Updater.Label;
+        if (Updater.Status == Updater.State.Ready)
         {
+            // downloaded: close, the new version replaces this one and starts (Updater.InstallAndRestart)
+            Updater.InstallAndRestart();
+            Quit();
+            return;
+        }
+        switch (_front.Update(keys, dt))
+        {
+            case FrontEnd.Result.Update:
+                Updater.Download();
+                break;
             case FrontEnd.Result.Quit:
                 Quit();
                 break;

@@ -10,13 +10,14 @@ namespace Touge.Ui;
 ///     middle of the screen (the 3D scene behind fills any width). Timings from the code at 60 fps: 30-frame fades,
 ///     cards 181 frames, title back to the attract cards after 601 idle frames, main menu back to the title after 1801;
 ///     cursor glow alpha 80 + 175·(1 + sin θ)/2 with θ += 5°/frame (40° after a decision); the drum fades the leaving row
-///     out (38/255 per frame), slides 48 px at 9 px per frame and fades the new row in, input locked meanwhile.
+///     out (38/255 per frame), slides 48 px at 9 px per frame and fades the new row in (the original locks input meanwhile; here a new step
+///     restarts the roll).
 ///     Sounds by SYSSE name through <see cref="Sound"/>, music per step in <see cref="Music"/>.
 /// </summary>
 public sealed class FrontEnd
 {
     public enum Step { Boot, Logo, Disclaimer, Title, Modes }
-    public enum Result { None, TimeAttack, Records, Options, Quit, Guide, Legend, Story, Versus, Replay, SaveLoad, FreePlay }
+    public enum Result { None, TimeAttack, Records, Options, Quit, Guide, Legend, Story, Versus, Replay, SaveLoad, FreePlay, Update }
 
     /// <summary>
     ///     Main menu in the original's drum order (sub_1F0E00, wraps 0 ↔ 6), English labels, plus the remake's VERSUS (split screen
@@ -35,6 +36,25 @@ public sealed class FrontEnd
 
     public const float Fade = 30 / 60f, CardHold = 181 / 60f, BootHold = 2.5f, TitleIdle = 601 / 60f, ModesIdle = 1801 / 60f;
     private const float RollFade = 7 / 60f, RollSlide = 48 / 9f / 60, Roll = 2 * RollFade + RollSlide;
+
+    /// <summary>
+    ///     Label of the update row (<see cref="Updater.Label"/>, e.g. "UPDATE TO 0.3.0"), null = none: shown first on the
+    ///     drum, above LEGEND; deciding it returns <see cref="Result.Update"/> at once and the menu stays.
+    /// </summary>
+    public string? UpdateRow
+    {
+        get => _update;
+        set
+        {
+            if (value != null != (_update != null)) Index = Math.Max(0, Index + (value != null ? 1 : -1)); // the selection stays on its mode
+            _update = value;
+        }
+    }
+
+    private string? _update;
+    private int Rows => Modes.Length + (_update != null ? 1 : 0);
+    private string Row(int i) => _update == null ? Modes[i] : i == 0 ? _update : Modes[i - 1];
+    private Result RowResult(int i) => _update == null ? ModeResults[i] : i == 0 ? Result.Update : ModeResults[i - 1];
 
     public bool Active { get; private set; }
     public Step Current { get; private set; }
@@ -116,7 +136,6 @@ public sealed class FrontEnd
                 else if (_idle >= TitleIdle) Leave(Step.Logo);
                 break;
             case Step.Modes:
-                if (_roll >= 0) break;
                 if (_quit.Open)
                 {
                     _idle = 0;
@@ -124,11 +143,18 @@ public sealed class FrontEnd
                 }
                 else if (k.Y != 0)
                 {
-                    Index = (Index + k.Y + Modes.Length) % Modes.Length;
-                    (_rollDir, _roll) = (k.Y, 0);
+                    Index = (Index + k.Y + Rows) % Rows;
+                    // a step mid-roll restarts it past the fade-out (the old row is already fading): the original locked
+                    // input for the whole roll (~0.3 s), presses got lost and the menu felt sluggish
+                    (_rollDir, _roll) = (k.Y, _roll >= 0 ? RollFade : 0);
                     Sound?.Invoke("SYS005");
                 }
-                else if (k.Ok && ModeResults[Index] == Result.Quit)
+                else if (k.Ok && RowResult(Index) == Result.Update)
+                {
+                    Sound?.Invoke("SYS006");
+                    return Result.Update;
+                }
+                else if (k.Ok && RowResult(Index) == Result.Quit)
                 {
                     Sound?.Invoke("SYS006");
                     _quit.Show();
@@ -137,7 +163,7 @@ public sealed class FrontEnd
                 {
                     Sound?.Invoke("SYS006");
                     _fast = true;
-                    Leave(Step.Modes, ModeResults[Index]);
+                    Leave(Step.Modes, RowResult(Index));
                 }
                 else if (k.Back)
                 {
@@ -266,7 +292,7 @@ public sealed class FrontEnd
             var lit = 48 / 255f + (1 - 48 / 255f) * MathF.Max(0, 1 - MathF.Abs(slot));
             var y = 224 + 111 + slot * 48;
             c.Plate(145, y, 222, 33, lit, a);
-            var label = Modes[(Index + rel + 2 * Modes.Length) % Modes.Length];
+            var label = Row((Index + rel + 2 * Rows) % Rows);
             var ink = Style.Fade(Canvas.Shade(0.05f, 0.05f, 0.06f, lit), a);
             var size = MathF.Min(21 * c.Ky, 196 * c.Kx / o.Font!.Measure(label, 1));
             var at = c.P(256, y + 16.5f) + new Vector2(0, o.Font.CapHeight * size / 2);

@@ -5,8 +5,8 @@ namespace Touge.Tests;
 public class FrontEndTests
 {
     /// <summary>
-    ///     The original's flow and timings: boot → cards → title on their own, START → main menu, the drum wraps and locks
-    ///     input while it rolls, unbuilt modes beep, Time Attack comes out after the 30-frame fade, idle goes back to the title.
+    ///     The original's flow and timings: boot → cards → title on their own, START → main menu, the drum wraps (a step while
+    ///     it rolls is taken at once), unbuilt modes beep, Time Attack comes out after the 30-frame fade, idle goes back to the title.
     /// </summary>
     [Fact]
     public void Flow_TimingsSoundsAndDrum()
@@ -39,10 +39,9 @@ public class FrontEndTests
         Run(1, (0, -1, false, false)); // up from LEGEND OF THE STREETS wraps to OPTIONS
         Assert.Equal(FrontEnd.Modes.Length - 1, f.Index);
         Run(0.1f, (0, 1, false, false));
-        f.Update((0, 1, false, false), 1 / 60f); // still rolling: ignored
         Assert.Equal(0, f.Index);
-        Run(0.5f);
-        Run(1, (0, 1, false, false)); // TIME ATTACK
+        Run(0.5f, (0, 1, false, false)); // still rolling: taken at once (the original dropped it), TIME ATTACK
+        Assert.Equal(1, f.Index);
         Run(0.5f, (0, 1, false, false)); // VERSUS
         Assert.Equal("VERSUS", FrontEnd.Modes[f.Index]);
         Run(0.5f, (0, 1, false, false)); // FREE PLAY
