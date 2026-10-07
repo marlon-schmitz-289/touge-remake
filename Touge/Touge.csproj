@@ -15,6 +15,11 @@
         <None Include="Assets\**" CopyToOutputDirectory="PreserveNewest"/>
     </ItemGroup>
 
+    <!-- übersetzte Originaltexte (StoryText/MangaText): privates Repo touge-remake-texts in texts/, Tools/texts.sh; fehlt es, Platzhalter -->
+    <ItemGroup Condition="Exists('..\texts')">
+        <Compile Include="..\texts\*.Local.cs"/>
+    </ItemGroup>
+
     <ItemGroup>
         <InternalsVisibleTo Include="Touge.Tests"/>
     </ItemGroup>

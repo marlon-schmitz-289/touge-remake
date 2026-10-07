@@ -7,7 +7,7 @@ namespace Touge.Story;
 ///     (before the battle, after it; chapter 30 has an epilogue). The disc names a speaker only now and then (F_…); the
 ///     English names every one. Chapters 0 and 1 have no script on the disc: their short scenes are the remake's own.
 ///     Each line is "SPEAKER|text"; text in parentheses is a thought. The scenes are not in the repo (the original's
-///     script): <c>StoryText.Local.cs</c> next to this file (gitignored) fills them in, without it every chapter shows a placeholder.
+///     script): <c>texts/StoryText.Local.cs</c> (private repo, <c>Tools/texts.sh</c>) fills them in, without it every chapter shows a placeholder.
 /// </summary>
 public static partial class StoryText
 {
@@ -32,7 +32,7 @@ public static partial class StoryText
         ["走り屋２"] = "GALLERY 2", ["走り屋３"] = "GALLERY 3", ["ＯＢ１"] = "TODO OB 1", ["ＯＢ２"] = "TODO OB 2", ["ＯＢ３"] = "TODO OB 3", ["社長"] = "PRESIDENT",
     };
 
-    /// <summary>The scenes by chapter, from the local <c>StoryText.Local.cs</c> (empty without it).</summary>
+    /// <summary>The scenes by chapter, from <c>texts/StoryText.Local.cs</c> (empty without it).</summary>
     private static readonly Dictionary<int, string[][]> Translated = Local();
 
     private static Dictionary<int, string[][]> Local()

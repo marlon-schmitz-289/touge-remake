@@ -11,3 +11,4 @@ out/
 .claude/
 # Übersetzte Originaltexte (Story-Skript, Manga-Hörspiele): nur lokal
 *.Local.cs
+texts/

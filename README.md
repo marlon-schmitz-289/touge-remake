@@ -3,7 +3,8 @@
 Fan-Nachbau (eigene C#-Engine). Plan: [PLAN.md](PLAN.md), Formate: [FORMATS.md](FORMATS.md).
 
 Assets kommen zur Laufzeit aus der eigenen ISO (SLPM-65268), nie ins Repo. Die englischen Texte der Story-Szenen und
-Manga-Hörspiele sind nicht enthalten (`Touge/Story/*.Local.cs`, gitignoriert); ohne sie zeigt die Story Platzhalter.
+Manga-Hörspiele sind nicht enthalten: sie liegen im privaten Repo `touge-remake-texts`, `Tools/texts.sh` holt bzw. aktualisiert sie
+nach `texts/` (gitignoriert, braucht Zugriff auf das Repo); ohne sie zeigt die Story Platzhalter.
 
 Nicht verbunden mit SEGA, Kodansha oder den Rechteinhabern von *Initial D*; Marken und Namen gehören ihren Inhabern.
 

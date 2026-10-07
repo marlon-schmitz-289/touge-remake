@@ -39,7 +39,7 @@ public static partial class MangaText
         ["M31A"] = "APRIL", ["M31B"] = "APRIL - THE GUNMA AREA",
     };
 
-    /// <summary>The dramas' lines by timeline, from the local <c>MangaText.Local.cs</c> (gitignored, a translation of the original's audio); empty without it.</summary>
+    /// <summary>The dramas' lines by timeline, from <c>texts/MangaText.Local.cs</c> (private repo, <c>Tools/texts.sh</c>; a translation of the original's audio); empty without it.</summary>
     public static readonly Dictionary<int, string[]> Koma = Local();
 
     private static Dictionary<int, string[]> Local()
