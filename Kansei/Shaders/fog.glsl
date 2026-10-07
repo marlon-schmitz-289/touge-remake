@@ -35,13 +35,23 @@ float fogAmount(vec3 p)
 
 // Extinction (1/m) of the height fog at q, with the fog weather's drifting banks (the same ~40 m noise as fogAmount,
 // sampled at q itself): the volumetric light (lighting.glsl) scatters in this density, so denser banks light up.
+float fogHeightDensity(vec3 q)
+{
+    return pc.uFogParams.z * exp(-clamp((q.y - pc.uFogSun.w) * pc.uFogParams.w, -4.0, 40.0));
+}
+
+// The banks' factor on the density at q (1 = none); it varies over ~40 m, so callers may sample it sparsely.
+float fogBanks(vec3 q)
+{
+#ifdef SCENE_PUSH
+    if (pc.uShadeGround.w > 0.0) return 1.0 + pc.uShadeGround.w * (noise(q.xz * 0.025 + pc.uSky.w * vec2(0.05, 0.02)) - 0.5);
+#endif
+    return 1.0;
+}
+
 float fogDensity(vec3 q)
 {
-    float s = pc.uFogParams.z * exp(-clamp((q.y - pc.uFogSun.w) * pc.uFogParams.w, -4.0, 40.0));
-#ifdef SCENE_PUSH
-    if (pc.uShadeGround.w > 0.0) s *= 1.0 + pc.uShadeGround.w * (noise(q.xz * 0.025 + pc.uSky.w * vec2(0.05, 0.02)) - 0.5);
-#endif
-    return s;
+    return fogHeightDensity(q) * fogBanks(q);
 }
 
 vec3 fogColour(vec3 dir)

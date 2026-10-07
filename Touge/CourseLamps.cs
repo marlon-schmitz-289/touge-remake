@@ -18,30 +18,22 @@ public static class CourseLamps
     public static readonly string[] DarkHeads = ["KINA_NIT117_015"];
 
     /// <summary>
-    ///     Linear-ish HDR vertex colour (world.vert squares it ~×2.2) of a lit lamp glass: warm and well over white, so the bloom
-    ///     draws the glare around it — the original's flat, ragged near-white card read as a matte paper patch. Tuned by eye.
+    ///     Night: the lit glass of every lamp in <paramref name="lamps"/> — the original's flat, ragged near-white card (the
+    ///     near-white triangles within 2 m) — is hidden (vertex alpha 0); the renderer draws a round glare at the lamp instead
+    ///     (lighting.glsl lampGlare). Drawn as bright HDR it looked like a torn paper patch and flickered in the bloom.
     /// </summary>
-    public static readonly Vector4 GlassColour = new(2.4f, 2.05f, 1.6f, 1);
-
-    /// <summary>
-    ///     Night: the glass of every lamp in <paramref name="lamps"/> glows (<see cref="GlassColour"/>): the near-white triangles
-    ///     within 2 m of it, and on the dark heads (<see cref="DarkHeads"/>) the housing's downward faces.
-    /// </summary>
-    public static void Glow(IReadOnlyList<(string Name, Mesh Mesh)> meshes, Vector3[] lamps)
+    public static void HideGlass(IReadOnlyList<(string Name, Mesh Mesh)> meshes, Vector3[] lamps)
     {
         foreach (var (_, mesh) in meshes.Where(m => m.Name.StartsWith("crs")))
         foreach (var m in mesh.Materials)
         {
-            var dark = m.Texture >= 0 && m.Texture < mesh.Textures.Length && DarkHeads.Contains(mesh.Textures[m.Texture]);
             var t = m.Triangles;
             for (var i = 0; i + 2 < t.Count; i += 3)
             {
                 var p = (t[i].Position + t[i + 1].Position + t[i + 2].Position) / 3;
-                if (!lamps.Any(l => Vector3.DistanceSquared(l, p) < 4)) continue;
                 var c = (t[i].Color + t[i + 1].Color + t[i + 2].Color) / 3;
-                var down = Vector3.Cross(t[i + 1].Position - t[i].Position, t[i + 2].Position - t[i].Position);
-                if (dark ? Math.Abs(down.Y) < 0.7f * down.Length() : (c.X + c.Y + c.Z) / 3 < 0.7f) continue; // dark heads: the flat underside (either winding)
-                for (var k = 0; k < 3; k++) t[i + k] = t[i + k] with { Color = GlassColour with { W = t[i + k].Color.W } };
+                if ((c.X + c.Y + c.Z) / 3 < 0.7f || !lamps.Any(l => Vector3.DistanceSquared(l, p) < 4)) continue;
+                for (var k = 0; k < 3; k++) t[i + k] = t[i + k] with { Color = t[i + k].Color with { W = 0 } };
             }
         }
     }
@@ -52,6 +44,7 @@ public static class CourseLamps
         var crs = meshes.Where(m => m.Name.StartsWith("crs")).ToArray();
         var seen = new HashSet<Vector3>();
         var points = new List<Vector3>();
+        var darkPoints = new HashSet<Vector3>();
         foreach (var (_, mesh) in crs)
         foreach (var m in mesh.Materials)
         {
@@ -65,6 +58,7 @@ public static class CourseLamps
                 var r = road.MinBy(q => Vector3.DistanceSquared(q, p));
                 if (p.Y - r.Y is < 3 or > 12 || Vector2.Distance(new(r.X, r.Z), new(p.X, p.Z)) > 15) continue;
                 points.Add(p);
+                if (dark) darkPoints.Add(p);
             }
         }
         // single-link clusters within 2.5 m
@@ -81,7 +75,9 @@ public static class CourseLamps
             }
             into.Add(p);
         }
-        var heads = groups.Where(g => g.Count >= 8).Select(g => g.Aggregate(Vector3.Zero, (a, q) => a + q) / g.Count).ToList();
+        // a lit card: its centre is the glass; a dark housing: just under its lowest point (from inside, it would shadow everything)
+        var heads = groups.Where(g => g.Count >= 8).Select(g => g.Aggregate(Vector3.Zero, (a, q) => a + q) / g.Count is var c && darkPoints.Contains(g[0])
+            ? c with { Y = g.Min(q => q.Y) - 0.1f } : c).ToList();
 
         bool Standing(Vector3 p) => float.IsFinite(p.X + p.Y + p.Z) && crs.Any(m => m.Mesh.Materials.Any(x => x.Triangles.Any(v => Vector3.DistanceSquared(v.Position, p) < 1.5f * 1.5f)));
         // the heads first: the light sits at the lit glass (CRS_LIGHT points sit ~0.4 m above it, inside the housing, which then

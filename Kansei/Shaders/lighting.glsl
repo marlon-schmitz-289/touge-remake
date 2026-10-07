@@ -104,15 +104,11 @@ float beam(int i, vec3 dir)
 // The beam as the fog shows it: light scattered more than once blurs the cut-off, so the lit mist is a cone with a soft top
 // edge (a little light above the cut, falling off over ~5° below) instead of beam()'s bright sheet right under a hard line
 // (the road seen through it looked like a glowing layer lying on the asphalt).
-float beamVeil(int i, vec3 dir)
+float beamVeil(vec3 dir, vec3 axis, vec3 right, vec3 up, float high)
 {
-    vec3 axis = pc.uSpotDir[i].xyz;
-    vec3 right = normalize(cross(axis, vec3(0.0, 1.0, 0.0)));
-    vec3 up = cross(right, axis);
     float ahead = dot(dir, axis);
     if (ahead <= 0.05) return 0.0;
     float x = dot(dir, right) / ahead, y = dot(dir, up) / ahead;
-    float high = pc.uSpotPos[i].w;
     float over = y - mix(-0.01, 0.03, high);
     float vertical = over > 0.0 ? exp(-over * over / 0.004) : pow(0.09 / (0.09 - over), 1.5);
     float sx = mix(0.45, 0.6, high);
@@ -224,6 +220,34 @@ vec3 wetLights(vec3 p, vec3 n, vec3 v, float across, float along)
     return sum * (fresnel / (3.14159 * across * along));
 }
 
+// The street lamps' glare, seen along the ray to p (sky: far behind): a small bright core of the lamp's angular size
+// (~0.3 m glass) and a faint wide halo, by the angle between the ray and the lamp — round and smooth at any distance (the
+// bloom spreads it), instead of the original's ragged glass card (hidden, CourseLamps.HideGlass). A surface nearer than
+// the lamp hides it pixel by pixel.
+vec3 lampGlare(vec3 p, bool sky)
+{
+    vec3 o = pc.uEye.xyz;
+    vec3 d = p - o;
+    float len = length(d);
+    vec3 rd = d / max(len, 1e-4);
+    vec3 sum = vec3(0.0);
+    for (int j = 0; j < 4; j++)
+    {
+        vec3 colour;
+        vec4 lp = pointLight(j, false, colour);
+        if (lp.w <= 0.0 || dot(colour, colour) == 0.0) continue;
+        vec3 ol = lp.xyz - o;
+        float dist = length(ol);
+        if (!sky && len < dist - 0.4) continue; // something in front of the lamp
+        float r = 0.3 / max(dist, 0.5);         // angular radius of the glass
+        float c = dot(rd, ol / dist);
+        float th2 = max(2.0 * (1.0 - c), 0.0);  // ≈ angle²
+        float shape = exp(-th2 / (r * r)) + 0.04 * (r * r) / (th2 + r * r * 4.0);
+        sum += colour * shape;
+    }
+    return sum * 0.3; // colour ≈ 50 × tint at night: a core of ~15, a glare for the bloom
+}
+
 // Light scattered towards the camera by the fog between the eye and p. Thin haze (σ = 0 at the eye): the street lights'
 // glow only, point sources, ∫ I / (h² + t²) dt along the ray solved exactly; headlights are left to the bloom on their lenses.
 // Dense fog: volumetric — the light scatters in the local density (fogDensity: height and drifting banks, relative to
@@ -256,20 +280,24 @@ vec3 lightGlow(vec3 p)
     if (sigma > 0.0 && dot(pc.uSpotColor.rgb, pc.uSpotColor.rgb) > 0.0)
     {
         float reach = min(len, 60.0), step = reach / 16.0, optical = 0.0;
+        // both lamps share the axis and sit 1.2 m apart: one source between them, twice as strong (the + 9 below already
+        // softens the mist near the bumper); the beam's frame once per pixel
+        vec3 lamp = 0.5 * (pc.uSpotPos[0].xyz + pc.uSpotPos[1].xyz), axis = pc.uSpotDir[0].xyz;
+        vec3 right = normalize(cross(axis, vec3(0.0, 1.0, 0.0))), up = cross(right, axis);
+        float high = pc.uSpotPos[0].w;
+        // the banks vary over ~40 m: sampled at the ray's start, middle and end, interpolated in between
+        float b0 = fogBanks(o), b1 = fogBanks(o + rd * (0.5 * reach)), b2 = fogBanks(o + rd * reach);
         for (int k = 0; k < 16; k++)
         {
             vec3 q = o + rd * ((float(k) + 0.5) * step);
-            float s = fogDensity(q);
+            vec3 dl = q - lamp;
+            float d2 = dot(dl, dl);
+            float b = beamVeil(dl * inversesqrt(max(d2, 1e-4)), axis, right, up, high);
+            float f = (float(k) + 0.5) / 16.0;
+            float s = fogHeightDensity(q) * (f < 0.5 ? mix(b0, b1, 2.0 * f) : mix(b1, b2, 2.0 * f - 1.0));
             optical += s * step * 0.5; // to the middle of this step
-            float lit = 0.0;
-            for (int i = 0; i < 2; i++)
-            {
-                vec3 dl = q - pc.uSpotPos[i].xyz;
-                float d2 = dot(dl, dl);
-                // + 9: the lamps are lenses, not points — no hot spot in the mist right at the bumper
-                lit += beamVeil(i, dl * inversesqrt(max(d2, 1e-4))) * exp(-s * sqrt(d2)) / (d2 + 9.0);
-            }
-            veil += vec3(lit * (s / sigma) * exp(-optical) * step);
+            // + 9: the lamps are lenses, not points — no hot spot in the mist right at the bumper
+            if (b > 0.0) veil += vec3(2.0 * b * exp(-s * sqrt(d2)) / (d2 + 9.0) * (s / sigma) * exp(-optical) * step);
             optical += s * step * 0.5;
         }
         veil *= pc.uSpotColor.rgb * (pc.uFog.a * HeadVeil);

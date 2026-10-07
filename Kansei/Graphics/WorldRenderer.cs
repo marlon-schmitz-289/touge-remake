@@ -37,8 +37,10 @@ public sealed class WorldRenderer : IDisposable
     internal static readonly TextureFormat ShadowFormat = TextureFormat.Depth32Float;
 
     private readonly IPenelopeDevice _device;
-    private readonly ShaderHandle _shader, _opaqueShader, _skyShader, _glowShader;
-    private readonly RenderPipelineHandle _glow;
+    private readonly ShaderHandle _shader, _opaqueShader, _skyShader, _glowShader, _glowFogShader;
+    private readonly RenderPipelineHandle _glow, _glowFog;
+    private readonly BindGroupLayoutHandle _glowLayout;
+    private BindGroupHandle _glowGroup;
     private BindGroupHandle _depthGroup;
     private Matrix4x4 _viewProj;
     private Vector3 _eye;
@@ -98,6 +100,9 @@ public sealed class WorldRenderer : IDisposable
         _opaqueShader = device.CreateShader(ShaderLoader.LoadGraphics(typeof(WorldRenderer).Assembly, "world", "world_opaque", "world-opaque"));
         _skyShader = device.CreateShader(ShaderLoader.LoadGraphics(typeof(WorldRenderer).Assembly, "fullscreen", "sky", "sky"));
         _glowShader = device.CreateShader(ShaderLoader.LoadGraphics(typeof(WorldRenderer).Assembly, "fullscreen", "glow", "glow"));
+        _glowFogShader = device.CreateShader(ShaderLoader.LoadGraphics(typeof(WorldRenderer).Assembly, "fullscreen", "glow_fog", "glow-fog"));
+        _glowLayout = device.GetBindGroupLayout(new BindGroupLayoutDesc(
+            [new BindGroupLayoutEntry(0, BindingType.CombinedImageSampler, ShaderStage.Fragment), new BindGroupLayoutEntry(12, BindingType.CombinedImageSampler, ShaderStage.Fragment)], "glow"));
         _layout = device.GetBindGroupLayout(new BindGroupLayoutDesc(
             [new BindGroupLayoutEntry(0, BindingType.CombinedImageSampler, ShaderStage.Fragment)], "world-tex"));
         _sampler = device.GetSampler(SamplerDesc.LinearWrap with { MaxAnisotropy = 8 });
@@ -107,7 +112,8 @@ public sealed class WorldRenderer : IDisposable
                 PostProcess.UniformEntry(6, ShaderStage.Vertex | ShaderStage.Fragment)], "scene"));
         _shadow = new ShadowMap(device, _layout);
         _local = new LocalShadows(device, _layout);
-        _glow = PostProcess.Fullscreen(device, _glowShader, PostProcess.HdrFormat, BlendState.Additive with { SrcColor = BlendFactor.One }, [_layout, _sceneLayout], 0);
+        _glow = PostProcess.Fullscreen(device, _glowShader, PostProcess.HdrFormat, BlendState.Additive with { SrcColor = BlendFactor.One }, [_glowLayout, _sceneLayout], 0);
+        _glowFog = PostProcess.Fullscreen(device, _glowFogShader, PostProcess.HdrFormat, BlendState.Opaque, [_layout, _sceneLayout], 0);
         _textureGroup = TextureGroup;
         var grey = AddTexture(1, 1, [118, 118, 118, 255], "env-grey"); // 18 % linear until a course sets its maps
         int[] greys = [grey, grey, grey, grey];
@@ -385,19 +391,36 @@ public sealed class WorldRenderer : IDisposable
     private void DrawGlow(ICommandEncoder encoder)
     {
         if (Atmosphere.LightGlow <= 0) return;
+        var nearest = _device.GetSampler(SamplerDesc.Nearest);
         if (_depthGroup.IsNull)
-            _depthGroup = _device.CreateBindGroup(new BindGroupDesc(_layout,
-                [BindGroupEntry.CombinedImageSampler(0, _post.DepthView, _device.GetSampler(SamplerDesc.Nearest))], "glow-depth"));
+        {
+            _depthGroup = _device.CreateBindGroup(new BindGroupDesc(_layout, [BindGroupEntry.CombinedImageSampler(0, _post.DepthView, nearest)], "glow-depth"));
+            _glowGroup = _device.CreateBindGroup(new BindGroupDesc(_glowLayout,
+                [BindGroupEntry.CombinedImageSampler(0, _post.DepthView, nearest), BindGroupEntry.CombinedImageSampler(12, _post.FogLightView, _device.GetSampler(SamplerDesc.Linear))], "glow"));
+        }
+        Matrix4x4.Invert(_viewProj, out var inv);
+        Span<byte> push = stackalloc byte[PushBytes];
+        var flip = _device.Backend == BackendKind.Metal ? -1 : 1;
+        // the fog's light at half resolution, then glare + that, upsampled, onto the scene (glow.glsl)
+        var (hw, hh) = _post.FogLightSize;
+        using (var half = encoder.BeginRenderPass(new RenderPassDesc([new ColorAttachment(_post.FogLightView, LoadOp.DontCare, StoreOp.Store, ClearColor.Black)],
+                   DebugName: "fog-light")))
+        {
+            half.SetViewport(0, 0, hw, hh);
+            half.SetScissor(0, 0, hw, hh);
+            WritePush(push, inv, new Matrix4x4 { M11 = 1f / hw, M12 = 1f / hh, M13 = flip }, _eye, false, false);
+            half.SetPipeline(_glowFog);
+            half.SetBindGroup(0, _depthGroup);
+            SetScene(half, push);
+            half.Draw(3);
+        }
         using var pass = encoder.BeginRenderPass(new RenderPassDesc([new ColorAttachment(_post.SceneView, LoadOp.Load, StoreOp.Store, ClearColor.Black)],
             DebugName: "glow"));
         pass.SetViewport(0, 0, _w, _h);
         pass.SetScissor(0, 0, _w, _h);
-        Matrix4x4.Invert(_viewProj, out var inv);
-        Span<byte> push = stackalloc byte[PushBytes];
-        var screen = new Matrix4x4 { M11 = 1f / _w, M12 = 1f / _h, M13 = _device.Backend == BackendKind.Metal ? -1 : 1 };
-        WritePush(push, inv, screen, _eye, false, false);
+        WritePush(push, inv, new Matrix4x4 { M11 = 1f / _w, M12 = 1f / _h, M13 = flip }, _eye, false, false);
         pass.SetPipeline(_glow);
-        pass.SetBindGroup(0, _depthGroup);
+        pass.SetBindGroup(0, _glowGroup);
         SetScene(pass, push);
         pass.Draw(3);
     }
@@ -491,7 +514,8 @@ public sealed class WorldRenderer : IDisposable
     private void ReleaseDepthGroup()
     {
         if (!_depthGroup.IsNull) _device.DestroyBindGroup(_depthGroup);
-        _depthGroup = default;
+        if (!_glowGroup.IsNull) _device.DestroyBindGroup(_glowGroup);
+        (_depthGroup, _glowGroup) = (default, default);
     }
 
     private void ReleaseTargets()
@@ -519,10 +543,11 @@ public sealed class WorldRenderer : IDisposable
         _shadow.Dispose();
         _local.Dispose();
         _post.Dispose();
-        foreach (var p in _pipeline.Concat(_opaque).Concat(_skyMesh).Concat(_sky).Append(_glow)) _device.DestroyRenderPipeline(p);
+        foreach (var p in _pipeline.Concat(_opaque).Concat(_skyMesh).Concat(_sky).Append(_glow).Append(_glowFog)) _device.DestroyRenderPipeline(p);
         _device.DestroyShader(_shader);
         _device.DestroyShader(_opaqueShader);
         _device.DestroyShader(_glowShader);
+        _device.DestroyShader(_glowFogShader);
         _device.DestroyShader(_skyShader);
     }
 }

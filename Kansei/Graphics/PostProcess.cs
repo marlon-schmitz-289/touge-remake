@@ -41,7 +41,7 @@ internal sealed class PostProcess : IDisposable
     public BufferHandle UniformBuffer => _uniforms.Buffer;
     private readonly SamplerHandle _sampler, _point;
     private readonly List<(TextureHandle Tex, TextureViewHandle View, BindGroupHandle Group, int W, int H)> _targets = [];
-    private (TextureHandle Tex, TextureViewHandle View) _gbuf, _depth, _ao, _aoBlur, _ssr, _ssrBlur;
+    private (TextureHandle Tex, TextureViewHandle View) _gbuf, _depth, _ao, _aoBlur, _ssr, _ssrBlur, _fogLight;
     private BindGroupHandle _tonemapGroup, _aoGroup, _blurGroup, _ssrGroup, _ssrBlurGroup;
     private int _w, _h;
 
@@ -49,6 +49,9 @@ internal sealed class PostProcess : IDisposable
     public TextureViewHandle GbufView => _gbuf.View;
     /// <summary>Single-sample scene depth: the MSAA depth resolves into it, or the 1-sample pass renders into it directly.</summary>
     public TextureViewHandle DepthView => _depth.View;
+    /// <summary>Half-resolution HDR target of the fog's light (WorldRenderer.DrawGlow), <see cref="FogLightSize"/>.</summary>
+    public TextureViewHandle FogLightView => _fogLight.View;
+    public (int W, int H) FogLightSize { get; private set; }
 
     public PostProcess(IPenelopeDevice device)
     {
@@ -107,6 +110,8 @@ internal sealed class PostProcess : IDisposable
         _aoBlur = Target(half.W, half.H, TextureFormat.Rg16Float, TextureUsage.ColorAttachment, "ao-blur");
         _ssr = Target(half.W, half.H, HdrFormat, TextureUsage.ColorAttachment, "ssr");
         _ssrBlur = Target(half.W, half.H, HdrFormat, TextureUsage.ColorAttachment, "ssr-blur");
+        _fogLight = Target(half.W, half.H, HdrFormat, TextureUsage.ColorAttachment, "fog-light");
+        FogLightSize = half;
         _aoGroup = Group(_oneTex, (_depth.View, _point));
         _blurGroup = Group(_oneTex, (_ao.View, _point));
         _ssrGroup = _device.CreateBindGroup(new BindGroupDesc(_ssrLayout,
@@ -216,7 +221,7 @@ internal sealed class PostProcess : IDisposable
             _device.DestroyTextureView(view);
             _device.DestroyTexture(tex);
         }
-        foreach (var (tex, view) in new[] { _gbuf, _depth, _ao, _aoBlur, _ssr, _ssrBlur })
+        foreach (var (tex, view) in new[] { _gbuf, _depth, _ao, _aoBlur, _ssr, _ssrBlur, _fogLight })
         {
             _device.DestroyTextureView(view);
             _device.DestroyTexture(tex);
