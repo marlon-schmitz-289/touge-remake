@@ -170,7 +170,7 @@ interpoliert Auge und Zoom genauso und schaut immer aufs Auto (`Touge/Replay/TvC
 
 ## Fahrkameras (ELF) – geknackt
 Gefunden über die View-Matrix (`sub_1486D0`: View = Inverse der Kameramatrix) rückwärts; Disassembly aus den Kommentaren des Recomp
-(`~/dev/initiald-special-stage-pc/generated`). Alle Werte im ELF fest, nichts je Auto oder Tempo.
+(`~/dev/initiald-remake-backup/recomp-generated`). Alle Werte im ELF fest, nichts je Auto oder Tempo.
 - **Kamera-Objekt** (0x1B0 B, `sub_175060`, Update `sub_175270` als Task-Funktion +0x14, Objektliste `0x32BD10` + 64·ID): drei Zustände
   à 0x50 B – aktuell +0xA0, vorher +0xF0, Ziel +0x140 –, je Auge xyzw, Zielpunkt xyzw, Blickrichtung, Winkel (Neigung°, Gier°, Rollen°),
   f32 Abstand, f32 Versatz entlang des Blicks, f32 FOV. Modus +0x196: 0x100 sofort, 0x300 Übergang über +0x19C Frames (Zähler +0x19A),
