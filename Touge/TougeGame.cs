@@ -130,6 +130,8 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
 
     // physics → render interpolation
     private Vector3 _prevPos;
+    /// <summary>The tick blend of the last frame the game ran (<see cref="Render"/>).</summary>
+    private float _heldAlpha = 1;
     private Quaternion _prevRot;
 
     // driver input (bindings: Options → Controls), sampled per frame, consumed per tick; force feedback per tick
@@ -1557,7 +1559,9 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         var shot = _shotState == 1 ? _capture : null;
         var frame = shot ?? _offscreen; // where the frame goes (null: the window)
         var (w, h) = frame != null ? (frame.Width, frame.Height) : (Device.SwapchainWidth, Device.SwapchainHeight);
-        UpdateCarMatrices(shot != null ? 1 : ReplayAlpha(ctx.TickAlpha));
+        // no tick runs while the game stands (pause, menus, photo): keep the last blend, else the cars (and the camera on them)
+        // swing between the last two ticks with every frame
+        UpdateCarMatrices(shot != null ? 1 : Frozen || _photo.Active ? _heldAlpha : _heldAlpha = ReplayAlpha(ctx.TickAlpha));
         _onBoard = null; // set by the on-board cameras below
         if (!UpdateMenuCamera(ctx.Time.DeltaTime) && !_fly) UpdateDriveCamera(ctx.Time.DeltaTime);
         var split = SplitViews(w, h);
