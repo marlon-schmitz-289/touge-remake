@@ -398,7 +398,10 @@ public sealed class WorldRenderer : IDisposable
             _glowGroup = _device.CreateBindGroup(new BindGroupDesc(_glowLayout,
                 [BindGroupEntry.CombinedImageSampler(0, _post.DepthView, nearest), BindGroupEntry.CombinedImageSampler(12, _post.FogLightView, _device.GetSampler(SamplerDesc.Linear))], "glow"));
         }
-        Matrix4x4.Invert(_viewProj, out var inv);
+        // camera-relative (no translation): with the world ~1 km from the origin and the hood view's 5 cm near plane, the
+        // full inverse lost the rays' direction to float rounding — it changed with every move, the beams' edge in the fog
+        // and the lamps' halos jumped by pixels from frame to frame
+        Matrix4x4.Invert(_viewRotProj, out var inv);
         Span<byte> push = stackalloc byte[PushBytes];
         var flip = _device.Backend == BackendKind.Metal ? -1 : 1;
         // the fog's light at half resolution, then glare + that, upsampled, onto the scene (glow.glsl)

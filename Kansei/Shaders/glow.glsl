@@ -6,8 +6,8 @@
 // pixel's neighbourhood (main).
 // The sky (depth 0, reversed-Z) gets the fog's light only in dense fog, along the ray 1 km out (the mist between eye and
 // sky glows like the mist in front of the trees); in thin haze the sky stays clear.
-// scene_push.glsl as for the world, but uMvp = inverse of view × projection and uModel[0] = (1 / width, 1 / height of this
-// pass's target, clip y per gl_FragCoord.y: +1 Vulkan/GL, −1 Metal, 0).
+// scene_push.glsl as for the world, but uMvp = inverse of (view rotation, no translation) × projection and uModel[0] =
+// (1 / width, 1 / height of this pass's target, clip y per gl_FragCoord.y: +1 Vulkan/GL, −1 Metal, 0).
 
 layout(set = 0, binding = 0) uniform sampler2D uDepth;
 #ifndef HALF
@@ -21,16 +21,15 @@ layout(set = 0, binding = 12) uniform sampler2D uFogLight; // binding numbers ar
 
 layout(location = 0) out vec4 FragColor;
 
-// Distance from the eye to the surface at full-res pixel q (sky: Far).
+// Distance from the eye to the surface at full-res pixel q (sky: Far). Reversed-Z with an infinite far plane: depth =
+// near / view depth, so the distance along a ray is its distance at the near plane (depth 1) over the depth — `nearDist`,
+// the centre pixel's (the 3 × 3 / 4 × 4 neighbours' rays differ by a pixel: ~1e-4 off). One divide instead of an inverse
+// projection per tap: the 9 matrix products were most of this pass at 3200 × 1800.
 const float Far = 150.0;
-float distanceAt(ivec2 q, ivec2 size)
+float distanceAt(ivec2 q, ivec2 size, float nearDist)
 {
     float d = texelFetch(uDepth, clamp(q, ivec2(0), size - 1), 0).r;
-    if (d <= 0.0) return Far;
-    vec2 ndc = (vec2(q) + 0.5) / vec2(size) * 2.0 - 1.0;
-    ndc.y *= pc.uModel[0].z;
-    vec4 p = pc.uMvp * vec4(ndc, d, 1.0);
-    return min(length(p.xyz / p.w - pc.uEye.xyz), Far);
+    return d <= 0.0 ? Far : min(nearDist / d, Far);
 }
 
 void main()
@@ -40,24 +39,26 @@ void main()
     // driving. The mean distance over the pixel's neighbourhood (half res: its 2 × 2 block and around) smooths those edges
     // like antialiasing and changes nothing inside a surface; the sky counts as Far (150 m, the glows barely grow beyond).
     ivec2 size = textureSize(uDepth, 0);
+    vec2 uv = gl_FragCoord.xy * pc.uModel[0].xy;
+    vec2 ndc = uv * 2.0 - 1.0;
+    ndc.y *= pc.uModel[0].z;
+    vec4 near = pc.uMvp * vec4(ndc, 1.0, 1.0); // the near plane: the ray's direction
+    vec3 toNear = near.xyz / near.w; // camera-relative
+    float nearDist = length(toNear);
+    vec3 rd = toNear / nearDist;
     float sum = 0.0, n = 0.0;
     bool skyCentre;
 #ifdef HALF
     ivec2 px = ivec2(gl_FragCoord.xy) * 2;
     for (int y = -1; y <= 2; y++)
-        for (int x = -1; x <= 2; x++, n++) sum += distanceAt(px + ivec2(x, y), size);
+        for (int x = -1; x <= 2; x++, n++) sum += distanceAt(px + ivec2(x, y), size, nearDist);
     skyCentre = texelFetch(uDepth, min(px, size - 1), 0).r <= 0.0;
 #else
     ivec2 px = ivec2(gl_FragCoord.xy);
     for (int y = -1; y <= 1; y++)
-        for (int x = -1; x <= 1; x++, n++) sum += distanceAt(px + ivec2(x, y), size);
+        for (int x = -1; x <= 1; x++, n++) sum += distanceAt(px + ivec2(x, y), size, nearDist);
     skyCentre = texelFetch(uDepth, min(px, size - 1), 0).r <= 0.0;
 #endif
-    vec2 uv = gl_FragCoord.xy * pc.uModel[0].xy;
-    vec2 ndc = uv * 2.0 - 1.0;
-    ndc.y *= pc.uModel[0].z;
-    vec4 near = pc.uMvp * vec4(ndc, 1.0, 1.0); // the near plane: the ray's direction
-    vec3 rd = normalize(near.xyz / near.w - pc.uEye.xyz);
     float dist = sum / n;
     bool sky = skyCentre && dist >= Far - 1.0;
     vec3 at = pc.uEye.xyz + rd * (sky ? 1000.0 : dist);
