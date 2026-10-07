@@ -8,7 +8,7 @@ public class CarModelTests
     [Fact]
     public void Bakes_are_cached_per_car_paint_and_livery()
     {
-        var path = Environment.GetEnvironmentVariable("INITIALD_ISO") ?? "Initial D - Special Stage (Japan) (v2.00).iso";
+        var path = Environment.GetEnvironmentVariable("INITIALD_ISO") ?? "";
         if (!File.Exists(path)) return;
         using var iso = new Iso9660(path);
         var a = CarModel.Bake(iso, "FC3S", 0, Livery.Rival);

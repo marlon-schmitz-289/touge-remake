@@ -9,7 +9,7 @@ namespace Touge.Story;
 ///     voices the drama does not name). Keyed by panel timeline (KOMATCn = chapter n; 32 = chapter 9 after the race; 27 and
 ///     30 have no speech). Also the English of the title cards (MTnn episode titles, the M… part/date cards).
 /// </summary>
-public static class MangaText
+public static partial class MangaText
 {
     public static IReadOnlyList<ShowLine> Lines(int timeline) =>
         Koma.TryGetValue(timeline, out var lines) ? [.. lines.Select(Parse)] : [];
@@ -39,97 +39,15 @@ public static class MangaText
         ["M31A"] = "APRIL", ["M31B"] = "APRIL - THE GUNMA AREA",
     };
 
-    public static readonly Dictionary<int, string[]> Koma = new()
+    /// <summary>The dramas' lines by timeline, from the local <c>MangaText.Local.cs</c> (gitignored, a translation of the original's audio); empty without it.</summary>
+    public static readonly Dictionary<int, string[]> Koma = Local();
+
+    private static Dictionary<int, string[]> Local()
     {
-        [0] =
-        [
-        ],
-        [1] =
-        [
-        ],
-        [2] =
-        [
-        ],
-        [3] =
-        [
-        ],
-        [4] =
-        [
-        ],
-        [5] =
-        [
-        ],
-        [6] =
-        [
-        ],
-        [7] =
-        [
-        ],
-        [8] =
-        [
-        ],
-        [9] =
-        [
-        ],
-        [10] =
-        [
-        ],
-        [11] =
-        [
-        ],
-        [12] =
-        [
-        ],
-        [13] =
-        [
-        ],
-        [14] =
-        [
-        ],
-        [15] =
-        [
-        ],
-        [16] =
-        [
-        ],
-        [17] =
-        [
-        ],
-        [18] =
-        [
-        ],
-        [19] =
-        [
-        ],
-        [20] =
-        [
-        ],
-        [21] =
-        [
-        ],
-        [22] =
-        [
-        ],
-        [23] =
-        [
-        ],
-        [24] =
-        [
-        ],
-        [25] =
-        [
-        ],
-        [26] =
-        [
-        ],
-        [28] =
-        [
-        ],
-        [29] =
-        [
-        ],
-        [32] =
-        [
-        ],
-    };
+        var koma = new Dictionary<int, string[]>();
+        LocalKoma(koma);
+        return koma;
+    }
+
+    static partial void LocalKoma(Dictionary<int, string[]> koma);
 }

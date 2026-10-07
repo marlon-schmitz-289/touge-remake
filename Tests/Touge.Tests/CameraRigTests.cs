@@ -108,7 +108,7 @@ public class CameraRigTests
     [Fact]
     public void Every_car_from_the_disc_gets_mounts_inside_its_body()
     {
-        var path = Environment.GetEnvironmentVariable("INITIALD_ISO") ?? "Initial D - Special Stage (Japan) (v2.00).iso";
+        var path = Environment.GetEnvironmentVariable("INITIALD_ISO") ?? "";
         if (!File.Exists(path)) return;
         using var iso = new Iso9660(path);
         var afs = iso.OpenAfs("CDVD/DATA/MODEL/HCAR.AFS");
