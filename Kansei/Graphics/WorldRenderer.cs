@@ -19,7 +19,7 @@ namespace Kansei.Graphics;
 /// </summary>
 public sealed class WorldRenderer : IDisposable
 {
-    internal const int PushBytes = 720; // scene_push.glsl (a uniform slice per draw, SetScene)
+    internal const int PushBytes = 736; // scene_push.glsl (a uniform slice per draw, SetScene)
     /// <summary>
     ///     Metres an overlay layer (<see cref="MeshBatch.Layer"/>) is pulled towards the camera per layer (world.vert,
     ///     car.vert): above the gap up to which layers are formed (1 mm, Touge.Formats.ZFight.FightGap) and far above the
@@ -44,10 +44,11 @@ public sealed class WorldRenderer : IDisposable
     private Vector3 _eye;
     private readonly BindGroupLayoutHandle _layout, _sceneLayout;
     private readonly ShadowMap _shadow;
+    private readonly LocalShadows _local;
     private readonly Dictionary<(int[], int[]), BindGroupHandle> _sceneGroups = [];
     private BindGroupHandle _sceneGroup;
     private float _envMix;
-    private bool _shadowsThisFrame;
+    private bool _shadowsThisFrame, _localThisFrame;
     private readonly Vector4[] _points = new Vector4[4];
     private readonly Func<int, BindGroupHandle> _textureGroup;
     // index 0: 1 sample, 1: 4× MSAA
@@ -102,9 +103,10 @@ public sealed class WorldRenderer : IDisposable
         _sampler = device.GetSampler(SamplerDesc.LinearWrap with { MaxAnisotropy = 8 });
         _post = new PostProcess(device);
         _sceneLayout = device.GetBindGroupLayout(new BindGroupLayoutDesc(
-            [.. Enumerable.Range(1, 9).Select(b => new BindGroupLayoutEntry(b < 6 ? b : b + 1, BindingType.CombinedImageSampler, ShaderStage.Fragment)),
+            [.. Enumerable.Range(1, 10).Select(b => new BindGroupLayoutEntry(b < 6 ? b : b + 1, BindingType.CombinedImageSampler, ShaderStage.Fragment)),
                 PostProcess.UniformEntry(6, ShaderStage.Vertex | ShaderStage.Fragment)], "scene"));
         _shadow = new ShadowMap(device, _layout);
+        _local = new LocalShadows(device, _layout);
         _glow = PostProcess.Fullscreen(device, _glowShader, PostProcess.HdrFormat, BlendState.Additive with { SrcColor = BlendFactor.One }, [_layout, _sceneLayout], 0);
         _textureGroup = TextureGroup;
         var grey = AddTexture(1, 1, [118, 118, 118, 255], "env-grey"); // 18 % linear until a course sets its maps
@@ -198,6 +200,7 @@ public sealed class WorldRenderer : IDisposable
             BindGroupEntry.CombinedImageSampler(1, _shadow.View, _shadow.Sampler),
             .. a.Select((t, i) => BindGroupEntry.CombinedImageSampler(2 + i, _textures[t].View, sampler)),
             .. b.Select((t, i) => BindGroupEntry.CombinedImageSampler(7 + i, _textures[t].View, sampler)),
+            BindGroupEntry.CombinedImageSampler(11, _local.View, _local.Sampler),
             BindGroupEntry.UniformBuffer(6, _post.UniformBuffer, 0, PostProcess.UniformBytes),
         ], "scene"));
         _sceneGroups[(a, b)] = _sceneGroup;
@@ -213,10 +216,30 @@ public sealed class WorldRenderer : IDisposable
         ReadOnlySpan<(StaticMesh Mesh, Matrix4x4 Model)> cars)
     {
         _shadowsThisFrame = Atmosphere.Shadows && Shadows;
-        if (!_shadowsThisFrame) return;
-        _shadow.Update(eye, forward, fovY, aspect, Vector3.Normalize(Atmosphere.SunDirection), _device.Backend == BackendKind.Vulkan);
-        DrawCalls += _shadow.Render(encoder, _textureGroup, world, cars);
+        if (_shadowsThisFrame)
+        {
+            _shadow.Update(eye, forward, fovY, aspect, Vector3.Normalize(Atmosphere.SunDirection), _device.Backend == BackendKind.Vulkan);
+            DrawCalls += _shadow.Render(encoder, _textureGroup, world, cars);
+        }
+        // the lamps' shadows: whenever a lamp throws light (night, or the headlights in dense fog), with the shadows option
+        PickStreetLights(eye);
+        var l = Lights;
+        var head = HeadShare(eye) > 0 && l.HeadlightColor != Vector3.Zero ? l.HeadlightDirection[0] : Vector3.Zero;
+        _localThisFrame = Shadows && (head != Vector3.Zero || _points[0].W > 0);
+        if (_localThisFrame)
+            DrawCalls += _local.Render(encoder, _textureGroup, world, cars, (l.HeadlightPosition[0] + l.HeadlightPosition[1]) / 2, head, _points);
     }
+
+    /// <summary>Extinction of the height fog at <paramref name="eye"/> (fog.glsl's density there); 0 for thin haze (&lt; 2 % over 5 m: not worth the shaders' exps).</summary>
+    private float FogSigma(Vector3 eye)
+    {
+        var a = Atmosphere;
+        var sigma = a.HeightFogDensity * MathF.Exp(-Math.Clamp((eye.Y - a.HeightFogBase) / a.HeightFogScale, -4, 40));
+        return sigma < 0.004f ? 0 : sigma;
+    }
+
+    /// <summary>Share of the headlights' light: the night share, at least <see cref="FogHeadShare"/> in dense fog (by day the lamps add nothing against the sun, but fog shows them).</summary>
+    private float HeadShare(Vector3 eye) => MathF.Max(Atmosphere.LocalLightShare, FogSigma(eye) > 0 ? FogHeadShare : 0);
 
     /// <summary>
     ///     Fills the shared push block (scene_push.glsl) for one draw. <paramref name="car"/> picks the sun strength
@@ -236,16 +259,13 @@ public sealed class WorldRenderer : IDisposable
         MemoryMarshal.Write(push[208..], new Vector4(_shadow.TexelWorld[0], _shadow.TexelWorld[1], _shadow.TexelWorld[2], 1f / ShadowMap.TileSize));
         for (var c = 0; c < ShadowMap.Cascades; c++) MemoryMarshal.Write(push[(224 + c * 64)..], in _shadow.Lookup[c]);
         var share = a.LocalLightShare;
-        // uTailPos[0].w: extinction of the height fog at the camera (fog.glsl's density at the eye; lighting.glsl dims lamp light with it)
-        var sigma = a.HeightFogDensity * MathF.Exp(-Math.Clamp((eye.Y - a.HeightFogBase) / a.HeightFogScale, -4, 40));
-        if (sigma < 0.004f) sigma = 0; // thin haze (< 2 % over 5 m): not worth the shaders' exps
+        var sigma = FogSigma(eye); // uTailPos[0].w (lighting.glsl dims lamp light with it)
         for (var i = 0; i < 2; i++)
         {
             MemoryMarshal.Write(push[(416 + i * 16)..], new Vector4(l.HeadlightPosition[i], l.HighBeam));
             MemoryMarshal.Write(push[(448 + i * 16)..], new Vector4(l.HeadlightDirection[i], i == 0 ? l.LampGlow : l.Reverse));
         }
-        // by day the lamps add nothing against the sun, but dense fog shows them: a lit cone in the mist and the road ahead a little brighter
-        MemoryMarshal.Write(push[480..], new Vector4(l.HeadlightColor * MathF.Max(share, sigma > 0 ? FogHeadShare : 0), float.Lerp(LowBeamRange, HighBeamRange, l.HighBeam)));
+        MemoryMarshal.Write(push[480..], new Vector4(l.HeadlightColor * HeadShare(eye), float.Lerp(LowBeamRange, HighBeamRange, l.HighBeam)));
         for (var i = 0; i < 4; i++) MemoryMarshal.Write(push[(496 + i * 16)..], _points[i]);
         MemoryMarshal.Write(push[560..], new Vector4(l.StreetLightColor * share, 0));
         WriteFog(push[576..]);
@@ -255,6 +275,7 @@ public sealed class WorldRenderer : IDisposable
         MemoryMarshal.Write(push[672..], new Vector4(a.SunColor, a.Specular));
         MemoryMarshal.Write(push[688..], new Vector4(a.ShadeSky, a.ContactShadow));
         MemoryMarshal.Write(push[704..], new Vector4(a.ShadeGround, a.FogDrift));
+        MemoryMarshal.Write(push[720..], new Vector4(_localThisFrame ? 1 : 0, _device.Backend == BackendKind.Vulkan ? 1 : 0, 0, 0));
     }
 
     /// <summary>uFogParams + uFogSun (scene_push.glsl, sky.frag).</summary>
@@ -496,6 +517,7 @@ public sealed class WorldRenderer : IDisposable
         ReleaseTargets();
         ReleaseDepthGroup();
         _shadow.Dispose();
+        _local.Dispose();
         _post.Dispose();
         foreach (var p in _pipeline.Concat(_opaque).Concat(_skyMesh).Concat(_sky).Append(_glow)) _device.DestroyRenderPipeline(p);
         _device.DestroyShader(_shader);

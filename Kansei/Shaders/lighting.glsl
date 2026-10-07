@@ -3,6 +3,7 @@
 // Bindings are unique across sets: the binding number is also the Metal texture/sampler slot.
 
 layout(set = 1, binding = 1) uniform sampler2DShadow uShadowMap;
+layout(set = 1, binding = 11) uniform sampler2DShadow uLocalShadow;
 
 float shadowAt(vec3 p, vec3 n)
 {
@@ -22,6 +23,42 @@ float shadowAt(vec3 p, vec3 n)
         return lit;
     }
     return 1.0;
+}
+
+// Shadow of a lamp at p (1 = lit): tile 0 the headlights, 1–4 the street lights (LocalShadows.cs, whose projections this
+// rebuilds: clip = (k·x, k·y, A·d + B, d) in the lamp's frame). `bias` moves the compared depth towards the lamp (surfaces;
+// 0 in the fog). Outside a tile's frustum: lit. 2×2 compare taps by the sampler.
+const float HeadK = 0.8390996, HeadNear = 0.5, HeadFar = 90.0;      // 1 / tan(100° / 2)
+const float StreetK = 0.3639702, StreetNear = 0.3, StreetFar = 30.0; // 1 / tan(140° / 2)
+const float StreetDrop = 0.35;
+float localShadow(int t, vec3 p, float bias)
+{
+    if (pc.uLocal.x < 0.5) return 1.0;
+    vec3 o, r, u, f;
+    float k, n, fr;
+    if (t == 0)
+    {
+        o = 0.5 * (pc.uSpotPos[0].xyz + pc.uSpotPos[1].xyz);
+        f = pc.uSpotDir[0].xyz;
+        r = normalize(cross(f, vec3(0.0, 1.0, 0.0)));
+        u = cross(r, f);
+        k = HeadK; n = HeadNear; fr = HeadFar;
+    }
+    else
+    {
+        o = pc.uPointPos[t - 1].xyz - vec3(0.0, StreetDrop, 0.0);
+        r = vec3(1.0, 0.0, 0.0); u = vec3(0.0, 0.0, 1.0); f = vec3(0.0, -1.0, 0.0);
+        k = StreetK; n = StreetNear; fr = StreetFar;
+    }
+    vec3 l = p - o;
+    float d = dot(l, f);
+    if (d <= n || d >= fr) return 1.0;
+    vec2 c = vec2(dot(l, r), dot(l, u)) * (k / d);
+    if (any(greaterThan(abs(c), vec2(0.99)))) return 1.0;
+    float db = max(d - bias, n);
+    float z = fr / (fr - n) * (1.0 - n / db);
+    vec2 uv = c * vec2(0.5, pc.uLocal.y > 0.5 ? 0.5 : -0.5) + 0.5;
+    return texture(uLocalShadow, vec3((uv.x + float(t)) / 5.0, uv.y, z));
 }
 
 // Tint of the shade/ambient for normal n: ground bounce below, sky above (1 = neutral).
@@ -127,6 +164,9 @@ vec3 lightIn(int i, vec3 p, bool mirror, out vec3 l)
     float w = 1.0 - (d2 * d2) / (range * range * range * range);
     float att = w * w / (d2 + 1.0);
     if (spot) att *= beam(i, -l);
+    // lamp shadows (headlights: tile 0, street lights 2–5: tiles 1–4; rear lamps none); the bias grows with the distance like a texel
+    if (i < 6) att *= localShadow(spot ? 0 : i - 1, p, 0.05 + 0.004 * sqrt(d2));
+    if (att <= 0.0) return vec3(0.0);
     vec3 e = colour * att;
     if (pc.uTailPos[0].w <= 0.0) return e;
     // dense fog swallows the light on its way and scatters the rest: soft cap, so a beam reads as a veil, not a white spot
@@ -208,12 +248,17 @@ vec3 lightGlow(vec3 p)
         vec3 ol = lp.xyz - o;
         float tc = dot(ol, rd);
         float h = sqrt(max(dot(ol, ol) - tc * tc, 0.0)) + 0.1;
-        float glow = (atan((len - tc) / h) + atan(tc / h)) / h;
-        if (sigma > 0.0)
+        float ta = -atan(tc / h), tb = atan((len - tc) / h);
+        float glow = (tb - ta) / h;
+        // the share of it that is lit (shadows): 4 points spread like the integrand (uniform in the angle seen from the
+        // lamp), so the lamp's own neighbourhood counts most; in dense fog × the density where the ray passes it closest
+        if (pc.uLocal.x > 0.5 && glow * dot(colour, vec3(0.2126, 0.7152, 0.0722)) * pc.uFog.a > 1e-4) // skip where it adds nothing visible
         {
-            vec3 near = o + rd * clamp(tc, 0.0, len);
-            glow *= fogDensity(near) / sigma * exp(-sigma * length(ol));
+            float lit = 0.0;
+            for (int k = 0; k < 4; k++) lit += localShadow(j + 1, o + rd * (tc + h * tan(mix(ta, tb, (float(k) + 0.5) / 4.0))), 0.0);
+            glow *= lit / 4.0;
         }
+        if (sigma > 0.0) glow *= fogDensity(o + rd * clamp(tc, 0.0, len)) / sigma * exp(-sigma * length(ol));
         sum += colour * glow;
     }
     vec3 veil = vec3(0.0);
@@ -225,7 +270,7 @@ vec3 lightGlow(vec3 p)
             vec3 q = o + rd * ((float(k) + 0.5) * step);
             float s = fogDensity(q);
             optical += s * step * 0.5; // to the middle of this step
-            vec3 lit = vec3(0.0);
+            float lit = 0.0;
             for (int i = 0; i < 2; i++)
             {
                 vec3 dl = q - pc.uSpotPos[i].xyz;
@@ -233,7 +278,7 @@ vec3 lightGlow(vec3 p)
                 // + 9: the lamps are lenses, not points — no hot spot in the mist right at the bumper
                 lit += beamVeil(i, dl * inversesqrt(max(d2, 1e-4))) * exp(-s * sqrt(d2)) / (d2 + 9.0);
             }
-            veil += lit * (s / sigma) * exp(-optical) * step;
+            if (lit > 0.0) veil += vec3(lit * localShadow(0, q, 0.0) * (s / sigma) * exp(-optical) * step); // the shadow only inside the beam
             optical += s * step * 0.5;
         }
         veil *= pc.uSpotColor.rgb * (pc.uFog.a * HeadVeil);

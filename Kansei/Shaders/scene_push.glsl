@@ -1,4 +1,4 @@
-// Per-draw block shared by world.*, car.*, effect.* and rain.* (720 bytes). A uniform buffer slice per draw
+// Per-draw block shared by world.*, car.*, effect.* and rain.* (736 bytes). A uniform buffer slice per draw
 // (WorldRenderer.SetScene, dynamic offset), not push constants: Vulkan only guarantees 128 bytes of those.
 // Written by WorldRenderer.WritePush. Positions/directions in world space, colours linear.
 layout(set = 1, binding = 6, std140) uniform Push {
@@ -24,5 +24,6 @@ layout(set = 1, binding = 6, std140) uniform Push {
     vec4 uSunColor;     // rgb tint of the direct sun, w = sun glints on the world (0 = none)
     vec4 uShadeSky;     // rgb tint of the shade (baked keep / car ambient) on upward normals, w = contact shadow under the car (world)
     vec4 uShadeGround;  // rgb tint of the shade on downward normals (bounce from the ground), w = fog drift (fog.glsl, 0 = none)
+    vec4 uLocal;        // x = lamp shadows rendered (LocalShadows), y = 1: tile v runs with clip y (Vulkan), else against it
 } pc;
 #define SCENE_PUSH

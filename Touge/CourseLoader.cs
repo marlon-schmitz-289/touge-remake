@@ -9,7 +9,7 @@ public static class CourseLoader
 {
     /// <param name="Road">CRS_ROAD centre points.</param>
     /// <param name="Env">Per road point the renderer texture indices of ENV_TOP/BOTTOM/LEFT/RIGHT, one shared array per distinct set (null: course has no env maps).</param>
-    /// <param name="Lights">CRS_LIGHT points (empty if none).</param>
+    /// <param name="Lights">Street lamp positions (<see cref="CourseLamps"/>; empty if none).</param>
     /// <param name="FogColour">The original's fog colour for this course and time of day (CRS_INFO, gamma 0..1), null if missing.</param>
     /// <param name="Fog">The original's linear fog start/end in metres for this time of day (CRS_INFO), null if missing.</param>
     /// <param name="SunDirection">Towards the original's key light (CRS_INFO light 0, its car lighting), null if missing.</param>
@@ -86,7 +86,7 @@ public static class CourseLoader
         var world = Build(renderer.Device, meshes, textures, cutout, white, true);
         var sky = Build(renderer.Device, Meshes(pac, true), textures, cutout, white, false); // no depth: paint order stays file order
 
-        var lights = Data($"CRS_LIGHT_{course}.BIN") is { } l ? CourseRoad.ReadLights(l) : [];
+        var lights = CourseLamps.Find(meshes, road, Data($"CRS_LIGHT_{course}.BIN") is { } l ? CourseRoad.ReadLights(l) : [], courseTime.EndsWith("_NIT"));
         var slot = CourseInfo.FogSlot(courseTime[(courseTime.LastIndexOf('_') + 1)..]);
         var cif = Data($"CRS_INFO_{course}.BIN");
         return new Course(world, sky, ReadDrivingLine(iso, course), road, LoadEnv(models, Data($"CRS_ENV_{course}.BIN"), courseTime, road.Length, renderer), lights,
