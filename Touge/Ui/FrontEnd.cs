@@ -177,15 +177,13 @@ public sealed class FrontEnd
                 break;
             case Step.Title:
                 Night(c);
-                Ghost(c, 256, 150, 420, 0.8f + 1.2f * MathF.Exp(-_t * 1.5f)); // the logo blooms up as the title appears
-                Logo(c, 1);
+                Logo(c, 1, 0.5f + 0.5f * MathF.Exp(-_t * 1.5f)); // the logo blooms up as the title appears
                 c.Fit("PRESS START BUTTON", 256, 306, 194, 0.5f, Style.Fade(Canvas.White, Canvas.Pulse(_theta)), 0.06f, 0.06f);
                 Copyright(c);
                 break;
             case Step.Modes:
                 Night(c);
-                Ghost(c, 160, 125, 190, 0.5f);
-                Logo(c, 1);
+                Logo(c, 1, 0.35f);
                 Drum(c);
                 Copyright(c);
                 _quit.Draw(c, _theta);
@@ -198,37 +196,29 @@ public sealed class FrontEnd
     /// <summary>Title/menu backdrop: the night course behind, pulled towards the photo's deep blue-black.</summary>
     private static void Night(Canvas c) => c.Fill(Overlay.Rgba(0.015f, 0.025f, 0.06f, 0.3f));
 
-    /// <summary>The big soft white "D" logo glowing in the photo, centred at (x, y), <paramref name="w"/> wide.</summary>
-    private static void Ghost(Canvas c, float x, float y, float w, float a)
-    {
-        const string text = "INITIAL D";
-        var size = w * c.Kx / c.O.Font!.Measure(text, 1);
-        var at = c.P(x, y) + new Vector2(0, c.O.Font.CapHeight * size / 2);
-        c.O.Text(text, at, size, Style.Fade(Overlay.Rgba(0.85f, 0.9f, 1, 0.3f), a), 0.5f, size * 0.04f, size * 0.2f, 0.2f);
-        c.O.Text(text, at, size, Style.Fade(Overlay.Rgba(0.9f, 0.93f, 1, 0.45f), a), 0.5f, 0, size * 0.06f, 0.2f);
-    }
-
     /// <summary>
     ///     The coloured logo where the original's sits (331×182 at (−166, −152) from the centre): heavy italic "INITIAL" in
     ///     place of the kanji and a taller "D", both yellow → red with a thin black and a white outline and red speed lines
-    ///     along their feet, "Special Stage" in yellow → gold below.
+    ///     along their feet, "Special Stage" in yellow → gold below. <paramref name="glow"/>: soft white light around the letters
+    ///     (the original's photo has the logo glowing in it).
     /// </summary>
-    private static void Logo(Canvas c, float a)
+    private static void Logo(Canvas c, float a, float glow = 0)
     {
         uint F(uint col) => Style.Fade(col, a);
         const float skew = 0.22f;
         for (var i = 0; i < 3; i++) // speed lines behind the letters' feet
             c.O.Line(c.P(64 + i * 10, 172 + i * 5), c.P(420, 172 + i * 5), (2.2f - i * 0.5f) * c.S, F(Overlay.Rgba(0.9f, 0.1f, 0.05f, 0.9f)));
-        Outlined(c, "D", 298, 194, 0, 0, skew, F(Overlay.Rgba(1, 0.9f, 0.25f)), F(Overlay.Rgba(0.92f, 0.12f, 0.04f)), a, 104);
-        Outlined(c, "INITIAL", 96, 186, 208, 0, skew, F(Overlay.Rgba(1, 0.9f, 0.25f)), F(Overlay.Rgba(0.92f, 0.12f, 0.04f)), a);
-        Outlined(c, "Special Stage", 412, 246, 240, 1, 0.3f, F(Overlay.Rgba(1, 0.97f, 0.6f)), F(Overlay.Rgba(0.85f, 0.55f, 0.08f)), a);
+        Outlined(c, "D", 298, 194, 0, 0, skew, F(Overlay.Rgba(1, 0.9f, 0.25f)), F(Overlay.Rgba(0.92f, 0.12f, 0.04f)), a, 104, glow);
+        Outlined(c, "INITIAL", 96, 186, 208, 0, skew, F(Overlay.Rgba(1, 0.9f, 0.25f)), F(Overlay.Rgba(0.92f, 0.12f, 0.04f)), a, 0, glow);
+        Outlined(c, "Special Stage", 412, 246, 240, 1, 0.3f, F(Overlay.Rgba(1, 0.97f, 0.6f)), F(Overlay.Rgba(0.85f, 0.55f, 0.08f)), a, 0, glow);
     }
 
     /// <summary>Logo lettering: white outer and thin black inner outline, vertical gradient fill; fitted to <paramref name="w"/> or cap height <paramref name="h"/>.</summary>
-    private static void Outlined(Canvas c, string text, float x, float y, float w, float align, float skew, uint top, uint bottom, float a, float h = 0)
+    private static void Outlined(Canvas c, string text, float x, float y, float w, float align, float skew, uint top, uint bottom, float a, float h = 0, float glow = 0)
     {
         var o = c.O;
         var size = h > 0 ? h * c.Ky / o.Font!.CapHeight : w * c.Kx / o.Font!.Measure(text, 1);
+        if (glow > 0) o.Text(text, c.P(x, y), size, Style.Fade(Overlay.Rgba(0.9f, 0.94f, 1), a * glow), align, size * 0.04f, size, skew); // soft: as wide as the font's range allows
         o.Text(text, c.P(x, y), size, Style.Fade(Canvas.White, a), align, size * 0.06f, 0, skew);
         o.Text(text, c.P(x, y), size, Style.Fade(Canvas.Black, a), align, size * 0.028f, 0, skew);
         o.Text(text, c.P(x, y), size, top, align, 0, 0, skew, bottom);
