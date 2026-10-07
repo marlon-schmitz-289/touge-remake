@@ -76,6 +76,8 @@ public sealed partial class Vehicle
     public int Gear { get; private set; } // −1 R, 0 N, 1..n
     /// <summary>Throttle of the last step (0..1, after the automatic's reverse swap).</summary>
     public float Throttle { get; private set; }
+    /// <summary>The brake pedal as it acts (the automatic swaps the pedals in reverse: there the brake key drives): what the brake lights show.</summary>
+    public float Brake { get; private set; }
     /// <summary>Body slip angle β in rad; + = travelling to the right of the nose. 0 when not moving forward.</summary>
     public float SlipAngle { get; private set; }
     public float SpeedKmh => Velocity.Length() * 3.6f;
@@ -158,7 +160,7 @@ public sealed partial class Vehicle
             }
             if (Gear == -1) (throttle, brake) = (brake, throttle);
         }
-        Throttle = throttle;
+        (Throttle, Brake) = (throttle, brake);
         _clutchPedal = Math.Clamp(input.Clutch, 0, 1);
         UpdateGear(input.Shift, dt, input.Handbrake);
         if (input.DirectSteer) _steer = Math.Clamp(input.Steer, -1, 1) * Spec.MaxSteer;

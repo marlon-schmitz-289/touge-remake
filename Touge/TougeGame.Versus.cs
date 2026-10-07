@@ -851,7 +851,7 @@ public sealed partial class TougeGame
         if (_vsRace == null) return;
         foreach (var c in RacingCars)
             if (!(view == 1 && c == _vsCars[0]))
-                DrawOtherCar(pass, viewProj, c.Model!, c.Body, c.Wheels, c.Lights, c.Lamps, c.Race!.Input.Brake, c.Race.Vehicle.Gear < 0);
+                DrawOtherCar(pass, viewProj, c.Model!, c.Body, c.Wheels, c.Lights, c.Lamps, c.Race!.Vehicle.Brake, c.Race.Vehicle.Gear < 0);
         if (view == 1) DrawOtherCar(pass, viewProj, _car, _carBody, _carWheels, _lights, _p1Lamps, _brakeLight, _drive.Car.Gear < 0);
     }
 
@@ -931,7 +931,7 @@ public sealed partial class TougeGame
         var menu = _menu?.Current ?? Menu.Screen.None;
         if (!_fly && menu is Menu.Screen.None or Menu.Screen.Intro or Menu.Screen.Finish) UpdateDriveCamera(shot != null ? 0 : ctx.Time.DeltaTime, car.Vehicle, p2.Pose, p2.Body, p2.Model!);
         else if (_camSnap) UpdateDriveCamera(0, car.Vehicle, p2.Pose, p2.Body, p2.Model!);
-        RenderView(ctx, shot, frame, viewport, new ViewCar(p2.Model!, p2.Body, p2.Wheels, p2.Lights, car.Input.Brake, car.Vehicle.Gear < 0, car.Vehicle), 1);
+        RenderView(ctx, shot, frame, viewport, new ViewCar(p2.Model!, p2.Body, p2.Wheels, p2.Lights, car.Vehicle.Brake, car.Vehicle.Gear < 0, car.Vehicle), 1);
         SwapCamera();
     }
 

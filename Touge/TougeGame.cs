@@ -552,7 +552,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         if (_vsRace != null) input = VersusStep(input, dt); // versus: split screen or online (Touge/Net)
         else if (_race != null) input = BattleStep(input, dt); // the session steps every car, the player's included
         else car.Step(input, _drive.Ground, dt);
-        _brakeLight = input.Brake;
+        _brakeLight = car.Brake; // the pedal as it acts: reversing with the automatic's brake key is not braking
         _ffb.Update(car, _drive.Roughness, _driver.SteerBeyond, _settings.Controls.FfbStrength, dt);
         _simTime += dt;
         _lights.Tick(dt);

@@ -455,7 +455,7 @@ public sealed partial class TougeGame
                 continue;
             }
             var lights = s.Lights;
-            lights.Apply(_showLamps, s.Model.Lamp, s.Body, _renderer.Atmosphere.LocalLightShare, s.Input.Brake, s.Vehicle.Gear < 0);
+            lights.Apply(_showLamps, s.Model.Lamp, s.Body, _renderer.Atmosphere.LocalLightShare, s.Vehicle.Brake, s.Vehicle.Gear < 0);
             var (glow, brake, reverse) = (l.LampGlow, l.Brake, l.Reverse);
             (l.LampGlow, l.Brake, l.Reverse) = (_showLamps.LampGlow, _showLamps.Brake, _showLamps.Reverse);
             var shell = s.Model.ShellFor(lights.State != Headlights.Mode.Off, InCabin(s.Body));
@@ -578,7 +578,7 @@ public sealed partial class TougeGame
         if (!p.Step()) return false;
         (_prevPos, _prevRot) = (p.PrevPosition[0], p.PrevOrientation[0]);
         var input = p.LastInput(0);
-        _brakeLight = input.Brake;
+        _brakeLight = _drive.Car.Brake;
         for (var i = 1; i < p.Cars.Length; i++)
         {
             if (_race != null && _viewerBack != Back.Menu)

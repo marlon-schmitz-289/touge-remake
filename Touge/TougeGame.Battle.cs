@@ -145,7 +145,7 @@ public sealed partial class TougeGame
             _hud.Tick(_drive.Car, Drive.Dt);
         });
         _simTime = seconds;
-        _brakeLight = _race!.Cars[0].Input.Brake;
+        _brakeLight = _race!.Cars[0].Vehicle.Brake;
     }
 
     private void UpdateRivalMatrices(float alpha)
@@ -175,7 +175,7 @@ public sealed partial class TougeGame
         if (_race == null || _rivalModel == null || _probe != null) return;
         var rival = _race.Cars[1];
         var l = _renderer.Lights;
-        _rivalLights.Apply(_rivalLamps, _rivalModel.Lamp, _rivalBody, _renderer.Atmosphere.LocalLightShare, rival.Input.Brake, rival.Vehicle.Gear < 0);
+        _rivalLights.Apply(_rivalLamps, _rivalModel.Lamp, _rivalBody, _renderer.Atmosphere.LocalLightShare, rival.Vehicle.Brake, rival.Vehicle.Gear < 0);
         var (glow, brake, reverse) = (l.LampGlow, l.Brake, l.Reverse);
         (l.LampGlow, l.Brake, l.Reverse) = (_rivalLamps.LampGlow, _rivalLamps.Brake, _rivalLamps.Reverse);
         var shell = _rivalModel.ShellFor(_rivalLights.State != Headlights.Mode.Off, InCabin(_rivalBody));

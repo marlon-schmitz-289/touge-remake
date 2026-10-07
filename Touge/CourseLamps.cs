@@ -53,12 +53,17 @@ public static class CourseLamps
         {
             if (m.Texture < 0 || m.Texture >= mesh.Textures.Length || !soft.Contains(mesh.Textures[m.Texture])) continue;
             var t = m.Triangles;
+            var kept = new List<Mesh.Vertex>(t.Count);
             for (var i = 0; i + 2 < t.Count; i += 3)
             {
                 var p = (t[i].Position + t[i + 1].Position + t[i + 2].Position) / 3;
-                if (!lamps.Any(l => Vector3.DistanceSquared(l, p) < 9)) continue; // up to 2.3 m from the bulb (AKINA); lamps stand ≥ 20 m apart
-                for (var k = 0; k < 3; k++) t[i + k] = t[i + k] with { Color = t[i + k].Color with { W = 0 } };
+                if (lamps.Any(l => Vector3.DistanceSquared(l, p) < 9)) continue; // up to 2.3 m from the bulb (AKINA); lamps stand ≥ 20 m apart
+                kept.AddRange([t[i], t[i + 1], t[i + 2]]);
             }
+            // removed, not made transparent: the shadow passes test only the texture's alpha, so invisible cards still cast
+            // shadows (in the headlights they moved along with the car)
+            t.Clear();
+            t.AddRange(kept);
         }
     }
 
