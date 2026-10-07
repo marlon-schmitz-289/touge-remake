@@ -17,6 +17,35 @@ public static class CourseLamps
     /// <summary>Housing textures of lamps the original leaves dark: AKINA's 8 cobra heads along the road.</summary>
     public static readonly string[] DarkHeads = ["KINA_NIT117_015"];
 
+    /// <summary>
+    ///     Linear-ish HDR vertex colour (world.vert squares it ~×2.2) of a lit lamp glass: warm and well over white, so the bloom
+    ///     draws the glare around it — the original's flat, ragged near-white card read as a matte paper patch. Tuned by eye.
+    /// </summary>
+    public static readonly Vector4 GlassColour = new(2.4f, 2.05f, 1.6f, 1);
+
+    /// <summary>
+    ///     Night: the glass of every lamp in <paramref name="lamps"/> glows (<see cref="GlassColour"/>): the near-white triangles
+    ///     within 2 m of it, and on the dark heads (<see cref="DarkHeads"/>) the housing's downward faces.
+    /// </summary>
+    public static void Glow(IReadOnlyList<(string Name, Mesh Mesh)> meshes, Vector3[] lamps)
+    {
+        foreach (var (_, mesh) in meshes.Where(m => m.Name.StartsWith("crs")))
+        foreach (var m in mesh.Materials)
+        {
+            var dark = m.Texture >= 0 && m.Texture < mesh.Textures.Length && DarkHeads.Contains(mesh.Textures[m.Texture]);
+            var t = m.Triangles;
+            for (var i = 0; i + 2 < t.Count; i += 3)
+            {
+                var p = (t[i].Position + t[i + 1].Position + t[i + 2].Position) / 3;
+                if (!lamps.Any(l => Vector3.DistanceSquared(l, p) < 4)) continue;
+                var c = (t[i].Color + t[i + 1].Color + t[i + 2].Color) / 3;
+                var down = Vector3.Cross(t[i + 1].Position - t[i].Position, t[i + 2].Position - t[i].Position);
+                if (dark ? Math.Abs(down.Y) < 0.7f * down.Length() : (c.X + c.Y + c.Z) / 3 < 0.7f) continue; // dark heads: the flat underside (either winding)
+                for (var k = 0; k < 3; k++) t[i + k] = t[i + k] with { Color = GlassColour with { W = t[i + k].Color.W } };
+            }
+        }
+    }
+
     public static Vector3[] Find(IReadOnlyList<(string Name, Mesh Mesh)> meshes, Vector3[] road, Vector3[] crsLight, bool night)
     {
         if (!night || road.Length == 0) return crsLight;

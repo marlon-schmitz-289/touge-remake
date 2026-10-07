@@ -83,10 +83,12 @@ public static class CourseLoader
 
         // lod/shd are not drawn; the tree templates are placed from TREE_* (baked into the world)
         List<(string Name, Mesh Mesh)> meshes = [.. Meshes(pac, false).Where(m => RaceGates(m.Name, reverse)), .. Trees(pac, course, Data, road)];
+        var night = courseTime.EndsWith("_NIT");
+        var lights = CourseLamps.Find(meshes, road, Data($"CRS_LIGHT_{course}.BIN") is { } l ? CourseRoad.ReadLights(l) : [], night);
+        if (night) CourseLamps.Glow(meshes, lights);
         var world = Build(renderer.Device, meshes, textures, cutout, white, true);
         var sky = Build(renderer.Device, Meshes(pac, true), textures, cutout, white, false); // no depth: paint order stays file order
 
-        var lights = CourseLamps.Find(meshes, road, Data($"CRS_LIGHT_{course}.BIN") is { } l ? CourseRoad.ReadLights(l) : [], courseTime.EndsWith("_NIT"));
         var slot = CourseInfo.FogSlot(courseTime[(courseTime.LastIndexOf('_') + 1)..]);
         var cif = Data($"CRS_INFO_{course}.BIN");
         return new Course(world, sky, ReadDrivingLine(iso, course), road, LoadEnv(models, Data($"CRS_ENV_{course}.BIN"), courseTime, road.Length, renderer), lights,
