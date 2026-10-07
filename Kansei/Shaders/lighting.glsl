@@ -132,6 +132,13 @@ vec3 capped(vec3 e) { return capped(e, LightCap); }
 
 const int Lights = 8;
 const float TailRange = 8.0, StreetRange = 22.0;
+
+// A street lamp shines down: its light within ~75° of straight down, nothing above its head (d = unit lamp → point).
+float streetCone(vec3 d)
+{
+    return smoothstep(0.05, 0.4, -d.y);
+}
+
 const float FogLightCap = 0.3; // most irradiance a lamp lends a surface in dense fog
 const float HeadVeil = 0.5, HeadVeilCap = 0.09; // headlight light scattered by dense fog: share of the street lamps' glow, most it adds
 
@@ -162,7 +169,7 @@ vec3 lightIn(int i, vec3 p, bool mirror, out vec3 l)
     if (spot) att *= beam(i, -l);
     // lamp shadows (headlights: tile 0, street lights 2–5: tiles 1–4; rear lamps none); the bias grows with the distance like a texel
     if (i < 6) att *= localShadow(spot ? 0 : i - 1, p, 0.05 + 0.004 * sqrt(d2));
-    if (i >= 2 && i < 6) att *= smoothstep(0.6, 1.2, sqrt(d2)); // a street lamp does not light its own fixture
+    if (i >= 2 && i < 6) att *= smoothstep(0.6, 1.2, sqrt(d2)) * streetCone(-l); // a street lamp shines down and not onto its own fixture
     if (att <= 0.0) return vec3(0.0);
     vec3 e = colour * att;
     if (pc.uTailPos[0].w <= 0.0) return e;
@@ -221,10 +228,10 @@ vec3 wetLights(vec3 p, vec3 n, vec3 v, float across, float along)
     return sum * (fresnel / (3.14159 * across * along));
 }
 
-// The street lamps' glare, seen along the ray to p (sky: far behind): a small bright core of the lamp's angular size
-// (~0.3 m glass) and a faint wide halo, by the angle between the ray and the lamp — round and smooth at any distance (the
-// bloom spreads it), instead of the original's ragged glass card (hidden, CourseLamps.HideGlass). A surface nearer than
-// the lamp hides it pixel by pixel.
+// The street lamps' glare, seen along the ray to p (sky: far behind): the lamp's glass is a flat disc facing down (~0.3 m),
+// so from below it shows as an ellipse squashed by the view's elevation, edge-on from the side and not at all from above;
+// a faint wide halo around it. By the angles between the ray and the lamp — smooth at any distance (the bloom spreads it),
+// in place of the original's ragged glow cards (CourseLamps.HideGlowCards). A surface nearer than the lamp hides it.
 vec3 lampGlare(vec3 p, bool sky)
 {
     vec3 o = pc.uEye.xyz;
@@ -240,11 +247,17 @@ vec3 lampGlare(vec3 p, bool sky)
         vec3 ol = lp.xyz - o;
         float dist = length(ol);
         if (!sky && len < dist - 0.4) continue; // something in front of the lamp
+        vec3 ld = ol / dist;
+        float below = ld.y;                     // sine of the view's elevation: > 0 = the eye is below the lamp
+        if (below <= 0.02) continue;
+        vec3 off = rd - ld * dot(rd, ld);       // angular offset from the lamp (radians, small angles)
+        vec3 up = normalize(vec3(0.0, 1.0, 0.0) - ld * below);
+        float ov = dot(off, up), oh2 = max(dot(off, off) - ov * ov, 0.0);
         float r = 0.3 / max(dist, 0.5);         // angular radius of the glass
-        float c = dot(rd, ol / dist);
-        float th2 = max(2.0 * (1.0 - c), 0.0);  // ≈ angle²
-        float shape = exp(-th2 / (r * r)) + 0.04 * (r * r) / (th2 + r * r * 4.0);
-        sum += colour * shape;
+        float rv = r * max(below, 0.08);        // the disc foreshortened
+        float core = exp(-(oh2 / (r * r) + ov * ov / (rv * rv)));
+        float halo = 0.03 * (r * r) / (dot(off, off) + r * r * 4.0);
+        sum += colour * (core + halo) * smoothstep(0.02, 0.25, below);
     }
     return sum * 0.3; // colour ≈ 50 × tint at night: a core of ~15, a glare for the bloom
 }
@@ -274,7 +287,9 @@ vec3 lightGlow(vec3 p)
         float tc = dot(ol, rd);
         float h = sqrt(max(dot(ol, ol) - tc * tc, 0.0)) + 0.1;
         float glow = (atan((len - tc) / h) + atan(tc / h)) / h; // no shadows in the fog: a handful of taps per ray flickered as edges crossed them
-        if (sigma > 0.0) glow *= fogDensity(o + rd * clamp(tc, 0.0, len)) / sigma * exp(-sigma * length(ol));
+        vec3 near = o + rd * clamp(tc, 0.0, len);
+        glow *= streetCone(normalize(near - lp.xyz + vec3(0.0, -0.3, 0.0))); // the mist lights up under the lamp, not above
+        if (sigma > 0.0) glow *= fogDensity(near) / sigma * exp(-sigma * length(ol));
         sum += colour * glow;
     }
     vec3 veil = vec3(0.0);

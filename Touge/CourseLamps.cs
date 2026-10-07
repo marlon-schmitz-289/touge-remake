@@ -23,6 +23,29 @@ public static class CourseLamps
     ///     PS2 blended them softly under the lamp; alpha-tested they became a ragged white sheet. The renderer's round glare
     ///     (lighting.glsl lampGlare) takes their place; the lamp's own glass (near-white, untextured) stays.
     /// </summary>
+    /// <summary>Baked colour of a lamp's glass/housing at night: dark metal (the glare draws the glowing disc under it).</summary>
+    public static readonly Vector4 HousingColour = new(0.14f, 0.14f, 0.15f, 1);
+
+    /// <summary>
+    ///     Night: the near-white lamp glass within 2 m of each lamp turns dark housing (<see cref="HousingColour"/>) — seen from
+    ///     the side it was a bright white wedge; the downward glare (lighting.glsl lampGlare) shows the light from below.
+    /// </summary>
+    public static void DarkenGlass(IReadOnlyList<(string Name, Mesh Mesh)> meshes, Vector3[] lamps)
+    {
+        foreach (var (_, mesh) in meshes)
+        foreach (var m in mesh.Materials)
+        {
+            var t = m.Triangles;
+            for (var i = 0; i + 2 < t.Count; i += 3)
+            {
+                var p = (t[i].Position + t[i + 1].Position + t[i + 2].Position) / 3;
+                var c = (t[i].Color + t[i + 1].Color + t[i + 2].Color) / 3;
+                if ((c.X + c.Y + c.Z) / 3 < 0.7f || !lamps.Any(l => Vector3.DistanceSquared(l, p) < 4)) continue;
+                for (var k = 0; k < 3; k++) t[i + k] = t[i + k] with { Color = HousingColour with { W = t[i + k].Color.W } };
+            }
+        }
+    }
+
     public static void HideGlowCards(IReadOnlyList<(string Name, Mesh Mesh)> meshes, Vector3[] lamps, IReadOnlySet<string> soft)
     {
         foreach (var (_, mesh) in meshes)
