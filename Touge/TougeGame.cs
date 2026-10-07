@@ -151,8 +151,8 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     /// <summary>--cam: start camera instead of the setting.</summary>
     public CameraView? StartCamera { get; init; }
     private Vector3 _pos, _camLook;
-    /// <summary>The chase views' state (<see cref="CameraRig.Follow"/>).</summary>
-    private CameraRig.Follow _follow;
+    /// <summary>The chase views' state (<see cref="ChaseCamera"/>).</summary>
+    private ChaseCamera _follow;
     private float _yaw, _pitch, _fov = MathF.PI / 3;
     private int _lastMouseX, _lastMouseY, _linePoint;
     private double _statusTime;
@@ -1514,7 +1514,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     /// <summary>The driving camera of <paramref name="car"/> at its interpolated <paramref name="carPose"/>/<paramref name="carBody"/> (split screen: player 2's too).</summary>
     private void UpdateDriveCamera(float dt, Vehicle car, Matrix4x4 carPose, Matrix4x4 carBody, CarModel model)
     {
-        (_pos, _camLook, _fov) = CameraRig.Place(_camView, ref _follow, _camSnap, dt, carPose, carBody, model.Mounts, _settings.Fov * MathF.PI / 180, _course.Hull);
+        (_pos, _camLook, _fov) = CameraRig.Place(_camView, ref _follow, _camSnap, dt, carPose, carBody, car.Velocity, model.Mounts, _settings.Fov * MathF.PI / 180, car.Wheels);
         _onBoard = _camView is CameraView.Hood or CameraView.Cockpit ? _camView : null;
         _camSnap = false;
         // wall hits shake the camera briefly (up to 12 cm, decays in ~0.3 s)
@@ -1626,7 +1626,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         if (viewport is { } vp) aspect = (float)vp.Width / Math.Max(1, vp.Height);
         // Game data is right-handed (y up). Vulkan clip space is Y-down, Metal/GL Y-up.
         var proj = WorldRenderer.Perspective(_fov, aspect, _onBoard is { } board ? CameraRig.Near(board) : 0.3f, Device.Backend == Penelope.BackendKind.Vulkan);
-        var shake = _fly ? Vector3.Zero : _shakeOffset; // moves the view only, not the camera spring
+        var shake = _fly || _onBoard == null ? Vector3.Zero : _shakeOffset; // the on-board views only (the chase views do not shake)
         var view3 = Matrix4x4.CreateLookAt(_pos + shake, _camLook + shake * 0.5f, Vector3.UnitY);
         var skyView = view3; // analytic sky + sun
         if (_probeView.Spin != 0)

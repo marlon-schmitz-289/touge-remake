@@ -5,7 +5,7 @@ using Touge.Replays;
 
 namespace Touge.Tests;
 
-/// <summary>The cameras against the course: pull-in, the edge of the course, the chase view's state, the TV director.</summary>
+/// <summary>The cameras against the course: pull-in, the edge of the course, the TV director.</summary>
 public class CameraHullTests
 {
     /// <summary>Ground 0..<paramref name="length"/> m along +Z, 20 m wide (X ±10), and optionally a wall across Z = <paramref name="wallZ"/> (10 m high).</summary>
@@ -35,133 +35,6 @@ public class CameraHullTests
         // a pivot already over the void (free camera started at a TV eye there) is not frozen: it may move, back towards the course too
         Assert.Equal(2, open.Reach(new Vector3(0, 5, -10), new Vector3(0, 5, -12)), 3);
         Assert.Equal(4, open.Reach(new Vector3(0, 5, -10), new Vector3(0, 5, -6)), 3);
-    }
-
-    private static Matrix4x4 PoseAt(Vector3 p, float yaw = 0) => Matrix4x4.CreateRotationY(yaw) * Matrix4x4.CreateTranslation(p);
-
-    /// <summary>The chase aim for a level car heading <paramref name="fwd"/>: along it, <see cref="CameraRig.Tilt"/> down.</summary>
-    internal static Vector3 Along(Vector3 fwd) => fwd * MathF.Cos(CameraRig.Tilt) - Vector3.UnitY * MathF.Sin(CameraRig.Tilt);
-
-    [Fact]
-    public void Chase_view_never_goes_through_a_wall_and_eases_back_out()
-    {
-        var hull = Course(wallZ: 47);
-        var f = new CameraRig.Follow();
-        var mounts = new CameraRig.Mounts();
-        // the car 2 m in front of the wall, facing away from it (+Z): the eye would stand 4.2 m behind, in the wall
-        var (pos, look, _) = CameraRig.Place(CameraView.Chase, ref f, true, 1 / 60f, PoseAt(new(0, 0.5f, 49)), PoseAt(new(0, 0.5f, 49)), mounts, 1, hull);
-        Assert.True(pos.Z > 47 + CameraHull.Radius - 1e-3f, $"{pos}");
-        Assert.True(look.Z > pos.Z);
-        // standing there: the pulled-in eye holds still (no pumping in and out)
-        var held = pos;
-        for (var i = 0; i < 120; i++)
-            (pos, _, _) = CameraRig.Place(CameraView.Chase, ref f, false, 1 / 60f, PoseAt(new(0, 0.5f, 49)), PoseAt(new(0, 0.5f, 49)), mounts, 1, hull);
-        Assert.True(Vector3.Distance(pos, held) < 0.02f, $"{held} -> {pos}");
-        // driving away from it: the eye eases out (no jump), back to the full distance
-        var last = 49 - pos.Z;
-        for (var i = 1; i <= 240; i++)
-        {
-            var car = new Vector3(0, 0.5f, 49 + i * 0.05f);
-            (pos, _, _) = CameraRig.Place(CameraView.Chase, ref f, false, 1 / 60f, PoseAt(car), PoseAt(car), mounts, 1, hull);
-            Assert.True(pos.Z > 47 + CameraHull.Radius - 1e-3f);
-            var behind = car.Z - pos.Z;
-            Assert.True(behind - last < 0.2f, $"frame {i}: {last:F2} -> {behind:F2}");
-            last = behind;
-        }
-        Assert.Equal(4.2f, last, 2);
-        // a wall popping up 2 m behind (grazed edge-on in a turn): the eye comes in over a few frames (MaxIn 30 m/s), not in one
-        var at = new Vector3(0, 0.5f, 59);
-        var walled = Course(wallZ: 57);
-        float prev = 4.2f, frames = 0;
-        for (; frames < 20 && prev > 2 + 1e-2f; frames++)
-        {
-            (pos, _, _) = CameraRig.Place(CameraView.Chase, ref f, false, 1 / 144f, PoseAt(at), PoseAt(at), mounts, 1, walled);
-            var now = at.Z - pos.Z;
-            Assert.True(prev - now < 30f / 144 + 1e-3f, $"{prev:F2} -> {now:F2}");
-            prev = now;
-        }
-        Assert.InRange(frames, 8, 16);
-    }
-
-    [Fact]
-    public void Chase_view_rig_and_fov()
-    {
-        var mounts = new CameraRig.Mounts();
-        // snapped on the flat: 4.2 m behind and 1.5 m over the car's origin, looking along the car a touch down (Tilt), the chase fov
-        var car = PoseAt(new Vector3(3, 0.3f, 7));
-        var f = new CameraRig.Follow();
-        var (eye, look, fov) = CameraRig.Place(CameraView.Chase, ref f, true, 1 / 60f, car, car, mounts, 1);
-        Assert.True(Vector3.Distance(eye, new Vector3(3, 1.8f, 2.8f)) < 1e-4f, $"{eye}");
-        Assert.True(Vector3.Dot(Vector3.Normalize(look - eye), Along(Vector3.UnitZ)) > 0.9999f);
-        Assert.Equal(MathF.Tan(0.5f) * CameraRig.Widen, MathF.Tan(fov / 2), 4);
-        // the default 60° setting is the original's chase: tan ½ H 0.92502 at 4:3, vertical 0.75 of it (69.5°)
-        (_, _, fov) = CameraRig.Place(CameraView.Chase, ref f, true, 1 / 60f, car, car, mounts, MathF.PI / 3);
-        Assert.Equal(0.75f * 0.92502f, MathF.Tan(fov / 2), 4);
-        // 10 % downhill: the view pitches down the slope, the eye stays 1.5 m over the car across the slope (higher behind)
-        var pose = Matrix4x4.CreateRotationX(MathF.Atan(0.1f)) * Matrix4x4.CreateTranslation(0, 0.5f, 0); // nose down
-        var h = new CameraRig.Follow();
-        (eye, look, _) = CameraRig.Place(CameraView.Chase, ref h, true, 1 / 60f, pose, pose, mounts, 1);
-        Assert.Equal(MathF.Sin(-MathF.Atan(0.1f) - CameraRig.Tilt), Vector3.Normalize(look - eye).Y, 3);
-        Assert.Equal(0.5f + (0.42f + 1.5f) / MathF.Sqrt(1.01f), eye.Y, 2); // 4.2 m back up the slope + 1.5 m across it
-        // spun round 200° and sliding sideways: the next frame is behind the body again (no lag, no drift turn)
-        CameraRig.Place(CameraView.Chase, ref h, true, 1 / 60f, PoseAt(Vector3.Zero), PoseAt(Vector3.Zero), mounts, 1);
-        var spun = PoseAt(new Vector3(0, 0, 0.3f), 200 * MathF.PI / 180);
-        (eye, look, _) = CameraRig.Place(CameraView.Chase, ref h, false, 1 / 60f, spun, spun, mounts, 1);
-        Assert.True(Vector3.Dot(Vector3.Normalize(look - eye), Along(Vector3.TransformNormal(Vector3.UnitZ, spun))) > 0.9999f);
-        // the car put 50 m away (a reset, another car in the replay): the view starts over there
-        var moved = PoseAt(new Vector3(50, 0, 0), MathF.PI / 2);
-        (eye, _, _) = CameraRig.Place(CameraView.Chase, ref h, false, 1 / 60f, moved, moved, mounts, 1);
-        Assert.True(MathF.Abs(eye.X - (50 - 4.2f)) < 1e-3f && MathF.Abs(eye.Z) < 1e-3f, $"{eye}"); // behind the turned car (it faces +X)
-    }
-
-    [Fact]
-    public void Chase_view_is_fixed_to_the_car_through_accelerations_and_turns()
-    {
-        var mounts = new CameraRig.Mounts();
-        foreach (var view in new[] { CameraView.Chase, CameraView.Far })
-        {
-            var f = new CameraRig.Follow();
-            Vector3 p = new(10, 0.5f, 20), first = default;
-            float heading = 0.3f, speed = 0, t = 0;
-            for (var i = 0; i < 144 * 20; i++, t += 1 / 144f)
-            {
-                // flooring it, braking, weaving left and right (up to 2.5 rad/s), all without slip: the car goes where it points
-                speed = Math.Clamp(speed + (t % 8 < 5 ? 9 : -14) / 144f, 0, 60);
-                heading += 2.5f * MathF.Sin(t * 1.7f) / 144f;
-                p += new Vector3(MathF.Sin(heading), 0, MathF.Cos(heading)) * speed / 144f;
-                var pose = PoseAt(p, heading);
-                var (eye, look, fov) = CameraRig.Place(view, ref f, i == 0, 1 / 144f, pose, pose, mounts, 1);
-                Matrix4x4.Invert(pose, out var inv);
-                var local = Vector3.Transform(eye, inv);
-                if (i == 0) first = local;
-                Assert.True(Vector3.Distance(local, first) < 1e-3f, $"{view} {t:F2} s: {first} -> {local}");
-                Assert.True(Vector3.Dot(Vector3.Normalize(look - eye), Along(Vector3.TransformNormal(Vector3.UnitZ, pose))) > 0.99999f);
-            }
-            Assert.True(MathF.Abs(first.X) < 1e-4f && first.Z < -4);
-        }
-    }
-
-    [Fact]
-    public void Chase_view_calms_the_bounce_and_follows_a_slope()
-    {
-        var mounts = new CameraRig.Mounts();
-        var f = new CameraRig.Follow();
-        float max = 0, pitch = 0;
-        for (var i = 0; i < 144 * 4; i++)
-        {
-            // the body bouncing ±2° at 2 Hz on a level road, standing still
-            var body = MathF.Sin(i / 144f * MathF.Tau * 2) * 2 * MathF.PI / 180;
-            var pose = Matrix4x4.CreateRotationX(-body) * Matrix4x4.CreateTranslation(0, 0.5f, 0);
-            var (eye, look, _) = CameraRig.Place(CameraView.Chase, ref f, i == 0, 1 / 144f, pose, pose, mounts, 1);
-            pitch = MathF.Asin(Vector3.Normalize(look - eye).Y) + CameraRig.Tilt;
-            if (i > 144) max = MathF.Max(max, MathF.Abs(pitch));
-        }
-        Assert.InRange(max, 0, 0.6f * 2 * MathF.PI / 180);
-        // onto a 10 % slope at once (a step; real slopes ramp in): the view is down it within a second
-        var slope = Matrix4x4.CreateRotationX(MathF.Atan(0.1f)) * Matrix4x4.CreateTranslation(0, 0.5f, 0);
-        for (var i = 0; i < 144; i++) CameraRig.Place(CameraView.Chase, ref f, false, 1 / 144f, slope, slope, mounts, 1);
-        var (e, l, _) = CameraRig.Place(CameraView.Chase, ref f, false, 1 / 144f, slope, slope, mounts, 1);
-        Assert.Equal(-MathF.Atan(0.1f) - CameraRig.Tilt, MathF.Asin(Vector3.Normalize(l - e).Y), 2);
     }
 
     [Fact]

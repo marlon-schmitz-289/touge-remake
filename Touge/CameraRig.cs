@@ -1,3 +1,4 @@
+using Kansei.Physics;
 using System.Numerics;
 using Touge.Formats;
 
@@ -7,7 +8,7 @@ namespace Touge;
 public enum CameraView { Chase, Far, Hood, Cockpit, Bumper }
 
 /// <summary>
-///     Placement of the driving cameras: chase and far chase ride fixed behind the car (<see cref="Place"/>), hood, cockpit and bumper are fixed to
+///     Placement of the driving cameras: chase and far chase follow behind the car (<see cref="ChaseCamera"/>), hood, cockpit and bumper are fixed to
 ///     the body at mount points measured from the car's own HCAR model (<see cref="Measure"/>). HCAR has no dashboard or
 ///     steering wheel (FORMATS.md: <c>other00</c> is a low interior shell — seats, door cards, the dash top as flat textured
 ///     cards for the view through the glass), so the cockpit draws the per-car instrument cluster as the dash
@@ -27,8 +28,8 @@ public static class CameraRig
     /// <summary>Near plane (m): on board the bonnet and the cabin are a few cm from the eye.</summary>
     public static float Near(CameraView v) => v is CameraView.Hood or CameraView.Cockpit ? 0.05f : 0.3f;
 
-    /// <summary>Camera mounts in model space: above the bonnet ahead of the screen, the driver's eye (right-hand drive: −X), the nose.</summary>
-    public readonly record struct Mounts(Vector3 Hood, Vector3 Eye, Vector3 Nose, Vector3 Min, Vector3 Max);
+    /// <summary>Camera mounts in model space: above the bonnet ahead of the screen, the driver's eye (right-hand drive: −X), the nose; the wheel centres' height.</summary>
+    public readonly record struct Mounts(Vector3 Hood, Vector3 Eye, Vector3 Nose, Vector3 Min, Vector3 Max, float WheelY = 0);
 
     /// <summary>
     ///     Mounts from the shown body parts (<paramref name="shell"/>, model space), the glass <paramref name="wind"/> and the
@@ -58,7 +59,7 @@ public static class CameraRig
         var bonnet = pts.Where(p => MathF.Abs(p.X) < 0.35f && p.Z > baseZ + 0.05f && p.Z < baseZ + 0.5f).Select(p => p.Y).DefaultIfEmpty(baseY).Max();
         var hood = new Vector3(0, MathF.Max(bonnet, baseY) + 0.1f, MathF.Min(baseZ + 0.15f, max.Z - 0.4f));
         var eye = new Vector3(-0.42f * max.X, MathF.Min(topY - 0.14f, max.Y - 0.1f), Math.Clamp(topZ - 0.32f, min.Z + 0.6f, baseZ - 0.3f));
-        return new Mounts(hood, eye, new Vector3(0, wheelY + 0.22f, max.Z + 0.05f), min, max);
+        return new Mounts(hood, eye, new Vector3(0, wheelY + 0.22f, max.Z + 0.05f), min, max, wheelY);
     }
 
     /// <summary>
@@ -96,68 +97,19 @@ public static class CameraRig
         return true;
     }
 
-    /// <summary>
-    ///     State of the chase views between frames: the view's <see cref="Pitch"/> (rad) and its rate, how far from the pivot over
-    ///     the car the eye may stand (<see cref="Reach"/>, pulled in by the course: <see cref="CameraHull.Reach"/>) and where the
-    ///     car was (a jump starts over). Default = not set: the next frame snaps.
-    /// </summary>
-    public struct Follow
-    {
-        public float Pitch, PitchRate, Reach, ReachRate;
-        public Vector3 Car;
-        public bool Set;
-    }
-
-    /// <summary>Chase view: metres behind and above the car's origin in the view's own frame.</summary>
-    private readonly record struct Rig(float Back, float Up);
-
-    /// <summary>CHASE close behind the car (the original stands at 4.6 m / 1.7 m, <c>0x16FFE0</c>: same angle down, nearer); FAR 1.5× further.</summary>
-    private static readonly Rig ChaseRig = new(4.2f, 1.5f), FarRig = new(6.3f, 2.25f);
-
-    /// <summary>The chase views aim this much (rad) under the car's axis: the nearer car sits whole in the lower half, bumper in the picture.</summary>
-    public const float Tilt = 3 * MathF.PI / 180;
-
-    /// <summary>
-    ///     Rate (1/s, critically damped) the view's pitch follows the body's: just enough to take the bounce on bumps (~2 Hz) out
-    ///     of the horizon, a slope is followed within a few tenths of a second.
-    /// </summary>
-    public const float PitchRate = 12;
-
-    /// <summary>
-    ///     Chase views' tan(½ vertical fov) over the setting's: the original's chase tan(½ H) 0.92502 (<c>0x170028</c>), vertical
-    ///     0.75 of it, over the default 60° — so the default gives the original's 69.5° and other settings scale with it.
-    /// </summary>
-    public static readonly float Widen = 0.75f * 0.92502f / MathF.Tan(MathF.PI / 6);
-
-    /// <summary>The car's pitch the view follows at most (rad): the original clamps it to ±30° (<c>0x154C40</c>).</summary>
-    private const float MaxPitch = MathF.PI / 6;
-
-    /// <summary>Height (m) of the pivot over the car's centre the eye is pulled in towards: under the roof.</summary>
-    public const float Pivot = 0.9f;
-
-    /// <summary>
-    ///     Fastest the hard limit pulls the chase eye in (m/s): a surface the <see cref="Sweep"/> did not see coming (grazed
-    ///     edge-on) takes a few frames, not one — 80 jerked the eye at 11 500 m/s² (--cam-bench), 30 stays under the original's.
-    /// </summary>
-    private const float MaxIn = 30;
-
-    /// <summary>Rates (1/s, critically damped) the eye eases in towards the <see cref="Sweep"/>'s reach and back out.</summary>
-    private const float InRate = 12, OutRate = 3;
-
-    /// <summary>Radius (m) of the easing sweep: wider than <see cref="CameraHull.Radius"/>, a surface near the line is felt early.</summary>
-    private const float Sweep = 1.2f;
+    /// <summary>Far chase stands this much further back and higher than chase.</summary>
+    private const float FarScale = 1.5f;
 
     /// <summary>
     ///     Eye, aim and field of view of <paramref name="view"/> for a car at physics pose <paramref name="pose"/> (CoG) with
-    ///     model matrix <paramref name="body"/>, both interpolated like the car is drawn; the on-board views are rigid. The chase
-    ///     views are fixed to the car: the eye stands <see cref="ChaseRig"/> back and up from the model's origin in a frame turned
-    ///     to the car's heading, and looks along it (<see cref="Tilt"/> down) — no heading lag, no drift turn, the car stays at one place in the picture.
-    ///     Only the pitch follows the body through a light filter (<see cref="PitchRate"/>, no roll), and the course
-    ///     (<paramref name="hull"/>) pulls the eye in towards the pivot over the car (at most <see cref="MaxIn"/> fast) and lets
-    ///     it out again, both eased (<see cref="Sweep"/>). <paramref name="snap"/> or a jump of the car (reset, another car) starts over.
+    ///     model matrix <paramref name="body"/>, both interpolated like the car is drawn, moving at <paramref name="velocity"/>;
+    ///     the on-board views are rigid, the chase views are a <see cref="ChaseCamera"/> on the model's origin. With the
+    ///     <paramref name="wheels"/> the chase views take height and slope from the wheel centres, which ride the road, not from
+    ///     the body pitching and bobbing on its springs (braking, bumps).
+    ///     <paramref name="snap"/> or a jump of the car (reset, another car) starts over.
     /// </summary>
-    public static (Vector3 Pos, Vector3 Look, float Fov) Place(CameraView view, ref Follow f, bool snap, float dt,
-        in Matrix4x4 pose, in Matrix4x4 body, in Mounts m, float fov, CameraHull? hull = null)
+    public static (Vector3 Pos, Vector3 Look, float Fov) Place(CameraView view, ref ChaseCamera chase, bool snap, float dt,
+        in Matrix4x4 pose, in Matrix4x4 body, Vector3 velocity, in Mounts m, float fov, ReadOnlySpan<WheelState> wheels = default)
     {
         var fwd = Vector3.TransformNormal(Vector3.UnitZ, pose);
         var up = Vector3.TransformNormal(Vector3.UnitY, pose);
@@ -174,42 +126,18 @@ public static class CameraRig
                 return (nose, nose + fwd * 10, fov);
         }
         var car = body.Translation;
-        float heading = MathF.Atan2(fwd.X, fwd.Z), pitch = Math.Clamp(MathF.Asin(Math.Clamp(fwd.Y, -1, 1)), -MaxPitch, MaxPitch);
-        snap |= !f.Set || Vector3.DistanceSquared(car, f.Car) > 8 * 8 || !float.IsFinite(f.Pitch + f.Reach);
-        if (snap) (f.Pitch, f.PitchRate) = (pitch, 0);
-        else
+        if (wheels.Length == 4)
         {
-            Vector3 x = new(f.Pitch, 0, 0), v = new(f.PitchRate, 0, 0);
-            Spring(ref x, ref v, new Vector3(pitch, 0, 0), PitchRate, dt);
-            (f.Pitch, f.PitchRate) = (x.X, v.X);
+            Vector3 front = default, rear = default;
+            for (var i = 0; i < 4; i++)
+                if (i < 2) front += Vector3.Transform(wheels[i].LocalCenter, pose) / 2; // FL, FR
+                else rear += Vector3.Transform(wheels[i].LocalCenter, pose) / 2;
+            fwd = Vector3.Normalize(front - rear);
+            car.Y = (front.Y + rear.Y) / 2 - m.WheelY;
         }
-        (f.Car, f.Set) = (car, true);
-        var rig = view == CameraView.Far ? FarRig : ChaseRig;
-        var want = Eye(car, heading, f.Pitch, rig, out _);
-        Eye(car, heading, f.Pitch - Tilt, rig, out var dir);
-        var pivot = pose.Translation + Vector3.UnitY * Pivot;
-        var full = Vector3.Distance(pivot, want);
-        // a wider sweep eases the eye in before the hard limit (never through a surface after MaxIn) has to clamp it
-        var hard = hull?.Reach(pivot, want) ?? full;
-        var soft = hull == null ? full : MathF.Min(hard, hull.Reach(pivot, want, Sweep));
-        if (snap) (f.Reach, f.ReachRate) = (soft, 0);
-        else
-        {
-            Vector3 x = new(f.Reach), v = new(f.ReachRate);
-            Spring(ref x, ref v, new Vector3(soft), soft < f.Reach ? InRate : OutRate, dt);
-            var reach = MathF.Max(MathF.Min(x.X, hard), f.Reach - MaxIn * dt);
-            (f.Reach, f.ReachRate) = (reach, x.X > reach ? 0 : v.X);
-        }
-        var pos = full > 1e-3f ? pivot + (want - pivot) * (MathF.Min(f.Reach, full) / full) : want;
-        return (pos, want + dir * 10, 2 * MathF.Atan(MathF.Tan(fov / 2) * Widen));
-    }
-
-    /// <summary>The chase eye of rig <paramref name="r"/> for a view at <paramref name="yaw"/>/<paramref name="pitch"/> from <paramref name="car"/>, its direction <paramref name="dir"/>.</summary>
-    private static Vector3 Eye(Vector3 car, float yaw, float pitch, Rig r, out Vector3 dir)
-    {
-        float sy = MathF.Sin(yaw), cy = MathF.Cos(yaw), sp = MathF.Sin(pitch), cp = MathF.Cos(pitch);
-        dir = new Vector3(sy * cp, sp, cy * cp);
-        return car - dir * r.Back + new Vector3(-sy * sp, cp, -cy * sp) * r.Up;
+        if (snap || Vector3.DistanceSquared(car, chase.Car) > 8 * 8) chase.Reset();
+        chase.Update(car, fwd, velocity, dt);
+        return chase.Pose(fov, view == CameraView.Far ? FarScale : 1);
     }
 
     /// <summary>

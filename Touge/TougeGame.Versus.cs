@@ -70,7 +70,7 @@ public sealed partial class TougeGame
         public bool Snap;
         public CameraView View;
         public CameraView? OnBoard;
-        public CameraRig.Follow Follow;
+        public ChaseCamera Follow;
     }
 
     private Versus? _versusUi;

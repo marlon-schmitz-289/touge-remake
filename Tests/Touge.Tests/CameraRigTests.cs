@@ -74,22 +74,19 @@ public class CameraRigTests
         var model = Matrix4x4.CreateTranslation(0, -0.07f, 0.1f) * pose;
         foreach (var view in new[] { CameraView.Hood, CameraView.Cockpit })
         {
-            var f = new CameraRig.Follow();
-            var (pos, look, _) = CameraRig.Place(view, ref f, false, 1 / 60f, pose, model, m, 1);
+            var f = new ChaseCamera();
+            var (pos, look, _) = CameraRig.Place(view, ref f, false, 1 / 60f, pose, model, Vector3.Zero, m, 1);
             Assert.True(Vector3.Distance(pos, Vector3.Transform(view == CameraView.Hood ? m.Hood : m.Eye, model)) < 1e-4f);
             Assert.True(Vector3.Dot(Vector3.Normalize(look - pos), Vector3.TransformNormal(Vector3.UnitZ, pose)) > 0.99f);
             Assert.Equal(0.05f, CameraRig.Near(view));
         }
         Assert.Equal(0.3f, CameraRig.Near(CameraView.Chase));
-        // snapped: far chase stands further back and higher than chase; one frame after the car turned 90° it is behind it again (rigid)
-        CameraRig.Follow c = default, fa = default;
-        var (chase, _, _) = CameraRig.Place(CameraView.Chase, ref c, true, 0, pose, model, m, 1);
-        var (far, _, farFov) = CameraRig.Place(CameraView.Far, ref fa, true, 0, pose, model, m, 1);
-        Assert.True(Vector3.Distance(far, pose.Translation) > Vector3.Distance(chase, pose.Translation) + 2 && far.Y > chase.Y + 0.7f);
-        Assert.Equal(MathF.Tan(0.5f) * CameraRig.Widen, MathF.Tan(farFov / 2), 4);
-        var turned = Matrix4x4.CreateRotationY(MathF.PI / 2) * pose;
-        var (now, look2, _) = CameraRig.Place(CameraView.Far, ref fa, false, 1 / 60f, turned, model, m, 1);
-        Assert.True(Vector3.Dot(Vector3.Normalize(look2 - now), CameraHullTests.Along(Vector3.TransformNormal(Vector3.UnitZ, turned))) > 0.9999f);
+        // snapped: far chase stands further back and higher than chase, same aim and fov
+        ChaseCamera c = default, fa = default;
+        var (chase, look1, fov) = CameraRig.Place(CameraView.Chase, ref c, true, 0, pose, model, Vector3.Zero, m, 1);
+        var (far, look2, farFov) = CameraRig.Place(CameraView.Far, ref fa, true, 0, pose, model, Vector3.Zero, m, 1);
+        Assert.True(Vector3.Distance(far, model.Translation) > Vector3.Distance(chase, model.Translation) + 2 && far.Y > chase.Y + 0.7f);
+        Assert.True(Vector3.Distance(look1, look2) < 1e-4f && fov == 1 && farFov == 1);
     }
 
     [Fact]

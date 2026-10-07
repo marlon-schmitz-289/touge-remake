@@ -214,7 +214,7 @@ public static class CameraBench
         foreach (var view in new[] { CameraView.Chase, CameraView.Far })
         {
             var s = new Stats(CameraRig.Name(view));
-            var follow = new CameraRig.Follow();
+            var follow = new ChaseCamera();
             track = new LinePilot(drive.Line); // its tracking is local: from the start again
             for (int f = 0, last = 0; ; f++)
             {
@@ -226,7 +226,7 @@ public static class CameraBench
                 var snap = reset && last != i;
                 last = i;
                 var pose = Matrix4x4.CreateFromQuaternion(Quaternion.Slerp(rot[i], rot[i + 1], a)) * Matrix4x4.CreateTranslation(Vector3.Lerp(pos[i], pos[i + 1], a));
-                var (eye, look, fov) = CameraRig.Place(view, ref follow, snap, 1 / Fps, pose, pose, mounts, fovDefault, hull);
+                var (eye, look, fov) = CameraRig.Place(view, ref follow, snap, 1 / Fps, pose, pose, (pos[i + 1] - pos[i]) / Drive.Dt, mounts, fovDefault);
                 s.Frame(hull, pose.Translation, eye, look, f / Fps, snap: snap);
                 s.Rigid(pose, eye, look, fov, snap);
                 s.Framing(pose, (pos[i + 1] - pos[i]).Length() / Drive.Dt * 3.6f, eye, look, fov);
@@ -279,7 +279,8 @@ public static class CameraBench
         var tvCams = new TvCameras(ReplayCameras.Load(iso, course[..course.LastIndexOf('_')], reverse), Road(iso, course), reverse, hull);
         var tv = new Stats("TV");
         var chase = new Stats("replay CHASE");
-        var chaseFollow = new CameraRig.Follow();
+        var chaseFollow = new ChaseCamera();
+        var lastCar = Vector3.Zero;
         var first = true;
         Viewer(player, 1, (p, time) =>
         {
@@ -289,7 +290,8 @@ public static class CameraBench
             // the car's centre off the picture (outside 90 %): the aim lags or the shot is too tight
             var vp = Matrix4x4.CreateLookAt(eye, look, Vector3.UnitY) * Matrix4x4.CreatePerspectiveFieldOfView(tvFov * MathF.PI / 180, 16 / 9f, 0.3f, 2000);
             if (Project(c + Vector3.UnitY * 0.6f, vp) is not { } q || MathF.Abs(q.X) > 0.9f || MathF.Abs(q.Y) > 0.9f) tv.Hidden++;
-            var (ce, cl, _) = CameraRig.Place(CameraView.Chase, ref chaseFollow, false, 1 / Fps, p, p, mounts, fovDefault, hull);
+            var (ce, cl, _) = CameraRig.Place(CameraView.Chase, ref chaseFollow, false, 1 / Fps, p, p, (c - lastCar) * Fps, mounts, fovDefault);
+            lastCar = c;
             chase.Frame(hull, c, ce, cl, time);
             first = false;
         });

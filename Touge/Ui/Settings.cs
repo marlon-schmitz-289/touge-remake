@@ -65,7 +65,7 @@ public sealed class Settings
     public CameraView Camera { get; set; }
     /// <summary>Time attack ghost: the best run of the course and route drives along see-through (Options → GAME SETTING → GHOST).</summary>
     public bool Ghost { get; set; } = true;
-    /// <summary>Camera field of view in degrees (the chase views scale it to the original's, <see cref="CameraRig.Widen"/>).</summary>
+    /// <summary>Camera field of view in degrees (the chase views widen it with speed, <see cref="ChaseCamera"/>).</summary>
     public int Fov { get; set; } = 60;
     /// <summary>Camera shake on wall hits 0..1.</summary>
     public float CameraShake { get; set; } = 1;
