@@ -64,6 +64,24 @@ float beam(int i, vec3 dir)
     return vertical * across * mix(1.0, 2.5, high);
 }
 
+// The beam as the fog shows it: light scattered more than once blurs the cut-off, so the lit mist is a cone with a soft top
+// edge (a little light above the cut, falling off over ~5° below) instead of beam()'s bright sheet right under a hard line
+// (the road seen through it looked like a glowing layer lying on the asphalt).
+float beamVeil(int i, vec3 dir)
+{
+    vec3 axis = pc.uSpotDir[i].xyz;
+    vec3 right = normalize(cross(axis, vec3(0.0, 1.0, 0.0)));
+    vec3 up = cross(right, axis);
+    float ahead = dot(dir, axis);
+    if (ahead <= 0.05) return 0.0;
+    float x = dot(dir, right) / ahead, y = dot(dir, up) / ahead;
+    float high = pc.uSpotPos[i].w;
+    float over = y - mix(-0.01, 0.03, high);
+    float vertical = over > 0.0 ? exp(-over * over / 0.004) : pow(0.09 / (0.09 - over), 1.5);
+    float sx = mix(0.45, 0.6, high);
+    return 0.3 * vertical * exp(-x * x / (sx * sx)) * mix(1.0, 2.0, high); // 0.3: the wider shape scatters more in all
+}
+
 // Irradiance cap: what the local lights throw onto a surface saturates softly towards LightCap — per light and in sum —
 // so a wall in front of the bumper, several lamps overlapping or a lamp right next to a surface never blow out (no
 // runaway before tonemapping). Applied after N·L: a grazing road keeps its full share. A headlight saturates far lower
@@ -82,7 +100,7 @@ vec3 capped(vec3 e) { return capped(e, LightCap); }
 const int Lights = 8;
 const float TailRange = 8.0;
 const float FogLightCap = 0.3; // most irradiance a lamp lends a surface in dense fog
-const float HeadVeil = 0.5, HeadVeilCap = 0.18; // headlight light scattered by dense fog: share of the street lamps' glow, most it adds
+const float HeadVeil = 0.5, HeadVeilCap = 0.09; // headlight light scattered by dense fog: share of the street lamps' glow, most it adds
 
 // Point light j (0–3 street lights, 4–5 rear lamps): position + radius, colour. A rear lamp lights surfaces by the
 // night share (uTailColor.w) but stays `mirror`ed at full strength: a brake light streaks on a wet road by day too.
@@ -204,12 +222,14 @@ vec3 lightGlow(vec3 p)
                 vec3 dl = q - pc.uSpotPos[i].xyz;
                 float d2 = dot(dl, dl);
                 // + 9: the lamps are lenses, not points — no hot spot in the mist right at the bumper
-                veil += beam(i, dl * inversesqrt(max(d2, 1e-4))) * step * fade / (d2 + 9.0);
+                veil += beamVeil(i, dl * inversesqrt(max(d2, 1e-4))) * step * fade / (d2 + 9.0);
             }
         }
         // soft cap well under lit surfaces: the beam reads as a lit cone in the mist that thins with distance, never as a white wall
         veil *= pc.uSpotColor.rgb * (pc.uFog.a * HeadVeil);
-        veil /= 1.0 + dot(veil, vec3(0.2126, 0.7152, 0.0722)) / HeadVeilCap;
+        // the cap grows with the fog's own brightness: against bright day fog the beams still show, as a fainter cone than at night
+        float cap = HeadVeilCap + 0.25 * dot(pc.uFog.rgb, vec3(0.2126, 0.7152, 0.0722));
+        veil /= 1.0 + dot(veil, vec3(0.2126, 0.7152, 0.0722)) / cap;
     }
     return capped(sum * pc.uFog.a) + veil;
 }

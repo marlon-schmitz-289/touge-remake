@@ -31,6 +31,8 @@ public sealed class WorldRenderer : IDisposable
     private const float AlphaCutoff = 0.3f; // world.frag
     /// <summary>Headlight reach (m, lighting.glsl windows the beam to it): low beam cut-off hits the road at ~60 m.</summary>
     private const float LowBeamRange = 75, HighBeamRange = 160;
+    /// <summary>Least share of the headlights in dense fog (by day <see cref="Atmosphere.LocalLightShare"/> is 0): tuned by eye.</summary>
+    private const float FogHeadShare = 1f;
     private const TextureFormat DepthFormat = PostProcess.DepthFormat;
     internal static readonly TextureFormat ShadowFormat = TextureFormat.Depth32Float;
 
@@ -234,19 +236,20 @@ public sealed class WorldRenderer : IDisposable
         MemoryMarshal.Write(push[208..], new Vector4(_shadow.TexelWorld[0], _shadow.TexelWorld[1], _shadow.TexelWorld[2], 1f / ShadowMap.TileSize));
         for (var c = 0; c < ShadowMap.Cascades; c++) MemoryMarshal.Write(push[(224 + c * 64)..], in _shadow.Lookup[c]);
         var share = a.LocalLightShare;
+        // uTailPos[0].w: extinction of the height fog at the camera (fog.glsl's density at the eye; lighting.glsl dims lamp light with it)
+        var sigma = a.HeightFogDensity * MathF.Exp(-Math.Clamp((eye.Y - a.HeightFogBase) / a.HeightFogScale, -4, 40));
+        if (sigma < 0.004f) sigma = 0; // thin haze (< 2 % over 5 m): not worth the shaders' exps
         for (var i = 0; i < 2; i++)
         {
             MemoryMarshal.Write(push[(416 + i * 16)..], new Vector4(l.HeadlightPosition[i], l.HighBeam));
             MemoryMarshal.Write(push[(448 + i * 16)..], new Vector4(l.HeadlightDirection[i], i == 0 ? l.LampGlow : l.Reverse));
         }
-        MemoryMarshal.Write(push[480..], new Vector4(l.HeadlightColor * share, float.Lerp(LowBeamRange, HighBeamRange, l.HighBeam)));
+        // by day the lamps add nothing against the sun, but dense fog shows them: a lit cone in the mist and the road ahead a little brighter
+        MemoryMarshal.Write(push[480..], new Vector4(l.HeadlightColor * MathF.Max(share, sigma > 0 ? FogHeadShare : 0), float.Lerp(LowBeamRange, HighBeamRange, l.HighBeam)));
         for (var i = 0; i < 4; i++) MemoryMarshal.Write(push[(496 + i * 16)..], _points[i]);
         MemoryMarshal.Write(push[560..], new Vector4(l.StreetLightColor * share, 0));
         WriteFog(push[576..]);
         MemoryMarshal.Write(push[608..], new Vector4(a.Zenith, Time));
-        // uTailPos[0].w: extinction of the height fog at the camera (fog.glsl's density at the eye; lighting.glsl dims lamp light with it)
-        var sigma = a.HeightFogDensity * MathF.Exp(-Math.Clamp((eye.Y - a.HeightFogBase) / a.HeightFogScale, -4, 40));
-        if (sigma < 0.004f) sigma = 0; // thin haze (< 2 % over 5 m): not worth the shaders' exps
         for (var i = 0; i < 2; i++) MemoryMarshal.Write(push[(624 + i * 16)..], new Vector4(l.TailLightPosition[i], i == 0 ? sigma : _envMix));
         MemoryMarshal.Write(push[656..], new Vector4(l.TailLightColor, share));
         MemoryMarshal.Write(push[672..], new Vector4(a.SunColor, a.Specular));
