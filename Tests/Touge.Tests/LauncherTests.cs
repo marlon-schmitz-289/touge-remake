@@ -110,6 +110,15 @@ public sealed class LauncherTests : IDisposable
         Assert.True(font.TryGet('漢', out var missing));
         Assert.Equal(q, missing);
         Assert.False(font.TryGet('\n', out _));
+        // with the Japanese fallback: its own glyph, Latin still from Rajdhani
+        var both = new Kansei.Graphics.SdfFont(File.ReadAllBytes(Path.Combine(dir, "Touge/Assets/Fonts/Rajdhani-Bold.ttf")), Style.Glyphs + "漢字ア",
+            File.ReadAllBytes(Path.Combine(dir, "Touge/Assets/Fonts/MPLUS1p-Bold.ttf")));
+        Assert.True(both.TryGet('漢', out var kan));
+        Assert.True(both.TryGet('?', out var q2));
+        Assert.NotEqual(q2, kan);
+        Assert.True(both.TryGet('H', out var h));
+        Assert.True(font.TryGet('H', out var h0));
+        Assert.Equal(h0.Advance, h.Advance);
     }
 
     [Fact]

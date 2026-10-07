@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using System.Numerics;
 using Kansei.Graphics;
 using Kansei.Physics;
@@ -273,11 +274,14 @@ public sealed class CarGuide(Catalog catalog)
     /// </summary>
     public static List<string> Wrap(SdfFont font, string text, float size, float width)
     {
+        if (font.Map != null) text = font.Map(text).ToString(); // whole, before the lines are cut (draw them raw)
         var lines = new List<string>();
         var line = "";
-        foreach (var word in text.Split(' '))
+        // a word: up to a space; Japanese has none, it breaks between any two characters
+        foreach (var word in Regex.Split(text, @" |(?<=[\u3000-\u9FFF\uFF00-\uFFEF])|(?=[\u3000-\u9FFF\uFF00-\uFFEF])").Where(w => w != ""))
         {
-            var next = line.Length == 0 ? word : line + " " + word;
+            var cjk = word[0] >= '\u3000' || line.Length > 0 && line[^1] >= '\u3000';
+            var next = line.Length == 0 ? word : line + (cjk ? "" : " ") + word;
             if (line.Length > 0 && font.Measure(next, size * 480f / 448) > width * 1.25f)
             {
                 lines.Add(line);
@@ -341,8 +345,8 @@ public sealed class CarGuide(Catalog catalog)
         foreach (var l in Wrap(c.O.Font!, text, size, width))
         {
             if (shown <= 0) break;
-            c.Text(l.Length <= shown ? l : l[..shown], x, y, size, Canvas.White, 0, 0.1f);
-            shown -= l.Length + 1;
+            c.Text(l.Length <= shown ? l : l[..shown], x, y, size, Canvas.White, 0, 0.1f, raw: true);
+            shown -= l.Length + (l[^1] >= '\u3000' ? 0 : 1); // the space the wrap took (Japanese has none)
             y += step;
         }
     }

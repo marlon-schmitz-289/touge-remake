@@ -186,13 +186,15 @@ public sealed class Overlay
     ///     <paramref name="weight"/> grows the glyphs by that many pixels (negative: thinner), <paramref name="soft"/>
     ///     widens the edge (shadows/glow; both limited by the font's distance range), <paramref name="skew"/> slants (italic, x per y),
     ///     <paramref name="bottom"/> (if set) is the colour at the bottom of each glyph box (vertical gradient from <paramref name="color"/>).
+    ///     <paramref name="raw"/>: drawn as it is, without <see cref="SdfFont.Map"/> (text mapped already, e.g. wrapped or typed out).
     ///     Glyphs go to <see cref="GlyphVertices"/>, drawn by <see cref="TextRenderer"/> after all shapes. Returns the advance width.
     /// </summary>
-    public float Text(ReadOnlySpan<char> text, Vector2 baseline, float size, uint color, float align = 0, float weight = 0, float soft = 0, float skew = 0, uint? bottom = null)
+    public float Text(ReadOnlySpan<char> text, Vector2 baseline, float size, uint color, float align = 0, float weight = 0, float soft = 0, float skew = 0, uint? bottom = null, bool raw = false)
     {
         if (Font is not { } f) return 0;
+        if (f.Map != null && !raw) text = f.Map(text);
         var low = bottom ?? color;
-        var width = f.Measure(text, size);
+        var width = f.Advance(text, size);
         var x = baseline.X - width * align;
         var range = size * SdfFont.Spread / SdfFont.EmPx; // distance range in screen pixels
         weight = MathF.Min(weight, range * 0.6f);

@@ -56,12 +56,15 @@ public sealed class Canvas
         O.FadeText(1 - fade);
     }
 
-    /// <summary>Text with em <paramref name="size"/> canvas pixels, baseline y; optional black outline of <paramref name="outline"/> × size.</summary>
-    public float Text(string text, float x, float y, float size, uint color, float align = 0, float skew = 0, float outline = 0, float weight = 0)
+    /// <summary>
+    ///     Text with em <paramref name="size"/> canvas pixels, baseline y; optional black outline of <paramref name="outline"/> × size.
+    ///     <paramref name="raw"/>: already in the language (<see cref="Overlay.Text"/>).
+    /// </summary>
+    public float Text(string text, float x, float y, float size, uint color, float align = 0, float skew = 0, float outline = 0, float weight = 0, bool raw = false)
     {
         var px = size * Ky;
-        if (outline > 0) O.Text(text, P(x, y), px, Style.Fade(Black, (color >> 24) / 255f), align, px * outline + weight * _s, 0, skew);
-        return O.Text(text, P(x, y), px, color, align, weight * _s, 0, skew) / Kx;
+        if (outline > 0) O.Text(text, P(x, y), px, Style.Fade(Black, (color >> 24) / 255f), align, px * outline + weight * _s, 0, skew, raw: raw);
+        return O.Text(text, P(x, y), px, color, align, weight * _s, 0, skew, raw: raw) / Kx;
     }
 
     /// <summary>Text fitted to <paramref name="w"/> canvas pixels (the width of the original's baked label), at most <paramref name="max"/> em.</summary>

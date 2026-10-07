@@ -2,14 +2,19 @@
 
 Fan-Nachbau (eigene C#-Engine). Plan: [PLAN.md](PLAN.md), Formate: [FORMATS.md](FORMATS.md).
 
-Assets kommen zur Laufzeit aus der eigenen ISO (SLPM-65268), nie ins Repo. Die Texte der Story-Szenen und
-Manga-Hörspiele sind nicht enthalten (Übersetzung des Original-Skripts): das Spiel lädt sie aus `Translations/<sprache>.json`
-im Profilordner (neben `settings.json`, bleibt bei Updates) oder neben dem Programm, Auswahl unter Optionen → GAME SETTING → LANGUAGE;
-ohne Datei zeigt die Story Platzhalter. Format: `{"name": "English", "scenes": {"<kapitel>": [[Zeilen Teil 0], [Teil 1], …]},
-"manga": {"<zeitleiste>": ["sekunden|SPRECHER|Text", …]}}`, Szenenzeilen `SPRECHER|Text` (`Touge/Story/Translation.cs`). Die eigenen
-Dateien liegen im privaten Repo `touge-remake-texts`: `Tools/texts.sh` holt bzw. aktualisiert sie nach `texts/` (gitignoriert),
-der Build legt sie neben das Programm. Neue Sprache: `en.json` kopieren, übersetzen, als `<code>.json` daneben legen
-(`--story-check` prüft Zeilen und Sprecher gegen die Disc). Die Schrift kann nur lateinische Zeichen.
+Assets kommen zur Laufzeit aus der eigenen ISO (SLPM-65268), nie ins Repo. Sprachen: das Spiel lädt `Translations/<sprache>.json` aus dem Profilordner (neben `settings.json`, bleibt bei Updates) oder neben
+dem Programm, Auswahl unter Optionen → GAME SETTING → LANGUAGE. Eine Datei kann die Story-Szenen, die Untertitel der Manga-Hörspiele
+und jeden Text auf dem Bildschirm übersetzen: `{"name": "Deutsch", "scenes": {"<kapitel>": [[Zeilen Teil 0], [Teil 1], …]},
+"manga": {"<zeitleiste>": ["sekunden|SPRECHER|Text", …]}, "ui": {"TIME ATTACK": "ZEITFAHREN", …}}` (Szenenzeilen `SPRECHER|Text`,
+alles optional; `Touge/Story/Translation.cs`). `ui` ersetzt Texte, die das Spiel ganz so zeichnet (Menüs, Titel, Kapiteltexte,
+Hinweise); was fehlt, bleibt Englisch und landet beim Beenden in `Translations/<sprache>.missing.json` im Profilordner (Englisch → "",
+zum Ausfüllen). **Japanisch** (`ja`) braucht keine Datei: die Story zeigt dann das Original-Skript von der Disc. Die Schrift ist
+Rajdhani, fehlende Zeichen (Japanisch) kommen aus M PLUS 1p (beide OFL, `Touge/Assets/Fonts`).
+
+Die englischen Story- und Hörspieltexte sind nicht enthalten (Übersetzung des Original-Skripts), ohne sie zeigt die Story
+Platzhalter. Sie liegen im privaten Repo `touge-remake-texts`: `Tools/texts.sh` holt bzw. aktualisiert sie nach `texts/`
+(gitignoriert), der Build legt sie neben das Programm. Neue Sprache: `en.json` kopieren, übersetzen, als `<code>.json` ablegen
+(`--story-check` prüft Zeilen und Sprecher der Szenen gegen die Disc).
 
 Nicht verbunden mit SEGA, Kodansha oder den Rechteinhabern von *Initial D*; Marken und Namen gehören ihren Inhabern.
 

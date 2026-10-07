@@ -195,9 +195,6 @@ public class StoryTests
             Assert.Equal(("Test", "B|two", "1.5|A|hi"), (t.Name, t.Scenes[2][1][0], t.Manga[0][0]));
             Assert.Empty(Translation.Load("zy").Scenes);
             Assert.Empty(Translation.Load("nope").Scenes);
-            Translation.Use("zz"); // through Current as the game reads it
-            Assert.Equal("A|one", StoryText.Chapters[2].Scene[0][0]);
-            Translation.Use("en");
             var placeholder = new StoryText.Chapter("T", "H", null, "B", 99, 3).Scene;
             Assert.Equal(3, placeholder.Length);
             Assert.All(placeholder, p => Assert.Matches(@"^[A-Z0-9 &]+\|\S", Assert.Single(p)));

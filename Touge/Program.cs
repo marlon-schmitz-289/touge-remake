@@ -100,6 +100,7 @@ if (launcher ? badIso == null && !args.Where((a, i) => i == 0 || !valueFlags.Con
 var plain = args.Where((a, i) => a != iso && a != badIso && a != "--backend" && (i == 0 || args[i - 1] != "--backend")).All(a => a is "--menu" or "--launcher" or "--input-debug" or "--sim-wheel" or "--hint-device" or "--dualsense-log" || a == Arg("--menu") || a == Arg("--hint-device"));
 // app data (settings, records, progress, replays, save slots, photos): --data-dir, the real profile for a plain start, a throwaway folder for any other run
 Touge.Ui.Settings.FilePath = Touge.Ui.Settings.RunFile(Arg("--data-dir"), plain);
+AppDomain.CurrentDomain.ProcessExit += (_, _) => Touge.Story.Translation.SaveMissing(); // texts the language lacks, for the translator
 // --car: HCAR name (AE86T, FD3S, R32, EVO3, …) or index 0–31 in that list (Touge.Formats.CarPaint.Cars)
 var carArg = Arg("--car") ?? "AE86T";
 var carIndex = int.TryParse(carArg, out var ci) ? ci : Array.FindIndex(Touge.Formats.CarPaint.Cars, c => c.Equals(carArg, StringComparison.OrdinalIgnoreCase));

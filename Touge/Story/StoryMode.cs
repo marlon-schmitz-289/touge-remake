@@ -611,7 +611,7 @@ public sealed class StoryMode(Catalog catalog)
         var y = 172f;
         foreach (var l in CarGuide.Wrap(c.O.Font!, t.Blurb, 10.5f, 222))
         {
-            c.Text(l, 262, y, 10.5f, Canvas.White, 0, 0.08f);
+            c.Text(l, 262, y, 10.5f, Canvas.White, 0, 0.08f, raw: true);
             y += 13.5f;
         }
         var course = catalog.Courses.FirstOrDefault(x => x.Id == StoryScript.Courses[d.Course]);
@@ -630,7 +630,7 @@ public sealed class StoryMode(Catalog catalog)
         var gy = 356f;
         foreach (var l in CarGuide.Wrap(c.O.Font!, StoryRules.Describe(Goal, StoryRules.Limit(Data)), 12, 224))
         {
-            c.Text(l, 262, gy, 12, Amber, 0, 0.15f, 0.06f);
+            c.Text(l, 262, gy, 12, Amber, 0, 0.15f, 0.06f, raw: true);
             gy += 15;
         }
         var tries = Progress.Count(Key(Chapter) + "/tries");
@@ -646,7 +646,7 @@ public sealed class StoryMode(Catalog catalog)
     }
 
     /// <summary>Speaker plate tint: the teams' colours.</summary>
-    private static uint Tint(string who) => who switch
+    private static uint Tint(string who) => StoryText.Speakers.GetValueOrDefault(who, who) switch
     {
         _ when who.StartsWith("TAKUMI") || who.StartsWith("BUNTA") => Overlay.Rgba(0.95f, 0.95f, 0.95f),
         _ when who.StartsWith("KEISUKE") => Overlay.Rgba(1, 0.82f, 0.1f),
@@ -691,8 +691,8 @@ public sealed class StoryMode(Catalog catalog)
         foreach (var l in CarGuide.Wrap(c.O.Font!, line, 15, 420))
         {
             if (shown <= 0) break;
-            c.Text(l.Length <= shown ? l : l[..shown], 50, y, 15, thought ? Thought : Canvas.White, 0, thought ? 0.22f : 0.1f);
-            shown -= l.Length + 1;
+            c.Text(l.Length <= shown ? l : l[..shown], 50, y, 15, thought ? Thought : Canvas.White, 0, thought ? 0.22f : 0.1f, raw: true);
+            shown -= l.Length + (l[^1] >= '\u3000' ? 0 : 1); // the space the wrap took (Japanese has none)
             y += 21;
         }
         if (Typed >= line.Length) c.Arrow(458, 392, 472, 392, 465, 403, Canvas.Pulse(Theta)); // ▼ more
@@ -742,8 +742,8 @@ public sealed class StoryMode(Catalog catalog)
                 foreach (var l in CarGuide.Wrap(c.O.Font!, line, 15, 420))
                 {
                     if (shown <= 0) break;
-                    c.Text(l.Length <= shown ? l : l[..shown], 50, y, 15, color, 0, thought ? 0.22f : 0.1f);
-                    shown -= l.Length + 1;
+                    c.Text(l.Length <= shown ? l : l[..shown], 50, y, 15, color, 0, thought ? 0.22f : 0.1f, raw: true);
+                    shown -= l.Length + (l[^1] >= '\u3000' ? 0 : 1); // the space the wrap took (Japanese has none)
                     y += 21;
                 }
                 if (s.Held) c.Arrow(458, 402, 472, 402, 465, 413, Canvas.Pulse(Theta)); // ▼ waiting for DECIDE
@@ -758,7 +758,7 @@ public sealed class StoryMode(Catalog catalog)
                 var y = top + 13f;
                 foreach (var l in wrapped)
                 {
-                    c.Text(l, 256, y, 14, color, 0.5f, thought ? 0.22f : 0.1f, 0.1f);
+                    c.Text(l, 256, y, 14, color, 0.5f, thought ? 0.22f : 0.1f, 0.1f, raw: true);
                     y += 19;
                 }
                 if (s.Held) c.Arrow(476, 412, 490, 412, 483, 423, Canvas.Pulse(Theta));
@@ -826,7 +826,7 @@ public sealed class StoryMode(Catalog catalog)
         var gy = 312f;
         foreach (var l in CarGuide.Wrap(c.O.Font!, StoryRules.Describe(Goal, StoryRules.Limit(Data)), 10.5f, 200))
         {
-            c.Text(l, 276, gy, 10.5f, Style.Fade(Amber, b), 0, 0.12f);
+            c.Text(l, 276, gy, 10.5f, Style.Fade(Amber, b), 0, 0.12f, raw: true);
             gy += 13;
         }
         c.Text($"RACES {Progress.Count(Key(Chapter) + "/tries")}", 478, 340, 10, Style.Fade(Grey, b), 1, 0.12f);

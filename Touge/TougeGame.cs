@@ -190,10 +190,10 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     public override void Load()
     {
         using var iso = new Iso9660(isoPath);
-        _overlay.Font = new SdfFont(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts", "Rajdhani-Bold.ttf")),
-            Style.Glyphs);
+        Story.Translation.Disc = isoPath;
+        BuildFont();
+        Story.Translation.Changed += BuildFont;
         _overlayRenderer = new OverlayRenderer(Device);
-        _textRenderer = new TextRenderer(Device, _overlay.Font);
         _sprites = new SpriteRenderer(Device);
         (LoadingArt.IsoPath, LoadingArt.Sprites) = (isoPath, _sprites);
         if (UseMenus)
@@ -210,7 +210,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             (_settings.MapMode, _settings.Livery, _settings.RenderScale) =
                 (HudMode switch { "north" => Hud.MapMode.NorthUp, "overview" => Hud.MapMode.Overview, _ => Hud.MapMode.Rotating }, Livery, RenderScale);
         }
-        Story.Translation.Use(_settings.Language);
+        if (_settings.Language != Story.Translation.Code) Story.Translation.Use(_settings.Language);
         _driver = new DriverInput(_settings.Controls);
         _frontKeys.Wheel = Hints.Controls = _settings.Controls;
         if (SimWheel) Input.AddVirtual(_simWheel = new JoystickState("Simulated wheel", 4, 20, 1, wheel: true));
@@ -1004,6 +1004,23 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     private float MusicLevel => _settings.MusicVolume * (_voice != null ? 0.35f : 1);
 
     /// <summary>Options changed: everything live except the assists (next run, <see cref="ResetRun"/>); saved with the menus.</summary>
+    /// <summary>
+    ///     The HUD and menu font: Rajdhani, with M PLUS 1p for what it lacks (Japanese), for the basic set and every character of
+    ///     the language (<see cref="Story.Translation"/>, whose texts it shows in place of the English); again on a language change.
+    /// </summary>
+    private void BuildFont()
+    {
+        var fonts = Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts");
+        var font = new SdfFont(File.ReadAllBytes(Path.Combine(fonts, "Rajdhani-Bold.ttf")), Style.Glyphs + Story.Translation.Current.Chars(),
+            File.ReadAllBytes(Path.Combine(fonts, "MPLUS1p-Bold.ttf"))) { Map = Story.Translation.Map };
+        if (_textRenderer != null)
+        {
+            Device.WaitIdle();
+            _textRenderer.Dispose();
+        }
+        (_overlay.Font, _textRenderer) = (font, new TextRenderer(Device, font)); // the second player's overlay takes it each frame
+    }
+
     private void ApplySettings()
     {
         var s = _settings;

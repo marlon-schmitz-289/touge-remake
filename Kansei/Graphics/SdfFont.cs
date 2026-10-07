@@ -8,9 +8,17 @@ namespace Kansei.Graphics;
 ///     composite <c>glyf</c>, quadratic curves flattened), per texel the exact distance to the outline, inside by
 ///     non-zero winding. 0.5 = edge, ±<see cref="Spread"/> atlas pixels map to 1/0. Only the <c>cmap</c> format 4
 ///     subtable is read and no kerning (fine for the HUD's ASCII). Metrics are in em units (1 = font size), y up from the baseline.
+///     Characters the font lacks come from the <c>fallback</c> font (e.g. Japanese); <see cref="Map"/> swaps whole texts before
+///     they are measured or drawn (the game's translation).
 /// </summary>
 public sealed class SdfFont
 {
+    /// <summary>Text to draw instead of <paramref name="text"/> (or <paramref name="text"/> itself).</summary>
+    public delegate ReadOnlySpan<char> TextMap(ReadOnlySpan<char> text);
+
+    /// <summary>Applied by <see cref="Measure"/> and <see cref="Overlay.Text"/>.</summary>
+    public TextMap? Map { get; set; }
+
     public const int EmPx = 96, Spread = 10; // atlas pixels per em, distance range in atlas pixels (also the glyph padding)
 
     public readonly record struct Glyph(float Advance, Vector4 Plane, Vector4 Uv); // Plane: x0, y0 (bottom), x1, y1 (top) in em
@@ -24,16 +32,18 @@ public sealed class SdfFont
     public float Ascender { get; }
     public float Descender { get; }
 
-    public SdfFont(byte[] ttf, string chars)
+    public SdfFont(byte[] ttf, string chars, byte[]? fallback = null)
     {
-        var t = new Ttf(ttf);
-        Ascender = t.Ascender;
-        Descender = t.Descender;
-        var s = (float)EmPx / t.UnitsPerEm;
+        var main = new Ttf(ttf);
+        var other = fallback == null ? null : new Ttf(fallback);
+        Ascender = main.Ascender;
+        Descender = main.Descender;
         var cells = new List<(char C, float Advance, List<(Vector2 A, Vector2 B)> Seg, int X0, int Y0, int W, int H)>();
         foreach (var c in chars.Distinct())
         {
-            if (t.GlyphIndex(c) is not { } gi) continue;
+            var (t, gi) = main.GlyphIndex(c) is { } m ? (main, m) : other?.GlyphIndex(c) is { } o ? (other, o) : (null, 0);
+            if (t == null) continue;
+            var s = (float)EmPx / t.UnitsPerEm;
             var seg = new List<(Vector2, Vector2)>();
             t.Outline(gi, Matrix3x2.CreateScale(s), seg, 0);
             int x0 = 0, y0 = 0, w = 0, h = 0;
@@ -47,8 +57,9 @@ public sealed class SdfFont
             cells.Add((c, t.Advance(gi) / (float)t.UnitsPerEm, seg, x0, y0, w, h));
         }
 
-        // shelf packing, tallest first, 1 px gap
-        const int width = 1024;
+        // shelf packing, tallest first, 1 px gap; wider than 1024 for a big set (Japanese) so the height stays a texture's
+        var area = cells.Sum(c => (long)(c.W + 1) * (c.H + 1));
+        var width = Math.Clamp((int)BitOperations.RoundUpToPowerOf2((uint)Math.Sqrt(area * 1.3)), 1024, 8192);
         var place = new (int X, int Y)[cells.Count];
         var order = Enumerable.Range(0, cells.Count).OrderByDescending(i => cells[i].H).ToArray();
         int px = 0, py = 0, shelf = 0;
@@ -81,32 +92,72 @@ public sealed class SdfFont
         CapHeight = _glyphs.TryGetValue('H', out var hg) ? hg.Plane.W - (float)Spread / EmPx : 0.7f;
     }
 
-    /// <summary>Distance field of one glyph into its atlas cell (atlas rows top-down, glyph y up).</summary>
+    /// <summary>
+    ///     Distance field of one glyph into its atlas cell (atlas rows top-down, glyph y up). Distances beyond <see cref="Spread"/> clamp,
+    ///     so a texel only looks at the segments in its own and the neighbouring cells of a <see cref="Spread"/>-sized grid; inside/outside
+    ///     by the winding of the crossings right of it, found once per row (Japanese glyphs have hundreds of segments).
+    /// </summary>
     private void Rasterize(List<(Vector2 A, Vector2 B)> seg, int x0, int y0, int w, int h, int ax, int ay)
     {
-        for (var y = 0; y < h; y++)
-        for (var x = 0; x < w; x++)
+        int gw = w / Spread + 1, gh = h / Spread + 1;
+        var grid = new List<int>?[gw * gh];
+        for (var i = 0; i < seg.Count; i++)
         {
-            var p = new Vector2(x0 + x + 0.5f, y0 + h - y - 0.5f);
-            var best = float.MaxValue;
-            var winding = 0;
+            var (a, b) = seg[i];
+            int cx0 = Cell(MathF.Min(a.X, b.X) - x0, gw), cx1 = Cell(MathF.Max(a.X, b.X) - x0, gw);
+            int cy0 = Cell(MathF.Min(a.Y, b.Y) - y0, gh), cy1 = Cell(MathF.Max(a.Y, b.Y) - y0, gh);
+            for (var cy = cy0; cy <= cy1; cy++)
+            for (var cx = cx0; cx <= cx1; cx++)
+                (grid[cy * gw + cx] ??= []).Add(i);
+        }
+        var crossings = new List<(float X, int Dir)>();
+        for (var y = 0; y < h; y++)
+        {
+            var py = y0 + h - y - 0.5f;
+            crossings.Clear();
+            var winding = 0; // of the crossings right of the texel: all at first, passed ones drop out
             foreach (var (a, b) in seg)
+                if ((a.Y <= py) != (b.Y <= py))
+                {
+                    var dir = a.Y < b.Y ? 1 : -1;
+                    crossings.Add((a.X + (py - a.Y) / (b.Y - a.Y) * (b.X - a.X), dir));
+                    winding += dir;
+                }
+            crossings.Sort((l, r) => l.X.CompareTo(r.X));
+            var next = 0;
+            var gy = Cell(py - y0, gh);
+            for (var x = 0; x < w; x++)
             {
-                var ab = b - a;
-                var k = Math.Clamp(Vector2.Dot(p - a, ab) / MathF.Max(ab.LengthSquared(), 1e-12f), 0, 1);
-                best = MathF.Min(best, Vector2.DistanceSquared(p, a + ab * k));
-                if ((a.Y <= p.Y) != (b.Y <= p.Y) && a.X + (p.Y - a.Y) / ab.Y * ab.X > p.X) winding += a.Y < b.Y ? 1 : -1;
+                var p = new Vector2(x0 + x + 0.5f, py);
+                while (next < crossings.Count && crossings[next].X <= p.X) winding -= crossings[next++].Dir;
+                var best = (float)(Spread * Spread);
+                var gx = Cell(p.X - x0, gw);
+                for (var cy = Math.Max(gy - 1, 0); cy <= Math.Min(gy + 1, gh - 1); cy++)
+                for (var cx = Math.Max(gx - 1, 0); cx <= Math.Min(gx + 1, gw - 1); cx++)
+                    if (grid[cy * gw + cx] is { } near)
+                        foreach (var i in near)
+                        {
+                            var (a, b) = seg[i];
+                            var ab = b - a;
+                            var k = Math.Clamp(Vector2.Dot(p - a, ab) / MathF.Max(ab.LengthSquared(), 1e-12f), 0, 1);
+                            best = MathF.Min(best, Vector2.DistanceSquared(p, a + ab * k));
+                        }
+                var d = MathF.Sqrt(best) * (winding != 0 ? 1 : -1);
+                Atlas[(ay + y) * AtlasWidth + ax + x] = (byte)Math.Clamp(MathF.Round((0.5f + d / (2 * Spread)) * 255), 0, 255);
             }
-            var d = MathF.Sqrt(best) * (winding != 0 ? 1 : -1);
-            Atlas[(ay + y) * AtlasWidth + ax + x] = (byte)Math.Clamp(MathF.Round((0.5f + d / (2 * Spread)) * 255), 0, 255);
         }
     }
+
+    private static int Cell(float v, int n) => Math.Clamp((int)(v / Spread), 0, n - 1);
 
     /// <summary>The glyph of <paramref name="c"/>; a printable character the atlas lacks shows as '?' instead of vanishing.</summary>
     public bool TryGet(char c, out Glyph g) => _glyphs.TryGetValue(c, out g) || c > ' ' && _glyphs.TryGetValue('?', out g);
 
     /// <summary>Advance width of <paramref name="text"/> in pixels at font size <paramref name="size"/> (unknown characters: half an em).</summary>
-    public float Measure(ReadOnlySpan<char> text, float size)
+    public float Measure(ReadOnlySpan<char> text, float size) => Advance(Map != null ? Map(text) : text, size);
+
+    /// <summary><see cref="Measure"/> of text already mapped.</summary>
+    internal float Advance(ReadOnlySpan<char> text, float size)
     {
         var w = 0f;
         foreach (var c in text) w += TryGet(c, out var g) ? g.Advance : 0.5f;
