@@ -51,6 +51,7 @@ public class LeftoversTests
         ms.Position = 0;
         var r = Replay.Read(ms);
         Assert.Null(r.Info.Chapter);
+        Assert.Equal(1, r.Info.Cars[1].Power);
         Assert.Equal("BATTLE vs BUNTA FUJIWARA WIN", ReplayMenu.Label(r.Info));
     }
 

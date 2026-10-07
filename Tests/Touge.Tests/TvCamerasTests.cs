@@ -33,6 +33,20 @@ public class TvCamerasTests
     private static readonly Vector3[] Road = [.. Enumerable.Range(0, 101).Select(i => new Vector3(0, 0, 2 * i))]; // 200 m straight, 2 m apart
 
     [Fact]
+    public void Progress_runs_smoothly_through_the_road_points()
+    {
+        // a car driving 5 cm a frame, 1 m beside the road: the progress grows 0.025 a frame, never held at a point then jumping
+        var tv = new TvCameras([], Road, false);
+        var last = tv.Progress(new Vector3(1, 0, 10));
+        for (var z = 10.05f; z < 30; z += 0.05f)
+        {
+            var p = tv.Progress(new Vector3(1, 0, z));
+            Assert.InRange(p - last, 0.02f, 0.03f);
+            last = p;
+        }
+    }
+
+    [Fact]
     public void CamerasFollowTheProgressAndMoveBetweenTheirKeys()
     {
         var cams = ReplayCameras.Read(RepCam((3, 0, 50, new(10, 3, 0), 20, new(10, 3, 100), 10), (2, 50, 100, new(-8, 2, 150), 30, new(-8, 2, 150), 30)));

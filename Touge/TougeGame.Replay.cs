@@ -257,7 +257,7 @@ public sealed partial class TougeGame
             Chapter = _story is { InRun: true } s ? s.Chapter + 1 : null, Title = _story is { InRun: true } t ? t.Text.Title : null,
             Cars = [new ReplayCar("YOU", _carName, _paint, _settings.SteerAssist, _settings.DriftAssist)],
         };
-        if (_race != null && Battle != null) info.Cars.Add(new ReplayCar(Battle.Rival.Name, Battle.Rival.Car, 0));
+        if (_race != null && Battle != null) info.Cars.Add(new ReplayCar(Battle.Rival.Name, Battle.Rival.Car, 0, Power: Battle.Rival.Power));
         (_rec, _recDrive, _recReverse, _recLast, _recBestKey, _recEnd) = (new ReplayRecorder(new Replay { Info = info }, cars), _drive, _drive.Reverse, [.. cars.Select(c => c.Position)], null, -1);
         _recRespawns = Respawns();
     }
@@ -374,7 +374,7 @@ public sealed partial class TougeGame
     }
 
     private static CarSpec SpecOf(ReplayCar c) =>
-        new Settings { SteerAssist = c.SteerAssist, DriftAssist = c.DriftAssist }.Assisted(CarSpecs.All[c.Car]);
+        CarSpecs.Balanced(new Settings { SteerAssist = c.SteerAssist, DriftAssist = c.DriftAssist }.Assisted(CarSpecs.All[c.Car]), c.Power);
 
     /// <summary>
     ///     Time attack with GHOST on: the best run of this course, route and assists (<see cref="ReplayStore.BestPath"/>) drives
@@ -703,7 +703,8 @@ public sealed partial class TougeGame
             default: // the driving cameras on the focused car
                 var view = ReplayViewer.Driving(_viewer.Cam)!.Value;
                 var (body, model) = FocusModel();
-                (_pos, _camLook, _fov) = CameraRig.Place(view, ref _follow, _camSnap, dt, pose, body, model.Mounts, _settings.Fov * MathF.PI / 180, _course.Hull);
+                var focus = FocusCar().Car;
+                (_pos, _camLook, _fov) = CameraRig.Place(view, ref _follow, _camSnap, dt, pose, body, focus.Velocity, model.Mounts, _settings.Fov * MathF.PI / 180, focus.Wheels);
                 _onBoard = view is CameraView.Hood or CameraView.Cockpit ? view : null;
                 break;
         }

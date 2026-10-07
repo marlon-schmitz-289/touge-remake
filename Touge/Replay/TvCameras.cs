@@ -61,11 +61,20 @@ public sealed class TvCameras(ReplayCameras.Cam[] cams, Vector3[] road, bool rev
                 var d = Vector3.DistanceSquared(_road[i], p);
                 if (d < best) (best, _seg) = (d, i);
             }
+        // the nearest point's segments on both sides: only the one ahead held the progress at the point while the car came up to it, then jumped
         var seg = Math.Min(_seg, n - 2);
+        var idx = Along(seg, p, out var ahead);
+        if (seg > 0 && Along(seg - 1, p, out var before) is var back && before < ahead) idx = back;
+        return _reverse ? n - 1 - idx : idx; // the reverse table counts from the far end
+    }
+
+    /// <summary><paramref name="p"/> projected onto road segment <paramref name="seg"/> as a fractional index, <paramref name="d"/> its squared distance from it.</summary>
+    private float Along(int seg, Vector3 p, out float d)
+    {
         var ab = _road[seg + 1] - _road[seg];
         var t = Math.Clamp(Vector3.Dot(p - _road[seg], ab) / MathF.Max(ab.LengthSquared(), 1e-6f), 0, 1);
-        var idx = seg + t;
-        return _reverse ? n - 1 - idx : idx; // the reverse table counts from the far end
+        d = Vector3.DistanceSquared(p, _road[seg] + ab * t);
+        return seg + t;
     }
 
     /// <summary>Camera for the car at <paramref name="car"/>: eye, vertical FOV (degrees) and which camera (cuts when it changes).</summary>
