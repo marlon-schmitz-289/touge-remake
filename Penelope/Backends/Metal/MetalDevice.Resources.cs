@@ -186,8 +186,9 @@ public sealed unsafe partial class MetalDevice
             destinationLevel: (ulong)mipLevel,
             destinationOrigin: region.origin);
         blit.EndEncoding();
+        // no wait: the queue runs the blit before any later draw, and the command buffer keeps staging and texture alive
+        // (a wait per call made a car's ~400 mip writes cost ~75 ms)
         cb.Commit();
-        cb.WaitUntilCompleted();
     }
 
     public void DestroyTexture(TextureHandle texture)

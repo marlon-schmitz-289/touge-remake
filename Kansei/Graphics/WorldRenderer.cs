@@ -148,9 +148,12 @@ public sealed class WorldRenderer : IDisposable
     ///     Uploads an sRGB RGBA8 texture with a full mip chain (<see cref="Mipmaps"/>, coverage kept for
     ///     <paramref name="alphaCutoff"/>), returns its index for <see cref="MeshBatch.Texture"/>.
     /// </summary>
-    public int AddTexture(int width, int height, ReadOnlySpan<byte> rgba, string? name = null, float alphaCutoff = AlphaCutoff)
+    public int AddTexture(int width, int height, ReadOnlySpan<byte> rgba, string? name = null, float alphaCutoff = AlphaCutoff) =>
+        AddTexture(width, height, rgba, Mipmaps.Build(width, height, rgba, alphaCutoff), name);
+
+    /// <summary><see cref="AddTexture(int, int, ReadOnlySpan{byte}, string?, float)"/> with the mip chain built already (e.g. off the render thread).</summary>
+    public int AddTexture(int width, int height, ReadOnlySpan<byte> rgba, List<(int W, int H, byte[] Rgba)> mips, string? name = null)
     {
-        var mips = Mipmaps.Build(width, height, rgba, alphaCutoff);
         var tex = _device.CreateTexture(TextureDesc.Sampled2D(width, height, TextureFormat.Rgba8UnormSrgb, mips.Count + 1, name), rgba);
         for (var i = 0; i < mips.Count; i++)
             _device.WriteTexture(tex, i + 1, 0, 0, 0, 0, mips[i].W, mips[i].H, 1, mips[i].Rgba, mips[i].W * 4, mips[i].H);

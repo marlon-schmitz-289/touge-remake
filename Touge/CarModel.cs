@@ -11,7 +11,7 @@ namespace Touge;
 ///     lamp parts and their lit lenses, <see cref="CarParts.Lit"/>), one wheel mesh (tire of the setup + brake disk;
 ///     calipers left out), the four wheel transforms in car space (fr_l, fr_r, re_l, re_r) and the <see cref="Lamps"/>.
 ///     <see cref="Paints"/> = number of CAR_ENV colours of the car. Its textures are the renderer's last ones (from
-///     <see cref="FirstTexture"/>), freed with the model.
+///     <see cref="FirstTexture"/>), freed with the model. The disc data is read and baked once per car, paint and livery (<see cref="Bake"/>).
 /// </summary>
 public sealed record CarModel(CarModel.Shell Day, CarModel.Shell Lit, StaticMesh Wheel, Matrix4x4[] Wheels, float WheelRadius, int Paints, CarModel.Lamps Lamp,
     WorldRenderer Renderer, int FirstTexture)
@@ -45,7 +45,73 @@ public sealed record CarModel(CarModel.Shell Day, CarModel.Shell Lit, StaticMesh
         }
     }
 
-    public static CarModel Load(Iso9660 iso, string car, int paint, WorldRenderer renderer, Livery livery = Livery.Rival)
+    /// <summary>A mesh ready for the GPU; batch textures index <see cref="Baked.Textures"/>.</summary>
+    public sealed record BakedMesh(CarVertex[] Vertices, uint[] Indices, MeshBatch[] Batches);
+
+    public sealed record BakedShell(BakedMesh Body, BakedMesh Decals, BakedMesh? PopUp);
+
+    /// <summary>
+    ///     Everything of <see cref="Load"/> that needs no GPU: decoded textures with their mips (0 = white), the meshes with their
+    ///     overlay layers. Pure data, so it is cached (<see cref="Bake"/>) and can be made off the render thread (<see cref="Prefetch"/>).
+    /// </summary>
+    public sealed record Baked(
+        (string Name, int W, int H, byte[] Rgba, List<(int W, int H, byte[] Rgba)> Mips)[] Textures, BakedShell Day, BakedShell Lit, BakedShell Cabin,
+        BakedMesh Wheel, Matrix4x4[] Wheels, float WheelRadius, int Paints, Lamps Lamp, CameraRig.Mounts Mounts);
+
+    // ponytail: unbounded until full, then cleared; 32 cars × a few paints stay well under it (≈ 3 MB each)
+    private const int CacheMax = 48;
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(string Car, int Paint, Livery Livery), Lazy<Baked>> Cache = new();
+
+    public static CarModel Load(Iso9660 iso, string car, int paint, WorldRenderer renderer, Livery livery = Livery.Rival) =>
+        Upload(Bake(iso, car, paint, livery), renderer);
+
+    /// <summary><see cref="Baked"/> of the car, from the cache or read from <paramref name="iso"/> (once per key, also when a <see cref="Prefetch"/> is on it).</summary>
+    public static Baked Bake(Iso9660 iso, string car, int paint, Livery livery)
+    {
+        var key = (car, paint, livery);
+        if (Cache.Count >= CacheMax && !Cache.ContainsKey(key)) Cache.Clear();
+        var lazy = Cache.GetOrAdd(key, _ => new Lazy<Baked>(() => Read(iso, car, paint, livery)));
+        try
+        {
+            return lazy.Value;
+        }
+        catch
+        {
+            Cache.TryRemove(new(key, lazy)); // not cached: the next try reads again
+            throw;
+        }
+    }
+
+    /// <summary>Bakes the cars in the background (own handle on the ISO), so picking one later only uploads it. Errors are left to the real load.</summary>
+    public static void Prefetch(string isoPath, IEnumerable<(string Car, int Paint, Livery Livery)> cars)
+    {
+        var todo = cars.Where(c => !Cache.ContainsKey(c)).ToArray();
+        if (todo.Length == 0) return;
+        Task.Run(() =>
+        {
+            try
+            {
+                using var iso = new Iso9660(isoPath);
+                foreach (var (car, paint, livery) in todo) Bake(iso, car, paint, livery);
+            }
+            catch (Exception e) when (e is IOException or InvalidDataException or UnauthorizedAccessException) { }
+        });
+    }
+
+    private static CarModel Upload(Baked b, WorldRenderer renderer)
+    {
+        var first = renderer.TextureCount;
+        foreach (var t in b.Textures) renderer.AddTexture(t.W, t.H, t.Rgba, t.Mips, t.Name);
+        var device = renderer.Device;
+        StaticMesh Mesh(BakedMesh m) => new(device, m.Vertices, m.Indices, [.. m.Batches.Select(x => x with { Texture = x.Texture + first })]);
+        Shell Shell(BakedShell s) => new(Mesh(s.Body), Mesh(s.Decals), s.PopUp == null ? null : Mesh(s.PopUp));
+        return new CarModel(Shell(b.Day), Shell(b.Lit), Mesh(b.Wheel), b.Wheels, b.WheelRadius, b.Paints, b.Lamp, renderer, first)
+        {
+            Cabin = Shell(b.Cabin), Mounts = b.Mounts,
+        };
+    }
+
+    private static Baked Read(Iso9660 iso, string car, int paint, Livery livery)
     {
         var hcar = iso.OpenAfs("CDVD/DATA/MODEL/HCAR.AFS");
         var pac = hcar.Read(hcar.Find(car + ".PAC") ?? throw new FileNotFoundException(car + ".PAC"));
@@ -53,12 +119,17 @@ public sealed record CarModel(CarModel.Shell Day, CarModel.Shell Lit, StaticMesh
         paint = Math.Clamp(paint, 0, colours.Length - 1);
         var entries = Pac.Entries(pac);
 
-        var firstTexture = renderer.TextureCount;
-        var textures = new Dictionary<string, int> { [""] = renderer.AddTexture(1, 1, [255, 255, 255, 255], "white") };
+        var list = new List<(string, int, int, byte[], List<(int, int, byte[])>)>();
+        int Add(string name, int w, int h, byte[] rgba)
+        {
+            list.Add((name, w, h, rgba, Mipmaps.Build(w, h, rgba, 0.5f))); // car.frag alpha test
+            return list.Count - 1;
+        }
+        var textures = new Dictionary<string, int> { [""] = Add("white", 1, 1, [255, 255, 255, 255]) };
         foreach (var e in entries.Where(e => e.Type == 1))
         {
             var (w, h, rgba) = Gim.Decode(pac.AsSpan(e.Offset, e.Size));
-            textures[e.Name] = renderer.AddTexture(w, h, rgba, e.Name, 0.5f); // car.frag alpha test
+            textures[e.Name] = Add(e.Name, w, h, rgba);
         }
         var parts = entries.Where(e => e.Type == 3 && Mesh.IsCmd(pac.AsSpan(e.Offset, e.Size)))
             .ToDictionary(e => e.Name[(car.Length + 1)..], e => CarPaint.Apply(Mesh.Parse(pac.AsSpan(e.Offset, e.Size)), colours[paint]));
@@ -69,7 +140,7 @@ public sealed record CarModel(CarModel.Shell Day, CarModel.Shell Lit, StaticMesh
             var tex = iso.OpenAfs("CDVD/DATA/MODEL/TEXTURE.AFS");
             var num = tex.Read(tex.Find("NUM_TEX.PAC")!.Value);
             var gims = Pac.Entries(num).ToDictionary(e => e.Name, e => Gim.Decode(num.AsSpan(e.Offset, e.Size)).Rgba);
-            textures["plate"] = renderer.AddTexture(64, 32, CarParts.Plate(gims[car == "CAPPU" ? "NUM_PLATE_Y" : "NUM_PLATE_W"], gims["NUM_TEX"], number), "plate", 0.5f);
+            textures["plate"] = Add("plate", 64, 32, CarParts.Plate(gims[car == "CAPPU" ? "NUM_PLATE_Y" : "NUM_PLATE_W"], gims["NUM_TEX"], number));
         }
         var tire = parts[CarParts.Tire(parts, setup)];
         var radius = tire.Materials.SelectMany(m => m.Triangles).Max(v => v.Position.Y);
@@ -89,20 +160,16 @@ public sealed record CarModel(CarModel.Shell Day, CarModel.Shell Lit, StaticMesh
             .Where(m => m.Texture >= 0).SelectMany(m => m.Triangles).Select(v => v.Position);
         var lamps = new Lamps(popUp != null, closed, open,
             Centres(Lenses("Flight"), new Vector3(0.6f, 0.35f, 1.9f), true), Centres(Lenses("Blamp"), new Vector3(0.6f, 0.4f, -2f), false));
-        Shell Shell(List<(string Name, Mesh Mesh)> body)
+        BakedShell Shell(List<(string Name, Mesh Mesh)> body)
         {
             var part = PopUpOf(body);
-            var (opaque, decals) = Build(renderer.Device, body.Where(p => p.Name != part), textures, true);
-            return new Shell(opaque, decals!, part == null ? null : Build(renderer.Device, [(part, parts[part])], textures, false).Opaque);
+            var (opaque, decals) = Build(body.Where(p => p.Name != part), textures, true);
+            return new BakedShell(opaque, decals!, part == null ? null : Build([(part, parts[part])], textures, false).Opaque);
         }
         var wheels = CarParts.Wheels(parts["body00"]);
-        return new CarModel(Shell(day), Shell(lit),
-            Build(renderer.Device, [("tire", tire), ("Bdisk00", parts["Bdisk00"])], textures, false).Opaque,
-            wheels, radius, colours.Length, lamps, renderer, firstTexture)
-        {
-            Cabin = Shell([.. lit.Select(p => (p.Name, CameraRig.CabinPart(p.Name, p.Mesh)))]),
-            Mounts = CameraRig.Measure(day.Select(p => p.Mesh), day.FirstOrDefault(p => p.Name.StartsWith("wind")).Mesh, wheels.Average(w => w.Translation.Y)),
-        };
+        return new Baked([.. list], Shell(day), Shell(lit), Shell([.. lit.Select(p => (p.Name, CameraRig.CabinPart(p.Name, p.Mesh)))]),
+            Build([("tire", tire), ("Bdisk00", parts["Bdisk00"])], textures, false).Opaque, wheels, radius, colours.Length, lamps,
+            CameraRig.Measure(day.Select(p => p.Mesh), day.FirstOrDefault(p => p.Name.StartsWith("wind")).Mesh, wheels.Average(w => w.Translation.Y)));
     }
 
     /// <summary>
@@ -131,8 +198,7 @@ public sealed record CarModel(CarModel.Shell Day, CarModel.Shell Lit, StaticMesh
     ///     kind + 4, that <see cref="CarRenderer"/> alpha-blends like the PS2 instead of alpha-testing (soft sticker edges,
     ///     no edge shimmer); layers are computed over both together.
     /// </summary>
-    private static (StaticMesh Opaque, StaticMesh? Decals) Build(Penelope.IPenelopeDevice device, IEnumerable<(string Name, Mesh Mesh)> meshes,
-        Dictionary<string, int> textures, bool split)
+    private static (BakedMesh Opaque, BakedMesh? Decals) Build(IEnumerable<(string Name, Mesh Mesh)> meshes, Dictionary<string, int> textures, bool split)
     {
         var verts = new List<CarVertex>();
         var batches = new List<(int Texture, int First, bool Decal)>();
@@ -151,7 +217,8 @@ public sealed record CarModel(CarModel.Shell Day, CarModel.Shell Lit, StaticMesh
             if (verts.Count > first) batches.Add((tex, first / 3, decal));
         }
         var (indices, ranges) = CourseLoader.Layered([.. verts.Select(v => v.Position)], [.. batches.Select(b => b.First)], true);
-        StaticMesh Part(bool decals) => new(device, verts.ToArray(), indices,
+        var vertices = verts.ToArray();
+        BakedMesh Part(bool decals) => new(vertices, indices,
             [.. ranges.Where(r => batches[r.Batch].Decal == decals).Select(r => new MeshBatch(batches[r.Batch].Texture, r.First * 3, r.Count * 3, r.Layer))]);
         return (Part(false), split ? Part(true) : null);
     }

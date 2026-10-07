@@ -450,6 +450,8 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     {
         (_car, _carLivery) = (CarModel.Load(iso, _carName, _paint, _renderer, _settings.Livery), _settings.Livery);
         _modelToBody = ModelToBody(_car, _drive.Car.Spec);
+        // the car select's next picks: this car's other paints, every car's first
+        CarModel.Prefetch(isoPath, [.. Enumerable.Range(0, _car.Paints).Select(p => (_carName, p, _carLivery)), .. CarPaint.Cars.Select(c => (c, 0, _carLivery))]);
     }
 
     /// <summary>Model space → physics body space (origin CoG): the model's wheel centres onto the physics wheel centres at rest.</summary>

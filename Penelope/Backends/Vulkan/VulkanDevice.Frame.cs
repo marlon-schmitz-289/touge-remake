@@ -101,6 +101,7 @@ public sealed unsafe partial class VulkanDevice
         // buffers themselves are reused across frames (BufferCursor in BeginCommands) rather than
         // freed + reallocated, so they neither accumulate (RSS leak) nor churn the allocator.
         Vk.ResetCommandPool(Device, frame.Pool, 0);
+        ReclaimUploads(false);
         frame.BufferCursor = 0;
         foreach (var enc in frame.LiveEncoders) enc.Invalidate();
         frame.LiveEncoders.Clear();

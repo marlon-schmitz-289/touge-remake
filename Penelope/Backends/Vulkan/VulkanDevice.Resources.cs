@@ -236,9 +236,10 @@ public sealed unsafe partial class VulkanDevice
     {
         if (!_images.TryGetValue(texture.Id, out var img)) throw new ArgumentException("Unknown texture.");
 
-        using var staging = CreateStaging(data.Length, data);
+        var staging = CreateStaging(data.Length, data);
 
-        // Transition dst to TransferDstOptimal, copy, transition to ShaderReadOnlyOptimal.
+        // Transition dst to TransferDstOptimal, copy, transition to ShaderReadOnlyOptimal. Not waited for: the barrier orders it
+        // before later draws, the staging buffer goes once done (a wait per call made a car's ~400 mip writes cost ~75 ms).
         ExecuteImmediate(cb =>
         {
             TransitionImageLayout(cb, img.Image, img.Format,
@@ -265,7 +266,7 @@ public sealed unsafe partial class VulkanDevice
                 ImageLayout.TransferDstOptimal, targetLayout,
                 (uint)mipLevel, 1, (uint)arrayLayer, 1);
             img.CurrentLayout = targetLayout;
-        });
+        }, staging);
     }
 
     public void DestroyTexture(TextureHandle texture)
@@ -769,7 +770,28 @@ public sealed unsafe partial class VulkanDevice
         return new Staging { Dev = this, Buffer = buf, Memory = mem };
     }
 
-    internal void ExecuteImmediate(Action<CommandBuffer> record)
+    /// <summary>Submits still running (<see cref="ExecuteImmediate"/> with a staging buffer): freed by <see cref="ReclaimUploads"/>.</summary>
+    private readonly List<(Silk.NET.Vulkan.Fence Fence, CommandBuffer Cb, Staging Staging)> _uploads = [];
+
+    /// <summary>Frees the finished uploads (<paramref name="all"/>: every one, the queue is idle).</summary>
+    internal void ReclaimUploads(bool all)
+    {
+        _uploads.RemoveAll(u =>
+        {
+            if (!all && Vk.GetFenceStatus(Device, u.Fence) != Result.Success) return false;
+            Vk.DestroyFence(Device, u.Fence, null);
+            var cb = u.Cb;
+            Vk.FreeCommandBuffers(Device, GraphicsPool, 1, &cb);
+            u.Staging.Dispose();
+            return true;
+        });
+    }
+
+    /// <summary>
+    ///     Records and submits one command buffer and waits for the queue; with <paramref name="async"/> it returns at once and
+    ///     the command buffer and that staging buffer are freed when done (<see cref="ReclaimUploads"/>).
+    /// </summary>
+    internal void ExecuteImmediate(Action<CommandBuffer> record, Staging? async = null)
     {
         var allocInfo = new CommandBufferAllocateInfo
         {
@@ -796,10 +818,19 @@ public sealed unsafe partial class VulkanDevice
             CommandBufferCount = 1,
             PCommandBuffers = &cb,
         };
+        if (async is { } staging)
+        {
+            var fenceInfo = new FenceCreateInfo { SType = StructureType.FenceCreateInfo };
+            Vk.CreateFence(Device, &fenceInfo, null, out var fence).ThrowIfError();
+            Vk.QueueSubmit(GraphicsQueue, 1, &submitInfo, fence).ThrowIfError();
+            _uploads.Add((fence, cb, staging));
+            return;
+        }
         Vk.QueueSubmit(GraphicsQueue, 1, &submitInfo, default).ThrowIfError();
         Vk.QueueWaitIdle(GraphicsQueue);
 
         Vk.FreeCommandBuffers(Device, GraphicsPool, 1, &cb);
+        ReclaimUploads(true);
     }
 
     internal void CopyBufferImmediate(Silk.NET.Vulkan.Buffer src, Silk.NET.Vulkan.Buffer dst, ulong size, ulong srcOff, ulong dstOff)

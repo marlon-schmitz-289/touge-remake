@@ -581,7 +581,11 @@ public sealed unsafe partial class VulkanDevice : IPenelopeDevice
         throw new Exception($"No memory type matching bits=0x{typeBits:X} flags={needed}.");
     }
 
-    public void WaitIdle() => Vk.DeviceWaitIdle(Device);
+    public void WaitIdle()
+    {
+        Vk.DeviceWaitIdle(Device);
+        ReclaimUploads(true);
+    }
 
     public void Dispose()
     {
