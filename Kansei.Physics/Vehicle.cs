@@ -114,6 +114,34 @@ public sealed partial class Vehicle
             _wheels[i] = new WheelState { LocalCenter = _mounts[i] - Vector3.UnitY * Spec.Travel };
     }
 
+    /// <summary>
+    ///     The engine alone with the clutch open (the countdown: revving on the line while the car is held): idle control, airflow
+    ///     limit and rev limiter as in <see cref="Step"/>. GO's first <see cref="Step"/> lets the clutch in from these revs.
+    /// </summary>
+    public void Rev(float throttle, float dt)
+    {
+        Throttle = Math.Clamp(throttle, 0, 1);
+        var h = dt / Spec.Substeps;
+        // plus a constant friction off throttle: EngineBrake grows with the revs (tuned for engine braking in gear), alone it lets a
+        // free engine hang for seconds; with it a blip falls back to idle in about 1.5 s
+        for (var i = 0; i < Spec.Substeps; i++)
+        {
+            var friction = Rpm > Spec.IdleRpm ? (1 - Throttle) * Spec.EngineBrake : 0;
+            Rpm = MathF.Max(0, Rpm + (FreeTorque(Throttle) - friction) * h / Spec.EngineInertia * (30 / MathF.PI));
+        }
+        (_clutch, _locked) = (0, false);
+    }
+
+    /// <summary>Engine torque unloaded (clutch not locked) at <paramref name="thr"/>, after idle control and the part-throttle airflow limit.</summary>
+    private float FreeTorque(float thr)
+    {
+        var s = Spec;
+        thr = MathF.Max(thr, Math.Clamp((s.IdleRpm - Rpm) / 300, 0, 1)); // idle control
+        // part throttle is airflow-limited: unloaded, the engine settles just below idle + throttle × range
+        thr *= Math.Clamp((s.IdleRpm + thr * (s.RevLimit - s.IdleRpm) - Rpm) / 500, 0, 1);
+        return (Rpm >= s.RevLimit ? 0 : thr * EngineTorque(Rpm)) - (1 - thr) * s.EngineBrake * Rpm / s.RevLimit;
+    }
+
     public void Step(in VehicleInput input, IGround ground, float dt)
     {
         var throttle = Math.Clamp(input.Throttle, 0, 1);
@@ -265,10 +293,7 @@ public sealed partial class Vehicle
             var thr = throttle;
             if (AutomaticGearbox && _shifting && ratio != 0 && !handbrake)
                 thr = _shiftDown ? Rpm < gearRpm ? 1 : 0 : Rpm > gearRpm ? 0 : throttle;
-            thr = MathF.Max(thr, Math.Clamp((s.IdleRpm - Rpm) / 300, 0, 1)); // idle control
-            // part throttle is airflow-limited: unloaded, the engine settles just below idle + throttle × range
-            thr *= Math.Clamp((s.IdleRpm + thr * (s.RevLimit - s.IdleRpm) - Rpm) / 500, 0, 1);
-            var te = (Rpm >= s.RevLimit ? 0 : thr * EngineTorque(Rpm)) - (1 - thr) * s.EngineBrake * Rpm / s.RevLimit;
+            var te = FreeTorque(thr);
             var ie = s.EngineInertia;
             float w = Rpm * (MathF.PI / 30), wg = gearRpm * (MathF.PI / 30), cap = _clutch * _clutchCapacity, tc;
             if (gearRpm < slipRpm && Rpm > gearRpm)

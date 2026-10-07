@@ -52,6 +52,24 @@ public class VehicleTests(ITestOutputHelper log)
         for (var i = 0; i < 120 * 60 && car.SpeedKmh < kmh; i++) car.Step(new VehicleInput(1, 0, 0), Flat, Dt);
     }
 
+    /// <summary>Countdown: full throttle revs the free engine up to just under the limiter, letting go drops it back to idle; the car does not move.</summary>
+    [Fact]
+    public void RevsOnTheLineWithoutMoving()
+    {
+        var car = NewCar();
+        var start = car.Position;
+        for (var t = 0f; t < 2; t += Dt) car.Rev(1, Dt);
+        log.WriteLine($"full: {car.Rpm:F0} rpm");
+        Assert.InRange(car.Rpm, CarSpec.AE86.RevLimit - 600, CarSpec.AE86.RevLimit + 50);
+        for (var t = 0f; t < 3; t += Dt) car.Rev(0, Dt);
+        log.WriteLine($"off: {car.Rpm:F0} rpm");
+        Assert.InRange(car.Rpm, CarSpec.AE86.IdleRpm - 100, CarSpec.AE86.IdleRpm + 100);
+        Assert.Equal(start, car.Position);
+        for (var t = 0f; t < 1; t += Dt) car.Rev(1, Dt);
+        Run(car, new VehicleInput(1, 0, 0), 1); // GO: the clutch comes in from the revs and the car drives off
+        Assert.True(car.SpeedKmh > 10, $"{car.SpeedKmh:F1} km/h");
+    }
+
     [Fact]
     public void SettlesAtRest()
     {

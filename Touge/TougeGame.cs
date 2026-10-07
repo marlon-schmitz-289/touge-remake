@@ -529,6 +529,14 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
     public override void Tick(float dt)
     {
         if (ReplayTick(dt)) return; // the replay viewer drives the cars
+        if (_menu is { Current: Menu.Screen.Intro, Freezes: true } && !_fly && autodrive == null && bench == null && Flow == null)
+        {
+            // the countdown holds the car, the engine revs with the throttle (scripted runs keep it idling: same start as ever)
+            var rev = _driver.Vehicle(0);
+            _drive.Car.Rev(rev.Throttle, dt);
+            _audio?.Update(_drive.Car, rev.Throttle, false, dt);
+            return;
+        }
         if (_probe != null || Frozen) return; // frozen scene / menus pause the game
         RecordBefore();
         var car = _drive.Car;
