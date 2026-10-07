@@ -866,7 +866,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         var front = _front is { Active: true };
         var guide = _guide is { Active: true } || _legend is { Active: true };
         var versus = _versusUi is { Active: true };
-        var sfx = !front && !guide && !versus && !ReplayMutes && _story is not { Mutes: true } && _menu!.Current is Menu.Screen.None or Menu.Screen.Intro or Menu.Screen.Finish ? _settings.SoundVolume : 0;
+        var sfx = !front && !guide && !versus && !ReplayMutes && _story is not { Mutes: true } && _menu!.Current is Menu.Screen.None or Menu.Screen.Intro or Menu.Screen.Finish ? _settings.SoundVolume * GameAudio.SoundLevel : 0;
         if (_audioDevice!.Sfx != sfx) _audioDevice.Sfx = sfx; // the setter touches every voice
         if (_guide?.Voice != _voice && _guideVoice != null)
         {

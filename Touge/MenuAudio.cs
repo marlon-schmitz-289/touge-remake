@@ -45,7 +45,7 @@ public sealed class MenuAudio : IDisposable
     public void Play(string name)
     {
         Console.WriteLine($"[Menu] {Stamp}SE {name}");
-        _dev.PlaySfx(_se[name], Volume, ui: true);
+        _dev.PlaySfx(_se[name], Volume * GameAudio.SoundLevel, ui: true);
         Played?.Invoke(name);
     }
 

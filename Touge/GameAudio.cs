@@ -16,6 +16,9 @@ namespace Touge;
 /// </summary>
 public sealed class GameAudio : IDisposable
 {
+    /// <summary>Sound effects and menu sounds under the options' volumes (100 % in SOUND = this): they were louder than the music.</summary>
+    public const float SoundLevel = 0.5f;
+
     private const float EngineVolume = 0.6f; // the game's own ×0.6 on the SECT volume (sub_00178800)
 
     /// <summary>
