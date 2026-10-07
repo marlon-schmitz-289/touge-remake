@@ -9,7 +9,7 @@
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 dist="$root/out/dist"
-version=0.1.$(git -C "$root" rev-list --count HEAD 2>/dev/null || echo 0)
+version=${VERSION:-0.1.$(git -C "$root" rev-list --count HEAD 2>/dev/null || echo 0)} # VERSION: Release-Workflow (Tag ohne v)
 if [ $# -eq 0 ]; then
     set -- win-x64 linux-x64
     [ "$(uname)" = Darwin ] && set -- osx-arm64 "$@"
