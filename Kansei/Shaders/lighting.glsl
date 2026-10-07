@@ -98,7 +98,7 @@ vec3 capped(vec3 e, float cap)
 vec3 capped(vec3 e) { return capped(e, LightCap); }
 
 const int Lights = 8;
-const float TailRange = 8.0;
+const float TailRange = 8.0, StreetRange = 22.0;
 const float FogLightCap = 0.3; // most irradiance a lamp lends a surface in dense fog
 const float HeadVeil = 0.5, HeadVeilCap = 0.09; // headlight light scattered by dense fog: share of the street lamps' glow, most it adds
 
@@ -106,8 +106,8 @@ const float HeadVeil = 0.5, HeadVeilCap = 0.09; // headlight light scattered by 
 // night share (uTailColor.w) but stays `mirror`ed at full strength: a brake light streaks on a wet road by day too.
 vec4 pointLight(int j, bool mirror, out vec3 colour)
 {
-    colour = j < 4 ? pc.uPointColor.rgb : pc.uTailColor.rgb * (mirror ? 1.0 : pc.uTailColor.w);
-    return j < 4 ? pc.uPointPos[j] : vec4(pc.uTailPos[j - 4].xyz, TailRange);
+    colour = j < 4 ? pc.uPointColor.rgb * pc.uPointPos[j].w : pc.uTailColor.rgb * (mirror ? 1.0 : pc.uTailColor.w);
+    return j < 4 ? vec4(pc.uPointPos[j].xyz, pc.uPointPos[j].w > 0.0 ? StreetRange : 0.0) : vec4(pc.uTailPos[j - 4].xyz, TailRange);
 }
 
 // Light i (0–1 headlights, 2–7 point lights) arriving at p: irradiance on a surface facing the lamp (inverse square
@@ -184,10 +184,13 @@ vec3 wetLights(vec3 p, vec3 n, vec3 v, float across, float along)
     return sum * (fresnel / (3.14159 * across * along));
 }
 
-// Light scattered towards the camera by the fog between the eye and p: the street lights' glow, point sources,
-// ∫ I / (h² + t²) dt along the ray solved exactly. Headlight beams scatter only in dense fog (σ > 0, 12 steps over the
-// first 50 m, softly capped at HeadVeilCap: a dim cone, never a wall); in thin haze they are left to the bloom on their lenses. Rear lamps: bloom.
-// The sum saturates at LightCap like surface irradiance.
+// Light scattered towards the camera by the fog between the eye and p. Thin haze (σ = 0 at the eye): the street lights'
+// glow only, point sources, ∫ I / (h² + t²) dt along the ray solved exactly; headlights are left to the bloom on their lenses.
+// Dense fog: volumetric — the light scatters in the local density (fogDensity: height and drifting banks, relative to
+// the eye's, which the overall strength is tuned for) and is dimmed on its way from the lamp and on to the eye. Street
+// lights: the exact integral, scaled by the density where the ray passes the lamp closest. Headlight beams (beamVeil):
+// 16 steps over the first 60 m with the optical depth summed from the samples, softly capped (a lit cone in the mist,
+// never a white wall; brighter fog by day raises the cap). Both saturate like surface irradiance.
 vec3 lightGlow(vec3 p)
 {
     if (pc.uFog.a <= 0.0) return vec3(0.0);
@@ -196,7 +199,7 @@ vec3 lightGlow(vec3 p)
     float len = length(d);
     vec3 rd = d / max(len, 1e-4);
     vec3 sum = vec3(0.0);
-    float sigma = pc.uTailPos[0].w; // fog extinction (0 = thin haze): dense fog swallows the lamps' light on its way
+    float sigma = pc.uTailPos[0].w; // fog extinction at the eye (0 = thin haze)
     for (int j = 0; j < 4; j++)
     {
         vec3 colour;
@@ -206,26 +209,33 @@ vec3 lightGlow(vec3 p)
         float tc = dot(ol, rd);
         float h = sqrt(max(dot(ol, ol) - tc * tc, 0.0)) + 0.1;
         float glow = (atan((len - tc) / h) + atan(tc / h)) / h;
-        sum += colour * (sigma > 0.0 ? glow * exp(-sigma * length(ol)) : glow);
+        if (sigma > 0.0)
+        {
+            vec3 near = o + rd * clamp(tc, 0.0, len);
+            glow *= fogDensity(near) / sigma * exp(-sigma * length(ol));
+        }
+        sum += colour * glow;
     }
     vec3 veil = vec3(0.0);
     if (sigma > 0.0 && dot(pc.uSpotColor.rgb, pc.uSpotColor.rgb) > 0.0)
     {
-        float reach = min(len, 50.0), step = reach / 12.0;
-        // lamp -> sample -> eye is about twice the sample's distance (the lamps sit near the camera): exp(-2 sigma t), stepped
-        float fade = exp(-sigma * step), decay = fade * fade;
-        for (int k = 0; k < 12; k++, fade *= decay)
+        float reach = min(len, 60.0), step = reach / 16.0, optical = 0.0;
+        for (int k = 0; k < 16; k++)
         {
             vec3 q = o + rd * ((float(k) + 0.5) * step);
+            float s = fogDensity(q);
+            optical += s * step * 0.5; // to the middle of this step
+            vec3 lit = vec3(0.0);
             for (int i = 0; i < 2; i++)
             {
                 vec3 dl = q - pc.uSpotPos[i].xyz;
                 float d2 = dot(dl, dl);
                 // + 9: the lamps are lenses, not points — no hot spot in the mist right at the bumper
-                veil += beamVeil(i, dl * inversesqrt(max(d2, 1e-4))) * step * fade / (d2 + 9.0);
+                lit += beamVeil(i, dl * inversesqrt(max(d2, 1e-4))) * exp(-s * sqrt(d2)) / (d2 + 9.0);
             }
+            veil += lit * (s / sigma) * exp(-optical) * step;
+            optical += s * step * 0.5;
         }
-        // soft cap well under lit surfaces: the beam reads as a lit cone in the mist that thins with distance, never as a white wall
         veil *= pc.uSpotColor.rgb * (pc.uFog.a * HeadVeil);
         // the cap grows with the fog's own brightness: against bright day fog the beams still show, as a fainter cone than at night
         float cap = HeadVeilCap + 0.25 * dot(pc.uFog.rgb, vec3(0.2126, 0.7152, 0.0722));

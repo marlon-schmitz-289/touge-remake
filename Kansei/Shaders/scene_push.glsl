@@ -14,7 +14,7 @@ layout(set = 1, binding = 6, std140) uniform Push {
     vec4 uSpotPos[2];   // headlights: xyz, w = low (0) … high beam (1)
     vec4 uSpotDir[2];   // beam axis xyz (car forward); [0].w = lamp lens glow (car.frag), [1].w = reverse lamps 0..1
     vec4 uSpotColor;    // rgb peak intensity (0 = off or daylight), w = range
-    vec4 uPointPos[4];  // street lights: xyz, w = radius (0 = unused)
+    vec4 uPointPos[4];  // street lights: xyz, w = weight 0..1 (0 = unused; WorldRenderer.PickStreetLights)
     vec4 uPointColor;   // rgb intensity, w = overlay layer pull in metres (world.vert, car.vert)
     vec4 uFogParams;    // x = linear fog start (m), y = 1 / (end − start), z = height-fog density at uFogSun.w (1/m), w = 1 / its scale height
     vec4 uFogSun;       // rgb sun light scattered into the fog towards the sun, w = height-fog base altitude

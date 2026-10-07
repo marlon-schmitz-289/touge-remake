@@ -268,24 +268,39 @@ public sealed class WorldRenderer : IDisposable
     /// <summary>Binds the scene group (shadows, env maps) with <paramref name="block"/> (scene_push.glsl / sky.frag) as its uniform slice.</summary>
     internal void SetScene(IRenderPassEncoder pass, ReadOnlySpan<byte> block) => pass.SetBindGroup(1, _sceneGroup, [_post.Upload(block)]);
 
-    /// <summary>The 4 street lights nearest to <paramref name="eye"/> (radius 0 = slot unused).</summary>
+    /// <summary>Metres over which a street light fades out as the next one comes as near (<see cref="PickStreetLights"/>).</summary>
+    private const float StreetLightFade = 15;
+
+    /// <summary>
+    ///     The 4 street lights nearest to <paramref name="eye"/>, w = weight 0..1 (0 = slot unused): each fades out as the 5th
+    ///     nearest closes in, so a swap happens at weight 0 — a lamp popping in and out flickered, most in fog where its glow reaches far.
+    /// </summary>
     private void PickStreetLights(Vector3 eye)
     {
         Array.Clear(_points);
-        if (Lights.StreetLightColor == Vector3.Zero) return;
-        // insertion into the 4 slots, nearest first (no allocations per frame)
-        Span<float> dist = [float.MaxValue, float.MaxValue, float.MaxValue, float.MaxValue];
-        foreach (var p in Lights.StreetLights)
+        if (Lights.StreetLightColor != Vector3.Zero) PickStreetLights(Lights.StreetLights, eye, _points);
+    }
+
+    /// <summary><see cref="PickStreetLights(Vector3)"/> of <paramref name="lights"/> into the 4 <paramref name="points"/> (cleared before).</summary>
+    public static void PickStreetLights(ReadOnlySpan<Vector3> lights, Vector3 eye, Span<Vector4> points)
+    {
+        // insertion into 5 slots, nearest first (no allocations per frame)
+        Span<float> dist = [float.MaxValue, float.MaxValue, float.MaxValue, float.MaxValue, float.MaxValue];
+        Span<Vector3> pos = stackalloc Vector3[5];
+        foreach (var p in lights)
         {
             var d = Vector3.DistanceSquared(p, eye);
-            for (var i = 0; i < _points.Length; i++)
+            for (var i = 0; i < dist.Length; i++)
             {
                 if (d >= dist[i]) continue;
-                for (var j = _points.Length - 1; j > i; j--) (dist[j], _points[j]) = (dist[j - 1], _points[j - 1]);
-                (dist[i], _points[i]) = (d, new Vector4(p, Lights.StreetLightRadius));
+                for (var j = dist.Length - 1; j > i; j--) (dist[j], pos[j]) = (dist[j - 1], pos[j - 1]);
+                (dist[i], pos[i]) = (d, p);
                 break;
             }
         }
+        var fifth = MathF.Sqrt(dist[4]);
+        for (var i = 0; i < points.Length; i++)
+            if (dist[i] < float.MaxValue) points[i] = new Vector4(pos[i], Math.Clamp((fifth - MathF.Sqrt(dist[i])) / StreetLightFade, 0, 1));
     }
 
     /// <summary>

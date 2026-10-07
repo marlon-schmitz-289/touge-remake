@@ -24,7 +24,6 @@ public sealed class SceneLights
     /// <summary>All street lights of the course; the 4 nearest to the camera are used.</summary>
     public Vector3[] StreetLights = [];
     public Vector3 StreetLightColor;
-    public float StreetLightRadius = 22;
     /// <summary>The player car's body → world (car space: +x left, +y up, +z front), for its contact shadow on the world.</summary>
     public Matrix4x4 Car = Matrix4x4.Identity;
 }
