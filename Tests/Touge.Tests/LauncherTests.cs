@@ -52,7 +52,7 @@ public sealed class LauncherTests : IDisposable
             Dir(21, ("COURSE.AFS;1", 24, 16, false));
         }
         else Dir(19);
-        var path = Path.Combine(_dir, name);
+        var path = Path.Combine(_dir, name.Replace('/', Path.DirectorySeparatorChar)); // the paths Windows hands back
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllBytes(path, img);
         return path;

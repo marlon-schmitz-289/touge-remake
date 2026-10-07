@@ -16,7 +16,7 @@ public class NetTests
     {
         INetMessage[] all =
         [
-            new Discover(), new Announce("TAKUMI", 2, 4, "AKINA_NIT", Phase.Lobby), new Hello(0xDEADBEEF, "ITSUKI", "AE85", 2, true, 7),
+            new Discover(), new Announce("TAKUMI", 2, 4, "AKINA_NIT", Phase.Lobby, 0xC0FFEE), new Hello(0xDEADBEEF, "ITSUKI", "AE85", 2, true, 7),
             new Ping(12.5), new Pong(99.25), new StateMsg(7, Car(42, 3.5f, new Vector3(1, 2, 3), new Vector3(20, 0, 5), 0.3f, 0.2f)),
             new Result(3, "GOAL", [new ResultEntry(0, 1, 201.5f, 7400), new ResultEntry(2, 2, -1, 6800)]), new Bye(2, "LEFT"),
         ];

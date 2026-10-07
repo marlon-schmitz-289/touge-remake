@@ -391,14 +391,14 @@ KOMATCn: identisch außer 22↔23, 25→28, 26→25, 27→26, 28→29, 29→27; 
 
 ## Netzprotokoll (Versus online) – eigenes Format des Remakes
 Das Original hat keinen Mehrspielermodus (Hauptmenü-Trommel ohne VS-Eintrag, s. o.); VERSUS ist eine Ergänzung (`Touge/Net/Protocol.cs`).
-UDP, Standardport 47860, höchstens 1200 Byte je Paket, little-endian. Kopf: `'I' 'D'`, Version (u8, derzeit 3: Regel FREE + Geister-Flag + Rennuhr im Rennen), Typ (u8). Strings: Länge (u8) +
+UDP, Standardport 47860, höchstens 1200 Byte je Paket, little-endian. Kopf: `'I' 'D'`, Version (u8, derzeit 4: Regel FREE + Geister-Flag + Rennuhr im Rennen, Session in Announce), Typ (u8). Strings: Länge (u8) +
 UTF-8, beim Lesen auf 32 druckbare Zeichen gekürzt; Listen höchstens 4 Einträge; Spieler-IDs 0–3 (0 = Host). Ungültiges (falscher Kopf/Version,
 zu kurz, Restbytes, NaN/∞, ID/Liste/Phase außerhalb, Orientierung nicht ~normiert) wird verworfen.
 
 | Typ | Richtung | Inhalt |
 |---|---|---|
 | 1 Discover | Broadcast → Port | leer |
-| 2 Announce | Host → Fragender | Hostname, Spieler (u8), max (u8), Kurs (`AKINA_NIT`), Phase (u8) |
+| 2 Announce | Host → Fragender | Hostname, Spieler (u8), max (u8), Kurs (`AKINA_NIT`), Phase (u8), Session (u32, Token des Hosts: ein Eintrag je Host, egal über wie viele Adressen er antwortet) |
 | 3 Hello | Client → Host, 5/s | Token (u32, erkennt Wiedereintritt/NAT-Portwechsel), Name, Auto (HCAR-Name), Lack (u8), bereit (u8), geladenes Rennen (i32) |
 | 4 Lobby | Host → jeden Client, 5/s | deine ID (u8), Phase (0 Lobby, 1 Laden, 2 Countdown, 3 Rennen, 4 Ergebnis), Rennnummer (i32), Kurs, Flags (1 rückwärts, 2 Nebel, 4 Geister: keine Kontakte), Regel (0 Battle, 1 Race, 2 Free = Freifahrt, kein Ergebnis), Spieler [ID, Name, Auto, Lack, bereit, Ping ms (u16), geladenes Rennen], Sekunden bis GO (f32; im Rennen negativ = seit GO), Folgenummer (u32, steigt je Paket; ältere verwirft der Client) |
 | 5 Ping / 6 Pong | beide | Sendezeit (f64), Pong spiegelt sie |

@@ -333,7 +333,7 @@ public sealed class NetSession : IDisposable
         switch (m)
         {
             case Discover:
-                _link.Send(Protocol.Encode(new Announce(Local.Name, (byte)Players.Count(p => p.Connected), MaxPlayers, Config.CourseTime, Phase)), from);
+                _link.Send(Protocol.Encode(new Announce(Local.Name, (byte)Players.Count(p => p.Connected), MaxPlayers, Config.CourseTime, Phase, Local.Token)), from);
                 return;
             case Hello h:
                 sender ??= Players.FirstOrDefault(p => !p.IsLocal && p.Token == h.Token);
@@ -471,7 +471,7 @@ public sealed class NetSession : IDisposable
 /// </summary>
 public sealed class NetDiscovery : IDisposable
 {
-    public sealed record Game(IPEndPoint EndPoint, string Host, int Players, int Max, string CourseTime, Phase Phase, double Seen);
+    public sealed record Game(IPEndPoint EndPoint, string Host, int Players, int Max, string CourseTime, Phase Phase, double Seen, uint Session);
 
     private readonly NetLink _link;
     private readonly Func<double> _clock;
@@ -498,8 +498,8 @@ public sealed class NetDiscovery : IDisposable
         while (_link.Receive(out var packet, out var from))
         {
             if (Protocol.Decode(packet) is not Announce a) continue;
-            _games.RemoveAll(g => g.EndPoint.Equals(from));
-            _games.Add(new Game(from, a.Host, a.Players, a.Max, a.CourseTime, a.Phase, now));
+            _games.RemoveAll(g => g.Session == a.Session); // a host on this machine or with two networks answers from each address
+            _games.Add(new Game(from, a.Host, a.Players, a.Max, a.CourseTime, a.Phase, now, a.Session));
         }
         _games.RemoveAll(g => now - g.Seen > 3);
         _games.Sort((x, y) => string.CompareOrdinal(x.Host, y.Host));

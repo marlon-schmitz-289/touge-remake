@@ -51,8 +51,8 @@ public sealed record Discover : INetMessage
     public void Write(ref Protocol.Writer w) { }
 }
 
-/// <summary>Host's answer to <see cref="Discover"/> (LAN list).</summary>
-public sealed record Announce(string Host, byte Players, byte Max, string CourseTime, Phase Phase) : INetMessage
+/// <summary>Host's answer to <see cref="Discover"/> (LAN list). <paramref name="Session"/>: the host's token, one entry per host however many of its addresses answer.</summary>
+public sealed record Announce(string Host, byte Players, byte Max, string CourseTime, Phase Phase, uint Session) : INetMessage
 {
     public MsgType Type => MsgType.Announce;
     public void Write(ref Protocol.Writer w)
@@ -62,6 +62,7 @@ public sealed record Announce(string Host, byte Players, byte Max, string Course
         w.U8(Max);
         w.Str(CourseTime);
         w.U8((byte)Phase);
+        w.U32(Session);
     }
 }
 
@@ -198,7 +199,7 @@ public sealed record Bye(byte Id, string Reason = "") : INetMessage
 /// </summary>
 public static class Protocol
 {
-    public const byte Version = 3;
+    public const byte Version = 4;
     public const int MaxPacket = 1200, MaxString = 32, MaxList = 4;
     private const byte Magic0 = (byte)'I', Magic1 = (byte)'D';
 
@@ -308,7 +309,7 @@ public static class Protocol
             INetMessage m = (MsgType)packet[3] switch
             {
                 MsgType.Discover => new Discover(),
-                MsgType.Announce => new Announce(r.Str(), r.U8(), r.U8(), r.Str(), ReadPhase(ref r)),
+                MsgType.Announce => new Announce(r.Str(), r.U8(), r.U8(), r.Str(), ReadPhase(ref r), r.U32()),
                 MsgType.Hello => new Hello(r.U32(), r.Str(), r.Str(), r.U8(), r.U8() != 0, r.I32()),
                 MsgType.Lobby => ReadLobby(ref r),
                 MsgType.Ping => new Ping(r.F64()),
