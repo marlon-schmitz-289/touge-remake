@@ -246,7 +246,7 @@ vec3 lampGlare(vec3 p, bool sky)
         if (lp.w <= 0.0 || dot(colour, colour) == 0.0) continue;
         vec3 ol = lp.xyz - o;
         float dist = length(ol);
-        if (!sky && len < dist - 0.4) continue; // something in front of the lamp
+        if (!sky && len < dist - 1.5) continue; // something well in front of the lamp (not its own housing: that flickered at the edge)
         vec3 ld = ol / dist;
         float below = ld.y;                     // sine of the view's elevation: > 0 = the eye is below the lamp
         if (below <= 0.02) continue;
@@ -254,8 +254,11 @@ vec3 lampGlare(vec3 p, bool sky)
         vec3 up = normalize(vec3(0.0, 1.0, 0.0) - ld * below);
         float ov = dot(off, up), oh2 = max(dot(off, off) - ov * ov, 0.0);
         float r = 0.3 / max(dist, 0.5);         // angular radius of the glass
-        float rv = r * max(below, 0.08);        // the disc foreshortened
-        float core = exp(-(oh2 / (r * r) + ov * ov / (rv * rv)));
+        // the disc foreshortened, but never thinner than a pixel (a sub-pixel line flickered while moving): wider and
+        // dimmer by as much, so it carries the same light
+        float px = length(fwidth(rd));
+        float rv0 = r * max(below, 0.08), rv = max(rv0, px), rh = max(r, px);
+        float core = exp(-(oh2 / (rh * rh) + ov * ov / (rv * rv))) * (rv0 / rv) * (r / rh);
         float halo = 0.03 * (r * r) / (dot(off, off) + r * r * 4.0);
         sum += colour * (core + halo) * smoothstep(0.02, 0.25, below);
     }
