@@ -32,6 +32,28 @@ public class MenuInputTests
         Assert.False(r.Update(true, Dt)); // and waits for the delay again
     }
 
+    /// <summary>RepeatY: a press (also a quick re-tap) is not a repeat, the steps of a held key after the delay are.</summary>
+    [Fact]
+    public void RepeatY_OnlyWhileHeld()
+    {
+        var input = new InputSnapshot();
+        var keys = new MenuKeys();
+        (int Y, bool Repeat) Frame(bool down)
+        {
+            if (down) input.Keyboard.OnKeyDown((SdlKey)Key.Down); else input.Keyboard.OnKeyUp((SdlKey)Key.Down);
+            var y = keys.Read(input, Dt).Y;
+            input.Keyboard.BeginFrame();
+            return (y, keys.RepeatY);
+        }
+
+        Assert.Equal((1, false), Frame(true));
+        Assert.Equal((0, false), Frame(false));
+        Assert.Equal((1, false), Frame(true)); // re-tapped two frames later: still a press
+        (int, bool) last = default;
+        for (var i = 0; i < 30 && last.Item1 == 0; i++) last = Frame(true);
+        Assert.Equal((1, true), last); // the first key repeat
+    }
+
     /// <summary>Steps of <paramref name="hold"/> held for one second through <see cref="MenuKeys"/>, after one idle frame.</summary>
     static List<int> HoldSteps(InputSnapshot input, Action<bool> hold, MenuKeys? keys = null, JoystickState? wheel = null)
     {

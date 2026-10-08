@@ -10,6 +10,10 @@ namespace Touge.Ui;
 public sealed class MenuKeys
 {
     private readonly DirRepeat _dirs = new();
+    private bool _up, _down;
+
+    /// <summary>The last <see cref="Read"/>'s Y is key repeat: that direction was already held the frame before (not a new press).</summary>
+    public bool RepeatY { get; private set; }
 
     /// <summary>Wheel in the menus: hat = arrows, shift paddles = left/right, MENU DECIDE/BACK bindings (Options → Controls).</summary>
     public ControlSettings? Wheel { get; set; }
@@ -50,7 +54,10 @@ public sealed class MenuKeys
         }
         var (dx, dy) = _dirs.Step(up, down, left, right, dt);
         Hints.Track(input, pads, w);
-        return (Math.Sign(x + dx), Math.Sign(y + dy), ok, back);
+        var sy = Math.Sign(y + dy);
+        RepeatY = sy < 0 ? _up : sy > 0 && _down;
+        (_up, _down) = (up || k.IsKeyDown(Key.Up) || k.IsKeyDown(Key.W), down || k.IsKeyDown(Key.Down) || k.IsKeyDown(Key.S));
+        return (Math.Sign(x + dx), sy, ok, back);
     }
 }
 

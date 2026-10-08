@@ -10,8 +10,11 @@ namespace Touge.Ui;
 ///     middle of the screen (the 3D scene behind fills any width). Timings from the code at 60 fps: 30-frame fades,
 ///     cards 181 frames, title back to the attract cards after 601 idle frames, main menu back to the title after 1801;
 ///     cursor glow alpha 80 + 175·(1 + sin θ)/2 with θ += 5°/frame (40° after a decision); the drum fades the leaving row
-///     out (38/255 per frame), slides 48 px at 9 px per frame and fades the new row in (the original locks input meanwhile; here a new step
-///     restarts the roll).
+///     out (38/255 per frame), slides 48 px at 9 px per frame and fades the new row in, locking input for the whole ~0.32 s.
+///     The remake takes every step at once (index and sound) and draws the drum from a continuous scroll position that
+///     slides after it at the same 9 px per frame (faster when steps pile up): the leaving row fades as it slides out, the
+///     new one fades in over 7 frames once the drum settles, so a single step looks like the original and quick, held or
+///     reversed steps never restart or jump. Held directions step every 0.1 s here, not at the key repeat's 35 ms.
 ///     Sounds by SYSSE name through <see cref="Sound"/>, music per step in <see cref="Music"/>.
 /// </summary>
 public sealed class FrontEnd
@@ -35,7 +38,12 @@ public sealed class FrontEnd
         [Result.Legend, Result.TimeAttack, Result.Versus, Result.FreePlay, Result.Story, Result.Replay, Result.Guide, Result.SaveLoad, Result.Options, Result.Quit];
 
     public const float Fade = 30 / 60f, CardHold = 181 / 60f, BootHold = 2.5f, TitleIdle = 601 / 60f, ModesIdle = 1801 / 60f;
-    private const float RollFade = 7 / 60f, RollSlide = 48 / 9f / 60, Roll = 2 * RollFade + RollSlide;
+    /// <summary>
+    ///     Drum: slide speed in rows/s (9 px/frame, 48 px a row), extra speed per row still to go (a backlog of quick steps
+    ///     catches up instead of trailing), edge-row fade time (7 frames), and the pace of held steps: key repeats come every
+    ///     35 ms, the drum takes one per <see cref="HoldStep"/> so every step is seen.
+    /// </summary>
+    private const float RollSpeed = 9 * 60 / 48f, RollCatch = 12, RollFade = 7 / 60f, HoldStep = 0.1f;
 
     /// <summary>
     ///     Label of the update row (<see cref="Updater.Label"/>, e.g. "UPDATE TO 0.3.0"), null = none: shown first on the
@@ -71,8 +79,17 @@ public sealed class FrontEnd
     /// </summary>
     public string? Music => Active && Current is Step.Title or Step.Modes ? "gam.adx" : null;
 
-    private float _t, _idle, _leave = -1, _roll = -1, _theta;
-    private int _rollDir;
+    private float _t, _idle, _leave = -1, _theta;
+    /// <summary>
+    ///     Rows the drum still has to roll towards <see cref="Index"/> (+ = rows move up); row i is drawn at slot
+    ///     i − Index + _lag. Steps move Index and _lag together, so the picture never jumps.
+    /// </summary>
+    private float _lag;
+    /// <summary>Visible reach of the edge above/below (1 = the original's 3 rows): shrinks to 0 while rows come in from that side.</summary>
+    private float _edgeUp = 1, _edgeDown = 1;
+    /// <summary>Time since the last step taken (held-step pacing).</summary>
+    private float _sinceStep = 1;
+    internal float Lag => _lag;
     private bool _fast;
     private Step _next;
     private Result _result;
@@ -94,18 +111,25 @@ public sealed class FrontEnd
     /// <summary>Skips the fade-in (screenshots).</summary>
     public void Settle() => _t = 10;
 
-    private void Enter(Step step) =>
-        (Current, _t, _idle, _leave, _roll, _fast, _result) = (step, 0, 0, -1, -1, false, Result.None);
+    private void Enter(Step step)
+    {
+        (Current, _t, _idle, _leave, _fast, _result) = (step, 0, 0, -1, false, Result.None);
+        (_lag, _edgeUp, _edgeDown, _sinceStep) = (0, 1, 1, 1);
+    }
 
     private void Leave(Step next, Result result = Result.None) => (_leave, _next, _result) = (0, next, result);
 
-    /// <summary>One frame of menu input (<see cref="MenuKeys"/>); returns what the game should do once the fade-out is over.</summary>
-    public Result Update((int X, int Y, bool Ok, bool Back) k, float dt)
+    /// <summary>
+    ///     One frame of menu input (<see cref="MenuKeys"/>, <paramref name="repeat"/>: its Y is key repeat of a held
+    ///     direction, <see cref="MenuKeys.RepeatY"/>); returns what the game should do once the fade-out is over.
+    /// </summary>
+    public Result Update((int X, int Y, bool Ok, bool Back) k, float dt, bool repeat = false)
     {
         if (!Active) return Result.None;
         dt = MathF.Min(dt, 1 / 20f);
         _t += dt;
         _theta = (_theta + dt * 60 * (_fast ? 40 : 5)) % 360;
+        Roll(dt);
         if (_leave >= 0)
         {
             if ((_leave += dt) < Fade) return Result.None;
@@ -113,8 +137,8 @@ public sealed class FrontEnd
             else Active = false;
             return _result;
         }
-        if (_roll >= 0 && (_roll += dt) >= Roll) _roll = -1;
         _idle = k.X != 0 || k.Y != 0 || k.Ok || k.Back ? 0 : _idle + dt;
+        _sinceStep += dt;
         switch (Current)
         {
             case Step.Boot:
@@ -143,10 +167,10 @@ public sealed class FrontEnd
                 }
                 else if (k.Y != 0)
                 {
+                    // a press always steps, key repeat only every HoldStep
+                    if (repeat && _sinceStep < HoldStep) break;
                     Index = (Index + k.Y + Rows) % Rows;
-                    // a step mid-roll restarts it past the fade-out (the old row is already fading): the original locked
-                    // input for the whole roll (~0.3 s), presses got lost and the menu felt sluggish
-                    (_rollDir, _roll) = (k.Y, _roll >= 0 ? RollFade : 0);
+                    (_lag, _sinceStep) = (_lag + k.Y, 0);
                     Sound?.Invoke("SYS005");
                 }
                 else if (k.Ok && RowResult(Index) == Result.Update)
@@ -174,6 +198,18 @@ public sealed class FrontEnd
                 break;
         }
         return Result.None;
+    }
+
+    /// <summary>
+    ///     The drum slides towards <see cref="Index"/> linearly at the original's speed (plus catch-up); the edge rows come in
+    ///     from fades back in over 7 frames once it stops. Rate-based, so a new step simply retargets.
+    /// </summary>
+    private void Roll(float dt)
+    {
+        var speed = MathF.Max(RollSpeed, RollCatch * MathF.Abs(_lag));
+        _lag = _lag > 0 ? MathF.Max(0, _lag - speed * dt) : MathF.Min(0, _lag + speed * dt);
+        _edgeDown = Math.Clamp(_edgeDown + (_lag > 0 ? -dt : dt) / RollFade, 0, 1);
+        _edgeUp = Math.Clamp(_edgeUp + (_lag < 0 ? -dt : dt) / RollFade, 0, 1);
     }
 
     // ---------------------------------------------------------------- drawing
@@ -276,23 +312,16 @@ public sealed class FrontEnd
     private void Drum(Canvas c)
     {
         var o = c.O;
-        float f1 = 1, p = 1, f3 = 1;
-        if (_roll >= 0)
+        for (var rel = (int)MathF.Ceiling(-2 - _lag); rel <= (int)MathF.Floor(2 - _lag); rel++)
         {
-            f1 = Math.Clamp(_roll / RollFade, 0, 1);
-            p = Math.Clamp((_roll - RollFade) / RollSlide, 0, 1);
-            f3 = Math.Clamp((_roll - RollFade - RollSlide) / RollFade, 0, 1);
-        }
-        var d = _roll >= 0 ? _rollDir : 0;
-        for (var rel = -2; rel <= 2; rel++)
-        {
-            var a = d != 0 && rel == -2 * d ? 1 - f1 : d != 0 && rel == d ? f3 : Math.Abs(rel) <= 1 ? 1 : 0;
+            // rows fade out past slot ±1, and on the side rows come in from the edge's reach shrinks while it rolls
+            var slot = rel + _lag;
+            var a = Math.Clamp(1 + (slot < 0 ? _edgeUp : _edgeDown) - MathF.Abs(slot), 0, 1);
             if (a <= 0) continue;
-            var slot = rel + d * (1 - p);
             var lit = 48 / 255f + (1 - 48 / 255f) * MathF.Max(0, 1 - MathF.Abs(slot));
             var y = 224 + 111 + slot * 48;
             c.Plate(145, y, 222, 33, lit, a);
-            var label = Row((Index + rel + 2 * Rows) % Rows);
+            var label = Row(((Index + rel) % Rows + Rows) % Rows);
             var ink = Style.Fade(Canvas.Shade(0.05f, 0.05f, 0.06f, lit), a);
             var size = MathF.Min(21 * c.Ky, 196 * c.Kx / o.Font!.Measure(label, 1));
             var at = c.P(256, y + 16.5f) + new Vector2(0, o.Font.CapHeight * size / 2);

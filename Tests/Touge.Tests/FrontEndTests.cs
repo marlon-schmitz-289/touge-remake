@@ -67,6 +67,58 @@ public class FrontEndTests
         Assert.Equal(FrontEnd.Step.Title, f.Current);
     }
 
+    /// <summary>
+    ///     Quick taps, reversals and a held key: every press steps at once with one sound, a held key (repeats) steps
+    ///     every 0.1 s, the drum's scroll position never moves more than its speed in a frame and comes to rest on the index.
+    /// </summary>
+    [Fact]
+    public void Drum_FollowsQuickStepsWithoutJumps()
+    {
+        var sounds = new List<string>();
+        var f = new FrontEnd { Sound = sounds.Add };
+        f.Open(FrontEnd.Step.Modes);
+        for (var i = 0; i < 40; i++) f.Update(default, 1 / 60f);
+        const float dt = 1 / 60f;
+        int target = 0, steps = 0, frame = 0; // target: index without wrapping
+        float pos = 0;
+        void Frame(int y, bool repeat = false)
+        {
+            var (before, lag) = (f.Index, f.Lag);
+            f.Update((0, y, false, false), dt, repeat);
+            if (f.Index != before) (target, steps) = (target + y, steps + 1);
+            var now = target - f.Lag; // where the drum is
+            Assert.True(MathF.Abs(now - pos) <= MathF.Max(9 * 60 / 48f, 12 * (MathF.Abs(lag) + 1)) * dt + 1e-4f, $"jump at frame {frame}: {pos} -> {now}");
+            Assert.InRange(f.Lag, -2, 2);
+            pos = now;
+            frame++;
+        }
+
+        // taps 5 frames apart (faster than anyone taps), reversing twice: all taken
+        int[] taps = [1, 1, 1, -1, -1, 1, -1, -1, -1, -1, 1];
+        foreach (var y in taps)
+        {
+            Frame(y);
+            for (var i = 0; i < 4; i++) Frame(0);
+        }
+        Assert.Equal(taps.Length, steps);
+        Assert.Equal(taps.Sum(), target);
+        // a held key: the press, then key repeats from 0.35 s every other frame for a second
+        var held = steps;
+        Frame(1);
+        for (var i = 1; i < 60; i++) Frame(i >= 21 && i % 2 == 1 ? 1 : 0, true);
+        Assert.InRange(steps - held, 7, 9); // press, first repeat, then one per 0.1 s
+        // flip-flopping while it still rolls: a turn is always a new press, then rest
+        held = steps;
+        Frame(-1);
+        Frame(0);
+        Frame(1);
+        Assert.Equal(2, steps - held);
+        for (var i = 0; i < 60; i++) Frame(0);
+        Assert.Equal(0f, f.Lag);
+        Assert.Equal(((target % FrontEnd.Modes.Length) + FrontEnd.Modes.Length) % FrontEnd.Modes.Length, f.Index);
+        Assert.Equal(steps, sounds.Count(s => s == "SYS005"));
+    }
+
     /// <summary>QUIT GAME (desktop): last on the drum, asks first with NO selected; NO/back stay, YES quits after the fade.</summary>
     [Fact]
     public void QuitGame_AsksFirst()

@@ -803,7 +803,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             Quit();
             return;
         }
-        switch (_front.Update(keys, dt))
+        switch (_front.Update(keys, dt, Flow == null && _frontKeys.RepeatY))
         {
             case FrontEnd.Result.Update:
                 Updater.Download();
