@@ -24,7 +24,7 @@ public sealed partial class TougeGame
     private (Vector2 Min, Vector2 Max)[] NowPlayingClear(int w, int h, (Viewport First, Viewport Second)? split)
     {
         if (!_hud.Visible) return [];
-        if (split is not var (a, b)) return Hud.TopBoxes(w, h, _hud.Scale);
+        if (split is not var (a, b)) return Hud.TopBoxes(w, h, _hud.Scale, _hud.Mirror);
         return [.. new[] { a, b }.SelectMany(v => Hud.TopBoxes(v.Width, v.Height, _hud.Scale)
             .Select(x => (x.Min + new Vector2(v.X, v.Y), x.Max + new Vector2(v.X, v.Y))))];
     }

@@ -63,6 +63,25 @@ public sealed class WorldRenderer : IDisposable
     private TextureViewHandle _depthView, _msaaView, _msaaGbufView;
     private Matrix4x4 _viewRotProj, _proj;
     private int _w, _h, _samples;
+    // size-dependent targets of the other slots (Slot)
+    private readonly Dictionary<int, (TextureHandle, TextureViewHandle, TextureHandle, TextureViewHandle, TextureHandle, TextureViewHandle, int, int, int, BindGroupHandle, BindGroupHandle)> _slots = [];
+    private int _slot;
+
+    /// <summary>
+    ///     Render targets in use: 0 = the main view, others (the rear-view mirror) keep their own set at their own size, so
+    ///     views of different sizes in one frame do not reallocate. Set before <see cref="BeginScene"/>, back to 0 after.
+    /// </summary>
+    public int Slot
+    {
+        get => _slot;
+        set
+        {
+            if (value == _slot) return;
+            _slots[_slot] = (_depth, _depthView, _msaa, _msaaView, _msaaGbuf, _msaaGbufView, _w, _h, _samples, _depthGroup, _glowGroup);
+            (_depth, _depthView, _msaa, _msaaView, _msaaGbuf, _msaaGbufView, _w, _h, _samples, _depthGroup, _glowGroup) = _slots.Remove(value, out var t) ? t : default;
+            _post.Use(_slot = value);
+        }
+    }
 
     public IPenelopeDevice Device => _device;
     internal BindGroupLayoutHandle TextureLayout => _layout;
@@ -541,6 +560,14 @@ public sealed class WorldRenderer : IDisposable
             _device.DestroyTextureView(view);
             _device.DestroyTexture(tex);
         }
+        Slot = 0;
+        foreach (var slot in _slots.Keys.ToArray())
+        {
+            Slot = slot;
+            ReleaseTargets();
+            ReleaseDepthGroup();
+        }
+        Slot = 0;
         ReleaseTargets();
         ReleaseDepthGroup();
         _shadow.Dispose();

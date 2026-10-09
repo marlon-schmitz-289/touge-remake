@@ -1615,6 +1615,8 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         {
             var (hw, hh) = split is var (v0, _) ? (v0.Width, v0.Height) : (w, h);
             (_hud.Lights, _hud.Dashboard, _hud.Free) = (_lights.State, _onBoard == CameraView.Cockpit && !_fly, FreeRun);
+            _hud.Mirror = _settings.RearMirror && split == null && !_fly && _probe == null;
+            if (_hud.Mirror) RenderMirror(ctx, frame, Hud.MirrorBox(w, h, _hud.Scale));
             _hud.Rival = _race is { } race ? (_rivalPose.Translation, race.Cars[1].Along) : VersusRival(0);
             _hud.Build(_overlay, hw, hh, _carPose.Translation, Vector3.TransformNormal(Vector3.UnitZ, _carPose), _drive.Car, _carName, _menuTime);
             BuildBattleHud(hw, hh);
@@ -1714,6 +1716,36 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         var heightPx = viewport?.Height ?? shot?.Height ?? Device.SwapchainHeight;
         _fxRenderer.DrawRain(pass, view3 * proj, _pos, _camVelocity, _simTime, 2 * MathF.Tan(_fov / 2) / heightPx);
         _renderer.EndScene(ctx.Encoder, pass, frame, viewport);
+    }
+
+    /// <summary>Mirror's vertical field of view and its eye: above the car's tail, looking back.</summary>
+    private const float MirrorFov = 18 * MathF.PI / 180, MirrorEyeHeight = 1.25f;
+
+    /// <summary>
+    ///     The rear-view mirror into <paramref name="box"/> of the frame: the scene behind the player's car, left and right
+    ///     swapped like a mirror, in its own render targets (<see cref="WorldRenderer.Slot"/>); the main view's shadows and lamps.
+    /// </summary>
+    private void RenderMirror(in FrameContext ctx, FrameCapture? frame, (Vector2 Min, Vector2 Max) box)
+    {
+        var vp = new Kansei.Core.Viewport((int)box.Min.X, (int)box.Min.Y, (int)(box.Max.X - box.Min.X), (int)(box.Max.Y - box.Min.Y));
+        if (vp.Width < 8 || vp.Height < 8) return;
+        var fwd = Vector3.Normalize(Vector3.TransformNormal(Vector3.UnitZ, _carPose));
+        var up = Vector3.Normalize(Vector3.TransformNormal(Vector3.UnitY, _carPose));
+        var eye = _carPose.Translation + up * MirrorEyeHeight - fwd * (_drive.Car.Spec.Length / 2 + 0.2f);
+        var view = Matrix4x4.CreateLookAt(eye, eye - fwd * 10 - up * 0.4f, up);
+        var proj = WorldRenderer.Perspective(MirrorFov, (float)vp.Width / vp.Height, 0.3f, Device.Backend == Penelope.BackendKind.Vulkan)
+                   * Matrix4x4.CreateScale(-1, 1, 1); // mirrored (no culling to flip: the pipelines draw both faces)
+        _renderer.Slot = 1;
+        var pass = _renderer.BeginScene(ctx.Encoder, view, proj, frame, vp);
+        _renderer.DrawSky(pass, _course.Sky, Matrix4x4.CreateTranslation(eye with { Y = 0 }) * view * proj, eye);
+        _renderer.Draw(pass, _course.World, view * proj, eye);
+        DrawRival(pass, view * proj);
+        DrawVersusCars(pass, view * proj, 0);
+        DrawShowCars(pass, view * proj);
+        _fxRenderer.Draw(pass, _fx, view, view * proj, eye);
+        _fxRenderer.DrawRain(pass, view * proj, eye, _drive.Car.Velocity, _simTime, 2 * MathF.Tan(MirrorFov / 2) / vp.Height);
+        _renderer.EndScene(ctx.Encoder, pass, frame, vp);
+        _renderer.Slot = 0;
     }
 
     /// <summary>A pad button the player bound to a driving control (then its fixed extra, e.g. D-pad right = next song, stays off).</summary>

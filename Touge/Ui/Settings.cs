@@ -75,6 +75,8 @@ public sealed class Settings
     public bool HudOn { get; set; } = true;
     /// <summary>HUD size 0.8..1.3 (Options HUD SIZE, <see cref="Hud.Scale"/>).</summary>
     public float HudScale { get; set; } = 1;
+    /// <summary>Rear-view mirror at the top centre of a single view (Options → HUD).</summary>
+    public bool RearMirror { get; set; } = true;
     public Hud.MapMode MapMode { get; set; }
     /// <summary>The race music's NOW PLAYING toast (Options → HUD).</summary>
     public enum Toast { On, Off, PauseOnly }

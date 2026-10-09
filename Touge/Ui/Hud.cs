@@ -35,6 +35,8 @@ public sealed class Hud
     public bool Mph;
     /// <summary>Options HUD SIZE (0.8..1.3): scales every HUD element.</summary>
     public float Scale = 1;
+    /// <summary>The rear-view mirror is drawn into <see cref="MirrorBox"/>: its frame, and the drift combo moves below it.</summary>
+    public bool Mirror;
     /// <summary>Cockpit camera: the cluster sits large in a dash across the bottom instead of bottom right (<see cref="Dash"/>).</summary>
     public bool Dashboard;
     /// <summary>Key named by the stuck/wrong-way hint (split screen: player 2's own reset binding); null: the binding on the device used last (<see cref="Hints"/>).</summary>
@@ -105,21 +107,21 @@ public sealed class Hud
         var spool = Math.Clamp((car.Rpm - 2500) / 2500, 0, 1);
         var boost = car.Throttle > 0.2f ? -0.3f + 1.1f * spool * car.Throttle : -0.6f;
         _boost = Style.Approach(_boost, boost, boost > _boost ? 1.2f : 3, dt);
-    }
-
         // rev limiter: the physics cuts softly and holds the rpm, the needle bounces off the cut like a real one (display only)
         var onLimit = car.Rpm > car.Spec.RevLimit - 150 && car.Throttle > 0.5f;
         _limiter = Style.Approach(_limiter, onLimit ? 1 : 0, 8, dt);
         _limiterPhase = onLimit ? _limiterPhase + dt * LimiterHz : 0;
         NeedleDrop = _limiter * LimiterDrop * MathF.Abs(MathF.Sin(_limiterPhase * MathF.PI));
-    /// <summary>
-    ///     HUD for a <paramref name="width"/>×<paramref name="height"/> target into <paramref name="o"/> (cleared first): car drawn
+    }
+
     /// <summary>Needle bounce at the rev limiter: bounces per second and rpm dropped at the bottom of each.</summary>
     public const float LimiterHz = 7, LimiterDrop = 350;
 
     /// <summary>Rpm the tach needle shows below the engine's: the bounce at the rev limiter (<see cref="Tick"/>).</summary>
     public float NeedleDrop { get; private set; }
 
+    /// <summary>
+    ///     HUD for a <paramref name="width"/>×<paramref name="height"/> target into <paramref name="o"/> (cleared first): car drawn
     ///     at <paramref name="carPos"/> heading <paramref name="carForward"/> (interpolated pose), cluster of <paramref name="carName"/>
     ///     (<see cref="Cluster.Cars"/>), <paramref name="time"/> s for pulses.
     /// </summary>
@@ -140,7 +142,8 @@ public sealed class Hud
         if (!Dashboard) Cluster.Draw(o, gauge, new Vector2(g.Right, g.Bottom), k * Cluster.Fit(gauge, g), reading);
         var timingH = Drift.Total > 0 ? 186 : 150;
         if (ShowTiming) Timing(o, new Vector2(g.Left, g.Top), timingH, u, time);
-        DriftPanel(o, new Vector2(width / 2f, DriftBox(width, height, Scale, timingH).Min.Y), u);
+        DriftPanel(o, new Vector2(width / 2f, DriftBox(width, height, Scale, timingH, Mirror).Min.Y), u);
+        if (Mirror) MirrorFrame(o, MirrorBox(width, height, Scale), u);
         Banners(o, width, height, u, time);
     }
 
@@ -171,21 +174,45 @@ public sealed class Hud
     ///     The drift combo panel (with its rising combo line) at <paramref name="scale"/>: top centre; when it would crowd the
     ///     timing panel (<paramref name="timingH"/> units high; 4:3, 5:4, split views) it moves below the top row.
     /// </summary>
-    public static (Vector2 Min, Vector2 Max) DriftBox(int width, int height, float scale, float timingH = 186)
+    public static (Vector2 Min, Vector2 Max) DriftBox(int width, int height, float scale, float timingH = 186, bool mirror = false)
     {
         var g = Style.Safe(width, height);
         var u = g.U * Math.Clamp(scale, 0.8f, 1.3f);
         var cx = width / 2f;
         var top = cx - DriftHalf * u > g.Left + (TimingW + 24) * u ? g.Top : g.Top + (timingH + 24) * u;
+        if (mirror) top = MathF.Max(top, MirrorBox(width, height, scale).Max.Y + 16 * u);
         return (new Vector2(cx - DriftHalf * u, top), new Vector2(cx + DriftHalf * u, top + 130 * u));
     }
 
-    /// <summary>What the HUD keeps along the top at <paramref name="scale"/> (timing panel, drift combo): the music toast stays clear of it.</summary>
-    public static (Vector2 Min, Vector2 Max)[] TopBoxes(int width, int height, float scale)
+    /// <summary>Rear-view mirror at <paramref name="scale"/>: top centre, <see cref="MirrorW"/>×<see cref="MirrorH"/> units, whole pixels (the 3D viewport).</summary>
+    public static (Vector2 Min, Vector2 Max) MirrorBox(int width, int height, float scale)
     {
         var g = Style.Safe(width, height);
         var u = g.U * Math.Clamp(scale, 0.8f, 1.3f);
-        return [(new Vector2(g.Left, g.Top), new Vector2(g.Left + TimingW * u, g.Top + 186 * u)), DriftBox(width, height, scale)];
+        var min = Vector2.Round(new Vector2(width / 2f - MirrorW / 2 * u, g.Top));
+        return (min, min + Vector2.Round(new Vector2(MirrorW, MirrorH) * u));
+    }
+
+    public const float MirrorW = 420, MirrorH = 120;
+
+    /// <summary>Dark rim around the mirror's glass.</summary>
+    private static void MirrorFrame(Overlay o, (Vector2 Min, Vector2 Max) b, float u)
+    {
+        var (a, c) = (b.Min - new Vector2(3 * u), b.Max + new Vector2(3 * u));
+        var rim = Overlay.Rgba(0.03f, 0.03f, 0.035f, 0.95f);
+        o.Line(a, new Vector2(c.X, a.Y), 6 * u, rim);
+        o.Line(new Vector2(c.X, a.Y), c, 6 * u, rim);
+        o.Line(c, new Vector2(a.X, c.Y), 6 * u, rim);
+        o.Line(new Vector2(a.X, c.Y), a, 6 * u, rim);
+    }
+
+    /// <summary>What the HUD keeps along the top at <paramref name="scale"/> (timing panel, drift combo): the music toast stays clear of it.</summary>
+    public static (Vector2 Min, Vector2 Max)[] TopBoxes(int width, int height, float scale, bool mirror = false)
+    {
+        var g = Style.Safe(width, height);
+        var u = g.U * Math.Clamp(scale, 0.8f, 1.3f);
+        (Vector2, Vector2)[] boxes = [(new Vector2(g.Left, g.Top), new Vector2(g.Left + TimingW * u, g.Top + 186 * u)), DriftBox(width, height, scale, 186, mirror)];
+        return mirror ? [.. boxes, MirrorBox(width, height, scale)] : boxes;
     }
 
     private void Timing(Overlay o, Vector2 at, float h, float u, float time)

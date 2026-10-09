@@ -40,7 +40,7 @@ internal sealed class PostProcess : IDisposable
         new(binding, BindingType.UniformBuffer, stages, UniformBytes, HasDynamicOffset: true);
     public BufferHandle UniformBuffer => _uniforms.Buffer;
     private readonly SamplerHandle _sampler, _point;
-    private readonly List<(TextureHandle Tex, TextureViewHandle View, BindGroupHandle Group, int W, int H)> _targets = [];
+    private List<(TextureHandle Tex, TextureViewHandle View, BindGroupHandle Group, int W, int H)> _targets = [];
     private (TextureHandle Tex, TextureViewHandle View) _gbuf, _depth, _ao, _aoBlur, _ssr, _ssrBlur, _fogLight;
     private BindGroupHandle _tonemapGroup, _aoGroup, _blurGroup, _ssrGroup, _ssrBlurGroup;
     private int _w, _h;
@@ -52,6 +52,26 @@ internal sealed class PostProcess : IDisposable
     /// <summary>Half-resolution HDR target of the fog's light (WorldRenderer.DrawGlow), <see cref="FogLightSize"/>.</summary>
     public TextureViewHandle FogLightView => _fogLight.View;
     public (int W, int H) FogLightSize { get; private set; }
+
+    // size-dependent targets of the other slots (Use): each view size keeps its own, no reallocation per frame
+    private readonly Dictionary<int, Slot> _slots = [];
+    private int _slot;
+
+    private sealed record Slot(List<(TextureHandle Tex, TextureViewHandle View, BindGroupHandle Group, int W, int H)> Targets,
+        (TextureHandle, TextureViewHandle) Gbuf, (TextureHandle, TextureViewHandle) Depth, (TextureHandle, TextureViewHandle) Ao, (TextureHandle, TextureViewHandle) AoBlur,
+        (TextureHandle, TextureViewHandle) Ssr, (TextureHandle, TextureViewHandle) SsrBlur, (TextureHandle, TextureViewHandle) FogLight,
+        BindGroupHandle Tonemap, BindGroupHandle AoGroup, BindGroupHandle Blur, BindGroupHandle SsrGroup, BindGroupHandle SsrBlurGroup, int W, int H, (int, int) FogSize);
+
+    /// <summary>Switches to the targets of <paramref name="slot"/> (0 = the main view; another size, e.g. a mirror, keeps its own set).</summary>
+    public void Use(int slot)
+    {
+        if (slot == _slot) return;
+        _slots[_slot] = new Slot(_targets, _gbuf, _depth, _ao, _aoBlur, _ssr, _ssrBlur, _fogLight, _tonemapGroup, _aoGroup, _blurGroup, _ssrGroup, _ssrBlurGroup, _w, _h, FogLightSize);
+        var n = _slots.Remove(slot, out var t) ? t : new Slot([], default, default, default, default, default, default, default, default, default, default, default, default, 0, 0, default);
+        (_targets, _gbuf, _depth, _ao, _aoBlur, _ssr, _ssrBlur, _fogLight) = (n.Targets, n.Gbuf, n.Depth, n.Ao, n.AoBlur, n.Ssr, n.SsrBlur, n.FogLight);
+        (_tonemapGroup, _aoGroup, _blurGroup, _ssrGroup, _ssrBlurGroup, _w, _h, FogLightSize) = (n.Tonemap, n.AoGroup, n.Blur, n.SsrGroup, n.SsrBlurGroup, n.W, n.H, n.FogSize);
+        _slot = slot;
+    }
 
     public PostProcess(IPenelopeDevice device)
     {
@@ -232,6 +252,11 @@ internal sealed class PostProcess : IDisposable
     public void Dispose()
     {
         ReleaseTargets();
+        foreach (var slot in _slots.Keys.ToArray())
+        {
+            Use(slot);
+            ReleaseTargets();
+        }
         foreach (var p in new[] { _downPipeline, _upPipeline, _tonemapPipeline, _aoPipeline, _blurPipeline, _ssrPipeline, _ssrBlurPipeline }) _device.DestroyRenderPipeline(p);
         foreach (var s in _shaders) _device.DestroyShader(s);
         _uniforms.Dispose();

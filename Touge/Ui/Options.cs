@@ -217,6 +217,7 @@ public sealed class Options
                     Row.Toggle("HUD", () => s.HudOn, v => s.HudOn = v, "Times, drift meter, course dial and the car's own gauges (F4)."),
                     Row.Choice("HUD SIZE", [.. Enumerable.Range(0, 6).Select(i => $"{80 + 10 * i} %")], () => Math.Clamp((int)MathF.Round((s.HudScale - 0.8f) * 10), 0, 5),
                         i => s.HudScale = 0.8f + i / 10f, "Size of the HUD: course dial, gauges and times."),
+                    Row.Toggle("REAR MIRROR", () => s.RearMirror, v => s.RearMirror = v, "A mirror at the top centre: the road behind you.", "Draws the scene a second time, small."),
                     Row.Choice("NAVI MAP", ["ROTATING", "NORTH UP", "WHOLE"], () => (int)s.MapMode, i => s.MapMode = (Hud.MapMode)i,
                         "Course dial: turns with the car, north up,", "or shows the whole course (N)."),
                     Row.Choice("NOW PLAYING", ["ON", "OFF", "PAUSE ONLY"], () => (int)s.NowPlaying, i => s.NowPlaying = (Settings.Toast)i,
