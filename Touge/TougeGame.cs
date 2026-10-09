@@ -535,6 +535,8 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
             var rev = _driver.Vehicle(0);
             _drive.Car.Rev(rev.Throttle, dt);
             _audio?.Update(_drive.Car, rev.Throttle, false, dt);
+            _simTime += dt; // the world goes on (rain, scene animation, particles), only the cars wait for GO
+            _fx.Update(dt);
             return;
         }
         if (_probe != null || Frozen) return; // frozen scene / menus pause the game
