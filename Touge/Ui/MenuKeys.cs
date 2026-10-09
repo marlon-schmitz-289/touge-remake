@@ -44,7 +44,9 @@ public sealed class MenuKeys
         var w = Wheel != null ? DriverInput.FindWheel(input, Wheel.WheelName) : null;
         if (w != null)
         {
-            bool Down(Control c) => Wheel!.Get(DeviceKind.Wheel, c).Any(b => DriverInput.Value(b, input, w, null) > 0.5f);
+            // a paddle that is also MenuOk/MenuBack only confirms/goes back, it does not also step
+            var menu = Wheel!.Get(DeviceKind.Wheel, Control.MenuOk).Concat(Wheel.Get(DeviceKind.Wheel, Control.MenuBack)).ToArray();
+            bool Down(Control c) => Wheel!.Get(DeviceKind.Wheel, c).Any(b => !menu.Any(b.SameInput) && DriverInput.Value(b, input, w, null) > 0.5f);
             bool P(Control c) => Wheel!.Get(DeviceKind.Wheel, c).Any(b => DriverInput.Pressed(b, w));
             var hat = w.Hat(0);
             (up, down) = (up | (hat & 1) != 0, down | (hat & 4) != 0);

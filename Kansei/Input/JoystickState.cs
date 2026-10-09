@@ -20,6 +20,7 @@ public sealed unsafe class JoystickState
     private Haptic* _haptic;
     private int _effect = -1;
     private short _level;
+    private bool _updateFailed;
 
     public JoystickState(string name, int axes, int buttons, int hats, bool wheel = false)
     {
@@ -36,6 +37,7 @@ public sealed unsafe class JoystickState
         _joystick = joystick;
         IsGameController = isController;
         InstanceId = sdl.JoystickInstanceID(joystick);
+        (Vendor, Product) = (sdl.JoystickGetVendor(joystick), sdl.JoystickGetProduct(joystick));
         for (var i = 0; i < _axes.Length; i++) _axes[i] = sdl.JoystickGetAxis(joystick, i) / 32767f; // pedals rest at ±1, not 0
         OpenHaptic();
     }
@@ -43,6 +45,9 @@ public sealed unsafe class JoystickState
     public string Name { get; }
     /// <summary>SDL joystick instance id; −1 for a virtual device.</summary>
     public int InstanceId { get; }
+    /// <summary>USB vendor/product id (0 when unknown), to recognise a wheel model.</summary>
+    public ushort Vendor { get; init; }
+    public ushort Product { get; init; }
     /// <summary>Also open as a game controller (<see cref="GamepadState"/>): an ordinary pad, not a wheel.</summary>
     public bool IsGameController { get; }
     /// <summary>SDL reports the device type as a wheel.</summary>
@@ -89,11 +94,16 @@ public sealed unsafe class JoystickState
     {
         Force = Math.Clamp(force, -1, 1);
         if (_effect < 0) return;
-        var level = (short)MathF.Round(Force * 32767);
+        // SDL/DirectInput: a positive level on the steering axis is a force from the right (pushes left) – the sign is flipped here
+        var level = (short)MathF.Round(-Force * 32767);
         if (level == _level) return;
         _level = level;
         var e = ConstantEffect(level);
-        _sdl!.HapticUpdateEffect(_haptic, _effect, &e);
+        if (_sdl!.HapticUpdateEffect(_haptic, _effect, &e) < 0 && !_updateFailed)
+        {
+            _updateFailed = true; // logged once
+            Console.WriteLine($"[Kansei] {Name}: force feedback update failed ({_sdl.GetErrorS()})");
+        }
     }
 
     /// <summary>Rumble motors 0..1 for <paramref name="ms"/> (pads and some wheels; no-op elsewhere).</summary>
@@ -129,11 +139,12 @@ public sealed unsafe class JoystickState
             _haptic = null;
             return;
         }
-        if ((features & Sdl.HapticAutocenter) != 0) _sdl.HapticSetAutocenter(_haptic, 0);
+        if ((features & Sdl.HapticAutocenter) != 0)
+            Console.WriteLine($"[Kansei] {Name}: autocenter off -> {_sdl.HapticSetAutocenter(_haptic, 0)}");
         if ((features & Sdl.HapticGain) != 0) _sdl.HapticSetGain(_haptic, 100);
         var e = ConstantEffect(0);
         _effect = _sdl.HapticNewEffect(_haptic, &e);
-        if (_effect >= 0) _sdl.HapticRunEffect(_haptic, _effect, 1);
+        if (_effect >= 0) _sdl.HapticRunEffect(_haptic, _effect, Sdl.HapticInfinity); // SDL's Length ms→µs wraps 32-bit (~71 min); infinite iterations do not
         Console.WriteLine($"[Kansei] {Name}: force feedback {(_effect >= 0 ? "on" : $"not available ({_sdl.GetErrorS()})")}");
     }
 

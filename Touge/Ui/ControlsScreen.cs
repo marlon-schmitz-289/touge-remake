@@ -80,12 +80,13 @@ public sealed class ControlsScreen(ControlSettings cfg, InputSnapshot input, Dri
                 rows.Add(new("FORCE FEEDBACK", "Tyre forces, kerbs and impacts on the wheel. The test pushes right, then left.",
                     Value: () => s.FfbStrength <= 0 ? "OFF" : Pct(s.FfbStrength), Change: d => s.FfbStrength = Step(s.FfbStrength, d, 0.1f, 0, 1), Activate: () => _test = 0));
                 rows.Add(new("FFB DIRECTION", "REVERSED if the test pushes left first.", Value: () => s.FfbInvert ? "REVERSED" : "NORMAL", Change: _ => s.FfbInvert = !s.FfbInvert));
+                rows.Add(new("FFB MINIMUM", "Lifts light forces over the wheel's dead zone (gear/belt wheels).", Value: () => Pct(s.FfbMinForce), Change: d => s.FfbMinForce = Step(s.FfbMinForce, d, 0.01f, 0, 0.2f)));
                 break;
         }
         foreach (var c in Enum.GetValues<Control>())
             if (_page == DeviceKind.Wheel || c is not (Control.MenuOk or Control.MenuBack))
                 rows.Add(new(Name(c), BindHelp(c), c));
-        rows.Add(new("RESET", $"All {Tabs[(int)_page].ToLowerInvariant()} bindings and settings back to the defaults.", Value: () => "DEFAULTS", Activate: () => s.Reset(_page)));
+        rows.Add(new("RESET", $"All {Tabs[(int)_page].ToLowerInvariant()} bindings and settings back to the defaults.", Value: () => "DEFAULTS", Activate: () => s.Reset(_page, driver.Wheel)));
         return [.. rows];
     }
 
@@ -207,7 +208,10 @@ public sealed class ControlsScreen(ControlSettings cfg, InputSnapshot input, Dri
         if (first) return;
         if (_page == DeviceKind.Keyboard && input.Keyboard.PressedThisFrame.Any(k => FixedKeys.Contains((Key)k))) sound?.Invoke("BEEP001"); // taken, keep waiting
         if (Detect() is not { } bind) return;
-        cfg.Set(_page, _rows[_row].Control!.Value, _slot, bind);
+        var c = _rows[_row].Control!.Value;
+        // the input already in this slot again clears it (the wheel has no DELETE)
+        // MENU OK/BACK are never cleared this way: a wheel-only player would be locked out of the menus
+        cfg.Set(_page, c, _slot, c is not (Control.MenuOk or Control.MenuBack) && cfg.Get(_page, c)[_slot].SameInput(bind) ? Bind.None : bind);
         _capture = -1;
         sound?.Invoke("SYS006");
     }
@@ -335,7 +339,7 @@ public sealed class ControlsScreen(ControlSettings cfg, InputSnapshot input, Dri
                 DeviceKind.Keyboard => "press the new key.",
                 DeviceKind.Pad => "press a button or move a stick/trigger.",
                 _ => "press a button or the hat, or move an axis (wheel, pedal) past half its travel.",
-            }, $"{(Hints.Device == DeviceKind.Keyboard ? "ESC: cancel, else c" : "C")}ancels in {MathF.Ceiling(CaptureTimeout - _capture):0} s"];
+            } + " Press the bound input again to clear it.", $"{(Hints.Device == DeviceKind.Keyboard ? "ESC: cancel, else c" : "C")}ancels in {MathF.Ceiling(CaptureTimeout - _capture):0} s"];
         if (_calib == 1) return [$"CALIBRATE 1/2: centre the wheel and release every pedal, then {Hints.Key("DECIDE")}.", ""];
         if (_calib == 2) return [$"CALIBRATE 2/2: turn the wheel to both locks and press every pedal fully, then {Hints.Key("DECIDE")}.", ""];
         if (_row < 0) return ["Choose the device to set up, then go down to its settings and bindings.", ""];
@@ -351,7 +355,7 @@ public sealed class ControlsScreen(ControlSettings cfg, InputSnapshot input, Dri
         : _rows.ElementAtOrDefault(_row) switch
         {
             null => "LEFT/RIGHT: Device    DOWN: Settings and bindings    BACK: Options",
-            { Control: not null } => "UP/DOWN: Select    LEFT/RIGHT: Slot    DECIDE: Bind    " + Hints.Pick("DELETE: Clear    ", "X: Clear    ", "") + "BACK: Options",
+            { Control: not null } => "UP/DOWN: Select    LEFT/RIGHT: Slot    DECIDE: Bind    " + Hints.Pick("DELETE: Clear    ", "X: Clear    ", "DECIDE + same input: Clear    ") + "BACK: Options",
             { Activate: not null, Change: not null } => "UP/DOWN: Select    LEFT/RIGHT: Change    DECIDE: Test    BACK: Options",
             { Activate: not null } => "UP/DOWN: Select    DECIDE: OK    BACK: Options",
             _ => "UP/DOWN: Select    LEFT/RIGHT: Change    BACK: Options",

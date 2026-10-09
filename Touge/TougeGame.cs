@@ -1450,7 +1450,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         var cfg = _settings.Controls;
         // only the wheel in use gets the physics: forces on an unattended wheel (autocentre off) would turn it and steal the steering
         var force = Frozen || _fly ? _menu?.Controls?.TestForce ?? 0 : _driver.Active == DeviceKind.Wheel ? _ffb.Output : 0;
-        _driver.Wheel?.SetForce(cfg.FfbInvert ? -force : force);
+        _driver.Wheel?.SetForce(ForceFeedback.Lift(cfg.FfbInvert ? -force : force, cfg.FfbMinForce));
         if (Frozen || _fly || _driver.Active != DeviceKind.Pad) return;
         var (low, high) = _ffb.PadRumble(cfg.Rumble);
         if (low + high > 0.02f && !(_ds != null && Input.ActiveIsDualSense)) Input.RumblePad(low, high, 80); // a DualSense: DualSenseFeedback

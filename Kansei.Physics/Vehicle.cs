@@ -165,7 +165,7 @@ public sealed partial class Vehicle
         UpdateGear(input.Shift, dt, input.Handbrake);
         if (input.DirectSteer) _steer = Math.Clamp(input.Steer, -1, 1) * Spec.MaxSteer;
         else UpdateSteer(Math.Clamp(input.Steer, -1, 1), dt);
-        UpdateDriftGrip(Math.Abs(input.Steer), throttle, input.Handbrake);
+        UpdateDriftGrip(Math.Abs(input.Steer), input.DirectSteer, throttle, brake, input.Handbrake);
         WallContacts = 0;
         WallImpactSpeed = 0;
         var h = dt / Spec.Substeps;
@@ -184,14 +184,21 @@ public sealed partial class Vehicle
     ///     Arcade: rear tyres lose some grip at full lock + full throttle at speed, and keep it reduced while the car
     ///     slides on throttle — drifts start from steering and hold. Part throttle = grip cornering; lift off and grip returns.
     /// </summary>
-    void UpdateDriftGrip(float steerInput, float throttle, bool handbrake)
+    void UpdateDriftGrip(float steerInput, bool direct, float throttle, float brake, bool handbrake)
     {
         var fwd = Vector3.Dot(Velocity, Vector3.Transform(Vector3.UnitZ, Orientation));
+        // a wheel steers the road wheels 1:1: entry reads the lock as the pad input that asks for it at this speed (UpdateSteer's
+        // speed-sensitive lock); holding takes any real road-wheel angle, into the turn or counter-steer (wheels straight = grip back)
+        if (direct) steerInput = MathF.Min(MathF.Abs(_steer) * (1 + MathF.Abs(fwd) * Spec.SteerSpeedFactor) / Spec.MaxSteer, 1);
+        var hold = direct ? MathF.Abs(_steer) > 0.02f : steerInput > 0.3f;
         var sliding = MathF.Abs(SlipAngle) > 0.09f;
         var entering = steerInput > 0.8f && throttle > 0.8f && fwd > Spec.DriftEntrySpeed;
-        _drifting = sliding && throttle > 0.3f && steerInput > 0.3f && !handbrake;
+        // brake drift: braking into a turn at speed lightens the rear and it steps out; throttle then holds it like any drift
+        var braking = steerInput > 0.6f && brake > 0.3f && fwd > Spec.DriftEntrySpeed;
+        _drifting = sliding && throttle > 0.3f && hold && !handbrake;
         var target = handbrake ? Spec.HandbrakeRearGrip
-            : entering || sliding && throttle > 0.3f && steerInput > 0.3f ? Spec.DriftRearGrip : 1f; // let go of the wheel = grip back
+            : braking ? Spec.BrakeDriftRearGrip
+            : entering || sliding && throttle > 0.3f && hold ? Spec.DriftRearGrip : 1f; // let go of the wheel = grip back
         _rearGrip += (target - _rearGrip) * 0.15f;
     }
 

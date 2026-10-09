@@ -113,6 +113,24 @@ public class MenuInputTests
         Assert.Equal(DeviceKind.Pad, Hints.Last);
     }
 
+    /// <summary>A paddle that is both ShiftUp and MenuOk only confirms in menus, it does not also step right.</summary>
+    [Fact]
+    public void Wheel_PaddleAlsoMenuOk_OnlyConfirms()
+    {
+        var input = new InputSnapshot();
+        var wheel = new JoystickState("G29 (sim)", 4, 20, 1, wheel: true);
+        input.AddVirtual(wheel);
+        var cfg = new ControlSettings();
+        cfg.Set(DeviceKind.Wheel, Control.MenuOk, 0, Bind.Joy(4)); // the ShiftUp paddle
+        var keys = new MenuKeys { Wheel = cfg };
+        keys.Read(input, Dt);
+        wheel.BeginFrame();
+        wheel.SetButton(4, true);
+        var k = keys.Read(input, Dt);
+        Assert.True(k.Ok);
+        Assert.Equal(0, k.X);
+    }
+
     [Fact]
     public void Hints_PerDevice()
     {

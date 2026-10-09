@@ -9,7 +9,8 @@ namespace Touge;
 ///     <list type="bullet">
 ///         <item>Self-aligning torque of the front tyres: per wheel load × x·e^((1−x²)/2) with x = slip angle / peak slip angle –
 ///         grows with cornering force, peaks at the grip limit and goes light past it (understeer, front washing out), and
-///         reverses with the slide (the wheel counter-steers by itself in a drift).</item>
+///         reverses with the slide (the wheel counter-steers by itself in a drift); plus a caster part (tanh x) that keeps
+///         centring past the limit. With a light damper on the wheel's speed, low-passed ~30 ms.</item>
 ///         <item>Kerbs/gutters/grass: a sine rumble at the stripe frequency (speed / 1.2 m, at most 25 Hz – below the 30 Hz Nyquist limit of a 60 fps
 ///         update; a square wave's harmonics alias).</item>
 ///         <item>Wall impacts: a jolt away from the wall, from the closing speed, decaying in ~0.15 s.</item>
@@ -19,10 +20,11 @@ namespace Touge;
 /// </summary>
 public sealed class ForceFeedback
 {
-    private float _phase, _jolt, _joltSign;
+    private float _phase, _jolt, _joltSign, _smooth, _lastSteer = float.NaN;
 
     /// <summary>Components of the last update (input debug).</summary>
     public float Aligning { get; private set; }
+    public float Damper { get; private set; }
     public float Kerb { get; private set; }
     public float Jolt => _jolt * _joltSign;
     public float Output { get; private set; }
@@ -45,7 +47,9 @@ public sealed class ForceFeedback
             rough = MathF.Max(rough, roughness(w.Surface));
             if (i >= 2) continue;
             var x = w.SlipAngle / spec.PeakSlipAngle;
-            sat += 0.35f * w.Load / nominal * x * MathF.Exp((1 - x * x) / 2);
+            // pneumatic trail (peaks at the grip limit, light past it) + caster trail on the lateral force (stays past it: the
+            // wheel keeps centring and counter-steers by itself in a slide)
+            sat += w.Load / nominal * (0.4f * x * MathF.Exp((1 - x * x) / 2) + 0.2f * MathF.Tanh(x));
         }
         Aligning = sat * MathF.Min(speed / 3, 1); // slip angles mean little at walking pace
 
@@ -61,9 +65,18 @@ public sealed class ForceFeedback
 
         var over = MathF.Abs(steerBeyond) - 1;
         var soft = over > 0 ? -MathF.Sign(steerBeyond) * MathF.Min(over * 10, 1) : 0;
-        Output = strength <= 0 ? 0 : Math.Clamp(strength * (Aligning + Kerb + Jolt) + soft, -1, 1);
+        // light damper on the wheel's speed (lock units/s): steadies the centring and the lock; first call has no rate
+        var rate = float.IsNaN(_lastSteer) || dt <= 0 ? 0 : (steerBeyond - _lastSteer) / dt;
+        _lastSteer = steerBeyond;
+        Damper = Math.Clamp(-0.08f * rate, -0.3f, 0.3f);
+        // ~30 ms low-pass on tyre forces + damper (the steering is read per frame, the physics ticks at 120 Hz); kerb, jolt and soft lock unfiltered
+        _smooth += (Aligning + Damper - _smooth) * (1 - MathF.Exp(-dt / 0.03f));
+        Output = strength <= 0 ? 0 : Math.Clamp(strength * (_smooth + Kerb + Jolt) + soft, -1, 1);
         return Output;
     }
+
+    /// <summary>Lifts a force over the motor's dead band (belt/gear wheels): min + (1 − min)·|f|, faded in over the first 2 % (no square wave around the centre).</summary>
+    public static float Lift(float f, float min) => MathF.CopySign(min * MathF.Min(MathF.Abs(f) / 0.02f, 1) + (1 - min) * MathF.Abs(f), f);
 
     /// <summary>Pad rumble (low, high motor) 0..1: impacts on the heavy motor, kerbs on the light one.</summary>
     public (float Low, float High) PadRumble(float strength) => (strength * _jolt, strength * MathF.Abs(Kerb) * 2.4f);

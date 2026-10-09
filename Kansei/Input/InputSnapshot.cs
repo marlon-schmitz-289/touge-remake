@@ -235,7 +235,7 @@ public sealed unsafe class InputSnapshot
         }
         var j = new JoystickState(_sdl, joystick, _sdl.IsGameController(deviceIndex) == SdlBool.True);
         _joysticks.Add(j);
-        Console.WriteLine($"[Kansei] Joystick: {j.Name} ({j.AxisCount} axes, {j.ButtonCount} buttons, {j.HatCount} hats{(j.IsWheel ? ", wheel" : "")}{(j.IsGameController ? ", pad" : "")})");
+        Console.WriteLine($"[Kansei] Joystick: {j.Name} [{j.Vendor:X4}:{j.Product:X4}] ({j.AxisCount} axes, {j.ButtonCount} buttons, {j.HatCount} hats{(j.IsWheel ? ", wheel" : "")}{(j.IsGameController ? ", pad" : "")})");
     }
 
     /// <summary>Scans every currently-connected joystick and opens the ones that are game controllers.</summary>
