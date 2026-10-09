@@ -23,7 +23,7 @@ public sealed class Hud
     private readonly LinePilot _pilot;
     private readonly float _start;
     private readonly MapWidget _map;
-    private float _progress, _wrongFor, _stuckFor, _wrongA, _driftA, _hintA, _boost = -0.6f;
+    private float _progress, _wrongFor, _stuckFor, _wrongA, _driftA, _hintA, _boost = -0.6f, _limiter, _limiterPhase;
 
     public bool Visible = true;
     /// <summary>Night course: cluster illumination on.</summary>
@@ -107,8 +107,19 @@ public sealed class Hud
         _boost = Style.Approach(_boost, boost, boost > _boost ? 1.2f : 3, dt);
     }
 
+        // rev limiter: the physics cuts softly and holds the rpm, the needle bounces off the cut like a real one (display only)
+        var onLimit = car.Rpm > car.Spec.RevLimit - 150 && car.Throttle > 0.5f;
+        _limiter = Style.Approach(_limiter, onLimit ? 1 : 0, 8, dt);
+        _limiterPhase = onLimit ? _limiterPhase + dt * LimiterHz : 0;
+        NeedleDrop = _limiter * LimiterDrop * MathF.Abs(MathF.Sin(_limiterPhase * MathF.PI));
     /// <summary>
     ///     HUD for a <paramref name="width"/>×<paramref name="height"/> target into <paramref name="o"/> (cleared first): car drawn
+    /// <summary>Needle bounce at the rev limiter: bounces per second and rpm dropped at the bottom of each.</summary>
+    public const float LimiterHz = 7, LimiterDrop = 350;
+
+    /// <summary>Rpm the tach needle shows below the engine's: the bounce at the rev limiter (<see cref="Tick"/>).</summary>
+    public float NeedleDrop { get; private set; }
+
     ///     at <paramref name="carPos"/> heading <paramref name="carForward"/> (interpolated pose), cluster of <paramref name="carName"/>
     ///     (<see cref="Cluster.Cars"/>), <paramref name="time"/> s for pulses.
     /// </summary>
@@ -120,7 +131,7 @@ public sealed class Hud
         var k = Dash(g, Scale);
         // course dial bottom left, same height as the cluster box (Cluster.Box.Y), so the two read as one dash row
         var gauge = Cluster.Cars[carName];
-        var reading = new Cluster.Reading(car.Rpm, car.SpeedKmh, car.Gear, car.AutomaticGearbox, _boost, Night, time, Lights, Mph);
+        var reading = new Cluster.Reading(car.Rpm - NeedleDrop, car.SpeedKmh, car.Gear, car.AutomaticGearbox, _boost, Night, time, Lights, Mph);
         if (Dashboard) DashPanel(o, width, height, g, k, gauge, reading); // first: the course dial lies on it
         var s = g.U * k * Cluster.Box.Y / (2 * MapWidget.Radius);
         _map.Rival = Rival is { } r ? (Xz(r.Position), Math.Clamp((r.Along - _start) / (_pilot.Length - LapTimer.Gate - _start), 0, 1)) : null;
