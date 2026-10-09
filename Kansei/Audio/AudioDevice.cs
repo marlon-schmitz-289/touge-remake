@@ -84,10 +84,13 @@ public sealed unsafe class AudioDevice : IDisposable
     /// <summary>Test runs in the background (--hidden): speakers silent whatever the volumes; loopback capture unaffected.</summary>
     public static bool Silent { get; set; }
 
+    /// <summary>Overall output scale under <see cref="Master"/>: full master was far too loud (MASTER 50 % = a comfortable level at normal Windows volume).</summary>
+    private const float Headroom = 0.2f;
+
     public float Master
     {
         get => _master;
-        set { _master = value; if (Enabled) _al.SetListenerProperty(ListenerFloat.Gain, Silent && _renderSamples == null ? 0 : value); }
+        set { _master = value; if (Enabled) _al.SetListenerProperty(ListenerFloat.Gain, Silent && _renderSamples == null ? 0 : value * Headroom); }
     }
 
     public float Music

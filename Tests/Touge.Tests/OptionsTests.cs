@@ -25,7 +25,7 @@ public class OptionsTests
             (s.MapMode, s.Camera == CameraView.Bumper, s.Course, s.Car, s.Paint, s.Manual, s.Livery));
         Assert.Equal([10f, 20, 30, 40], s.Best["AKINA_A"]);
         // new fields at their defaults
-        Assert.Equal((1f, 1f, 60, 100, true, Settings.DisplayMode.Window), (s.MasterVolume, s.EngineVolume, s.Fov, s.RenderScale, s.VSync, s.Display));
+        Assert.Equal((0.5f, 0.8f, 60, 100, true, Settings.DisplayMode.Window), (s.MasterVolume, s.EngineVolume, s.Fov, s.RenderScale, s.VSync, s.Display));
     }
 
     [Fact]
@@ -133,7 +133,7 @@ public class OptionsTests
     [Fact]
     public void Navigation_ChangesSettingsLive()
     {
-        var s = new Settings();
+        var s = new Settings { MasterVolume = 1 };
         var o = new Options(s) { Resolutions = () => [(1280, 720), (1920, 1080)] };
         var sounds = new List<string>();
         (int, int, bool, bool) up = (0, -1, false, false), down = (0, 1, false, false), left = (-1, 0, false, false), right = (1, 0, false, false),

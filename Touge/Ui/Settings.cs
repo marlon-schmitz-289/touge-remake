@@ -39,19 +39,19 @@ public sealed class Settings
     public bool Ssr { get; set; } = true;
 
     // ------------------------------------------------------------ sound (Options: SOUND), all 0..1
-    public float MasterVolume { get; set; } = 1;
+    public float MasterVolume { get; set; } = 0.5f;
     public bool MusicOn { get; set; } = true;
-    public float MusicVolume { get; set; } = 0.8f;
+    public float MusicVolume { get; set; } = 1;
     /// <summary>Race songs switched off in Options → PLAYLIST (<see cref="Jukebox.Song.File"/>); all off = silence in races.</summary>
     public HashSet<string> MusicOff { get; set; } = [];
     /// <summary>Game sound effects (engine, tyres, walls, wind).</summary>
-    public float SoundVolume { get; set; } = 1;
+    public float SoundVolume { get; set; } = 0.7f;
     /// <summary>Engine on top of <see cref="SoundVolume"/>.</summary>
-    public float EngineVolume { get; set; } = 1;
+    public float EngineVolume { get; set; } = 0.8f;
     /// <summary>Menu sounds (cursor, decide, countdown).</summary>
-    public float MenuVolume { get; set; } = 1;
+    public float MenuVolume { get; set; } = 0.7f;
     /// <summary>Voices: the story's manga dramas and scenes, Iketani in the car guide.</summary>
-    public float VoiceVolume { get; set; } = 1;
+    public float VoiceVolume { get; set; } = 0.9f;
 
     // ------------------------------------------------------------ gameplay (Options: GAME SETTING)
     public bool Mph { get; set; }
