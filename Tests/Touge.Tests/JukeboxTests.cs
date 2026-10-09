@@ -53,6 +53,17 @@ public class JukeboxTests
         Assert.Equal([0, 1, 2], round.Order());
     }
 
+    /// <summary>Full volume up to the loop end, a linear fade over the given frames, then the end (no abrupt cut).</summary>
+    [Fact]
+    public void FadeOut_FadesAfterLoopEndThenEnds()
+    {
+        var f = Jukebox.FadeOut(dst => { dst.Fill(1000); return dst.Length / 2; }, 2, 4, 4);
+        var buf = new short[20];
+        Assert.Equal(8, f(buf));
+        Assert.Equal(new short[] { 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 750, 750, 500, 500, 250, 250 }, buf[..16]);
+        Assert.Equal(0, f(buf));
+    }
+
     /// <summary>Stop reports the device's unplayed tail; Rewind replays exactly those frames, then continues the song.</summary>
     [Fact]
     public void Rewind_ReplaysUnplayedTail()

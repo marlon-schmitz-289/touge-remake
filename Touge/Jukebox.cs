@@ -6,7 +6,7 @@ namespace Touge;
 
 /// <summary>
 ///     Race music as a jukebox over RACEBGM.AFS, independent of the course: every song plays once to its end (no loop),
-///     then the next comes from <see cref="Shuffle"/> (no repeats until all enabled songs played). Songs switched off in
+///     loop rips going round into their loop and fading out (<see cref="FadeSeconds"/>), then the next comes from <see cref="Shuffle"/> (no repeats until all enabled songs played). Songs switched off in
 ///     Options (<see cref="Settings.MusicOff"/>) are skipped; all off = silence. <see cref="Stop"/> keeps the song's
 ///     position, <see cref="Play"/> resumes it (menus with their own music in between, course loads). One instance per game.
 /// </summary>
@@ -110,7 +110,11 @@ public sealed class Jukebox
             var adx = new Adx(_afs.Read(_afs.Find(song.File + ".ADX")!.Value));
             if (request != _request) return; // superseded (next / stop) while loading
             lock (_shuffle) _shuffle.Played(i);
-            var rewind = new Rewind(adx.Open(loop: false).Read, adx.Channels);
+            // the disc's songs are loop rips that stop at full volume ≤ 6 s past the loop end; a real ending (≥ 15 s past it, MIKADO) plays as is
+            var once = adx.Loop is { } l && adx.SampleCount - l.End < 10 * adx.SampleRate
+                ? FadeOut(adx.Open(loop: true).Read, adx.Channels, l.End, (int)(FadeSeconds * adx.SampleRate))
+                : adx.Open(loop: false).Read;
+            var rewind = new Rewind(once, adx.Channels);
             PcmSource source = dst =>
             {
                 var k = rewind.Read(dst);
@@ -137,6 +141,25 @@ public sealed class Jukebox
             Log($"end {Current?.Title}");
             Next(background);
         }
+    }
+
+    /// <summary>Fade after a loop rip's loop end (s), like soundtrack rips.</summary>
+    public const float FadeSeconds = 10;
+
+    /// <summary><paramref name="src"/> at full volume up to frame <paramref name="from"/>, then a linear fade to silence over <paramref name="frames"/>, then the end.</summary>
+    public static PcmSource FadeOut(PcmSource src, int channels, long from, int frames)
+    {
+        long at = 0, end = from + frames;
+        return dst =>
+        {
+            var n = src(dst[..(int)(Math.Min(dst.Length / channels, end - at) * channels)]);
+            for (var i = 0; i < n; i++)
+                if (at + i >= from)
+                    for (var c = 0; c < channels; c++)
+                        dst[i * channels + c] = (short)(dst[i * channels + c] * ((end - at - i) / (float)frames));
+            at += n;
+            return n;
+        };
     }
 
     private void Log(FormattableString s) =>
