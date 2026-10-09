@@ -40,6 +40,18 @@ public sealed class LinePilot
     /// <summary>Plan: also cap the speed by the line's curvature at <see cref="CornerAccel"/> (a drift corner taken in grip).</summary>
     public bool CheckCurvature;
 
+    /// <summary>
+    ///     Plan: speed (m/s) from which bends of at least <see cref="SlideCurvature"/> are taken in a slide like a player's
+    ///     (the plan counts on the drift layer's carve, <see cref="RivalPilot.SlideShare"/>): full lock into it (and a tap of
+    ///     the handbrake, <see cref="RivalPilot"/>), the throttle held over the drift layer's thresholds, the car's own
+    ///     counter-steer kept and the slip held under <see cref="SlideBeta"/>. ∞ = grip only.
+    /// </summary>
+    public float SlideFrom = float.PositiveInfinity;
+    public const float SlideCurvature = 1 / 400f, SlideBeta = 8 / 57.3f;
+
+    /// <summary>The last <see cref="Drive"/> was a slide.</summary>
+    public bool Sliding { get; private set; }
+
     /// <summary>Speed the last <see cref="Drive" /> call aimed for (m/s).</summary>
     public float TargetSpeed { get; private set; }
 
@@ -210,9 +222,19 @@ public sealed class LinePilot
             var d2 = MathF.Max(local.X * local.X + local.Z * local.Z, 1);
             delta = MathF.Atan(car.Spec.Wheelbase * 2 * local.X / d2); // + = left (+X)
         }
-        // Vehicle scales the input lock down with speed and adds counter-steer from body slip; undo both
-        var assist = v > 2 ? car.Spec.CounterSteerAssist * car.SlipAngle : 0;
+        var bendAhead = plan?.CurvatureAt(s + v * 0.3f) ?? 0;
+        var slide = plan != null && !CheckCurvature && v > SlideFrom && MathF.Abs(bendAhead) > SlideCurvature;
+        Sliding = slide;
+        // Vehicle scales the input lock down with speed and adds counter-steer from body slip; undo both (a slide keeps the counter-steer)
+        var assist = v > 2 && !slide ? car.Spec.CounterSteerAssist * car.SlipAngle : 0;
         var steer = Math.Clamp((-delta - assist) * (1 + MathF.Abs(v) * car.Spec.SteerSpeedFactor) / car.Spec.MaxSteer, -1, 1);
+        if (slide)
+        {
+            // into the bend at under 5° of slip: full lock, the drift layer's entry (with the throttle below)
+            if (MathF.Abs(car.SlipAngle) < 0.09f && MathF.Abs(steer) > 0.4f && MathF.Sign(steer) == -MathF.Sign(bendAhead)) steer = MathF.Sign(steer);
+            // more slip than wanted: counter-steer on the excess
+            if (MathF.Abs(car.SlipAngle) > SlideBeta) steer = Math.Clamp(steer + 4 * (car.SlipAngle - MathF.Sign(car.SlipAngle) * SlideBeta), -1, 1);
+        }
 
         // target speed: every point within braking distance must be reachable at its corner speed
         var target = MathF.Min(TopSpeed, SpeedCap);
@@ -248,8 +270,13 @@ public sealed class LinePilot
         if (plan != null)
         {
             // track the profile: throttle up to it, brake only once clearly over it
-            var calmP = v < 8 ? 1 : Math.Clamp(1 - (MathF.Abs(car.SlipAngle) - SlipTolerance) / 0.1f, 0, 1);
-            return new VehicleInput(Math.Clamp(0.3f + 0.5f * err, 0, 1) * calmP, Math.Clamp((-err - 0.5f) * 0.6f, 0, 1) * calmP, steer);
+            var calmP = v < 8 ? 1 : Math.Clamp(1 - (MathF.Abs(car.SlipAngle) - (slide ? 0.3f : SlipTolerance)) / 0.1f, 0, 1);
+            var gas = Math.Clamp(0.3f + 0.5f * err, 0, 1) * calmP;
+            // a slide: on the throttle that starts and keeps the drift layer (and kicks the gearbox down) unless clearly too fast;
+            // else near full lock at speed below it (no slide by accident)
+            if (slide && err > -1) gas = MathF.Max(gas, 0.95f);
+            else if (!slide && MathF.Abs(steer) > 0.8f && v > car.Spec.DriftEntrySpeed) gas = MathF.Min(gas, 0.75f);
+            return new VehicleInput(gas, Math.Clamp((-err - 0.5f) * 0.6f, 0, 1) * calmP, steer);
         }
         // traction/stability aid: ease off throttle and brake when the body starts to slide (β 3° … 9°);
         // not at crawling speed, where β is noise and cutting throttle leaves the car parked against a wall

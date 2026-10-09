@@ -73,6 +73,25 @@ public class RacingLineTests(ITestOutputHelper log)
         Assert.InRange(drift.Time / grip.Time, 0.95f, 1.05f); // about as fast as grip
     }
 
+    /// <summary>Fast bends at skill 1 in a slide (the drift layer's carve, like a player's full lock): quicker than in grip, still on the road.</summary>
+    [Fact]
+    public void Fast_bends_are_slid_at_the_top_of_the_scale()
+    {
+        var line = DriftLineTests.Line((300, 80, MathF.PI / 2), (120, 60, -MathF.PI / 2));
+        var spec = CarSpecs.All["AE86T"];
+        var slide = DriftLineTests.Drive(line, 4.5f, new RivalStyle(1, 0.5f, 0, 0), spec);
+        var grip = DriftLineTests.Drive(line, 4.5f, new RivalStyle(0.3f, 0.5f, 0, 0), spec);
+        log.WriteLine($"slide {slide}");
+        log.WriteLine($"grip  {grip}");
+        Assert.True(slide.MinEdge > 0, $"stayed on the road: {slide.MinEdge:F2} m");
+        Assert.False(slide.Spun);
+        Assert.True(slide.MaxBeta > 5, $"slid: {slide.MaxBeta:F1}°");
+        Assert.True(slide.Time < grip.Time);
+        Assert.True(grip.MaxBeta < 5, $"grip at 0.3: {grip.MaxBeta:F1}°");
+        Assert.Equal(0, RivalPilot.SlideShare(0.3f, spec));
+        Assert.Equal(RivalPilot.SlideCarve, RivalPilot.SlideShare(1, spec));
+    }
+
     [Fact]
     public void Mistakes_follow_the_seed()
     {

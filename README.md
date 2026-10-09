@@ -89,7 +89,7 @@ dotnet run --project Touge -- "<iso>" --flow out/proof   # ganzer Ablauf per Skr
 dotnet run --project Touge -- "<iso>" --flow out/proof/legend/flow --legend [--car FD3S]   # Legend of the Streets per Skript: Akina, zwei Battles (Autopilot, 16×), Leiter danach, PNG je Schritt
 dotnet run --project Touge -- "<iso>" --legend-sim [--legend-progress out/progress.json] [--car FD3S] [--player-skill 0.5]   # Legend ohne Fenster: Autopilot (als Spieler mit Können k, sonst 0,8; mit Gummiband) fährt jede Rivalenleiter hoch (Niederlage beendet den Kurs), Freischaltungen + Bilanz, Fortschritt als JSON
 dotnet run --project Touge -- "<iso>" --cam-bench [AKINA,IROHA_DAY,…] [--car R34]   # Kameras ohne Fenster (~25 s für 6 Kurse × 2 Richtungen): Pilot mit Handbremsdrifts bis ins Ziel, 144-Hz-Bilder wie im Spiel interpoliert; je CHASE/FAR CHASE live und im Replay, Showcase-Orbit (alle ~100 m, 72 Winkel) und TV: Bilder mit Kurs zwischen Auto und Auge (blocked), ohne Boden unter dem Auge (void, aus der Karte), Fläche näher als die Near-Plane (clip), Straße 20 m voraus verdeckt/außerhalb (hidden; bergab ab 5 % Gefälle eigens, und davon hinter der Karosserie), Abstand, Ruckeln (Beschleunigung des Auges relativ zum Auto und der Blickrichtung, RMS/p99/max), TV-Schnitte (< 1,5 s), bei TV heißt hidden: Automitte außerhalb 90 % des Bildes; „Fest am Auto“: Auge im Autorahmen (2. Ableitung), Auto im Bild über die Fahrt (ohne eingezogene Bilder); Replay-Tempo ¼–4×: Beschleunigung des gezeigten Autos; dazu Stellen für Bilder (steilstes Gefälle, engste Kurven, schlimmste Orbit-Winkel)
-dotnet run --project Touge -- "<iso>" --ai-bench solo|drift|battle|corners[:AKINA,IROHA] [--car R34]   # KI ohne Fenster vermessen (~40 s je Matrix): solo = Zeit gegen H (der Pilot mit Können 1 und dem Driftstil des Autos, „guter Spieler“) je Kurs/Richtung/Auto/Können, Wandtreffer (wo), Schräglauf je Kurventyp, Fehler je 5 km; drift = jeder Driftstil gegen Grip (gehalten/abgebrochen/verblasst, β, Kurvenzeit, Ausgangstempo, Treffer je Drift, Dreher); battle = Autopilot 0,8 gegen fünf Figuren und den AE86 mit 0,5/0,65/1, Race und Lead/Chase, Tempo-Delta je Paarung aus Solo-Läufen, Überholquote nach Delta, Führungswechsel, Kontakte; corners = Kurvenarten, Straßenbreite, Überholzonen; human:<datei.rpl> misst einen aufgezeichneten Lauf daneben. Umgebung: AIBENCH_TRACE=von:bis (Strecke loggen), AIBENCH_SKILLS/AIBENCH_DRIFTS/AIBENCH_MISTAKES/AIBENCH_NOH (Matrix), AIBENCH_HITS (jeden Wandtreffer mit Zustand), AIBENCH_RIVALS/AIBENCH_RULES (z. B. LeadChase1), AIBENCH_BTRACE=von:bis, AIBENCH_ATTEMPTS, AIBENCH_CONTACTS (Battles)
+dotnet run --project Touge -- "<iso>" --ai-bench solo|drift|battle|corners[:AKINA,IROHA] [--car R34]   # KI ohne Fenster vermessen (~40 s je Matrix): solo = Zeit gegen H (der Pilot mit Können 1 und dem Driftstil des Autos, „guter Spieler“) je Kurs/Richtung/Auto/Können, Wandtreffer (wo), Schräglauf je Kurventyp, Fehler je 5 km; drift = jeder Driftstil gegen Grip (gehalten/abgebrochen/verblasst, β, Kurvenzeit, Ausgangstempo, Treffer je Drift, Dreher); battle = Autopilot 0,8 gegen fünf Figuren und den AE86 mit 0,5/0,65/1, Race und Lead/Chase, Tempo-Delta je Paarung aus Solo-Läufen, Überholquote nach Delta, Führungswechsel, Kontakte; corners = Kurvenarten, Straßenbreite, Überholzonen; human:<datei.rpl> misst einen aufgezeichneten Lauf daneben. Umgebung: AIBENCH_TRACE=von:bis (Strecke loggen), AIBENCH_SKILLS/AIBENCH_DRIFTS/AIBENCH_MISTAKES/AIBENCH_NOH/AIBENCH_DIR=up|down (Matrix), AIBENCH_HITS (jeden Wandtreffer mit Zustand), AIBENCH_RIVALS/AIBENCH_RULES (z. B. LeadChase1), AIBENCH_BTRACE=von:bis, AIBENCH_ATTEMPTS, AIBENCH_CONTACTS (Battles)
 dotnet run --project Touge -- "<iso>" --menu legend|legend-rivals|legend-card[:AKINA/takumi] [--legend-progress <json>|--data-dir <ordner>] --shot out/proof/l.png   # Legend-Schritt als Bild (Fortschritt aus der Datei bzw. dem Ordner, sonst leer)
 dotnet run --project Touge -- "<iso>" --jukebox 720   # Rennmusik-Jukebox offline ohne Fenster: Zufallsfolge, M, Menüpause, Titelende → nächster, Log
 dotnet run --project Touge -- "<iso>" --frontend-capture out/proof/fe.wav   # ganzer Menüablauf per Skript offline: Original-SE/BGM als WAV + Log aller Auslöser
@@ -185,8 +185,12 @@ versucht es dann auch nicht; der Führende mit 4 s Vorsprung oder ≥ 1 s Vorspr
 `CourseMap` (je Fahrlinie einmal: Kurven nach Art, freie voll griffige Straße links/rechts alle 2 m, Überholzonen = Bremszonen vor engen
 Kurven mit ≥ 5 m Straße und Geraden ≥ 80 m), eigene Ideallinie `RacingLine` (geringste Krümmung in der Straßenbreite minus 1,3 m, in
 Driftkurven mehr für das Heck, außen-innen-außen mit spätem Scheitel) mit Tempoplan (Querbeschleunigung des Könnens, Motor-/Luftwiderstand
-vorwärts, Bremsen rückwärts). Eine Könnensskala 0…1 für alle Modi: Kurven 0,67 g (Anfänger) bis 1,45 g (AE86 am Haftlimit, ein guter Spieler),
-Bremsen 0,6–0,95 g, je Auto nach seiner Haftgrenze auf der Kreisbahn (`GripLimit`). Driften (`DriftController`) je Stil und Kurve, einmal je
+vorwärts, Bremsen rückwärts). Eine Könnensskala 0…1 für alle Modi: Kurven 0,67 g (Anfänger) bis 1,45 g (AE86 am Haftlimit),
+Bremsen 0,6–0,95 g, je Auto nach seiner Haftgrenze auf der Kreisbahn (`GripLimit`); ab Können 0,3 kommt der Slide dazu (bei 1 wie ein
+schneller Spieler: Kurven ab 72 km/h mit Vollausschlag, Gas und kurzem Handbremsen-Tipp quer, der Plan rechnet bis 80 % des Drift-Carves
+der Driftschicht mit ein, schwerere Autos weniger; mit `--ai-bench human:` an 10 Legend-Replays im Trueno kalibriert: die KI mit 1,0 ist
+in 6 von 10 in den Kurven nicht langsamer, MYOGI-r-80-m-Kurven 155–181 statt 120–136 km/h; `--ai-bench solo` Trueno 1,0 −5 %, R34 −4 %,
+EK9 −5 %, 2–3 Wandkratzer je Lauf statt 0,6). Driften (`DriftController`) je Stil und Kurve, einmal je
 Kurve aus dem Renn-Seed entschieden: FR in Haarnadeln und engen Kurven (Takumi/Keisuke fast immer, Ryosuke gut die Hälfte, Takeshi nie), 4WD
 kurzer Powerslide in Haarnadeln (≤ 15°), FF nur ein Handbremsen-Einlenken (~9°); Einleitung per Handbremse, Bremsdrift (Takumi) oder Finte
 (Stil ≥ 0,8, nur mit Platz außen), Halten über einen Schräglauf-Sollwert aus der Bahnkrümmung, weiches Ausleiten, Abfangen bei zu viel
@@ -212,8 +216,8 @@ Ergebnis, WIN/LOSE-Jingle beim Entscheid): SPLIT SCREEN, ONLINE oder VS CPU.
 - **VS CPU** (freies Battle gegen die KI, `Ui/FreeBattle`, `TougeGame.FreeBattle`): Lobby links das Battle (Kurs, Route, Bedingungen
   wie im Versus/Time Attack, Regel RACE = Battle des Originals mit 8-s-Vorsprungssieg oder LEAD / CHASE = Anime-Runde mit Führendem und
   Jäger, WHO LEADS YOU/RIVAL nur bei LEAD / CHASE, AI LEVEL EASY/NORMAL/HARD/LEGEND = Können-Band 0–0,2 (dazu 85 % Motormoment) / 0,35–0,65 / 0,65–0,85 / 0,88–1, die Figur liegt nach ihrem Können darin
-  (AKINA bergab, 14 Rivalen, Siege Trueno/FD3S bei Spieler 0,2 · 0,5 · 0,8: EASY 14/14 überall, NORMAL 0/0 · 6/3 · 13/14, HARD 0/0 · 0/1 · 10/8, LEGEND 0/0 · 0/0 · 1/3;
-  vorher hatte der FD3S bei 0,8 LEGEND 12/14, der Trueno 2/14); HARD
+  (AKINA bergab, 14 Rivalen, Siege Trueno/FD3S bei Spieler 0,2 · 0,5 · 0,8 · 1: EASY 14/14 überall, NORMAL 0/0 · 6/3 · 13/14 · 14/14, HARD 0/0 · 1/1 · 6/12 · 13/12,
+  LEGEND 0/0 · 0/1 · 2/2 · 9/9; mit dem Slide der KI ab 0,3 sind HARD und LEGEND schneller geworden, EASY nicht); HARD
   holt nur auf (halbes Gummiband), LEGEND ohne Gummiband und mit halb so vielen Fehlern; Sterne auf der Karte nach dem Können der Stufe),
   rechts die Rivalenkarte (einer der 14 aus `--battle`: Team, Auto, Stufe in Sternen, kurze Notiz zum Fahrstil; ◀ ▶ blättert) und das
   eigene Auto mit Lack und AT/MT (◀ ▶ blättert, ENTSCHEIDEN oder ◀ ▶ auf CAR öffnet dieselbe Autowahl wie Time Attack: Hersteller → Autos mit 3D-Vorschau). In der Lobby läuft das Thema des Rivalen aus `MG_BGM.AFS` (wie auf Legends VS-Karte). START → Laden
@@ -340,13 +344,14 @@ CAR SELECT / EXIT. Rivalen und Bedingungen aus dem Original (34 Rivalen auf 11 K
 je Kurs eine Leiter (der nächste Rivale nach einem Sieg über den vorigen), die fünf Zusatzkurse (MYOGI+ … SHIONA) ab 3 geschafften Hauptkursen,
 Bunta (Akina) nach allen 24 Rivalen der Hauptkurse, Takumi von Project D (Irohazaka) nach allen anderen außer Bunta; ein Sieg über Bunta schaltet
 sein Impreza (IMP3) frei – wie im Original auch das Schlusskapitel von STORY; bis dahin ist es in jeder Autowahl (Time Attack, Legend, Versus-Lobby) „?????“ mit dem Hinweis, wie man es bekommt. Revanche gegen einen besiegten Rivalen im Regen (wie das Original). Die vier
-Rivalen eines Hauptkurses fahren mit 60/78/95/100 % Motormoment (auf ihr ausgeglichenes Auto) und Können je Sprosse (0,1–0,2 / ~0,3 / 0,3–0,45 / 0,3–0,5; MYOGI 0,1 / 0,25 / 0,3 / 0,4; in den starken
-Autos niedriger; Zusatzkurse 0,65–0,8, PD-Takumi 0,9, Bunta 1) – eigene Abstimmung. MYOGI: Takumi im AE85 (im Original Zeile 1) ist die
-letzte Sprosse statt der zweiten (vorher 72 % auf den 83 PS des AE85 bergauf = ~60 PS: der Autopilot im FD3S war nach 29 s 8 s weg).
-`--legend-sim --player-skill k` (Leiter wie ein Spieler; Trueno / FD3S / R34 / S15 / AE85): Anfänger 0,2 11 / 11 / 13 / 11 / 13 Rivalen
-(vor BoP 12 / 17 / 16 / 17 / 6), NORMAL 0,5 18 / 18 / 25 / 17 / 23 (vorher 21 / 29 / 25 / 26 / 12), HARD 0,8 27 / 25 / 30 / 27 / 30
-(vorher 27 / 31 / 31 / 31 / 13) – das Auto entscheidet nicht mehr. MYOGI-Takumi: Anfänger verlieren (außer R34 +0,7 s), NORMAL meist knapp
-im Ziel, HARD gewinnt (Trueno −0,7 s knapp verloren). `LEGEND_ALL=1` fährt jeden Rivalen einmal (Kalibrierung).
+Rivalen eines Hauptkurses fahren mit 90/95/100/100 % Motormoment (auf ihr ausgeglichenes Auto) und Können je Sprosse vom oberen Ende der
+Skala (VS CPU HARD/LEGEND): 0,8–0,84 / 0,85–0,9 / 0,85–0,95 / Bosse 0,95–1; Zusatzkurse 0,95–1, PD-Takumi und Bunta 1 – eigene Abstimmung
+(vorher 0,1–0,5 bei 60/78/95/100 % und eine KI ohne Slide: ein schneller Spieler fuhr allen Rivalen der ersten Kurse mit 8 s davon).
+MYOGI: Takumi im AE85 (im Original Zeile 1) ist die letzte Sprosse statt der zweiten. `LEGEND_ALL=1 --legend-sim --player-skill 1` im
+Trueno (jeder Rivale einmal, Spieler 1,0 ≈ die 10 Legend-Replays): 21/34 gewonnen, 8 s Vorsprung nur gegen Itsuki und die Zwei aus
+Tokyo, verloren u. a. gegen Takeshi, MYOGI-Takumi, Ryosuke, Wataru, Kai, Keisuke (Iroha), Bunta knapp (−0,4 s). Als Leiter
+(`--legend-sim`, eine Niederlage beendet den Kurs; Trueno / FD3S / R34 / S15 / AE85): 0,5 5 / 6 / 4 / 3 / 4 Rivalen, 0,8 13 / 18 / 14 / 11 / 14,
+1,0 15 / 19 / 28 / 13 / 22.
 Nach einem Battle steht der Cursor auf dem nächsten Rivalen, Neues (Rivalen, Kurse, Auto) läuft unten als rotes Band ein. Fortschritt in
 `progress.json` neben `settings.json` (`Rivals`: Siege, Niederlagen, bester Abstand je Rivale; dieselbe Datei wie Story, `Progress`; ein altes
 `legend.json` wird beim Laden übernommen und beim nächsten Speichern gelöscht). Pause-Exit und Zurück aus der

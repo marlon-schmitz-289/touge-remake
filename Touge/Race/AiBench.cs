@@ -36,6 +36,8 @@ public static class AiBench
     {
         public float Time, Entry, Min, Exit, MaxBeta, SlideTime;
         public bool Reached;
+        /// <summary>The run got past the bend's end (a replay that stops mid-corner leaves it partial).</summary>
+        public bool Done;
     }
 
     public sealed record Result(float Time, int WallHits, int WallTicks, float MaxLateral, CornerRun[] Corners, bool Finished, List<float> HitsAt)
@@ -76,7 +78,7 @@ public static class AiBench
             var rl = pilot.Racing!;
             var (lo, hi) = rl.BoundsAt(s);
             var (l, r) = rl.Map.Room(s);
-            return (pilot.Drifting ? $"drift {pilot.Drift.State} cmd {pilot.Drift.Command * Deg:F0} {pilot.Drift.Debug}" :pilot.State.ToString()) + $" plan {rl.OffsetAt(s):+0.00;-0.00} [{lo:+0.0;-0.0},{hi:+0.0;-0.0}] room L {l:F2} R {r:F2} κ {rl.CurvatureAt(s):+0.000;-0.000} {pilot.MistakeNote}";
+            return (pilot.Drifting ? $"drift {pilot.Drift.State} cmd {pilot.Drift.Command * Deg:F0} {pilot.Drift.Debug}" :pilot.State.ToString()) + (pilot.Pilot.Sliding ? " slide" : "") + $" plan {rl.OffsetAt(s):+0.00;-0.00} [{lo:+0.0;-0.0},{hi:+0.0;-0.0}] room L {l:F2} R {r:F2} κ {rl.CurvatureAt(s):+0.000;-0.000} {pilot.MistakeNote}";
         });
         return (r, new PilotStats(pilot.Drift.Held, pilot.Drift.Aborted, pilot.Mistakes, [.. Enumerable.Range(0, corners.Count).Select(pilot.DriftAt)], [.. pilot.Drift.AbortWhy], pilot.Drift.Faded));
     }
@@ -120,7 +122,7 @@ public static class AiBench
                 }
                 lastHit = t;
             }
-            while (ci < corners.Count && s > corners[ci].To + 20) ci++;
+            while (ci < corners.Count && s > corners[ci].To + 20) runs[ci++].Done = true;
             for (var i = ci; i < corners.Count && corners[i].From - 20 <= s; i++)
             {
                 ref var r = ref runs[i];
@@ -208,7 +210,7 @@ public static class AiBench
                 // per corner kind: the human's time through the corners against the AI's (+ = human slower)
                 foreach (var g in cs.Select((x, i) => (x.Kind, i)).GroupBy(x => x.Kind))
                 {
-                    var ok = g.Where(x => human.Corners[x.i].Reached && r.Corners[x.i].Reached).ToList();
+                    var ok = g.Where(x => human.Corners[x.i].Done && r.Corners[x.i].Done).ToList();
                     if (ok.Count == 0) continue;
                     Console.WriteLine($"[Human]   vs {k:F1} {g.Key,-8} Δt {ok.Sum(x => human.Corners[x.i].Time - r.Corners[x.i].Time),6:+0.0;-0.0} s over {ok.Count} " +
                                       $"(human β̄max {ok.Average(x => human.Corners[x.i].MaxBeta):F1}° slide {ok.Sum(x => human.Corners[x.i].SlideTime):F1} s, " +
@@ -250,6 +252,9 @@ public static class AiBench
     /// <summary>Drift styles of the matrix (AIBENCH_DRIFTS=a,b,…; default 0.3, and 0.9 from skill 0.8). AIBENCH_NOH skips H.</summary>
     private static readonly float[]? Drifts = Environment.GetEnvironmentVariable("AIBENCH_DRIFTS") is { } dr ? [.. dr.Split(',').Select(x => float.Parse(x, CultureInfo.InvariantCulture))] : null;
 
+    /// <summary>Directions of the matrix (AIBENCH_DIR=up|down, default both; up = the reverse line).</summary>
+    private static readonly bool[] Directions = Environment.GetEnvironmentVariable("AIBENCH_DIR") switch { "up" => [true], "down" => [false], _ => [false, true] };
+
     /// <summary>Mistake factor of the matrix runs (AIBENCH_MISTAKES, default 1).</summary>
     private static readonly float Mistakes = float.Parse(Environment.GetEnvironmentVariable("AIBENCH_MISTAKES") ?? "1", CultureInfo.InvariantCulture);
 
@@ -267,7 +272,7 @@ public static class AiBench
         Console.WriteLine("[Bench] tag,course,dir,car,skill,drift,time_s,vs_H_pct,wall_hits,wall_ticks,max_lat_m,hairpin_maxbeta,hairpin_slide_s,tight_maxbeta,medium_maxbeta,drifts,aborts,mistakes");
         var summary = new List<(string Car, float Skill, float Drift, float Pct, int Hits, bool Finished, float Mistakes5Km)>();
         foreach (var course in courses)
-        foreach (var rev in new[] { false, true })
+        foreach (var rev in Directions)
         foreach (var car in cars)
         {
             var d = Load(iso, course, rev, car);
@@ -323,7 +328,7 @@ public static class AiBench
         var styles = new[] { ("takumi", 0.9f), ("keisuke", 0.8f), ("ryosuke", 0.6f), ("takeshi", 0.1f) };
         var rows = new List<(string Car, string Who, int Eligible, int Planned, int Held, float Beta, float BetaStd, float DtPct, float DExit, int Hits, int Spins, float TotalPct, int Aborts)>();
         foreach (var course in courses)
-        foreach (var rev in new[] { false, true })
+        foreach (var rev in Directions)
         foreach (var car in cars)
         {
             var d = Load(iso, course, rev, car);
