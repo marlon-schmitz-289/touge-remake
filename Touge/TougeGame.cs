@@ -1480,7 +1480,8 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         if (d.Pressed(Control.Camera))
             (_camView, _settings.Camera, _camSnap) = (CameraRig.Next(_camView), CameraRig.Next(_camView), true);
         if (k.IsKeyPressed(Key.T)) car.AutomaticGearbox = !car.AutomaticGearbox;
-        if (d.Pressed(Control.Lights)) _lights.Toggle();
+        // the DualSense mic button (SDL Misc1) toggles the lights too: its LED already shows them (MIC LED: HEADLIGHTS)
+        if (d.Pressed(Control.Lights) || Input.Gamepad.IsButtonPressed(GamepadButton.Misc1) && !PadBound(GamepadButton.Misc1)) _lights.Toggle();
         if (d.Pressed(Control.HighBeam)) _lights.ToggleHigh();
         if (d.Shift(car) is var shift and not 0) _pendingShift = shift; // steering, pedals: DriverInput
     }
