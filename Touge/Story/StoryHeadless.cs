@@ -289,8 +289,8 @@ public static class StoryHeadless
                 drive.Car.Step(pilot.Drive(drive.Car, drive.Ground, [], Touge.Drive.Dt), drive.Ground, Touge.Drive.Dt);
                 var along = drive.Pilot.Track(drive.Car.Position).Along;
                 timer.Update(along - drive.Start, Touge.Drive.Dt);
-                drift.Update(drive.Car.SlipAngle, drive.Car.SpeedKmh, drive.Car.WallContacts > 0, Touge.Drive.Dt);
-                judge.Update(timer.Phase == LapTimer.State.Running, timer.Phase == LapTimer.State.Finished, timer.Time, drive.Car.WallContacts > 0,
+                drift.Update(drive.Car.SlipAngle, drive.Car.SpeedKmh, drive.Car.WallHit, Touge.Drive.Dt);
+                judge.Update(timer.Phase == LapTimer.State.Running, timer.Phase == LapTimer.State.Finished, timer.Time, drive.Car.WallHit,
                     drift.Total + drift.Score, Touge.Drive.Dt);
             }
             log = $"{judge.Reason}: Zeit {Style.Time(judge.Time)} (Grenze {judge.Param} s), Wandtreffer {judge.WallHits}, Drift {judge.Drift:#,0}";

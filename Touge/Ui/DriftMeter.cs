@@ -3,7 +3,7 @@ namespace Touge.Ui;
 /// <summary>
 ///     Drift combo: while the body slips more than <see cref="MinAngle"/>° above 30 km/h, points build with angle × speed,
 ///     the multiplier grows every 2 s of unbroken drifting (×1…×5). After <see cref="Hold"/> s without drifting the combo is
-///     banked into <see cref="Total"/>; a wall hit drops it. Tuned by eye.
+///     banked into <see cref="Total"/>; a wall hit drops it (a scrape does not, Vehicle.WallHit). Tuned by eye.
 /// </summary>
 public sealed class DriftMeter
 {

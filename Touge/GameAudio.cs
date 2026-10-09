@@ -291,7 +291,7 @@ public sealed class GameAudio : IDisposable
 
         // Walls
         _crashCooldown -= dt;
-        if (car.WallImpactSpeed > 1.5f && _crashCooldown <= 0)
+        if (car.WallHit && _crashCooldown <= 0)
         {
             _dev.PlaySfx((_crashToggle = !_crashToggle) ? _crashA : _crashB, Math.Clamp(car.WallImpactSpeed / 10, 0.15f, 1) * _gain);
             _crashCooldown = 0.3f;

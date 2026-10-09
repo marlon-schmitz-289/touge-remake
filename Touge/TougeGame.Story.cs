@@ -144,7 +144,7 @@ public sealed partial class TougeGame
     {
         if (_storyJudge == null || _story is not { InRun: true } || _finished) return;
         var t = _hud.Timer;
-        _storyJudge.Update(t.Phase == LapTimer.State.Running, t.Phase == LapTimer.State.Finished, t.Time, _drive.Car.WallContacts > 0,
+        _storyJudge.Update(t.Phase == LapTimer.State.Running, t.Phase == LapTimer.State.Finished, t.Time, _drive.Car.WallHit,
             _hud.Drift.Total + _hud.Drift.Score, dt);
     }
 

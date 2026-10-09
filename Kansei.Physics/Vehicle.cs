@@ -95,6 +95,10 @@ public sealed partial class Vehicle
     public Vector3 WallNormal { get; private set; }
     /// <summary>Highest closing speed (m/s) into a wall over the substeps of the last <see cref="Step" />; 0 without contact.</summary>
     public float WallImpactSpeed { get; private set; }
+    /// <summary>Closing speed (m/s) from which a wall contact is a hit (crash sound, drift combo, story hit count); slower is a scrape.</summary>
+    public const float HitSpeed = 1.5f;
+    /// <summary>The last <see cref="Step" /> hit a wall (<see cref="HitSpeed"/>), not just grazed it.</summary>
+    public bool WallHit => WallImpactSpeed > HitSpeed;
     public Matrix4x4 Pose => Matrix4x4.CreateFromQuaternion(Orientation) * Matrix4x4.CreateTranslation(Position);
     public ReadOnlySpan<WheelState> Wheels => _wheels;
 

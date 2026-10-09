@@ -87,7 +87,7 @@ public sealed class Hud
         _progress = Math.Clamp((along - _start) / (_pilot.Length - LapTimer.Gate - _start), 0, 1);
         Timer.Update(along - _start, dt);
         var kmh = car.SpeedKmh;
-        Drift.Update(car.SlipAngle, kmh, car.WallContacts > 0, dt);
+        Drift.Update(car.SlipAngle, kmh, car.WallHit, dt);
         _map.Tick(kmh, dt);
         var seg = Math.Min(_pilot.Segment, _line.Length - 2);
         var tangent = Xz(_line[seg + 1] - _line[seg]);
