@@ -425,6 +425,23 @@ public class ControlsTests
         Assert.True(ffb.Damper < 0);
     }
 
+    /// <summary>Parked, the wheel is heavy to turn (friction against its motion) but does not push by itself; the soft knee never clips.</summary>
+    [Fact]
+    public void ForceFeedback_ParkedFriction_SoftKnee()
+    {
+        var car = new Vehicle(CarSpec.AE86);
+        car.Reset(Vector3.Zero, 0);
+        var ffb = new ForceFeedback();
+        ffb.Update(car, Rough, 0, 1, 1 / 120f);
+        ffb.Update(car, Rough, 0.01f, 1, 1 / 120f); // turned right at 1.2 lock/s
+        Assert.True(ffb.Friction < -0.1f, $"friction {ffb.Friction:F3}");
+        for (var i = 0; i < 30; i++) ffb.Update(car, Rough, 0.01f, 1, 1 / 120f); // held still
+        Assert.True(MathF.Abs(ffb.Output) < 0.02f, $"held {ffb.Output:F3}");
+        Assert.Equal(0.5f, ForceFeedback.Compress(0.5f));
+        Assert.True(ForceFeedback.Compress(3) is > 0.95f and <= 1);
+        Assert.True(ForceFeedback.Compress(0.9f) > ForceFeedback.Compress(0.8f));
+    }
+
     [Fact]
     public void ForceFeedback_Lift_ClearsTheDeadBand()
     {

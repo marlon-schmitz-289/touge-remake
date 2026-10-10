@@ -39,6 +39,7 @@ public sealed partial class Vehicle
     readonly WheelState[] _wheels = new WheelState[4];
     readonly GroundHit[] _hits = new GroundHit[4];
     readonly Vector3[] _mounts = new Vector3[4]; // body space, wheel centre at full droop + Travel
+    readonly float[] _sideForce = new float[2];  // N, tyre side force per axle (front, rear) of the last substep, body +X
     readonly Vector3 _inertia;                   // body-space principal moments
     readonly float _clutchCapacity;              // Nm, fully engaged
     float _steer, _clutchPedal, _shiftTimer, _rearGrip = 1, _prevBeta, _clutch, _gearRpm;
@@ -111,6 +112,7 @@ public sealed partial class Vehicle
         _gearRpm = 0;
         _locked = _shifting = false;
         _rearGrip = 1;
+        _sideForce[0] = _sideForce[1] = 0;
         SlipAngle = 0;
         for (var i = 0; i < 4; i++)
             _wheels[i] = new WheelState { LocalCenter = _mounts[i] - Vector3.UnitY * Spec.Travel };
@@ -337,6 +339,8 @@ public sealed partial class Vehicle
         var torque = Vector3.Zero;
         var speed = Velocity.Length();
         force -= Velocity * (0.5f * AirDensity * s.DragArea * speed);
+        var left = Vector3.Transform(Vector3.UnitX, q);
+        Span<float> side = stackalloc float[2]; // this substep's side force per axle, body +X (left)
         for (var i = 0; i < 4; i++)
         {
             ref var w = ref _wheels[i];
@@ -362,7 +366,9 @@ public sealed partial class Vehicle
                 var fs = k * MathF.Min(comp, s.Travel) + 10 * k * MathF.Max(comp - s.Travel, 0)
                          - s.Damper * Vector3.Dot(vp, up)
                          + (front ? s.AntiRollFront : s.AntiRollRear) * (comp - _wheels[i ^ 1].Compression);
-                fs = MathF.Max(fs, 0);
+                // roll centre: the links carry this share of the axle's lateral load transfer straight to the tyres (last substep's
+                // side force), the springs only the rest – same load transfer, less body roll, the inside wheel stays down
+                fs = MathF.Max(fs + (i % 2 == 0 ? -1 : 1) * _sideForce[front ? 0 : 1] * s.RollCentre * s.CogHeight / s.Track, 0);
 
                 var n = hit.Normal;
                 var heading = front ? Vector3.Transform(fwd, steerRot) : fwd;
@@ -398,6 +404,7 @@ public sealed partial class Vehicle
                 var f3 = up * fs + tf * fx + tr * fy;
                 force += f3;
                 tyreForce += tf * fx + tr * fy;
+                side[front ? 0 : 1] += Vector3.Dot(tf * fx + tr * fy, left);
                 torque += Vector3.Cross(arm, f3);
                 force -= Velocity * (s.RollingResistance * fs / MathF.Max(speed, 1));
                 w.Load = fs;
@@ -409,6 +416,8 @@ public sealed partial class Vehicle
             w.AngularVelocity = omega;
             w.SpinAngle = (w.SpinAngle + omega * h) % MathF.Tau;
         }
+
+        (_sideForce[0], _sideForce[1]) = (side[0], side[1]);
 
         // Arcade: a held drift keeps its momentum — cancel part of the tyre force that brakes along the travel direction.
         if (_drifting && speed > 1)

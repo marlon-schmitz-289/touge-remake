@@ -26,6 +26,7 @@ public sealed record CarSpec
     public float Damper { get; init; } = 2300f;               // N/(m/s)
     public float AntiRollFront { get; init; } = 12000f;       // N/m of left-right compression difference
     public float AntiRollRear { get; init; } = 6000f;
+    public float RollCentre { get; init; } = 0.6f;            // roll-centre height as a share of CogHeight: lateral load transfer through the links, not body roll
     public float Travel { get; init; } = 0.18f;               // full droop → full bump
 
     // Wheels / tyres (185/70R13)
