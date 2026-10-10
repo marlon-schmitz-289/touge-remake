@@ -18,8 +18,10 @@ public sealed unsafe class JoystickState
     private readonly Sdl? _sdl;
     private Joystick* _joystick;
     private Haptic* _haptic;
-    private int _effect = -1;
-    private short _level;
+    private int _effect = -1, _sine = -1;
+    private short _level, _vibration;
+    private ushort _period;
+    private bool _updateFailed;
 
     public JoystickState(string name, int axes, int buttons, int hats, bool wheel = false)
     {
@@ -36,6 +38,7 @@ public sealed unsafe class JoystickState
         _joystick = joystick;
         IsGameController = isController;
         InstanceId = sdl.JoystickInstanceID(joystick);
+        (Vendor, Product) = (sdl.JoystickGetVendor(joystick), sdl.JoystickGetProduct(joystick));
         for (var i = 0; i < _axes.Length; i++) _axes[i] = sdl.JoystickGetAxis(joystick, i) / 32767f; // pedals rest at ±1, not 0
         OpenHaptic();
     }
@@ -43,11 +46,16 @@ public sealed unsafe class JoystickState
     public string Name { get; }
     /// <summary>SDL joystick instance id; −1 for a virtual device.</summary>
     public int InstanceId { get; }
+    /// <summary>USB vendor/product id (0 when unknown), to recognise a wheel model.</summary>
+    public ushort Vendor { get; init; }
+    public ushort Product { get; init; }
     /// <summary>Also open as a game controller (<see cref="GamepadState"/>): an ordinary pad, not a wheel.</summary>
     public bool IsGameController { get; }
     /// <summary>SDL reports the device type as a wheel.</summary>
     public bool IsWheel { get; }
     public bool HasForceFeedback => _effect >= 0;
+    /// <summary>The wheel takes a sine effect alongside the constant force (<see cref="SetVibration"/>).</summary>
+    public bool HasVibration => _sine >= 0;
     public bool Connected { get; internal set; } = true;
     /// <summary>Last force sent (−1..1, + = right), also on devices without force feedback (input debug).</summary>
     public float Force { get; private set; }
@@ -89,11 +97,32 @@ public sealed unsafe class JoystickState
     {
         Force = Math.Clamp(force, -1, 1);
         if (_effect < 0) return;
-        var level = (short)MathF.Round(Force * 32767);
+        // SDL/DirectInput: a positive level on the steering axis is a force from the right (pushes left) – the sign is flipped here
+        var level = (short)MathF.Round(-Force * 32767);
         if (level == _level) return;
         _level = level;
         var e = ConstantEffect(level);
-        _sdl!.HapticUpdateEffect(_haptic, _effect, &e);
+        if (_sdl!.HapticUpdateEffect(_haptic, _effect, &e) < 0 && !_updateFailed)
+        {
+            _updateFailed = true; // logged once
+            Console.WriteLine($"[Kansei] {Name}: force feedback update failed ({_sdl.GetErrorS()})");
+        }
+    }
+
+    /// <summary>
+    ///     Sine vibration on the steering axis, <paramref name="amplitude"/> 0..1 at <paramref name="hz"/>, as its own effect next to
+    ///     the constant force: drivers that smooth or rate-limit constant-force updates (Linux) lose a vibration sent through those.
+    /// </summary>
+    public void SetVibration(float amplitude, float hz)
+    {
+        if (_sine < 0) return;
+        var magnitude = (short)MathF.Round(Math.Clamp(amplitude, 0, 1) * 32767);
+        var period = (ushort)Math.Clamp(MathF.Round(1000 / MathF.Max(hz, 1)), 20, 1000);
+        // a re-upload restarts the wave on some drivers: only for a clear change
+        if (Math.Abs(magnitude - _vibration) < 600 && Math.Abs(period - _period) < 4 && (magnitude == 0) == (_vibration == 0)) return;
+        (_vibration, _period) = (magnitude, period);
+        var e = SineEffect(magnitude, period);
+        _sdl!.HapticUpdateEffect(_haptic, _sine, &e);
     }
 
     /// <summary>Rumble motors 0..1 for <paramref name="ms"/> (pads and some wheels; no-op elsewhere).</summary>
@@ -113,6 +142,17 @@ public sealed unsafe class JoystickState
         return e;
     }
 
+    private static HapticEffect SineEffect(short magnitude, ushort period)
+    {
+        var e = new HapticEffect { Type = Sdl.HapticSine };
+        e.Periodic.Type = Sdl.HapticSine;
+        e.Periodic.Direction.Type = (byte)Sdl.HapticSteeringAxis;
+        e.Periodic.Length = Sdl.HapticInfinity;
+        e.Periodic.Period = period;
+        e.Periodic.Magnitude = magnitude;
+        return e;
+    }
+
     /// <summary>
     ///     SDL haptics on the joystick: a constant-force effect that runs forever and is updated per frame (the usual way for
     ///     wheels); the wheel's own spring (autocenter) is switched off so the game's forces are the only ones.
@@ -129,12 +169,17 @@ public sealed unsafe class JoystickState
             _haptic = null;
             return;
         }
-        if ((features & Sdl.HapticAutocenter) != 0) _sdl.HapticSetAutocenter(_haptic, 0);
+        if ((features & Sdl.HapticAutocenter) != 0)
+            Console.WriteLine($"[Kansei] {Name}: autocenter off -> {_sdl.HapticSetAutocenter(_haptic, 0)}");
         if ((features & Sdl.HapticGain) != 0) _sdl.HapticSetGain(_haptic, 100);
         var e = ConstantEffect(0);
         _effect = _sdl.HapticNewEffect(_haptic, &e);
-        if (_effect >= 0) _sdl.HapticRunEffect(_haptic, _effect, 1);
+        if (_effect >= 0) _sdl.HapticRunEffect(_haptic, _effect, Sdl.HapticInfinity); // SDL's Length ms→µs wraps 32-bit (~71 min); infinite iterations do not
         Console.WriteLine($"[Kansei] {Name}: force feedback {(_effect >= 0 ? "on" : $"not available ({_sdl.GetErrorS()})")}");
+        if (_effect < 0 || (features & Sdl.HapticSine) == 0) return;
+        var sine = SineEffect(0, 100);
+        _sine = _sdl.HapticNewEffect(_haptic, &sine);
+        if (_sine >= 0) _sdl.HapticRunEffect(_haptic, _sine, Sdl.HapticInfinity);
     }
 
     internal void Close()
@@ -144,7 +189,7 @@ public sealed unsafe class JoystickState
         if (_joystick != null) _sdl!.JoystickClose(_joystick);
         _haptic = null;
         _joystick = null;
-        _effect = -1;
+        _effect = _sine = -1;
     }
 
     internal void OnAxis(int axis, short value) => SetAxis(axis, value / 32767f);

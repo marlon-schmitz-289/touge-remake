@@ -74,6 +74,13 @@ using Touge;
 // --dualsense-log: jeden an den DualSense gesendeten Befehl loggen (auch beim normalen Start).
 // started from Finder/Explorer/launcher (no args = launcher, or just the ISO): no console to read, so everything also goes to touge.log in the profile folder
 // ponytail: "desktop start" guessed from the arguments, not from the console; an explicit --log flag if that ever guesses wrong
+// --texts pack <json> <tl> | unpack <tl> <json>: a language file to/from the packed form kept in texts/ (Story/Translation.Pack)
+if (args is ["--texts", var textsOp and ("pack" or "unpack"), var textsFrom, var textsTo])
+{
+    if (textsOp == "pack") File.WriteAllBytes(textsTo, Touge.Story.Translation.Pack(File.ReadAllText(textsFrom)));
+    else File.WriteAllText(textsTo, Touge.Story.Translation.Unpack(File.ReadAllBytes(textsFrom)));
+    return 0;
+}
 if (args.All(a => a.EndsWith(".iso", StringComparison.OrdinalIgnoreCase)))
     Touge.LogFile.Start(Path.Combine(Path.GetDirectoryName(Touge.Ui.Settings.FilePath)!, "touge.log"));
 var iso = args.Where((a, i) => i == 0 || args[i - 1] is not ("--drop" or "--browse")).FirstOrDefault(a => a.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))

@@ -9,6 +9,6 @@
 cache/
 out/
 .claude/
-# Übersetzte Originaltexte (Story-Skript, Manga-Hörspiele): nur lokal, privates Repo (Tools/texts.sh)
-texts/
 Translations/
+# Klartext der Übersetzungen nur lokal zum Bearbeiten, im Repo gepackt (Tools/texts.sh)
+texts/*.json

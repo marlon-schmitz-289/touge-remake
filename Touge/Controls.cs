@@ -85,8 +85,9 @@ public sealed record Bind(Source Source, int Code, float Rest = 0, float Full = 
 /// <summary>
 ///     Bindings (two slots per action and device) and tuning, saved with the <see cref="Ui.Settings"/>. Missing actions (older
 ///     files) fall back to <see cref="Defaults"/>. Wheel defaults follow the Logitech G29/G920 layout as SDL reports it on
-///     Windows (axis 1 wheel, 2 throttle, 3 brake, 4 clutch, pedals resting at +1; paddles buttons 5/6, shifter 13–19, OPTIONS pauses; numbers 1-based as shown); other wheels
-///     bind by pressing.
+///     Windows (axis 1 wheel, 2 throttle, 3 brake, 4 clutch, pedals resting at +1; paddles buttons 5/6, shifter 13–19, OPTIONS pauses; numbers 1-based as shown).
+///     Known models get their own layout (<see cref="WheelDefaults"/>, Thrustmaster T150), taken over automatically while the
+///     wheel binds are untouched (<see cref="AdoptWheel"/>) or by RESET on the wheel page; other wheels bind by pressing.
 /// </summary>
 public sealed class ControlSettings
 {
@@ -118,9 +119,11 @@ public sealed class ControlSettings
     public float FfbStrength { get; set; } = 0.7f;
     /// <summary>Some drivers report the steering axis the other way round.</summary>
     public bool FfbInvert { get; set; }
+    /// <summary>Least force 0..0.2 any non-zero force is lifted to (<see cref="ForceFeedback.Lift"/>): clears the dead band of belt/gear wheels.</summary>
+    public float FfbMinForce { get; set; } = 0.05f;
 
-    /// <summary>Wheel degrees lock to lock that give full steering in the game: the car's 540° rack, faster with <see cref="Sensitivity"/>, at most the wheel's range.</summary>
-    public float FullLockDegrees => MathF.Min(Rotation, 540 / MathF.Max(Sensitivity, 0.1f));
+    /// <summary>Wheel degrees lock to lock that give full steering in the game: the car's 900° rack (≈13:1 at 35°), faster with <see cref="Sensitivity"/>, at most the wheel's range.</summary>
+    public float FullLockDegrees => MathF.Min(Rotation, 900 / MathF.Max(Sensitivity, 0.1f));
 
     public Dictionary<Control, Bind[]> Page(DeviceKind d) => d switch { DeviceKind.Keyboard => Keyboard, DeviceKind.Pad => Pad, _ => Wheel };
 
@@ -135,7 +138,7 @@ public sealed class ControlSettings
         return all;
     })];
 
-    /// <summary>Binds slot <paramref name="slot"/>; the same input is taken away from every other action of that device.</summary>
+    /// <summary>Binds slot <paramref name="slot"/>; the same input is taken away from the other actions of that device in its group (driving or menu: one button may do both).</summary>
     public void Set(DeviceKind d, Control c, int slot, Bind bind)
     {
         var page = Page(d);
@@ -143,15 +146,17 @@ public sealed class ControlSettings
         {
             var binds = (Bind[])Get(d, other).Clone();
             for (var i = 0; i < 2; i++)
-                if (bind.Source != Source.None && binds[i].SameInput(bind) && (other != c || i != slot))
+                if (bind.Source != Source.None && binds[i].SameInput(bind) && (other != c || i != slot) && IsMenu(other) == IsMenu(c))
                     binds[i] = Bind.None;
             if (other == c) binds[slot] = bind;
             page[other] = binds;
         }
     }
 
-    /// <summary>Bindings and tuning of one device back to the defaults.</summary>
-    public void Reset(DeviceKind d)
+    private static bool IsMenu(Control c) => c is Control.MenuOk or Control.MenuBack;
+
+    /// <summary>Bindings and tuning of one device back to the defaults (the wheel: the profile of <paramref name="wheel"/>, <see cref="WheelDefaults"/>).</summary>
+    public void Reset(DeviceKind d, JoystickState? wheel = null)
     {
         var fresh = new ControlSettings();
         switch (d)
@@ -159,10 +164,40 @@ public sealed class ControlSettings
             case DeviceKind.Keyboard: Keyboard = fresh.Keyboard; break;
             case DeviceKind.Pad: (Pad, PadDeadzone, PadLinearity, Rumble) = (fresh.Pad, fresh.PadDeadzone, fresh.PadLinearity, fresh.Rumble); break;
             default:
-                (Wheel, Rotation, Sensitivity, SteerDeadzone, SteerLinearity, InvertSteer) = (fresh.Wheel, fresh.Rotation, fresh.Sensitivity, fresh.SteerDeadzone, fresh.SteerLinearity, false);
-                (PedalDeadzone, InvertThrottle, InvertBrake, InvertClutch, FfbStrength, FfbInvert) = (fresh.PedalDeadzone, false, false, false, fresh.FfbStrength, false);
+                (Wheel, Rotation, Sensitivity, SteerDeadzone, SteerLinearity, InvertSteer) = (WheelDefaults(wheel), fresh.Rotation, fresh.Sensitivity, fresh.SteerDeadzone, fresh.SteerLinearity, false);
+                (PedalDeadzone, InvertThrottle, InvertBrake, InvertClutch, FfbStrength, FfbInvert, FfbMinForce) = (fresh.PedalDeadzone, false, false, false, fresh.FfbStrength, false, fresh.FfbMinForce);
                 break;
         }
+    }
+
+    /// <summary>
+    ///     Takes the profile of a known wheel (<see cref="WheelDefaults"/>) when the wheel binds are still the untouched
+    ///     generic defaults; binds anyone changed stay. Idempotent (called whenever the wheel device changes).
+    /// </summary>
+    public void AdoptWheel(JoystickState? w)
+    {
+        var plain = Defaults(DeviceKind.Wheel);
+        if (Enum.GetValues<Control>().All(c => Get(DeviceKind.Wheel, c).SequenceEqual(plain.TryGetValue(c, out var b) ? b : [Bind.None, Bind.None])))
+            Wheel = WheelDefaults(w);
+    }
+
+    /// <summary>Wheel bindings for device <paramref name="w"/>: <see cref="Defaults"/> (G29) with the layout of a known model on top.</summary>
+    public static Dictionary<Control, Bind[]> WheelDefaults(JoystickState? w)
+    {
+        var all = Defaults(DeviceKind.Wheel);
+        if (w is { Vendor: 0x044F, Product: 0xB677 }) // Thrustmaster T150: a1 brake, a2 throttle, a3 clutch (unused); paddles b0 down, b1 up
+        {
+            Bind[] Two(Bind a) => [a, Bind.None];
+            all[Control.Throttle] = Two(Bind.JoyAxis(2, 1, -1));
+            all[Control.Brake] = Two(Bind.JoyAxis(1, 1, -1));
+            (all[Control.ShiftUp], all[Control.ShiftDown], all[Control.Handbrake], all[Control.ResetCar]) = (Two(Bind.Joy(1)), Two(Bind.Joy(0)), Two(Bind.Joy(3)), Two(Bind.Joy(2)));
+            (all[Control.Camera], all[Control.Lights], all[Control.HighBeam], all[Control.Pause]) = (Two(Bind.Joy(9)), Two(Bind.Joy(8)), Two(Bind.Joy(6)), Two(Bind.Joy(7)));
+            (all[Control.MenuOk], all[Control.MenuBack]) = (Two(Bind.Joy(5)), Two(Bind.Joy(4)));
+            // no clutch pedal or H-shifter: explicitly empty, a missing entry falls back to the G29 layout (b12 is the PS button)
+            foreach (var c in (Control[])[Control.Clutch, Control.Gear1, Control.Gear2, Control.Gear3, Control.Gear4, Control.Gear5, Control.Gear6, Control.GearR])
+                all[c] = [Bind.None, Bind.None];
+        }
+        return all;
     }
 
     /// <summary>Default bindings of a device: the original keyboard/pad layout of this remake, a G29-style wheel.</summary>

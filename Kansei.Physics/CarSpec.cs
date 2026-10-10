@@ -26,6 +26,7 @@ public sealed record CarSpec
     public float Damper { get; init; } = 2300f;               // N/(m/s)
     public float AntiRollFront { get; init; } = 12000f;       // N/m of left-right compression difference
     public float AntiRollRear { get; init; } = 6000f;
+    public float RollCentre { get; init; } = 0.6f;            // roll-centre height as a share of CogHeight: lateral load transfer through the links, not body roll
     public float Travel { get; init; } = 0.18f;               // full droop → full bump
 
     // Wheels / tyres (185/70R13)
@@ -81,6 +82,7 @@ public sealed record CarSpec
     public float HandbrakeRearGrip { get; init; } = 0.4f;     // rear grip factor while the handbrake is pulled (arcade: rotates the car)
     public float MaxDriftAngle { get; init; } = 0.6f;         // rad (~34°); beyond it a spring pushes the slip back
     public float DriftRearGrip { get; init; } = 0.75f;        // rear grip factor while drifting/entering on throttle
+    public float BrakeDriftRearGrip { get; init; } = 0.6f;    // rear grip factor while braking into a turn at speed (brake drift)
     public float DriftMomentum { get; init; } = 0.4f;         // share of the tyre drag against the travel direction cancelled while drifting on throttle
     public float DriftCarve { get; init; } = 0.3f;            // rad/s the travel direction turns toward the nose while drifting (speed kept)
     public float DriftEntrySpeed { get; init; } = 20f;        // m/s; full lock + full throttle above this starts a drift

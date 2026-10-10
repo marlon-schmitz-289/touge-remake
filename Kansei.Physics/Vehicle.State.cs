@@ -10,7 +10,7 @@ namespace Kansei.Physics;
 public sealed partial class Vehicle
 {
     /// <summary>Bytes of one <see cref="Save"/>.</summary>
-    public const int StateBytes = 4 * (3 + 4 + 3 + 3 + 1 + 1 + 1 + 1 + 1 + 3 + 3 + 1) + 4 * 7 + 6 + 4 * WheelBytes;
+    public const int StateBytes = 4 * (3 + 4 + 3 + 3 + 1 + 1 + 1 + 1 + 1 + 3 + 3 + 1) + 4 * 9 + 6 + 4 * WheelBytes;
 
     private const int WheelBytes = 4 * 11 + 1;
 
@@ -25,6 +25,7 @@ public sealed partial class Vehicle
         W(w, WallNormal);
         w.Write(WallImpactSpeed);
         w.Write(_steer); w.Write(_clutchPedal); w.Write(_shiftTimer); w.Write(_rearGrip); w.Write(_prevBeta); w.Write(_clutch); w.Write(_gearRpm);
+        w.Write(_sideForce[0]); w.Write(_sideForce[1]);
         w.Write(_drifting); w.Write(_locked); w.Write(_shifting); w.Write(_shiftDown); w.Write(AutomaticGearbox); w.Write((byte)0);
         foreach (var x in _wheels)
         {
@@ -45,6 +46,7 @@ public sealed partial class Vehicle
         (WallPoint, WallNormal, WallImpactSpeed) = (V(r), V(r), r.ReadSingle());
         (_steer, _clutchPedal, _shiftTimer, _rearGrip, _prevBeta, _clutch, _gearRpm) =
             (r.ReadSingle(), r.ReadSingle(), r.ReadSingle(), r.ReadSingle(), r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
+        (_sideForce[0], _sideForce[1]) = (r.ReadSingle(), r.ReadSingle());
         (_drifting, _locked, _shifting, _shiftDown, AutomaticGearbox) = (r.ReadBoolean(), r.ReadBoolean(), r.ReadBoolean(), r.ReadBoolean(), r.ReadBoolean());
         r.ReadByte();
         for (var i = 0; i < 4; i++)

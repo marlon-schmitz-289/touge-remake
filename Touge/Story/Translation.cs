@@ -1,3 +1,6 @@
+using System.IO.Compression;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Touge.Formats;
 
@@ -5,8 +8,9 @@ namespace Touge.Story;
 
 /// <summary>
 ///     The game's text in one language, from <c>Translations/&lt;code&gt;.json</c> (<c>en.json</c>, <c>de.json</c> …) in the profile folder
-///     (next to settings.json; kept across updates) or next to the program. Not in the repo (the scenes translate the original's script):
-///     <c>Tools/texts.sh</c> fetches the private texts, the build copies them next to the program. Layout:
+///     (next to settings.json; kept across updates) or next to the program, or packed as <c>&lt;code&gt;.tl</c> (<see cref="Pack"/>: the
+///     repo's <c>texts/</c> holds them that way so the translated script is not readable in plain text; the build copies them next to
+///     the program). Layout:
 ///     <c>{"name": "English", "scenes": {"&lt;chapter&gt;": [[part 0 lines], [part 1 lines], …]}, "manga": {"&lt;timeline&gt;":
 ///     ["seconds|SPEAKER|text", …]}, "ui": {"&lt;English on screen&gt;": "&lt;translation&gt;", …}}</c>, scene lines "SPEAKER|text"
 ///     (<see cref="StoryText"/>, <see cref="MangaText"/>). <c>ui</c> swaps any text the game draws whole (menus, titles, blurbs, hints;
@@ -21,6 +25,11 @@ public sealed class Translation
     {
         PropertyNameCaseInsensitive = true, WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
+
+    public const string PackedExtension = ".tl";
+    private static readonly byte[] Magic = "TLX1"u8.ToArray();
+    // not a secret (it ships with the program): keeps the texts from being read or searched as plain text in the repo
+    private static readonly byte[] Key = SHA256.HashData("touge-remake translations"u8);
 
     public string Name { get; set; } = "";
     public Dictionary<int, string[][]> Scenes { get; set; } = [];
@@ -45,6 +54,7 @@ public sealed class Translation
     /// <summary>Language codes with a file, and <c>ja</c> with a disc (files read once; a new one needs a restart).</summary>
     public static IReadOnlyList<string> Available =>
         [.. (_files ??= [.. Dirs.Where(Directory.Exists).SelectMany(d => Directory.GetFiles(d, "*.json"))
+                .Concat(Dirs.Where(Directory.Exists).SelectMany(d => Directory.GetFiles(d, "*" + PackedExtension)))
                 .Select(f => Path.GetFileNameWithoutExtension(f).ToLowerInvariant()).Where(c => !c.EndsWith(".missing"))])
             .Concat(Disc != null ? ["ja"] : []).Distinct().Order()];
 
@@ -62,19 +72,42 @@ public sealed class Translation
     public static Translation Load(string code)
     {
         foreach (var dir in Dirs)
+        foreach (var path in new[] { Path.Combine(dir, code + ".json"), Path.Combine(dir, code + PackedExtension) })
         {
-            var path = Path.Combine(dir, code + ".json");
             if (!File.Exists(path)) continue;
             try
             {
-                return JsonSerializer.Deserialize<Translation>(File.ReadAllText(path), Json) ?? new();
+                var json = path.EndsWith(PackedExtension) ? Unpack(File.ReadAllBytes(path)) : File.ReadAllText(path);
+                return JsonSerializer.Deserialize<Translation>(json, Json) ?? new();
             }
-            catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException)
+            catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException or CryptographicException or InvalidDataException)
             {
                 Console.WriteLine($"[Touge] Übersetzung {path} nicht lesbar ({e.Message})");
             }
         }
         return code == "ja" && Disc != null ? FromDisc(Disc) : new();
+    }
+
+    /// <summary>A language file's JSON packed for <c>texts/</c>: "TLX1", AES-CBC IV, then the gzipped JSON encrypted.</summary>
+    public static byte[] Pack(string json)
+    {
+        using var zipped = new MemoryStream();
+        using (var gz = new GZipStream(zipped, CompressionLevel.SmallestSize)) gz.Write(Encoding.UTF8.GetBytes(json));
+        using var aes = Aes.Create();
+        aes.Key = Key;
+        return [.. Magic, .. aes.IV, .. aes.EncryptCbc(zipped.ToArray(), aes.IV)];
+    }
+
+    /// <summary>The JSON of a <see cref="Pack"/>ed file.</summary>
+    public static string Unpack(byte[] packed)
+    {
+        if (packed.Length < Magic.Length + 16 || !packed.AsSpan(0, Magic.Length).SequenceEqual(Magic)) throw new InvalidDataException("kein gepackter Übersetzungstext");
+        using var aes = Aes.Create();
+        aes.Key = Key;
+        var zipped = aes.DecryptCbc(packed.AsSpan(Magic.Length + 16), packed.AsSpan(Magic.Length, 16));
+        using var gz = new GZipStream(new MemoryStream(zipped), CompressionMode.Decompress);
+        using var text = new StreamReader(gz, Encoding.UTF8);
+        return text.ReadToEnd();
     }
 
     /// <summary>

@@ -181,6 +181,27 @@ public class StoryTests
         Assert.Equal([0, 19, 24], StoryText.Parts.Select(p => p.First));
     }
 
+    /// <summary>A packed language file (texts/*.tl) loads like its JSON and is not readable as plain text.</summary>
+    [Fact]
+    public void Translation_PackedFileLoads()
+    {
+        const string json = """{ "name": "Packed", "scenes": { "1": [["TAKUMI|Secret line"]] } }""";
+        var packed = Translation.Pack(json);
+        Assert.Equal(json, Translation.Unpack(packed));
+        Assert.DoesNotContain("Secret", System.Text.Encoding.UTF8.GetString(packed));
+        var path = Path.Combine(AppContext.BaseDirectory, "Translations", "zx" + Translation.PackedExtension);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllBytes(path, packed);
+        try
+        {
+            Assert.Equal("TAKUMI|Secret line", Translation.Load("zx").Scenes[1][0][0]);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     /// <summary>A language file next to the program gives the scenes and dramas; a missing or broken one leaves placeholders (one line per part).</summary>
     [Fact]
     public void Translation_LoadsFileOrPlaceholders()

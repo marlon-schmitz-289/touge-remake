@@ -49,4 +49,39 @@ public class WheelInputTests
         car.Step(new VehicleInput(0, 0, 0, Shift: -4), Flat, Dt); // to neutral
         Assert.Equal(0, car.Gear);
     }
+
+    /// <summary>A wheel holds a drift by counter-steering (any real road-wheel angle) on throttle; lifting or straight wheels bring the grip back.</summary>
+    [Fact]
+    public void DirectSteer_DriftHoldsOnCounterSteer()
+    {
+        float After(float throttle, float counter)
+        {
+            var car = Rolling(70);
+            for (var t = 0f; t < 0.35f; t += Dt) car.Step(new VehicleInput(0.5f, 0, -0.5f, Handbrake: true, DirectSteer: true), Flat, Dt);
+            for (var t = 0f; t < 1; t += Dt) car.Step(new VehicleInput(throttle, 0, -counter * MathF.Sign(car.SlipAngle), DirectSteer: true), Flat, Dt);
+            return MathF.Abs(car.SlipAngle) * 180 / MathF.PI;
+        }
+        var (held, lifted, straight) = (After(0.8f, 0.15f), After(0, 0.15f), After(0.8f, 0));
+        Assert.True(held > 15, $"{held:F1}°");
+        Assert.True(lifted < 5, $"{lifted:F1}°"); // still settling (~0.2 s later with the roll centre's load transfer), gone by 1.2 s
+        Assert.True(straight < held - 5, $"{straight:F1}° vs {held:F1}°");
+    }
+
+    /// <summary>Brake drift: braking into a turn at speed steps the rear out, with any steering device; the same turn without the brake stays gripped.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void BrakeIntoTurn_StepsTheRearOut(bool direct)
+    {
+        float Slip(float brake)
+        {
+            var car = Rolling(100);
+            var steer = direct ? 0.35f : 1f; // a wheel: ~0.2 rad of road wheel, about what a pad asks for at full lock at this speed
+            for (var t = 0f; t < 0.5f; t += Dt) car.Step(new VehicleInput(0, brake, steer, DirectSteer: direct), Flat, Dt);
+            for (var t = 0f; t < 0.5f; t += Dt) car.Step(new VehicleInput(0.8f, 0, steer, DirectSteer: direct), Flat, Dt);
+            return MathF.Abs(car.SlipAngle) * 180 / MathF.PI;
+        }
+        var (braked, rolled) = (Slip(0.6f), Slip(0));
+        Assert.True(braked > rolled + 3, $"braked {braked:F1}° vs {rolled:F1}°");
+    }
 }

@@ -51,7 +51,7 @@ public static class InputDebugView
         Bar("CLUTCH", d.Clutch, false);
         Text($"HANDBRAKE {(d.Handbrake ? "ON" : "off")}   {(d.DirectSteer ? "DIRECT STEER" : "ASSISTED STEER")}   H-GEAR {(d.HGear?.ToString() ?? "-")}");
         Bar("FFB OUT", ffb.Output, true);
-        Text(FormattableString.Invariant($"aligning {ffb.Aligning:+0.00;-0.00}  kerb {ffb.Kerb:+0.00;-0.00}  jolt {ffb.Jolt:+0.00;-0.00}  lock {d.SteerBeyond:+0.00;-0.00}"), Style.Dim);
+        Text(FormattableString.Invariant($"aligning {ffb.Aligning:+0.00;-0.00}  damper {ffb.Damper:+0.00;-0.00}  friction {ffb.Friction:+0.00;-0.00}  road {ffb.Road:+0.00;-0.00}  kerb {ffb.Kerb:+0.00;-0.00}  jolt {ffb.Jolt:+0.00;-0.00}  lock {d.SteerBeyond:+0.00;-0.00}"), Style.Dim);
         foreach (var j in input.Joysticks)
         {
             Text($"{(j == d.Wheel ? "> " : "")}{j.Name}{(j.IsWheel ? " [wheel]" : "")}{(j.IsGameController ? " [pad]" : "")}{(j.HasForceFeedback ? " [FFB]" : "")}", j == d.Wheel ? Style.Green : 0);

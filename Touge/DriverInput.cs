@@ -100,7 +100,9 @@ public sealed class DriverInput(ControlSettings cfg)
 
     public void Update(InputSnapshot input, float dt)
     {
-        Wheel = FindWheel(input, cfg.WheelName);
+        var found = FindWheel(input, cfg.WheelName);
+        if (found != Wheel) cfg.AdoptWheel(found); // a known model's layout while the binds are untouched
+        Wheel = found;
         Array.Copy(_down, _was, _down.Length);
         bool key = false, pad = false, wheel = false;
         foreach (var c in All)
@@ -116,6 +118,7 @@ public sealed class DriverInput(ControlSettings cfg)
                 on = true;
                 if (c is Control.SteerLeft or Control.SteerRight) // the steering device is the one steered with last
                     (key, pad, wheel) = (key || d == DeviceKind.Keyboard, pad || d == DeviceKind.Pad, wheel || d == DeviceKind.Wheel);
+                if (d == DeviceKind.Wheel && c is Control.Throttle or Control.Brake) wheel = true; // driving off on the pedals: the wheel steers (and gets its force)
             }
             _down[(int)c] = on;
         }
@@ -127,9 +130,9 @@ public sealed class DriverInput(ControlSettings cfg)
         var tilt = Tilt?.Invoke(PadOf != null ? PadOf(input) : input.Gamepad) ?? 0;
         pad |= MathF.Abs(tilt) > 0.3f; // a deliberate tilt takes over; a pad lying a little askew does not
         if (tilt != 0 && (pad || Active == DeviceKind.Pad)) stick = Math.Clamp(stick + tilt, -1, 1);
-        // a bumped wheel (a few degrees) takes nothing over: it has to be turned 0.1 of the lock away from where it was left
+        // a bumped wheel (a few degrees) takes nothing over: it has to be turned ~27° away from where it was left (ws is in half-locks)
         if (!hasWheelSteer || Active != DeviceKind.Wheel && float.IsNaN(_wheelAnchor)) _wheelAnchor = hasWheelSteer ? ws : float.NaN;
-        if (hasWheelSteer && Active != DeviceKind.Wheel && MathF.Abs(ws - _wheelAnchor) > 0.1f) wheel = true;
+        if (hasWheelSteer && Active != DeviceKind.Wheel && MathF.Abs(ws - _wheelAnchor) * cfg.FullLockDegrees > 54) wheel = true;
         if (key) Active = DeviceKind.Keyboard;
         else if (pad) Active = DeviceKind.Pad;
         else if (wheel) Active = DeviceKind.Wheel;

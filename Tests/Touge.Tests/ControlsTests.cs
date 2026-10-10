@@ -55,18 +55,18 @@ public class ControlsTests
         Frame(input, d, w);
         Assert.Equal(DeviceKind.Keyboard, d.Active); // a wheel at rest takes nothing over
         Assert.Same(w, d.Wheel);
-        w.SetAxis(0, 0.3f); // 900° wheel: 135° right; full lock at 270° → half lock
+        w.SetAxis(0, 0.5f); // 900° wheel: 225° right; full lock at 450° (the car's 900° rack) → half lock
         Frame(input, d, w);
         Assert.Equal(DeviceKind.Wheel, d.Active);
         Assert.True(d.DirectSteer);
         Assert.Equal(0.5f, d.Steer, 3);
-        d.Settings.Sensitivity = 2; // full lock at 135°
+        d.Settings.Sensitivity = 2; // full lock at 225°
         Frame(input, d, w);
         Assert.Equal(1, d.Steer, 3);
         w.SetAxis(0, -0.8f); // past the lock: clamped, the excess is for the force feedback's soft lock
         Frame(input, d, w);
         Assert.Equal(-1, d.Steer, 3);
-        Assert.True(d.SteerBeyond < -2);
+        Assert.True(d.SteerBeyond < -1.5f);
         d.Settings.InvertSteer = true;
         Frame(input, d, w);
         Assert.Equal(1, d.Steer, 3);
@@ -153,6 +153,47 @@ public class ControlsTests
         Assert.Equal(Bind.OfKey(Key.W), back.Controls.Get(DeviceKind.Keyboard, Control.Throttle)[0]);
         // a file from before the controls existed: defaults
         Assert.Equal(Bind.OfKey(Key.Space), JsonSerializer.Deserialize<Settings>("{}")!.Controls.Get(DeviceKind.Keyboard, Control.Handbrake)[0]);
+
+        // menu and driving binds are separate groups: one button may do both
+        var c = new ControlSettings();
+        c.Set(DeviceKind.Wheel, Control.MenuOk, 0, Bind.Joy(4));
+        Assert.Equal(Bind.Joy(4), c.Get(DeviceKind.Wheel, Control.ShiftUp)[0]);
+        c.Set(DeviceKind.Wheel, Control.MenuBack, 0, Bind.Joy(4)); // same group: taken from MenuOk
+        Assert.Equal(Source.None, c.Get(DeviceKind.Wheel, Control.MenuOk)[0].Source);
+        c.Set(DeviceKind.Wheel, Control.ShiftDown, 0, Bind.Joy(4)); // taken from ShiftUp, MenuBack keeps it
+        Assert.Equal(Source.None, c.Get(DeviceKind.Wheel, Control.ShiftUp)[0].Source);
+        Assert.Equal(Bind.Joy(4), c.Get(DeviceKind.Wheel, Control.MenuBack)[0]);
+    }
+
+    /// <summary>DECIDE, then the input already in the slot clears it (the wheel has no DELETE); DELETE still clears on the keyboard page.</summary>
+    [Fact]
+    public void ControlsScreen_PressSameInputClears()
+    {
+        var cfg = new ControlSettings();
+        var (input, w, d) = Rig(cfg);
+        var screen = new ControlsScreen(cfg, input, d);
+        screen.Open(DeviceKind.Wheel);
+        void Step((int, int, bool, bool) k = default)
+        {
+            d.Update(input, Dt);
+            screen.Update(k, Dt, null);
+            w.BeginFrame();
+            input.Keyboard.BeginFrame();
+        }
+        for (var i = 0; i < 21; i++) Step((0, 1, false, false)); // STEER LEFT (15) … SHIFT UP (+6)
+        Step((0, 0, true, false));
+        Step();
+        w.SetButton(4, true);
+        Step();
+        w.SetButton(4, false);
+        Assert.False(screen.Capturing);
+        Assert.Equal(Source.None, cfg.Get(DeviceKind.Wheel, Control.ShiftUp)[0].Source);
+
+        screen.Open(DeviceKind.Keyboard);
+        screen.Update((0, 1, false, false), Dt, null); // first keyboard row: STEER LEFT
+        input.Keyboard.OnKeyDown((SdlKey)Key.Delete);
+        screen.Update(default, Dt, null);
+        Assert.Equal(Source.None, cfg.Get(DeviceKind.Keyboard, Control.SteerLeft)[0].Source);
     }
 
     [Fact]
@@ -179,13 +220,19 @@ public class ControlsTests
             w.BeginFrame();
             input.Keyboard.BeginFrame();
         }
-        for (var i = 0; i < 14; i++) Step((0, 1, false, false)); // tabs → 13 wheel settings → STEER LEFT
+        for (var i = 0; i < 15; i++) Step((0, 1, false, false)); // tabs → 14 wheel settings → STEER LEFT
         Step((0, 0, true, false));
         Assert.True(screen.Capturing);
         Step();
         w.SetAxis(0, -0.2f); // a centred axis binds after ~90° on a 900° wheel
         Step();
         Assert.False(screen.Capturing);
+        Assert.Equal(Source.None, cfg.Get(DeviceKind.Wheel, Control.SteerLeft)[0].Source); // it was already bound there: the same input clears
+        w.SetAxis(0, 0);
+        Step((0, 0, true, false));
+        Step();
+        w.SetAxis(0, -0.2f);
+        Step();
         Assert.Equal(Bind.JoyAxis(0, 0, -1), cfg.Get(DeviceKind.Wheel, Control.SteerLeft)[0]);
         w.SetAxis(0, 0);
         Step((0, 1, false, false)); // STEER RIGHT
@@ -200,7 +247,7 @@ public class ControlsTests
         w.SetAxis(3, 1);
 
         // calibration: worn throttle rests at 0.9 and only reaches −0.8
-        for (var i = 0; i < 15; i++) Step((0, -1, false, false));
+        for (var i = 0; i < 16; i++) Step((0, -1, false, false));
         Step((0, 1, false, false)); // CALIBRATE
         w.SetAxis(1, 0.9f);
         Step((0, 0, true, false));
@@ -351,5 +398,79 @@ public class ControlsTests
         var ffb2 = new ForceFeedback();
         Assert.Equal(-1, ffb2.Update(car, Rough, 1.2f, 0.5f, 1 / 120f), 3); // 20 % past the lock: full spring back
         Assert.Equal(0, new ForceFeedback().Update(car, Rough, 1.2f, 0, 1 / 120f)); // strength 0 = off
+    }
+
+    /// <summary>At speed the wheel clearly centres (well over a belt wheel's dead band), straight it is quiet, and the damper opposes the wheel's motion.</summary>
+    [Fact]
+    public void ForceFeedback_CentresAtSpeed_DamperOpposesMotion()
+    {
+        var ground = new Ground();
+        var car = new Vehicle(CarSpec.AE86);
+        car.Reset(Vector3.Zero, 0);
+        var ffb = new ForceFeedback();
+        while (car.SpeedKmh < 60) car.Step(new VehicleInput(1, 0, 0), ground, 1 / 120f);
+        for (var i = 0; i < 60; i++)
+        {
+            car.Step(new VehicleInput(0.3f, 0, 0, DirectSteer: true), ground, 1 / 120f);
+            ffb.Update(car, Rough, 0, 0.7f, 1 / 120f);
+        }
+        Assert.True(MathF.Abs(ffb.Output) < 0.02f, $"straight {ffb.Output:F3}");
+        for (var i = 0; i < 60; i++)
+        {
+            car.Step(new VehicleInput(0.3f, 0, 0.1f, DirectSteer: true), ground, 1 / 120f);
+            ffb.Update(car, Rough, 0.1f, 0.7f, 1 / 120f);
+        }
+        Assert.True(ffb.Output < -0.15f, $"0.1 lock at 60 km/h {ffb.Output:F3}");
+        ffb.Update(car, Rough, 0.2f, 0.7f, 1 / 120f); // the wheel turned right quickly
+        Assert.True(ffb.Damper < 0);
+    }
+
+    /// <summary>Parked, the wheel is heavy to turn (friction against its motion) but does not push by itself; the soft knee never clips.</summary>
+    [Fact]
+    public void ForceFeedback_ParkedFriction_SoftKnee()
+    {
+        var car = new Vehicle(CarSpec.AE86);
+        car.Reset(Vector3.Zero, 0);
+        var ffb = new ForceFeedback();
+        ffb.Update(car, Rough, 0, 1, 1 / 120f);
+        ffb.Update(car, Rough, 0.01f, 1, 1 / 120f); // turned right at 1.2 lock/s
+        Assert.True(ffb.Friction < -0.1f, $"friction {ffb.Friction:F3}");
+        for (var i = 0; i < 30; i++) ffb.Update(car, Rough, 0.01f, 1, 1 / 120f); // held still
+        Assert.True(MathF.Abs(ffb.Output) < 0.02f, $"held {ffb.Output:F3}");
+        Assert.Equal(0.5f, ForceFeedback.Compress(0.5f));
+        Assert.True(ForceFeedback.Compress(3) is > 0.95f and <= 1);
+        Assert.True(ForceFeedback.Compress(0.9f) > ForceFeedback.Compress(0.8f));
+    }
+
+    [Fact]
+    public void ForceFeedback_Lift_ClearsTheDeadBand()
+    {
+        Assert.Equal(0, ForceFeedback.Lift(0, 0.05f));
+        Assert.Equal(0.0345f, ForceFeedback.Lift(0.01f, 0.05f), 4);
+        Assert.Equal(-1, ForceFeedback.Lift(-1, 0.05f), 5);
+        Assert.Equal(0.335f, ForceFeedback.Lift(0.3f, 0.05f), 4);
+    }
+
+    /// <summary>A T150 (by USB id) gets its own layout while the wheel binds are the untouched defaults; customised binds stay.</summary>
+    [Fact]
+    public void T150_Profile_AdoptedOnlyOverDefaults()
+    {
+        JoystickState T150() => new("T150 (sim)", 4, 13, 1, true) { Vendor = 0x044F, Product = 0xB677 };
+        var input = new InputSnapshot();
+        input.AddVirtual(T150());
+        var cfg = new ControlSettings();
+        new DriverInput(cfg).Update(input, Dt);
+        Assert.Equal(Bind.JoyAxis(2, 1, -1), cfg.Get(DeviceKind.Wheel, Control.Throttle)[0]);
+        Assert.Equal(Bind.JoyAxis(1, 1, -1), cfg.Get(DeviceKind.Wheel, Control.Brake)[0]);
+        Assert.Equal([Bind.None, Bind.None], cfg.Get(DeviceKind.Wheel, Control.Gear1));
+        Assert.Equal([Bind.None, Bind.None], cfg.Get(DeviceKind.Wheel, Control.Clutch));
+
+        var custom = new ControlSettings();
+        custom.Set(DeviceKind.Wheel, Control.Camera, 0, Bind.Joy(11));
+        new DriverInput(custom).Update(input, Dt);
+        Assert.Equal(Bind.JoyAxis(1, 1, -1), custom.Get(DeviceKind.Wheel, Control.Throttle)[0]); // G29 layout kept
+        Assert.Equal(Bind.Joy(11), custom.Get(DeviceKind.Wheel, Control.Camera)[0]);
+        custom.Reset(DeviceKind.Wheel, T150()); // RESET on the wheel page: the profile
+        Assert.Equal(Bind.JoyAxis(2, 1, -1), custom.Get(DeviceKind.Wheel, Control.Throttle)[0]);
     }
 }
