@@ -33,7 +33,7 @@ public sealed class ForceFeedback
     /// <summary>Output above this is compressed toward 1.</summary>
     public const float Knee = 0.7f;
 
-    private float _phase, _jolt, _joltSign, _smooth, _lastSteer = float.NaN, _road, _loadDiff = float.NaN;
+    private float _phase, _jolt, _joltSign, _smooth, _lastSteer = float.NaN, _loadDiff = float.NaN;
 
     /// <summary>Components of the last update (input debug).</summary>
     public float Aligning { get; private set; }

@@ -11,9 +11,9 @@ Hinweise); was fehlt, bleibt Englisch und landet beim Beenden in `Translations/<
 zum Ausfüllen). **Japanisch** (`ja`) braucht keine Datei: die Story zeigt dann das Original-Skript von der Disc. Die Schrift ist
 Rajdhani, fehlende Zeichen (Japanisch) kommen aus M PLUS 1p (beide OFL, `Touge/Assets/Fonts`).
 
-Die englischen Story- und Hörspieltexte sind nicht enthalten (Übersetzung des Original-Skripts), ohne sie zeigt die Story
-Platzhalter. Sie liegen im privaten Repo `touge-remake-texts`: `Tools/texts.sh` holt bzw. aktualisiert sie nach `texts/`
-(gitignoriert), der Build legt sie neben das Programm. Neue Sprache: `en.json` kopieren, übersetzen, als `<code>.json` ablegen
+Die englischen Story- und Hörspieltexte (Übersetzung des Original-Skripts) liegen gepackt in `texts/` (`<sprache>.tl`, nicht im
+Klartext lesbar), der Build legt sie neben das Programm (ohne sie zeigt die Story Platzhalter). Bearbeiten: `Tools/texts.sh unpack`
+schreibt `texts/<sprache>.json` (gitignoriert), nach dem Ändern `Tools/texts.sh pack`. Neue Sprache: `en.json` kopieren, übersetzen, als `<code>.json` ablegen
 (`--story-check` prüft Zeilen und Sprecher der Szenen gegen die Disc).
 
 Nicht verbunden mit SEGA, Kodansha oder den Rechteinhabern von *Initial D*; Marken und Namen gehören ihren Inhabern.
