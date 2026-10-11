@@ -55,6 +55,38 @@ public class LeftoversTests
         Assert.Equal("BATTLE vs BUNTA FUJIWARA WIN", ReplayMenu.Label(r.Info));
     }
 
+    /// <summary>A v1 file from before the tyres' side forces (states 8 bytes shorter) loads with zeros in their place.</summary>
+    [Fact]
+    public void OldReplayState_GetsZeroSideForces()
+    {
+        var car = new Vehicle(CarSpecs.All["AE86T"]);
+        car.Reset(new Vector3(1, 2, 3), 0.5f);
+        var state = car.SaveState();
+        Array.Fill(state, (byte)0xAB, 128, 8);
+        byte[] old = [.. state[..128], .. state[136..]];
+        var json = Encoding.UTF8.GetBytes("""{"Course":"AKINA_NIT","Cars":[{"Name":"YOU","Car":"AE86T","Paint":0}],"Ticks":0}""");
+        using var ms = new MemoryStream();
+        using (var gz = new GZipStream(ms, CompressionLevel.Fastest, true))
+        using (var w = new BinaryWriter(gz))
+        {
+            w.Write("IDRP"u8);
+            w.Write(Replay.Version);
+            w.Write((ushort)old.Length);
+            w.Write(json.Length);
+            w.Write(json);
+            w.Write(0);
+            w.Write(1);
+            w.Write(1);
+            w.Write(0);
+            w.Write(old);
+        }
+        ms.Position = 0;
+        var loaded = Replay.Read(ms).Keys[0][0];
+        Array.Fill(state, (byte)0, 128, 8);
+        Assert.Equal(state, loaded);
+        Assert.Equal(car.Position, Replay.PositionOf(loaded));
+    }
+
     private static SdfFont Font()
     {
         var dir = AppContext.BaseDirectory;

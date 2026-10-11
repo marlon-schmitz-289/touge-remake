@@ -41,12 +41,12 @@ public static class Legend
     /// <summary>
     ///     All 34 rivals in the original's id order (0x2A2D90 rows 0–33), grouped by slot as 0x29B2E0 lists them. Skill on the
     ///     one scale (<see cref="RivalPilot.Pace"/>) by rung, the top of it (VS CPU's HARD and LEGEND: the slides of
-    ///     <see cref="RivalPilot.SlideShare"/>, a fast player's pace): a main course's ladder 0.8–0.84 (with <see cref="RungPower"/>),
+    ///     <see cref="RivalPilot.SlideShare"/>, a fast player's pace): a main course's ladder 0.8–0.84 (stock cars: skill alone makes the ladder),
     ///     0.85–0.9, 0.85–0.95, bosses 0.95–1; the additions 0.95–1 stock, the secret ones 1 (LEGEND_ALL=1 --legend-sim
-    ///     --player-skill 1: 21 of 34 won, README).
+    ///     --player-skill 1: 17 of 34 won, README).
     ///     Byte 3 → <see cref="Entry.Reverse"/>, 4 → <see cref="Entry.Wet"/>, 5 → <see cref="Entry.Night"/>, 6 → <see cref="Entry.Figure"/>.
     /// </summary>
-    public static readonly Entry[] All = Tiered(
+    public static readonly Entry[] All =
     [
         // MYOGI (Takumi in Itsuki's AE85 is row 1 of the original, the remake's ladder has him last: the hero is the course's boss, not its second rung)
         E(0, "itsuki", R("itsuki", "ITSUKI TAKEUCHI", "AKINA SPEEDSTARS", "AE85", 0.84f, 0.2f, 0.3f), false, false, false, 0, "ITSUKI.adx"),
@@ -90,27 +90,10 @@ public static class Legend
         E(10, "sakai", R("sakai", "SMILEY SAKAI", "TODO SCHOOL", "INTGR", 1f, 0.55f, 0.2f), true, false, true, 33, "SAKAI.adx"),
         // AKINA's fifth: Bunta (row 33 of 0x2A2D90, figure 25)
         E(3, "bunta", R("bunta", "BUNTA FUJIWARA", "FUJIWARA TOFU", "IMP3", 1f, 0.4f, 0.7f), false, false, true, 25, "BUNTA.adx", true),
-    ]);
+    ];
 
     private static Entry E(int slot, string id, Rivals.Rival r, bool reverse, bool wet, bool night, int figure, string theme, bool secret = false) =>
         new($"{CourseIds[slot]}/{id}", CourseIds[slot], slot, r, reverse, night, wet, figure, theme, secret);
-
-    /// <summary>
-    ///     Engine torque of the rival's car by its rung on a main course's ladder (the remake's own balance, in the spirit of
-    ///     the original's per-course AI speed table 0x2C7930): the first two rivals run slightly detuned (on top of their balanced car, CarSpecs.Bop),
-    ///     the third and fourth at full power; the additions and the secret rivals are always stock.
-    /// </summary>
-    public static float[] RungPower => [0.9f, 0.95f, 1f, 1f]; // a property: All (above) is initialised first
-
-    /// <summary><see cref="RungPower"/> applied to the main courses' regulars.</summary>
-    private static Entry[] Tiered(Entry[] all) =>
-    [
-        .. all.Select(e =>
-        {
-            var rung = all.Where(x => x.Slot == e.Slot && !x.Secret).ToList().IndexOf(e);
-            return e.Slot < MainCourses && !e.Secret && rung < RungPower.Length ? e with { Rival = e.Rival with { Power = RungPower[rung] } } : e;
-        }),
-    ];
 
     /// <summary>A slot's rivals in ladder order (regulars as listed, the secret one last).</summary>
     public static Entry[] Of(int slot) => [.. All.Where(e => e.Slot == slot && !e.Secret), .. All.Where(e => e.Slot == slot && e.Secret)];

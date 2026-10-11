@@ -48,7 +48,10 @@ public sealed class DriftController
     private const float ThrottleBase = 0.6f, ThrottleP = 0.3f;
 
     /// <summary>Exit when the travel is within this of the corner's exit heading or this far before its end; over this long, at this throttle.</summary>
-    private const float ExitHeading = 15 / Deg, ExitBeforeEnd = 5, ExitTime = 0.4f, ExitThrottle = 0.55f;
+    private const float ExitHeading = 15 / Deg, ExitBeforeEnd = 5, ExitThrottle = 0.55f;
+    public const float ExitTime = 0.4f;
+    /// <summary>Exit: the pilot's brake passes only above this (clearly too fast; 0.5 braked 10 % of the R34's exits, 0.7 6.5 % with no more wall hits).</summary>
+    private const float ExitBrake = 0.7f;
 
     public Phase State { get; private set; }
     /// <summary>Corner index of the current/last drift.</summary>
@@ -71,6 +74,7 @@ public sealed class DriftController
     private Entry _entry;
     private float _t, _integral, _heading, _kappa, _exitFrom, _hb;
     private int _dir;
+    private bool _shifted; // this drift's downshift is done
 
     /// <summary>Body slip held without traffic/feedback (rad): 12° + 18° × drift style; 4WD at most 15°.</summary>
     public static float StyleBeta(float drift, CarSpec spec) =>
@@ -79,7 +83,7 @@ public sealed class DriftController
     /// <summary>Starts a drift into corner <paramref name="corner"/> (index <paramref name="index"/>) now.</summary>
     public void Start(Vehicle car, CourseMap.Corner corner, int index, Entry entry)
     {
-        (State, Corner, _entry, _dir, _t, _integral, EndedEarly) = (Phase.Entry, index, entry, corner.Dir, 0, 0, false);
+        (State, Corner, _entry, _dir, _t, _integral, EndedEarly, _shifted) = (Phase.Entry, index, entry, corner.Dir, 0, 0, false, false);
         var v = car.Velocity.Length();
         _hb = entry switch { Entry.Tuck => TuckTime, Entry.Feint => FeintTime + FeintFlick, _ => v >= FlickSpeed ? FlickFast : FlickSlow };
         (_heading, _kappa) = (Heading(car.Velocity), 0);
@@ -179,7 +183,7 @@ public sealed class DriftController
             var throttle = Math.Clamp(ThrottleBase + ThrottleP * (vRef - v), Engage, 1);
             if (beta < 0.6f * Command && car.Spec.DriveFront < 1) throttle = MathF.Max(throttle, 0.8f); // power the tail out
             _dbg = (kLine, kRef, wide, outPsi, trim, vRef);
-            return new VehicleInput(throttle, 0, Steer(beta, Command));
+            return new VehicleInput(throttle, 0, Steer(beta, Command), Shift: Downshift(car));
         }
 
         // exit: the pilot steers back onto the line at once (its steering undoes the car's own counter-steer), the throttle
@@ -189,8 +193,25 @@ public sealed class DriftController
         Command = _exitFrom * (1 - k);
         // still sliding hard: catch it first (counter-steer on the slip), then the pilot
         if (beta > 20 / Deg) return new VehicleInput(ExitThrottle, 0, Steer(beta, Command));
-        return pilot with { Throttle = MathF.Max(pilot.Throttle, ExitThrottle), Brake = pilot.Brake * k };
+        // the pilot's brake only when clearly too fast (the plan's grip speed comes before the tail has settled), then off the throttle
+        if (pilot.Brake > ExitBrake) return pilot with { Throttle = 0 };
+        return pilot with { Throttle = MathF.Max(pilot.Throttle, ExitThrottle), Brake = 0 };
     }
+
+    /// <summary>
+    ///     Once per drift, below the torque peak: a gear down if the lower one stays under the upshift point (the automatic
+    ///     only kicks down above 0.9 throttle, the hold's throttle is lower: the R34 held its drifts in 3rd at 3300 rpm).
+    /// </summary>
+    private int Downshift(Vehicle car)
+    {
+        var s = car.Spec;
+        if (_shifted || car.Gear < 2 || car.Rpm >= PeakRpm(s) || car.Rpm * s.Gears[car.Gear - 2] / s.Gears[car.Gear - 1] > s.AutoUpRpm - 300) return 0;
+        _shifted = true;
+        return -1;
+    }
+
+    /// <summary>Engine speed of the torque peak (rpm).</summary>
+    public static float PeakRpm(CarSpec s) => s.TorqueRpm[Array.IndexOf(s.TorqueNm, s.TorqueNm.Max())];
 
     /// <summary>P on the slip, at least <see cref="Engage"/> of lock so the drift layer stays engaged.</summary>
     private float Steer(float beta, float cmd)

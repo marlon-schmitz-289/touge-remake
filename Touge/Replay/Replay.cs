@@ -89,7 +89,7 @@ public sealed class Replay
     {
         using var gz = new GZipStream(stream, CompressionMode.Decompress, leaveOpen: true);
         using var r = new BinaryReader(gz);
-        var info = Header(r);
+        var (info, stateBytes) = Header(r);
         var replay = new Replay { Info = info };
         int ticks = r.ReadInt32(), cars = r.ReadInt32();
         if (cars != info.Cars.Count || ticks < 0 || cars <= 0) throw new InvalidDataException("Replay: Kopf und Daten passen nicht zusammen");
@@ -106,21 +106,24 @@ public sealed class Replay
         {
             var tick = r.ReadInt32();
             var states = new byte[cars][];
-            for (var c = 0; c < cars; c++) states[c] = r.ReadBytes(Vehicle.StateBytes);
+            for (var c = 0; c < cars; c++) states[c] = stateBytes == Vehicle.StateBytes ? r.ReadBytes(stateBytes) : [.. r.ReadBytes(OldSideForceAt), .. new byte[8], .. r.ReadBytes(stateBytes - OldSideForceAt)];
             replay.Keys[tick] = states;
         }
         return replay;
     }
 
-    private static ReplayInfo Header(BinaryReader r)
+    /// <summary>Offset of the tyres' side forces in a state: files from before them (8 bytes shorter) get zeros there.</summary>
+    private const int OldSideForceAt = 128;
+
+    private static (ReplayInfo Info, int StateBytes) Header(BinaryReader r)
     {
         if (Encoding.ASCII.GetString(r.ReadBytes(4)) != "IDRP") throw new InvalidDataException("keine Replay-Datei");
         var version = r.ReadUInt16();
         var stateBytes = r.ReadUInt16();
-        if (version != Version || stateBytes != Vehicle.StateBytes)
+        if (version != Version || stateBytes != Vehicle.StateBytes && stateBytes != Vehicle.StateBytes - 8)
             throw new InvalidDataException($"Replay aus einer anderen Version (v{version}, Zustand {stateBytes} B)");
         var len = r.ReadInt32();
-        return JsonSerializer.Deserialize<ReplayInfo>(r.ReadBytes(len), Json) ?? throw new InvalidDataException("Replay: Kopf leer");
+        return (JsonSerializer.Deserialize<ReplayInfo>(r.ReadBytes(len), Json) ?? throw new InvalidDataException("Replay: Kopf leer"), stateBytes);
     }
 
     /// <summary>Only the header (lists show many replays without reading their ticks).</summary>
@@ -128,7 +131,7 @@ public sealed class Replay
     {
         using var gz = new GZipStream(stream, CompressionMode.Decompress, leaveOpen: true);
         using var r = new BinaryReader(gz);
-        return Header(r);
+        return Header(r).Info;
     }
 
     public void Save(string path)

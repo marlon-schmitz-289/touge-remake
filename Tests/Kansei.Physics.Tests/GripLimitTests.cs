@@ -11,8 +11,10 @@ public class GripLimitTests(ITestOutputHelper log)
         foreach (var (name, spec) in CarSpecs.All)
         {
             var g = GripLimit.Of(spec) / 9.81f;
-            log.WriteLine($"{name,-6} {g:F2} g (100 m: {GripLimit.At(spec, 100) / 9.81f:F2} g), drift up to {GripLimit.DriftSpeed(spec) * 3.6f:F0} km/h");
+            var (decel, pedal) = GripLimit.BrakeLimit(spec);
+            log.WriteLine($"{name,-6} {g:F2} g (100 m: {GripLimit.At(spec, 100) / 9.81f:F2} g), drift up to {GripLimit.DriftSpeed(spec) * 3.6f:F0} km/h, brakes {decel / 9.81f:F2} g at pedal {pedal:F2}");
             Assert.InRange(g, 1.0f, 1.8f);
+            Assert.InRange(decel / 9.81f, 0.8f, 1.4f); // the brake feed-forward divides by it
         }
         Assert.InRange(GripLimit.Of(CarSpec.AE86) / 9.81f, 1.3f, 1.6f);
     }

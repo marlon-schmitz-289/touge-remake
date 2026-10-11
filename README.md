@@ -89,7 +89,8 @@ dotnet run --project Touge -- "<iso>" --flow out/proof   # ganzer Ablauf per Skr
 dotnet run --project Touge -- "<iso>" --flow out/proof/legend/flow --legend [--car FD3S]   # Legend of the Streets per Skript: Akina, zwei Battles (Autopilot, 16×), Leiter danach, PNG je Schritt
 dotnet run --project Touge -- "<iso>" --legend-sim [--legend-progress out/progress.json] [--car FD3S] [--player-skill 0.5]   # Legend ohne Fenster: Autopilot (als Spieler mit Können k, sonst 0,8; mit Gummiband) fährt jede Rivalenleiter hoch (Niederlage beendet den Kurs), Freischaltungen + Bilanz, Fortschritt als JSON
 dotnet run --project Touge -- "<iso>" --cam-bench [AKINA,IROHA_DAY,…] [--car R34]   # Kameras ohne Fenster (~25 s für 6 Kurse × 2 Richtungen): Pilot mit Handbremsdrifts bis ins Ziel, 144-Hz-Bilder wie im Spiel interpoliert; je CHASE/FAR CHASE live und im Replay, Showcase-Orbit (alle ~100 m, 72 Winkel) und TV: Bilder mit Kurs zwischen Auto und Auge (blocked), ohne Boden unter dem Auge (void, aus der Karte), Fläche näher als die Near-Plane (clip), Straße 20 m voraus verdeckt/außerhalb (hidden; bergab ab 5 % Gefälle eigens, und davon hinter der Karosserie), Abstand, Ruckeln (Beschleunigung des Auges relativ zum Auto und der Blickrichtung, RMS/p99/max), TV-Schnitte (< 1,5 s), bei TV heißt hidden: Automitte außerhalb 90 % des Bildes; „Fest am Auto“: Auge im Autorahmen (2. Ableitung), Auto im Bild über die Fahrt (ohne eingezogene Bilder); Replay-Tempo ¼–4×: Beschleunigung des gezeigten Autos; dazu Stellen für Bilder (steilstes Gefälle, engste Kurven, schlimmste Orbit-Winkel)
-dotnet run --project Touge -- "<iso>" --ai-bench solo|drift|battle|corners[:AKINA,IROHA] [--car R34]   # KI ohne Fenster vermessen (~40 s je Matrix): solo = Zeit gegen H (der Pilot mit Können 1 und dem Driftstil des Autos, „guter Spieler“) je Kurs/Richtung/Auto/Können, Wandtreffer (wo), Schräglauf je Kurventyp, Fehler je 5 km; drift = jeder Driftstil gegen Grip (gehalten/abgebrochen/verblasst, β, Kurvenzeit, Ausgangstempo, Treffer je Drift, Dreher); battle = Autopilot 0,8 gegen fünf Figuren und den AE86 mit 0,5/0,65/1, Race und Lead/Chase, Tempo-Delta je Paarung aus Solo-Läufen, Überholquote nach Delta, Führungswechsel, Kontakte; corners = Kurvenarten, Straßenbreite, Überholzonen; human:<datei.rpl> misst einen aufgezeichneten Lauf daneben. Umgebung: AIBENCH_TRACE=von:bis (Strecke loggen), AIBENCH_SKILLS/AIBENCH_DRIFTS/AIBENCH_MISTAKES/AIBENCH_NOH/AIBENCH_DIR=up|down (Matrix), AIBENCH_HITS (jeden Wandtreffer mit Zustand), AIBENCH_RIVALS/AIBENCH_RULES (z. B. LeadChase1), AIBENCH_BTRACE=von:bis, AIBENCH_ATTEMPTS, AIBENCH_CONTACTS (Battles)
+dotnet run --project Touge -- "<iso>" --ai-bench solo|drift|battle|corners[:AKINA,IROHA] [--car R34]   # KI ohne Fenster vermessen (~40 s je Matrix): solo = Zeit gegen H (der Pilot mit Können 1 und dem Driftstil des Autos, „guter Spieler“) je Kurs/Richtung/Auto/Können, Wandtreffer (wo), Schräglauf je Kurventyp, Fehler je 5 km; drift = jeder Driftstil gegen Grip (gehalten/abgebrochen/verblasst, β, Kurvenzeit, Ausgangstempo, Treffer je Drift, Dreher); battle = Autopilot 0,8 gegen fünf Figuren und den AE86 mit 0,5/0,65/1, Race und Lead/Chase, Tempo-Delta je Paarung aus Solo-Läufen, Überholquote nach Delta, Führungswechsel, Kontakte; corners = Kurvenarten, Straßenbreite, Überholzonen; human:<datei.rpl> misst einen aufgezeichneten Lauf daneben (Zeit über die gemeinsam gefahrene Strecke, erste 150 m; alte Replays mit 8 Byte kürzerem Zustand werden mit Null-Seitenkräften gelesen); [Stats] je Solo-Lauf: Bremsanteil, Verzögerung der Reifen p50/p95 (bergab ohne die Hangabtriebskraft) und Anteil der Bremsgrenze, Bremsen im Drift-Ausleiten, Drehzahl im Halten (unter dem Drehmomentmaximum, und davon mit freiem kleineren Gang). Umgebung: AIBENCH_TRACE=von:bis (Strecke loggen), AIBENCH_SKILLS (leer = nur H)/AIBENCH_DRIFTS/AIBENCH_MISTAKES/AIBENCH_NOH/AIBENCH_DIR=up|down (Matrix), AIBENCH_HITS (jeden Wandtreffer mit Zustand), AIBENCH_RIVALS/AIBENCH_RULES (z. B. LeadChase1), AIBENCH_BTRACE=von:bis, AIBENCH_ATTEMPTS, AIBENCH_CONTACTS (Battles), AIBENCH_PLAYER=rival:<k> (Battle gegen den eigenen Zwilling: AE86T/FD3S/R34, beide mit Können k)
+dotnet run -c Release --project Touge -- "<iso>" --ai-bench calibrate[:AKINA,…]   # Streckenwissen der KI neu backen (~20 s mit einem Prozess je Kurs, sonst ein paar Minuten): je Kurs/Richtung/Antriebsklasse fahren 2–4 Autos als H, 5 Durchgänge (Wandtreffer in/nach einer Kurve −8 % Plan-Haftung dort, ungenutzter Platz außen bis +2 %), der Durchgang mit den wenigsten Treffern landet in Kansei.Physics/CornerGrip.csv (AIBENCH_OUT). Nach jeder Physik-Änderung (Reifen, Fahrwerk, Bodenkontakt, Fahrlinien) neu backen
 dotnet run --project Touge -- "<iso>" --menu legend|legend-rivals|legend-card[:AKINA/takumi] [--legend-progress <json>|--data-dir <ordner>] --shot out/proof/l.png   # Legend-Schritt als Bild (Fortschritt aus der Datei bzw. dem Ordner, sonst leer)
 dotnet run --project Touge -- "<iso>" --jukebox 720   # Rennmusik-Jukebox offline ohne Fenster: Zufallsfolge, M, Menüpause, Titelende → nächster, Log
 dotnet run --project Touge -- "<iso>" --frontend-capture out/proof/fe.wav   # ganzer Menüablauf per Skript offline: Original-SE/BGM als WAV + Log aller Auslöser
@@ -185,16 +186,37 @@ versucht es dann auch nicht; der Führende mit 4 s Vorsprung oder ≥ 1 s Vorspr
 `CourseMap` (je Fahrlinie einmal: Kurven nach Art, freie voll griffige Straße links/rechts alle 2 m, Überholzonen = Bremszonen vor engen
 Kurven mit ≥ 5 m Straße und Geraden ≥ 80 m), eigene Ideallinie `RacingLine` (geringste Krümmung in der Straßenbreite minus 1,3 m, in
 Driftkurven mehr für das Heck, außen-innen-außen mit spätem Scheitel) mit Tempoplan (Querbeschleunigung des Könnens, Motor-/Luftwiderstand
-vorwärts, Bremsen rückwärts). Eine Könnensskala 0…1 für alle Modi: Kurven 0,67 g (Anfänger) bis 1,45 g (AE86 am Haftlimit),
-Bremsen 0,6–0,95 g, je Auto nach seiner Haftgrenze auf der Kreisbahn (`GripLimit`); ab Können 0,3 kommt der Slide dazu (bei 1 wie ein
-schneller Spieler: Kurven ab 72 km/h mit Vollausschlag, Gas und kurzem Handbremsen-Tipp quer, der Plan rechnet bis 80 % des Drift-Carves
-der Driftschicht mit ein, schwerere Autos weniger; mit `--ai-bench human:` an 10 Legend-Replays im Trueno kalibriert: die KI mit 1,0 ist
-in 6 von 10 in den Kurven nicht langsamer, MYOGI-r-80-m-Kurven 155–181 statt 120–136 km/h; `--ai-bench solo` Trueno 1,0 −5 %, R34 −4 %,
-EK9 −5 %, 2–3 Wandkratzer je Lauf statt 0,6). Driften (`DriftController`) je Stil und Kurve, einmal je
+vorwärts, Bremsen rückwärts). Eine Könnensskala 0…1 für alle Modi: Kurven 0,67 g (Anfänger) bis 1,45 g (AE86 am Haftlimit; bis
+Können 0,5 mit (1 − k)^1,5, darüber linear zur Spitze: 0,8 → 1,0 sind 2,2 % auf `--ai-bench solo` (je Lauf 0,8–4,2 %), 0,8 ist 0,3 % schneller
+als vor der Überarbeitung), je Auto nach seiner Haftgrenze auf der Kreisbahn (`GripLimit`, das Verhältnis zum AE86 linear – früher quadriert:
+R34/R32/EVO 2,4 % langsamer als der AE86, jetzt innerhalb 1 %); Bremsen 0,6–0,95 g wie bisher, höchstens bis zur eigenen Bremsgrenze des
+Autos (`GripLimit.BrakeLimit`: geradeaus 120 → 40 km/h, festestes Pedal ohne Blockieren vorn; blockiert = Schlupf über dem Doppelten des Haftmaximums oder keine
+Zunahme mehr; alle Autos 1,12–1,15 g bei Pedal 1), ein
+Auto, das mehr kann, bekommt den Rest nach k⁴ (AE86 1,13 g bei 1); gebremst mit Vorsteuerung aus der Verzögerung des Plans 0,1 s voraus
+(Gas bleibt bei 0,25 s) und ABS-artigem Lösen bei Schlupf > 0,2; Vollgas nach dem Scheitel mit dem Können (0 = nach Tempofehler wie
+bisher, 1 = sobald Platz ist); ab Können 0,3 kommt der Slide dazu (bei 1 wie ein schneller Spieler: Kurven ab 72 km/h mit Vollausschlag,
+Gas und kurzem Handbremsen-Tipp quer, einmal begonnen bis 61 km/h gehalten, ein am Kurvenende noch quer stehendes Heck wird abgefangen;
+der Plan rechnet bis 80 % des Drift-Carves der Driftschicht mit ein, schwerere Autos weniger, 4WD × 0,7, und erst 0,7 s (höchstens 20 m)
+nach Beginn eines gleichsinnigen Bogens – vorher schwenkt das Heck erst aus; geplante Slide-Stellen und 10 m danach halten wie
+Driftkurven 0,13 m mehr Rand). Streckenwissen ab Können 0,5 (bei 1 voll): je Kurve ein gebackener Faktor 0,85–1,15 auf die geplante Haftung
+(`CornerCalibration`, `CornerGrip.csv`, `--ai-bench calibrate`; Kurse über die Geometrie der Fahrlinie erkannt, also in jedem Modus). `--ai-bench
+solo` H gegen vor der Überarbeitung: alle 32 Autos schneller (−0,3 … −3,4 %), Trueno −0,6 %, FD3S −1,6 %, R34 −2,9 %, EVO7 −3,0 % (zum Trueno
+alle innerhalb ±1,1 %), Wandkratzer je Lauf bei keinem Auto mehr als 0,5 über vorher (Trueno 3,1 → 2,1, FD3S 3,0 → 1,7, R34 2,9 → 2,6, EVO7
+1,7 → 1,7, MR2 5,5 → 4,6); mit `--ai-bench human:` an den 8 langen Legend-Replays im Trueno: auf 2 von 8 nicht langsamer (zusammen −13,4 s),
+in engen Kurven/Haarnadeln auf USUI0/AKAGI 1–3 s je Lauf langsamer – der Spieler fährt die S-Kurven quer mit Vollgas, nutzt die Straße bis
+über die Linie der KI hinaus und streift dabei fast in jeder Kurve die Wand (AKAGI_RIN 2361–2741 m: 126–149 statt 86–112 km/h, 7 Wandtreffer,
+−3,7 s der −6,8 s). Am Start dreht die KI im Countdown nach Können hoch (bis VS CPU EASYs 0,2 gar nicht, ab HARDs 0,65 voll wie ein guter
+Spieler, sonst 0,2–0,6 s auf den ersten 150 m verloren);
+steht sie 1,5 s an einer Wand fest, obwohl der Plan fahren will, setzt sie einmal 1 s zurück (wartet sie hinter einem Auto oder steht sie
+am Kursende, nicht; steckt sie danach wieder fest, setzt das Rennen sie wie bisher nach 3 s zurück). Driften (`DriftController`) je Stil und Kurve, einmal je
 Kurve aus dem Renn-Seed entschieden: FR in Haarnadeln und engen Kurven (Takumi/Keisuke fast immer, Ryosuke gut die Hälfte, Takeshi nie), 4WD
 kurzer Powerslide in Haarnadeln (≤ 15°), FF nur ein Handbremsen-Einlenken (~9°); Einleitung per Handbremse, Bremsdrift (Takumi) oder Finte
 (Stil ≥ 0,8, nur mit Platz außen), Halten über einen Schräglauf-Sollwert aus der Bahnkrümmung, weiches Ausleiten, Abfangen bei zu viel
-Schräglauf/Innenkante/Wand; nicht unter 40 km/h, nicht über 65 km/h im Scheitel, nicht mit einem Auto daneben. Renntaktik: folgt mit
+Schräglauf/Innenkante/Wand; nicht unter 40 km/h, nicht über 80 km/h (und 15 % über dem gehaltenen Drift des Autos) im Scheitel, nicht mit
+einem Auto daneben; der Plan rechnet den Drift-Bonus über das Fenster des Drift-Controllers und blendet ihn über das Ausleiten aus, beim
+Ausleiten bremst nur noch ein Pilot, der deutlich zu schnell ist (> 0,7 Pedal, dann ohne Gas); liegt die Drehzahl im Halten unter dem
+Drehmomentmaximum und bleibt der kleinere Gang unter der Hochschaltdrehzahl, schaltet sie einmal je Drift herunter; ein früh verblasster Drift (der übliche
+Schluss eines 4WD-Powerslides) fährt ab Können 0,65 auf dem Plan weiter statt auf Grip-Tempo herunterzubremsen. Renntaktik: folgt mit
 0,4–0,8 s, macht als schnellerer Verfolger Druck (am Heck, auf der eigenen Linie – kein Versatz nach der Querlage des Vordermanns, die
 gehört zu einer anderen Stelle der Kurve), zieht in Bremszonen vor dem Bremspunkt des Vordermanns auf die Innenseite, wenn die Straße bis
 ¾ zum Scheitel Platz für zwei hat, bremst 3–8 m später (mehr mit mehr Tempovorteil) und überholt nur, wenn er bis zum Einlenken wirklich
@@ -344,14 +366,16 @@ CAR SELECT / EXIT. Rivalen und Bedingungen aus dem Original (34 Rivalen auf 11 K
 je Kurs eine Leiter (der nächste Rivale nach einem Sieg über den vorigen), die fünf Zusatzkurse (MYOGI+ … SHIONA) ab 3 geschafften Hauptkursen,
 Bunta (Akina) nach allen 24 Rivalen der Hauptkurse, Takumi von Project D (Irohazaka) nach allen anderen außer Bunta; ein Sieg über Bunta schaltet
 sein Impreza (IMP3) frei – wie im Original auch das Schlusskapitel von STORY; bis dahin ist es in jeder Autowahl (Time Attack, Legend, Versus-Lobby) „?????“ mit dem Hinweis, wie man es bekommt. Revanche gegen einen besiegten Rivalen im Regen (wie das Original). Die vier
-Rivalen eines Hauptkurses fahren mit 90/95/100/100 % Motormoment (auf ihr ausgeglichenes Auto) und Können je Sprosse vom oberen Ende der
-Skala (VS CPU HARD/LEGEND): 0,8–0,84 / 0,85–0,9 / 0,85–0,95 / Bosse 0,95–1; Zusatzkurse 0,95–1, PD-Takumi und Bunta 1 – eigene Abstimmung
-(vorher 0,1–0,5 bei 60/78/95/100 % und eine KI ohne Slide: ein schneller Spieler fuhr allen Rivalen der ersten Kurse mit 8 s davon).
+Rivalen eines Hauptkurses fahren ihr ausgeglichenes Serienauto (bis zur KI-Überarbeitung 90/95/100/100 % Motormoment je Sprosse), die Leiter
+kommt nur aus dem Können je Sprosse vom oberen Ende der Skala (VS CPU HARD/LEGEND): 0,8–0,84 / 0,85–0,9 / 0,85–0,95 / Bosse 0,95–1; Zusatzkurse
+0,95–1, PD-Takumi und Bunta 1 – eigene Abstimmung (vorher 0,1–0,5 bei 60/78/95/100 % und eine KI ohne Slide: ein schneller Spieler fuhr allen
+Rivalen der ersten Kurse mit 8 s davon).
 MYOGI: Takumi im AE85 (im Original Zeile 1) ist die letzte Sprosse statt der zweiten. `LEGEND_ALL=1 --legend-sim --player-skill 1` im
-Trueno (jeder Rivale einmal, Spieler 1,0 ≈ die 10 Legend-Replays): 21/34 gewonnen, 8 s Vorsprung nur gegen Itsuki und die Zwei aus
-Tokyo, verloren u. a. gegen Takeshi, MYOGI-Takumi, Ryosuke, Wataru, Kai, Keisuke (Iroha), Bunta knapp (−0,4 s). Als Leiter
-(`--legend-sim`, eine Niederlage beendet den Kurs; Trueno / FD3S / R34 / S15 / AE85): 0,5 5 / 6 / 4 / 3 / 4 Rivalen, 0,8 13 / 18 / 14 / 11 / 14,
-1,0 15 / 19 / 28 / 13 / 22.
+Trueno (jeder Rivale einmal, Spieler 1,0 ≈ die 10 Legend-Replays): 17/34 gewonnen (vor der KI-Überarbeitung 21), verloren u. a. gegen
+Itsuki, Takeshi, Nobuhiko, Ryosuke, Kenji, Wataru. Als Leiter (`--legend-sim`, eine Niederlage beendet den Kurs; Trueno / FD3S / R34 /
+S15 / AE85): 0,5 4 / 4 / 8 / 3 / 4 Rivalen, 0,8 8 / 11 / 4 / 8 / 2, 1,0 8 / 19 / 23 / 19 / 17 (vorher 0,5 5 / 6 / 4 / 3 / 4, 0,8 13 / 18 / 14 /
+11 / 14, 1,0 15 / 19 / 28 / 13 / 22; einzelne Leitern schwanken stark, weil eine knappe Niederlage den Kurs beendet) – die Können-Werte der
+Leiter sind noch nicht neu abgestimmt.
 Nach einem Battle steht der Cursor auf dem nächsten Rivalen, Neues (Rivalen, Kurse, Auto) läuft unten als rotes Band ein. Fortschritt in
 `progress.json` neben `settings.json` (`Rivals`: Siege, Niederlagen, bester Abstand je Rivale; dieselbe Datei wie Story, `Progress`; ein altes
 `legend.json` wird beim Laden übernommen und beim nächsten Speichern gelöscht). Pause-Exit und Zurück aus der
@@ -378,10 +402,12 @@ und überholen (auch: in 120 s); 100 s dranbleiben; allein mit Zeitgrenze, Tofu 
 im Rennen oben rechts eine Tafel mit Restzeit/Wandtreffern/Drift. Rivalenstärke je Kapitel aus zwei Kalibrierungen
 (Autopilot als Spieler mit seinen Fehlern, `--story-check calibrate --player-skill k`): am Anfang gegen einen Anfänger (0,2), zum Ende hin
 gegen einen NORMAL-Spieler (0,55), Gewicht (Kapitel/30)², minus 0,03 (mit den ausgeglichenen Autos und dem Kickdown neu gemessen; Kapitel 12
-etwas tiefer, weil die Bisektion nicht monoton ist); wo selbst 0,1 für den Anfänger zu stark ist (Kapitel 2 95 %, 10 96 %, 21 Seijis Evo gegen
-Keisukes FD 78 %) fährt der Rivale gedrosselt; das Finale (Bunta) ist ein starker Fahrer (0,6) im gedrosselten Impreza (83 %, `STORY_CAL_AT=0.65`), den
-NORMAL schlägt (+6,1 s). Zeitgrenzen vom Anfänger- zur NORMAL-Zeit (Akina bergab 5'24 → 4'53, bergauf 5'37 → 5'07). Anfänger (0,2)
-schafft 14 von 31 Kapiteln (0–14 außer 4 Driftpunkte und 13), 0,25 14, NORMAL 30 (nicht: 4), 0,8 30. Pause → Exit führt zur Kapitelwahl zurück. Regen bei Nacht (Kapitel 11, MYOGI) gibt es auf der Disc nicht: der Nachtkurs bekommt
+etwas tiefer, weil die Bisektion nicht monoton ist); wo selbst 0,1 für den Anfänger zu stark ist (Kapitel 2 91 %, 10 66 %, 12 79 %, 21 Seijis Evo
+gegen Keisukes FD 78 %, 24 90 %, 25 93 %) fährt der Rivale gedrosselt; das Finale (Bunta) ist ein starker Fahrer (0,6) im gedrosselten Impreza (78 %,
+`STORY_CAL_AT=0.65`), den NORMAL schlägt (+8 s). Nach der KI-Überarbeitung neu kalibriert (beide Tabellen, Drosselungen, Finale; die Zeitgrenzen
+nicht – sie sind für Menschen, und der Autopilot als NORMAL-Spieler ist jetzt 8 s schneller). Zeitgrenzen vom Anfänger- zur NORMAL-Zeit (Akina bergab 5'24 → 4'53, bergauf 5'37 → 5'07). Anfänger (0,2)
+schafft 11 von 31 Kapiteln (vor der KI-Überarbeitung 14; knappe Rennen, die Bisektion ist nicht monoton), NORMAL 29 (nicht: 4, 27; vorher 30),
+0,8 30 (nicht: 4). Pause → Exit führt zur Kapitelwahl zurück. Regen bei Nacht (Kapitel 11, MYOGI) gibt es auf der Disc nicht: der Nachtkurs bekommt
 Regen (Tropfen, nasse Spiegelungen, Gischt, Regen-Sound, Telop WET); die Haftung ist wie auf den _RIN-Kursen unverändert. Fortschritt in `progress.json` neben den Einstellungen (Schlüssel `story/nn`, Zähler
 `…/tries`, `…/wins`; dieselbe Datei hält Legend of the Streets); Story-Läufe zählen nicht als Time-Attack-Rekord.
 Einstellungen, letzte Wahl und Bestzeiten liegen als JSON im App-Data-Ordner (macOS `~/Library/Application Support/InitialDRemake/settings.json`,
@@ -410,14 +436,26 @@ EVO3 (20), EVO4, EVO7, FD3S, FD3SA, FC3S, NA6C, NB8C, IMP, IMP2, IMP3 (30), CAPP
 Gangzahl aus dem Spiel, Masse, Leistung, Übersetzungen, Antrieb aus realen Daten (`Kansei.Physics/CarSpecs.cs`); Motorsound je
 Auto aus der Original-Zuordnung (FORMATS.md, AE86T/AE86L mit der voll getunten `AE86`-Bank).
 Balance (BoP, wie die Arcade-Reihe): `CarSpecs.Real` sind die echten Autos (Datenblatt, Car Guide, Autowahl zeigen sie), gefahren wird
-`CarSpecs.All` = echtes Auto mit einem Faktor je Auto auf das Motormoment (`CarSpecs.Bop`, sonst nichts: Gewicht, Reifen, Übersetzung,
-Antrieb, Driftschicht bleiben echt – der R34 zieht weiter in 5,7 s auf 100, der Trueno in 7,9 s, verliert aber in den Kurven nicht mehr
-gegen 280 PS). Faktoren 0,75 (FD3SA, 280 → 211 PS) … 1,55 (AE85, 83 → 129 PS), AE86 1,06 (130 → 137 PS), R34 1,05; kg/PS 4,5–11,1 → 4,8–7,6.
-Kalibriert mit `--ai-bench solo` (alle 32 Autos × alle 11 Legend-Kurse, also auch die Rundkurse MYOGI/USUI, × beide Richtungen,
-Referenzfahrer H und Autopilot 0,8; Newton-Schritte auf die mittlere Feldzeit je Kurs): mittlere Zeit je Auto best→schlechtestes
-12,6 % → 0,7 % (H; Autopilot 11,6 → 0,6 %, Anfänger 0,2 2,0 %), größte Abweichung eines Autos auf einem Kurs vom Feld 15,2 % → 4,8 %
-(EK9 IROHA bergauf: FF in engen Bergauf-Haarnadeln, EG6/INTGR +4, MR2 −3,3; sonst nur der Cappuccino auf dem MYOGI-Rundkurs +3,4, alle
-anderen ≤ 3 %). Automatik mit Kickdown: bei Vollgas schaltet sie zurück, sobald der kleinere Gang klar (> 10 %) mehr zieht – vorher erst
+`CarSpecs.All` = echtes Auto mit einem Faktor je Auto auf das Motormoment (`CarSpecs.Bop`, sonst nichts: Gewicht, Übersetzung, Antrieb,
+Driftschicht bleiben echt – der R34 zieht in 6,9 s auf 100, der Trueno in 8,0 s, verliert aber in den Kurven nicht mehr gegen 280 PS).
+Reifen: Autos schwerer als der AE86 bekommen eine mit der Masse wachsende Nennlast (`NominalLoad`, größere Reifen), sonst nahm ihnen die
+Lastempfindlichkeit bis ~6 % Haftung (R34), die der Fit mit viel Moment ausglich – bergauf schnell, bergab langsam. Leichtere Autos behalten
+die AE86-Reifen. Faktoren 0,68 (FD3SA, 280 → 192 PS; IMP/IMP3 0,70 → 195 PS) … 1,59 (AE85, 83 → 132 PS), AE86 1,077 (130 → 140 PS, Anker:
+bleibt fest, das Feld wird um ihn gefittet), R34 0,83 (232 PS); kg/PS 4,5–11,1 → 5,6 (S2000) … 7,5 (Cappuccino).
+Fit (Teil D): `--ai-bench solo` mit `AIBENCH_SKILLS=` (leer = nur H), alle 32 Autos × 11 Legend-Kurse × beide Richtungen (~20 s),
+gedämpfte Newton-Schritte (0,6) auf den Mittelwert aus bergauf und bergab je Auto gegen den Feld-Median (gleich gewichtet: kleinste Streuung
+je Richtung), danach Streckenwissen neu gebacken (`--ai-bench calibrate`) und nachgefittet. Gemessen (H, vorher → jetzt): Spanne der
+Automittel bergauf 1,25 → 1,08 %, bergab 1,35 → 1,09 %; Mittel je Auto über alle 22 Läufe −0,06…+0,05 % (AE85/Cappuccino bewusst +0,23 %:
+bergauf +0,2/+0,35 % hinter dem AE86); Autopilot 0,8 (Driftstil 0,3) 1,55/1,75 → 1,26/1,26 %; Wandtreffer aller Autos 1506 → 1027 je Matrix
+(kein Auto mehr als +0,3 je Lauf). Zum Vergleich Können 0,8 → 1,0 im AE86T: 2,3 % (je Lauf 0,4–4,4 %), das Auto zählt im Mittel also
+weniger als halb so viel wie das Können. Charakter bleibt: FF bergauf +0,6…0,8 %, bergab −0,55…0,8 % (die Grenze der Spanne: sie verlieren
+in steilen Haarnadeln bergauf, IROHA +4…5 %); 4WD-Asymmetrie mit den Reifen halbiert (R34 −0,24/+0,19 %). Gemessen und verworfen, weil sie
+bergauf und bergab gleich verschieben: Bremsmoment, Luftwiderstand, Sperrdifferential, Schwerpunkthöhe, Gewichtsverteilung, Hinterachshaftung
+(FF, doppelt so viele Treffer), Momentkurve unten/oben, 4WD-Momentverteilung; vorher schon die Driftschicht je Antrieb. Einzelne Kurse
+weichen weiter bis 8 % ab (EK9/EG6/INTGR IROHA bergauf +4…5 %, MR2/MRS dort −3 %, AE85/Cappuccino MYOGI-Rundkurs bergab +3 %). Nach dem
+Bodenkontakt-Fix `--ai-bench calibrate` und dann den Fit wiederholen.
+Frühere Kalibrierung (H und Autopilot 0,8, Newton-Schritte auf die mittlere Feldzeit je Kurs): mittlere Zeit je Auto best→schlechtestes
+12,6 % → 0,7 % (H; Autopilot 11,6 → 0,6 %, Anfänger 0,2 2,0 %), größte Abweichung eines Autos auf einem Kurs vom Feld 15,2 % → 4,8 %. Automatik mit Kickdown: bei Vollgas schaltet sie zurück, sobald der kleinere Gang klar (> 10 %) mehr zieht – vorher erst
 unter 40 % der Abregeldrehzahl, der Trueno kroch auf dem MYOGI-Rundkurs bergauf im 4. mit 3100/min und 78 km/h (R34: 115) und verlor dort
 allein ~7 s; das war der eigentliche Grund für 8 % Streuung auf MYOGI (jetzt ~3 %, ohne Cappuccino 2 %).
 Ein Grip-Faktor dazu drückte die Streuung kaum weiter (0,8 / 2,9 %), hätte aber dem Trueno Grip genommen und den 4WDs gegeben – verworfen.

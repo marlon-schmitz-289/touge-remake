@@ -17,6 +17,8 @@ public sealed class LinePilot
     /// <summary>Lateral acceleration the pilot plans corners for (m/s²) and its braking deceleration.</summary>
     public float CornerAccel = 0.8f * G;
     public float BrakeDecel = 0.6f * G; // planned below the tyres' limit: braking into a corner shares the friction circle
+    /// <summary>Plan: the car's straight-line braking limit (m/s²) and the pedal that reaches it (<see cref="GripLimit.BrakeLimit"/>): the brake's feed-forward.</summary>
+    public float BrakeLimit = 1.1f * G, BrakePedal = 1;
     public float TopSpeed = 160 / 3.6f;
 
     /// <summary>Lateral offset (m, + = left of the line) the pursuit point is moved by: overtaking/blocking lines (<see cref="RivalPilot"/>).</summary>
@@ -35,6 +37,8 @@ public sealed class LinePilot
     public float Lateral, Blend;
     /// <summary>Plan: seconds of look-ahead on the speed profile, and metres it is read further on (+ = brakes earlier).</summary>
     public float SpeedLead = 0.25f, PlanShift;
+    /// <summary>Plan: seconds of look-ahead of the brake (it acts at once, the throttle's engine and gearbox lag).</summary>
+    public float BrakeLead = 0.1f;
     /// <summary>Plan: preview distance of the lateral/heading feedback as a share of the default (smaller = stiffer).</summary>
     public float LateralGain = 0.5f;
     /// <summary>Plan: also cap the speed by the line's curvature at <see cref="CornerAccel"/> (a drift corner taken in grip).</summary>
@@ -48,6 +52,20 @@ public sealed class LinePilot
     /// </summary>
     public float SlideFrom = float.PositiveInfinity;
     public const float SlideCurvature = 1 / 400f, SlideBeta = 8 / 57.3f;
+
+    /// <summary>
+    ///     A slide once started is held down to this share of <see cref="SlideFrom"/> (the drift layer holds it below its entry
+    ///     speed): the player's steer-in power slide through hairpins entered fast (--ai-bench solo −0.8 %, AKAGI hairpins).
+    /// </summary>
+    public const float SlideHold = 0.85f;
+
+    /// <summary>Plan: how far past the apex the throttle opens fully once there is room (0 = by the speed error alone, a beginner; 1 = flat out, skill 1).</summary>
+    public float ExitGas = 1;
+
+    /// <summary>Plan: within this of the end of the road (m) and heading for it, the throttle's target speed eases off by up to this share (the brake's stays on the plan).</summary>
+    public const float EdgeGap = 0.5f, EdgeEase = 0.1f;
+
+    bool _catching; // a slide ended with the tail still out
 
     /// <summary>The last <see cref="Drive"/> was a slide.</summary>
     public bool Sliding { get; private set; }
@@ -195,7 +213,7 @@ public sealed class LinePilot
         // pure pursuit: arc through the look-ahead point, steer angle = atan(wheelbase · curvature)
         var look = Math.Clamp(5 + 0.5f * v, 8, 30);
         var plan = Plan;
-        float delta, aimLat = 0;
+        float delta, aimLat = 0, edgeCut = 0;
         if (plan != null)
         {
             // own racing line (plus the offset/override from traffic, inside the road): curvature feed-forward from the
@@ -210,6 +228,10 @@ public sealed class LinePilot
             var dir = v > 2 ? car.Velocity : Vector3.Transform(Vector3.UnitZ, car.Orientation);
             var cross = tangent.X * dir.Z - tangent.Z * dir.X;
             var psi = MathF.Atan2(-cross, tangent.X * dir.X + tangent.Z * dir.Z); // + = travelling left of the line
+            // close to the end of the road and still heading for it: ease the speed off (up to EdgeEase at the edge itself)
+            var (roomL, roomR) = plan.Map.Room(s);
+            var gap = psi > 0 ? roomL - latNow : roomR + latNow;
+            if (MathF.Abs(psi) > 0.01f) edgeCut = EdgeEase * Math.Clamp(1 - gap / EdgeGap, 0, 1);
             var e = latNow - want;
             var preview = Math.Clamp(4 + 0.4f * v, 6, 25) * LateralGain;
             var kappa = plan.CurvatureAt(s + MathF.Max(v, 0) * 0.1f) - 2 * e / (preview * preview) - 2 * psi / preview;
@@ -223,11 +245,16 @@ public sealed class LinePilot
             delta = MathF.Atan(car.Spec.Wheelbase * 2 * local.X / d2); // + = left (+X)
         }
         var bendAhead = plan?.CurvatureAt(s + v * 0.3f) ?? 0;
-        var slide = plan != null && !CheckCurvature && v > SlideFrom && MathF.Abs(bendAhead) > SlideCurvature;
+        // a slide starts above SlideFrom and, once going, is kept down to SlideHold of it (the tap of the handbrake restarts one that died)
+        var slide = plan != null && !CheckCurvature && (v > SlideFrom || Sliding && v > SlideFrom * SlideHold) && MathF.Abs(bendAhead) > SlideCurvature;
+        var wasSliding = Sliding;
         Sliding = slide;
         // Vehicle scales the input lock down with speed and adds counter-steer from body slip; undo both (a slide keeps the counter-steer)
-        var assist = v > 2 && !slide ? car.Spec.CounterSteerAssist * car.SlipAngle : 0;
+        // a slide that ended (the bend straightens) with the tail still out: caught like one, the car's own counter-steer kept
+        _catching = !slide && (wasSliding || _catching) && MathF.Abs(car.SlipAngle) > SlideBeta;
+        var assist = v > 2 && !slide && !_catching ? car.Spec.CounterSteerAssist * car.SlipAngle : 0;
         var steer = Math.Clamp((-delta - assist) * (1 + MathF.Abs(v) * car.Spec.SteerSpeedFactor) / car.Spec.MaxSteer, -1, 1);
+        if (_catching) steer = Math.Clamp(steer + 4 * (car.SlipAngle - MathF.Sign(car.SlipAngle) * SlideBeta), -1, 1);
         if (slide)
         {
             // into the bend at under 5° of slip: full lock, the drift layer's entry (with the throttle below)
@@ -238,8 +265,11 @@ public sealed class LinePilot
 
         // target speed: every point within braking distance must be reachable at its corner speed
         var target = MathF.Min(TopSpeed, SpeedCap);
+        var brakeAt = s + MathF.Max(v, 0) * BrakeLead + PlanShift; // the brake reads the plan closer ahead than the throttle
+        var brakeTarget = target;
         if (plan != null)
         {
+            brakeTarget = MathF.Min(target, plan.SpeedAt(brakeAt));
             target = MathF.Min(target, plan.SpeedAt(s + MathF.Max(v, 0) * SpeedLead + PlanShift));
             // off the planned line (passing, defending, a mistake): the path there may be tighter than the plan's
             if (CheckCurvature || MathF.Abs(aimLat - plan.OffsetAt(s + look)) > 0.5f)
@@ -250,7 +280,8 @@ public sealed class LinePilot
                 {
                     var kg = map.At(map.Bend, s + d);
                     var k = MathF.Max(MathF.Abs(plan.CurvatureAt(s + d)), MathF.Abs(kg / MathF.Max(1 - kg * aimLat, 0.3f)));
-                    target = MathF.Min(target, MathF.Sqrt(CornerAccel / MathF.Max(k, 1e-4f) + 2 * BrakeDecel * d));
+                    var off = MathF.Sqrt(CornerAccel / MathF.Max(k, 1e-4f) + 2 * BrakeDecel * d);
+                    (target, brakeTarget) = (MathF.Min(target, off), MathF.Min(brakeTarget, off));
                 }
             }
         }
@@ -263,7 +294,8 @@ public sealed class LinePilot
                 target = MathF.Min(target, MathF.Sqrt(CornerAccel / MathF.Max(_curvature[i], 1e-4f) + 2 * BrakeDecel * d));
             }
         }
-        if (s >= Length - 1) target = 0;
+        if (s >= Length - 1) target = brakeTarget = 0;
+        target *= 1 - edgeCut; // off the throttle only: braking hard mid-corner at the limit would end in the wall sooner
 
         TargetSpeed = target;
         var err = target - v;
@@ -271,12 +303,27 @@ public sealed class LinePilot
         {
             // track the profile: throttle up to it, brake only once clearly over it
             var calmP = v < 8 ? 1 : Math.Clamp(1 - (MathF.Abs(car.SlipAngle) - (slide ? 0.3f : SlipTolerance)) / 0.1f, 0, 1);
-            var gas = Math.Clamp(0.3f + 0.5f * err, 0, 1) * calmP;
+            // past the apex (the plan speeding up over the next 5 m) the throttle opens fully as soon as there is room for it
+            var exiting = plan.SpeedAt(s + 5) > plan.SpeedAt(s) + 0.05f;
+            var gas = Math.Clamp(0.3f + 0.5f * err, 0, 1);
+            if (exiting) gas = float.Lerp(gas, err > 0.5f ? 1 : Math.Clamp(0.3f + 0.7f * err, 0, 1), ExitGas);
+            gas *= calmP;
             // a slide: on the throttle that starts and keeps the drift layer (and kicks the gearbox down) unless clearly too fast;
-            // else near full lock at speed below it (no slide by accident)
+            // else near full lock at speed below it (no slide by accident) unless the bend opens up ahead
             if (slide && err > -1) gas = MathF.Max(gas, 0.95f);
-            else if (!slide && MathF.Abs(steer) > 0.8f && v > car.Spec.DriftEntrySpeed) gas = MathF.Min(gas, 0.75f);
-            return new VehicleInput(gas, Math.Clamp((-err - 0.5f) * 0.6f, 0, 1) * calmP, steer);
+            else if (!slide && MathF.Abs(steer) > 0.8f && v > car.Spec.DriftEntrySpeed && !(MathF.Abs(plan.CurvatureAt(s + 0.3f * v)) < MathF.Abs(plan.CurvatureAt(s)))) gas = MathF.Min(gas, 0.75f);
+            var errB = brakeTarget - v;
+            var brake = Math.Clamp((-errB - 0.5f) * 0.6f, 0, 1);
+            // a braking zone of the plan: its deceleration fed forward as pedal, plus P on the overspeed, nothing on the throttle
+            var decel = plan.DecelAt(brakeAt);
+            if (decel > 0.5f * G && errB < 2 && v < SpeedCap + 0.5f)
+            {
+                brake = Math.Clamp((decel / BrakeLimit - 0.8f * errB) * BrakePedal, 0, BrakePedal);
+                gas = 0;
+            }
+            // a front wheel locking up: ease off this tick
+            if (MathF.Max(MathF.Abs(car.Wheels[0].SlipRatio), MathF.Abs(car.Wheels[1].SlipRatio)) > 0.2f) brake *= 0.7f;
+            return new VehicleInput(gas, brake * calmP, steer);
         }
         // traction/stability aid: ease off throttle and brake when the body starts to slide (β 3° … 9°);
         // not at crawling speed, where β is noise and cutting throttle leaves the car parked against a wall

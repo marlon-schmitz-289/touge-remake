@@ -52,10 +52,13 @@ public sealed class RivalPilot
     private DriftController.Entry _entry; // of the next drift, chosen at its decision
     private float[] _brakeAt = [];
     private CourseMap.Corner[] _window = [];
+    private float[]? _cornerGrip;
+    private bool[] _slides = []; // stations the last plan slides through
     private float _time, _tapUntil = -1, _tapNext = -1, _driftEnd = float.MinValue, _band = float.NaN, _startS = float.NaN, _recoverUntil = -1, _lockUntil = -1, _throttleUntil = -1, _overUntil = -1;
     private bool _fresh = true;
     private int _passing = -1, _failedZone = -1, _defendZone = -1, _defended = -1, _rolled = -1, _driftDone = -1, _decided = -1, _gripCorner = -1;
-    private float _defendTarget, _oSpeed = float.NaN, _oDecel;
+    private float _defendTarget, _oSpeed = float.NaN, _oDecel, _slowSince, _reverseUntil = -1;
+    private bool _slowWall, _reverseArmed = true; // the standstill touched a wall; a back-out is left (re-armed once going again)
     // lateral rates (m/s, smoothed): ours and every other car's, for contact checks that look half a second ahead
     private float _latPrev = float.NaN, _latRate;
     private float[] _oLat = [], _oLatRate = [];
@@ -108,10 +111,23 @@ public sealed class RivalPilot
     /// <summary>Mistakes so far (statistics).</summary>
     public int Mistakes { get; private set; }
 
+    /// <summary>Per course corner a factor on the planned grip (course knowledge, from <see cref="KnowledgeFrom"/> on); null = <see cref="CornerCalibration"/>'s.</summary>
+    public float[]? CornerGrip { get; set; }
+
+    /// <summary>
+    ///     Skill from which the course knowledge (<see cref="CornerCalibration"/>) counts, fully at 1: the top drivers know where a
+    ///     bend has room to spare and where the wall is close.
+    /// </summary>
+    public const float KnowledgeFrom = 0.5f;
+
     /// <summary>
     ///     Planned cornering of the skill scale (g): <see cref="CornerTop"/> at skill 1 (the AE86 at its skid-pad limit; a good
-    ///     player's pace with the slides of <see cref="SlideShare"/> on top), falling by <see cref="CornerSpan"/> × (1 − k)^1.5 below (0.67 g at 0: a beginner); braking
-    ///     <see cref="BrakeLow"/> … <see cref="BrakeTop"/> g. Calibrated with --ai-bench solo against H (README).
+    ///     player's pace with the slides of <see cref="SlideShare"/> on top), falling by <see cref="CornerSpan"/> × (1 − k)^1.5 below 0.5 (0.67 g at 0: a
+    ///     beginner), linearly from there to the top (0.8: 1.34 g, 2.9 % under the 1.5 power, but on --ai-bench solo still 0.5 % faster than before the
+    ///     brake/slide work, and 2.2 % behind skill 1 instead of 1.6 % with one course where 0.8 beat 1); braking
+    ///     <see cref="BrakeLow"/> … <see cref="BrakeTop"/> g as before, at most the car's measured straight-line
+    ///     limit (<see cref="GripLimit.BrakeLimit"/>), and a car that brakes harder than that gets the rest by k⁴ (AE86 1.13 g at 1,
+    ///     0.95 g at 0.8). Calibrated with --ai-bench solo against H (README).
     /// </summary>
     public const float CornerTop = 1.45f, CornerSpan = 0.78f, BrakeLow = 0.6f, BrakeTop = 0.95f;
 
@@ -122,19 +138,24 @@ public sealed class RivalPilot
     public static (float Corner, float Brake) Pace(float skill, CarSpec? spec = null)
     {
         var k = Math.Clamp(skill, 0, 1);
-        return (G * (CornerTop - CornerSpan * MathF.Pow(1 - k, 1.5f)) * (spec == null ? 1 : CarFactor(spec, 30)), G * float.Lerp(BrakeLow, BrakeTop, k));
+        // above 0.5 straight on to the top (the 1.5 power's last steps were too small to tell 0.8 from 1)
+        var below = k <= 0.5f ? CornerSpan * MathF.Pow(1 - k, 1.5f) : CornerSpan * MathF.Pow(0.5f, 1.5f) * (1 - k) / 0.5f;
+        // braking: as before up to what the car's tyres do, the rest of the way to its own limit over the last steps
+        var top = GripLimit.BrakeLimit(spec ?? CarSpec.AE86).Decel;
+        return (G * (CornerTop - below) * (spec == null ? 1 : CarFactor(spec, 30)),
+            MathF.Min(G * float.Lerp(BrakeLow, BrakeTop, k), top) + MathF.Max(top - G * BrakeTop, 0) * MathF.Pow(k, 4));
     }
 
     /// <summary>
     ///     How much of the AE86's planned cornering <paramref name="spec"/> gets in a bend of <paramref name="radius"/> m: its
-    ///     skid-pad limit against the AE86's on the 30 m and 100 m pads (<see cref="GripLimit"/>), squared (heavier cars also
-    ///     lose more in the transients), between them by radius.
+    ///     skid-pad limit against the AE86's on the 30 m and 100 m pads (<see cref="GripLimit"/>), between them by radius. (Squared
+    ///     before: the R34/R32/EVO planned at 91–93 % of their limit, 2.4 % slower than the AE86; the 4WD slides' <see cref="SlideAwd"/> keeps them on the road.)
     /// </summary>
     public static float CarFactor(CarSpec spec, float radius)
     {
         if (spec == CarSpec.AE86) return 1;
         float r30 = GripLimit.At(spec, 30) / GripLimit.At(CarSpec.AE86, 30), r100 = GripLimit.At(spec, 100) / GripLimit.At(CarSpec.AE86, 100);
-        return MathF.Pow(float.Lerp(r30, r100, Math.Clamp((radius - 30) / 70, 0, 1)), 2);
+        return float.Lerp(r30, r100, Math.Clamp((radius - 30) / 70, 0, 1));
     }
 
     /// <summary>
@@ -161,9 +182,20 @@ public sealed class RivalPilot
     /// <summary>
     ///     The share of the drift carve planned in slides for <paramref name="skill"/>: from nothing at 0.3 to
     ///     <see cref="SlideCarve"/> at 1 (a slide at the limit is a good player's move); heavier cars less (× AE86 mass / mass:
-    ///     the R34's slides ran wide, 5 wall hits a run instead of 2). FF cars too: the small slip holds where a drift does not.
+    ///     the R34's slides ran wide, 5 wall hits a run instead of 2), 4WD cars × <see cref="SlideAwd"/> on top (the front axle pulls
+    ///     the slide straight: R34 4.8 → 4.3 wall hits a run for +0.7 %). FF cars too: the small slip holds where a drift does not.
     /// </summary>
-    public static float SlideShare(float skill, CarSpec spec) => SlideCarve * Math.Clamp((skill - 0.3f) / 0.7f, 0, 1) * MathF.Min(CarSpec.AE86.Mass / spec.Mass, 1);
+    public static float SlideShare(float skill, CarSpec spec) => SlideCarve * Math.Clamp((skill - 0.3f) / 0.7f, 0, 1) * MathF.Min(CarSpec.AE86.Mass / spec.Mass, 1) * (spec.DriveFront > 0 && spec.DriveFront < 1 ? SlideAwd : 1);
+
+    /// <summary>4WD cars' factor on <see cref="SlideShare"/>.</summary>
+    public const float SlideAwd = 0.7f;
+
+    /// <summary>
+    ///     The plan counts on a slide's carve only this long (s at the slide's speed, at most this many m) into a bend going the same
+    ///     way: the tail needs it to swing out (or over, in an S-bend) and carves nothing meanwhile (--ai-bench solo AE86 a wall hit a
+    ///     run less for +0.5 %; without the cap the fast circuits' long bends lost 2 %).
+    /// </summary>
+    public const float SlideSwing = 0.7f, SlideSwingMax = 20;
 
     /// <summary>A drift starts where the own line's curvature first reaches this share of the bend's sharpest, and this long before (s at the planned speed).</summary>
     public const float DriftWindow = 0.6f, TurnInLead = 0.35f;
@@ -182,9 +214,26 @@ public sealed class RivalPilot
 
     /// <summary>
     ///     Nor faster ones than the car holds a drift at (<see cref="GripLimit.DriftSpeed"/>, +15 %), at most this (m/s): a
-    ///     heavy, powerful car sliding a fast bend runs wide (FD3S: 2–3 wall hits per run more).
+    ///     heavy, powerful car sliding a fast bend runs wide (FD3S: 2–3 wall hits per run more). Raising the car's own limit
+    ///     (×1.5, ×2) cost the AE86 0.5–1 %: the drift controller is built for hairpins.
     /// </summary>
-    public const float MaxDriftSpeed = 65 / 3.6f;
+    public const float MaxDriftSpeed = 80 / 3.6f;
+
+    /// <summary>
+    ///     From this skill on (VS CPU HARD) a drift that fades early rides on through the corner on the plan instead of braking to
+    ///     the grip speed (a 4WD power slide's usual end: EVO7/R34 −0.7 %, drift exits braked 37 → 10 %); below, a beginner's
+    ///     faded drift is caught in grip (skills 0–0.5 as before).
+    /// </summary>
+    public const float RideFadedFrom = 0.65f;
+
+    /// <summary>
+    ///     Throttle held in the countdown (the launch revs): none up to VS CPU EASY's skill 0.2, flat out from HARD's 0.65 (a
+    ///     good player's launch, 0.2–0.6 s to the first 150 m), linear between.
+    /// </summary>
+    public float LaunchThrottle => Math.Clamp((Style.Skill - 0.2f) / 0.45f, 0, 1);
+
+    /// <summary>Under this speed (m/s) for this long (s), touching a wall and wanting to go, the car is stuck and reverses this long (s).</summary>
+    public const float StuckSpeed = 2, StuckTime = 1.5f, ReverseTime = 1;
 
     /// <summary>Following distance (m, centre to centre) behind a car at <paramref name="speed"/>: a metre plus 0.8 … 0.4 s by aggression, 0.12 … 0.02 s when pressing (on its bumper).</summary>
     public static float FollowGap(float speed, float aggression, bool pressure = false) =>
@@ -252,22 +301,27 @@ public sealed class RivalPilot
         _spec = car.Spec;
         _map = CourseMap.Of(_line, ground, car.SurfaceGrip);
         var cs = _map.Corners;
+        _cornerGrip = CornerGrip ?? CornerCalibration.Factors(_line, car.Spec);
+        if (_cornerGrip?.Length != cs.Count) _cornerGrip = null;
         _drift = new DriftController.Entry?[cs.Count];
         for (var i = 0; i < cs.Count; i++) _drift[i] = DriftPlan(cs[i], Style, car.Spec, Hash(Seed, 1, i));
         var beta = DriftController.StyleBeta(Style.Drift, car.Spec);
         var holds = MathF.Min(GripLimit.DriftSpeed(car.Spec) * 1.15f, MaxDriftSpeed);
-        for (var pass = 0; pass < 2; pass++)
+        _slides = [];
+        for (var pass = 0; pass < 3; pass++)
         {
-            // drift corners: room for the swung-out tail
+            // drift corners: room for the swung-out tail; the last plan's slides (and 10 m on) too, at the slide's slip
             var margin = new float[_map.Count];
             Array.Fill(margin, EdgeMargin);
             for (var i = 0; i < cs.Count; i++)
                 if (_drift[i] is not (null or DriftController.Entry.Tuck))
                     for (var j = _map.Index(cs[i].From - 15); j <= _map.Index(cs[i].To + 10); j++) margin[j] = MathF.Max(margin[j], EdgeMargin + DriftTail * MathF.Sin(beta));
+            var slid = false;
+            for (var i = 0; i < _slides.Length; i++)
+                if (_slides[i])
+                    for (var j = i; j <= Math.Min(i + (int)(10 / CourseMap.Step), _map.Count - 1); j++) (margin[j], slid) = (MathF.Max(margin[j], EdgeMargin + DriftTail * MathF.Sin(LinePilot.SlideBeta)), true);
             _racing = new RacingLine(_map, margin, 1); // half the default late apex: the slides want the earlier, rounder one (--ai-bench solo −0.8 %)
             Pilot.Plan = _racing;
-            _band = float.NaN;
-            Replan(0);
             // drift window per corner: where the own line really bends (entry from DriftWindow of its sharpest, exit 35 %)
             _window = new CourseMap.Corner[cs.Count];
             for (var i = 0; i < cs.Count; i++)
@@ -282,12 +336,14 @@ public sealed class RivalPilot
                 while (to < b && _racing.Curvature[to + 1] * c.Dir >= exit) to++;
                 _window[i] = c with { From = from * CourseMap.Step, To = to * CourseMap.Step, Apex = top * CourseMap.Step };
             }
+            _band = float.NaN;
+            Replan(0);
             // corners too fast to hold a drift in this car: grip
             var dropped = false;
             for (var i = 0; i < cs.Count; i++)
                 if (_drift[i] is { } e && _racing.SpeedAt(_window[i].Apex) is var va && (va > holds && e != DriftController.Entry.Tuck || va < MinDriftSpeed))
                     (_drift[i], dropped) = (null, true);
-            if (!dropped) break;
+            if (!dropped && (slid || !_slides.Contains(true))) break;
         }
         var racing = _racing!;
         // braking point per corner: where the plan starts to slow for it
@@ -304,29 +360,52 @@ public sealed class RivalPilot
     {
         if (_racing == null || _map == null || _spec == null || band == _band) return;
         _band = band;
-        var (corner, brake) = Pace(Style.Skill);
+        var corner = Pace(Style.Skill).Corner; // × the car's factor per station below
+        var brake = Pace(Style.Skill, _spec).Brake;
         var cap = Pace(1).Corner; // never above the LEGEND plan for the car
         var aLat = MathF.Min(corner * (1 + band), MathF.Max(cap, corner));
-        var aBrake = brake * (1 + band);
-        var drift = new bool[_map.Count];
+        var aBrake = MathF.Min(brake * (1 + band), GripLimit.BrakeLimit(_spec).Decel); // pushing: never past what the tyres do
+        // the drift bonus over the stretch the drift controller has the car (its window, from the course corner's start if
+        // earlier), on through the exit (ExitTime at the last plan's speed) fading out: no grip plan while the tail still slides
+        var drift = new float[_map.Count];
         for (var i = 0; i < _drift.Length; i++)
             if (_drift[i] is not (null or DriftController.Entry.Tuck))
-                for (var j = _map.Index(_map.Corners[i].From - 5); j <= _map.Index(_map.Corners[i].To + 5); j++) drift[j] = true;
+            {
+                var c = _map.Corners[i];
+                float from = MathF.Min(c.From, _window[i].From) - 5, to = MathF.Max(c.To, _window[i].To) + 5;
+                var fade = MathF.Max(_racing.SpeedAt(to), 15) * DriftController.ExitTime;
+                for (var j = _map.Index(from); j <= _map.Index(to + fade); j++) drift[j] = MathF.Max(drift[j], Math.Clamp(1 - (j * CourseMap.Step - to) / fade, 0, 1));
+            }
         var racing = _racing;
         var spec = _spec;
         var bonus = DriftBonusOf(spec);
         var carve = SlideShare(Style.Skill, spec) * spec.DriftCarve;
-        _racing.Plan(i =>
+        var slides = new bool[_map.Count];
+        var acc = new float[_map.Count];
+        var run = 0; // stations the bend has gone the same way, past the slide curvature
+        for (var i = 0; i < acc.Length; i++)
         {
+            run = MathF.Abs(racing.Curvature[i]) > LinePilot.SlideCurvature && i > 0 && racing.Curvature[i] * racing.Curvature[i - 1] > 0 ? run + 1 : 0;
             var k = MathF.Max(MathF.Abs(racing.Curvature[i]), 1e-3f);
             var a = aLat * CarFactor(spec, 1 / k);
-            if (drift[i]) return a + bonus;
-            // a slide: v²κ = a + carve·v
+            // a slide: v²κ = a + carve·v; it starts above the drift entry speed (LinePilot.SlideFrom) and, once going, is held
+            // down to SlideHold of it: a slower station slides only straight on from a faster one
             var v = (carve + MathF.Sqrt(carve * carve + 4 * k * a)) / (2 * k);
-            return carve > 0 && v > spec.DriftEntrySpeed && k > LinePilot.SlideCurvature ? a + carve * v : a;
-        }, aBrake, _spec, Pilot.TopSpeed);
+            var held = i > 0 && slides[i - 1] && racing.Curvature[i] * racing.Curvature[i - 1] > 0; // the same bend
+            var from = spec.DriftEntrySpeed * (held ? LinePilot.SlideHold : 1);
+            slides[i] = carve > 0 && v > from && k > LinePilot.SlideCurvature && run * CourseMap.Step >= MathF.Min(SlideSwing * v, SlideSwingMax);
+            acc[i] = MathF.Max(a + drift[i] * bonus, slides[i] ? a + carve * v : a);
+        }
+        var know = Math.Clamp((Style.Skill - KnowledgeFrom) / (1 - KnowledgeFrom), 0, 1);
+        if (_cornerGrip != null && know > 0)
+            for (var c = 0; c < _cornerGrip.Length; c++)
+                for (var j = _map.Index(_map.Corners[c].From); j <= _map.Index(_map.Corners[c].To); j++) acc[j] *= 1 + (_cornerGrip[c] - 1) * know;
+        _slides = slides;
+        _racing.Plan(i => acc[i], aBrake, _spec, Pilot.TopSpeed);
         (Pilot.CornerAccel, Pilot.BrakeDecel) = (aLat * CarFactor(spec, 30), aBrake);
+        (Pilot.BrakeLimit, Pilot.BrakePedal) = GripLimit.BrakeLimit(spec);
         Pilot.SlideFrom = carve > 0 ? spec.DriftEntrySpeed : float.PositiveInfinity;
+        Pilot.ExitGas = Math.Clamp(Style.Skill, 0, 1);
     }
 
     /// <summary>Is corner <paramref name="i"/> planned as a drift (and how).</summary>
@@ -369,7 +448,7 @@ public sealed class RivalPilot
         var rate = 1.2f;
         State = Mode.Line;
         Pilot.PlanShift = 0;
-        Pilot.BrakeDecel = Pace(Style.Skill, _spec).Brake * (1 + MathF.Max(rb, 0) * BandUp);
+        Pilot.BrakeDecel = MathF.Min(Pace(Style.Skill, _spec).Brake * (1 + MathF.Max(rb, 0) * BandUp), GripLimit.BrakeLimit(_spec!).Decel);
 
         // --- traffic: the nearest car ahead and behind
         int ahead = -1, behind = -1;
@@ -678,7 +757,7 @@ public sealed class RivalPilot
                 if (_overUntil > _time) noise += 15 / Deg;
                 var beta = DriftController.StyleBeta(Style.Drift, car.Spec);
                 if (Drift.Step(car, racing, c, s, lat, beta, noise, input, dt) is { } d) input = d;
-                if (Drift.EndedEarly) _gripCorner = Drift.Corner; // caught or faded: grip speed for the rest of it
+                if (Drift.EndedEarly && (Drift.State == DriftController.Phase.Abort || Style.Skill < RideFadedFrom)) _gripCorner = Drift.Corner; // grip speed for the rest of it
                 if (Drift.State == DriftController.Phase.Idle) _driftEnd = _time;
             }
             else Drift.Stop();
@@ -692,6 +771,13 @@ public sealed class RivalPilot
         // about to touch the car ahead: brake now (the speed control alone reacts too gently for this)
         if (v > ram + 0.3f) input = input with { Throttle = 0, Brake = MathF.Max(input.Brake, Math.Clamp((v - ram) * 0.6f, 0.3f, 1)) };
         if (_lockUntil > _time) input = input with { Brake = 1, Throttle = 0 };
+        // stuck at a wall (nose in it after a spin) while the plan wants to go: back out once, the wheels turned the other way;
+        // not when held up by traffic or parked (target 0), and once per standstill: stuck again, the race's respawn takes over
+        if (v > 2.5f * StuckSpeed) _reverseArmed = true;
+        if (v > StuckSpeed || Pilot.TargetSpeed < 2 * StuckSpeed || !_reverseArmed || _time < 3) (_slowSince, _slowWall) = (_time, false);
+        _slowWall |= car.WallContacts > 0;
+        if (_time - _slowSince > StuckTime && _slowWall) (_reverseUntil, _reverseArmed) = (_time + ReverseTime, false);
+        if (_reverseUntil > _time) input = new VehicleInput(0, 1, -input.Steer); // the automatic's brake at standstill: reverse
         if (_throttleUntil > _time && !Drifting) input = input with { Throttle = 1, Brake = 0 };
         return input;
     }
@@ -757,7 +843,7 @@ public sealed class RivalPilot
     {
         (_fresh, _passing, _defended, _driftDone, _decided, _gripCorner, _lockUntil, _throttleUntil, _overUntil, _tapUntil) = (true, -1, -1, -1, -1, -1, -1, -1, -1, -1);
         (_setupZone, _failedZone, _defendZone, _oSpeed, _oDecel) = (-1, -1, -1, float.NaN, 0);
-        (Pilot.Offset, Pilot.SpeedCap, Pilot.Blend) = (0, float.PositiveInfinity, 0);
+        (Pilot.Offset, Pilot.SpeedCap, Pilot.Blend, _slowSince, _slowWall, _reverseUntil, _reverseArmed) = (0, float.PositiveInfinity, 0, _time, false, -1, true);
         Drift.Stop();
     }
 }

@@ -70,6 +70,41 @@ public static class GripLimit
         return car.SlipAngle > 0.15f ? car.Velocity.Length() : 0; // no drift held: none
     }
 
+    private static readonly ConcurrentDictionary<CarSpec, (float, float)> Brakes = new();
+
+    /// <summary>
+    ///     How hard the car brakes in a straight line on the flat from 120 to 40 km/h: the firmest pedal (0.5 … 1 in steps of
+    ///     0.05) at which the front tyres stay within twice their peak slip ratio (no lock-up; the R34 passes 0.15 near 40 km/h
+    ///     yet still slows harder) and the deceleration still grows, and its mean deceleration (m/s²). Pedal 0.5 counts even if
+    ///     it locks: never 0.
+    /// </summary>
+    public static (float Decel, float Pedal) BrakeLimit(CarSpec spec) => Brakes.GetOrAdd(spec, MeasureBrake);
+
+    private static (float, float) MeasureBrake(CarSpec spec)
+    {
+        var car = new Vehicle(spec);
+        var ground = new Flat();
+        car.Reset(Vector3.Zero, 0);
+        for (var i = 0; i < 120 * 60 && car.SpeedKmh < 125; i++) car.Step(new VehicleInput(1, 0, 0), ground, Dt);
+        for (var i = 0; i < 120 && car.SpeedKmh > 120; i++) car.Step(new VehicleInput(0, 0, 0), ground, Dt);
+        var start = car.SaveState();
+        (float, float) best = (0, 0.5f);
+        for (var pedal = 0.5f; pedal <= 1.001f; pedal += 0.05f)
+        {
+            car.LoadState(start);
+            float t = 0, slip = 0, v0 = car.Velocity.Length();
+            for (; car.SpeedKmh > 40 && t < 10; t += Dt)
+            {
+                car.Step(new VehicleInput(0, pedal, 0), ground, Dt);
+                slip = MathF.Max(slip, MathF.Max(MathF.Abs(car.Wheels[0].SlipRatio), MathF.Abs(car.Wheels[1].SlipRatio)));
+            }
+            var decel = (v0 - car.Velocity.Length()) / t;
+            if (pedal > 0.5f && (slip > 2 * spec.PeakSlipRatio || decel <= best.Item1)) break;
+            best = (decel, pedal);
+        }
+        return best;
+    }
+
     private sealed class Flat : IGround
     {
         public bool Raycast(Vector3 origin, Vector3 direction, float maxDistance, out GroundHit hit)

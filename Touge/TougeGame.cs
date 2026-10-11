@@ -531,9 +531,12 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         if (ReplayTick(dt)) return; // the replay viewer drives the cars
         if (_menu is { Current: Menu.Screen.Intro, Freezes: true } && !_fly && autodrive == null && bench == null && Flow == null)
         {
-            // the countdown holds the car, the engine revs with the throttle (scripted runs keep it idling: same start as ever)
+            // the countdown holds the cars: the player's engine revs with the throttle, the rivals' by their skill (RivalPilot.LaunchThrottle)
             var rev = _driver.Vehicle(0);
             _drive.Car.Rev(rev.Throttle, dt);
+            if (_race != null)
+                foreach (var c in _race.Cars)
+                    if (c.Driver is Race.AiDriver ai && c.Vehicle != _drive.Car) c.Vehicle.Rev(ai.Pilot.LaunchThrottle, dt);
             _audio?.Update(_drive.Car, rev.Throttle, false, dt);
             _simTime += dt; // the world goes on (rain, scene animation, particles), only the cars wait for GO
             _fx.Update(dt);

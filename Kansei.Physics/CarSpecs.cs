@@ -9,8 +9,8 @@ namespace Kansei.Physics;
 ///     (engine table 0x2CBBD0, 24 B per car: gear-table index, gear count, rev limit 7500–11500, …).
 ///     Everything else is real-world data of the stock Japanese-market model (published figures from memory, ±5 %:
 ///     mass, front weight share, peak power/torque, rev limit, gear and final ratios, drivetrain, length/width).
-///     The torque curve is built from the two peaks (<see cref="Curve"/>). Suspension and brakes scale with mass from
-///     the AE86 so ride and stopping feel alike; the arcade layer is shared, only scaled per drivetrain (<see cref="Make"/>).
+///     The torque curve is built from the two peaks (<see cref="Curve"/>). Suspension, brakes and (for cars heavier than the
+///     AE86) the tyres' load rating scale with mass from the AE86 so ride, stopping and cornering feel alike; the arcade layer is shared, only scaled per drivetrain (<see cref="Make"/>).
 ///     AE86T/AE86L are <see cref="CarSpec.AE86"/> unchanged (hand-tuned).
 /// </summary>
 public static class CarSpecs
@@ -57,45 +57,47 @@ public static class CarSpecs
     /// <summary>
     ///     Balance of performance (BoP, the arcade's way): per car a factor on the engine torque so every car is competitive on
     ///     the passes. Only the power is evened out — weight, tyres, gearing, drivetrain and drift layer stay real, so the cars
-    ///     keep their character (where on a course they gain and lose), just not 70 PS more or less. Calibrated with --ai-bench solo, all 32 cars × the 11 Legend
-    ///     courses (circuits MYOGI/USUI too) × both ways at the reference driver H and the autopilot (README "Balance"): mean lap
-    ///     time within ±0.4 % of the field, no car more than 3 % off on any course except IROHA uphill (front-drivers up to
-    ///     +4.8 %, MR2 −3.3 %) and the Cappuccino on the MYOGI circuit (+3.4 %). Missing = 1.
+    ///     keep their character (where on a course they gain and lose), just not 70 PS more or less. Fitted with --ai-bench solo at
+    ///     the reference driver H (all 32 cars × the 11 Legend courses × both ways; README "Balance") so that each car's mean of
+    ///     uphill and downhill is the field's, the AE86 keeping its 1.077: car means within 0.1 %, per direction within 1.1 % (FF
+    ///     slower up, faster down), AE85/Cappuccino +0.25 % (uphill +0.2/+0.35 % behind the AE86). The AE86's skill gap
+    ///     0.8 → 1.0 is 2.3 %. Single courses still differ by up to 8 % (front-drivers IROHA uphill, AE85/Cappuccino on the
+    ///     MYOGI circuit). Missing = 1.
     /// </summary>
     public static readonly IReadOnlyDictionary<string, float> Bop = new Dictionary<string, float>
     {
-        ["AE86T"] = 1.057f,
-        ["AE86L"] = 1.057f,
-        ["AE85"] = 1.552f,
-        ["MR2"] = 1.035f,
-        ["MRS"] = 1.183f,
-        ["ALTEZ"] = 1.184f,
-        ["GT-4"] = 1.168f,
-        ["R32"] = 0.956f,
-        ["R34"] = 1.054f,
-        ["ER34"] = 0.903f,
-        ["S13"] = 0.826f,
-        ["S14Q"] = 1.133f,
-        ["S14"] = 0.862f,
-        ["S15"] = 0.803f,
-        ["ONE80"] = 0.884f,
-        ["SIL80"] = 0.849f,
-        ["EK9"] = 0.997f,
-        ["EG6"] = 1.109f,
-        ["INTGR"] = 0.957f,
-        ["S2000"] = 1.013f,
-        ["EVO3"] = 0.922f,
-        ["EVO4"] = 0.975f,
-        ["EVO7"] = 0.943f,
-        ["FD3S"] = 0.802f,
-        ["FD3SA"] = 0.753f,
-        ["FC3S"] = 0.915f,
-        ["NA6C"] = 1.307f,
-        ["NB8C"] = 1.104f,
-        ["IMP"] = 0.769f,
-        ["IMP2"] = 0.954f,
-        ["IMP3"] = 0.767f,
-        ["CAPPU"] = 1.440f,
+        ["AE86T"] = 1.077f,
+        ["AE86L"] = 1.077f,
+        ["AE85"] = 1.592f,
+        ["MR2"] = 0.891f,
+        ["MRS"] = 1.103f,
+        ["ALTEZ"] = 1.039f,
+        ["GT-4"] = 0.973f,
+        ["R32"] = 0.808f,
+        ["R34"] = 0.830f,
+        ["ER34"] = 0.776f,
+        ["S13"] = 0.807f,
+        ["S14Q"] = 1.123f,
+        ["S14"] = 0.819f,
+        ["S15"] = 0.754f,
+        ["ONE80"] = 0.847f,
+        ["SIL80"] = 0.821f,
+        ["EK9"] = 0.952f,
+        ["EG6"] = 1.058f,
+        ["INTGR"] = 0.905f,
+        ["S2000"] = 0.882f,
+        ["EVO3"] = 0.821f,
+        ["EVO4"] = 0.787f,
+        ["EVO7"] = 0.791f,
+        ["FD3S"] = 0.733f,
+        ["FD3SA"] = 0.684f,
+        ["FC3S"] = 0.827f,
+        ["NA6C"] = 1.258f,
+        ["NB8C"] = 1.016f,
+        ["IMP"] = 0.696f,
+        ["IMP2"] = 0.779f,
+        ["IMP3"] = 0.696f,
+        ["CAPPU"] = 1.458f,
     };
 
     /// <summary>The cars as driven: <see cref="Real"/> with <see cref="Bop"/> applied.</summary>
@@ -106,7 +108,9 @@ public static class CarSpecs
 
     /// <summary>
     ///     Spec from game geometry + real figures. Suspension, brakes and wheel inertia scale with mass/radius from the
-    ///     AE86 (same ride frequency and deceleration). Arcade layer by drivetrain: FF keeps more rear grip when the drift
+    ///     AE86 (same ride frequency and deceleration); so does the tyres' nominal load for heavier cars (bigger tyres: without it
+    ///     the load sensitivity took the R34 ~6 % grip, which only a big power bonus made up – uphill fast, downhill slow; lighter
+    ///     cars keep the AE86's tyres and their small grip edge). Arcade layer by drivetrain: FF keeps more rear grip when the drift
     ///     layer kicks in (0.85 instead of 0.75), 4WD rotates less through its front drive share alone and carves 20 % less.
     ///     Engine inertia grows with √torque (bigger/turbo engines carry heavier cranks and flywheels), rotaries are 40 % lighter.
     ///     Steer-in at 110 km/h (CarSpecsTests): FR/MR 7–19° body slip, 4WD 5–10°, FF 3°. The CoG height scales down with a
@@ -126,6 +130,7 @@ public static class CarSpecs
             WheelInertia = a.WheelInertia * r * r, BrakeTorque = a.BrakeTorque * m * r, HandbrakeTorque = a.HandbrakeTorque * m * r,
             TorqueRpm = tRpm, TorqueNm = tNm, RevLimit = limit, AutoUpRpm = limit - 400, AutoDownRpm = 0.4f * limit,
             Gears = gears, FinalDrive = final, DriveFront = driveFront,
+            NominalLoad = a.NominalLoad * MathF.Max(1, m),
             EngineInertia = a.EngineInertia * MathF.Sqrt(nm / a.TorqueNm.Max()) * (rotary ? 0.6f : 1),
             DriftRearGrip = driveFront < 1 ? a.DriftRearGrip : 0.85f,
             DriftCarve = driveFront is > 0 and < 1 ? 0.8f * a.DriftCarve : a.DriftCarve,

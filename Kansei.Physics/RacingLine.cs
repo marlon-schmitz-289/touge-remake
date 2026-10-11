@@ -99,6 +99,12 @@ public sealed class RacingLine
     public float OffsetAt(float s) => Map.At(Offset, s);
     public float SpeedAt(float s) => Map.At(Speed, s);
     public float CurvatureAt(float s) => Map.At(Curvature, s);
+    /// <summary>The plan's deceleration at <paramref name="s"/> less what the grade gives (m/s², + = slowing over the next station): the brakes' share.</summary>
+    public float DecelAt(float s)
+    {
+        float a = SpeedAt(s), b = SpeedAt(s + CourseMap.Step);
+        return (a * a - b * b) / (2 * CourseMap.Step) - G * (PositionAt(s + CourseMap.Step).Y - PositionAt(s).Y) / CourseMap.Step;
+    }
     public (float Lo, float Hi) BoundsAt(float s) => (Map.At(Lo, s), Map.At(Hi, s));
     /// <summary>Planned time (s) from <paramref name="from"/> to <paramref name="to"/> m along.</summary>
     public float TimeBetween(float from, float to) => Map.At(Time, to) - Map.At(Time, from);

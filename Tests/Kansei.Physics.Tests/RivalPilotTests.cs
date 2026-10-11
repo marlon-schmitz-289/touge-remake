@@ -181,7 +181,7 @@ public class RivalPilotTests(ITestOutputHelper log)
         var car = new Vehicle(CarSpec.AE86);
         car.Reset(Vector3.Zero, 0);
         ai.Pilot.Nearest(car.Position);
-        float lead = 14, leadSpeed = 0, closest = float.MaxValue;
+        float lead = 14, leadSpeed = 0, closest = float.MaxValue, furthest = 0, back = 0;
         for (var t = 0f; t < 20; t += Dt)
         {
             leadSpeed = t < 10 ? MathF.Min(leadSpeed + 3 * Dt, 25) : MathF.Max(leadSpeed - 8 * Dt, 0);
@@ -189,9 +189,33 @@ public class RivalPilotTests(ITestOutputHelper log)
             car.Step(ai.Drive(car, ground, [new Opponent(lead, 0, leadSpeed)], Dt), ground, Dt);
             var (s, lat) = ai.Pilot.Track(car.Position);
             if (MathF.Abs(lat) < RivalPilot.Alongside && lead - s > -4.4f) closest = MathF.Min(closest, lead - s);
+            (furthest, back) = (MathF.Max(furthest, s), MathF.Max(back, furthest - s));
         }
-        log.WriteLine($"closest in line {closest:F2} m");
+        log.WriteLine($"closest in line {closest:F2} m, backed off {back:F2} m");
         Assert.True(closest > 4.6f, $"kept off its bumper: {closest:F2} m");
+        Assert.True(back < 0.3f, $"waits behind the stopped car, no backing out: {back:F2} m"); // held by traffic is not stuck
+    }
+
+    /// <summary>Nose in a wall with the plan wanting to go: it backs out (once) and drives on.</summary>
+    [Fact]
+    public void Backs_out_once_when_stuck_nose_in_a_wall()
+    {
+        var line = Straight();
+        var ground = Road(4);
+        var ai = new RivalPilot(line, new RivalStyle(1, 0.5f, 0));
+        var car = new Vehicle(CarSpec.AE86);
+        car.Reset(new Vector3(1.5f, 0, 50), MathF.PI / 2); // across the road, facing the wall at x = 4
+        ai.Pilot.Nearest(car.Position);
+        var reversed = 0f;
+        for (var t = 0f; t < 12; t += Dt)
+        {
+            car.Step(ai.Drive(car, ground, [], Dt), ground, Dt);
+            reversed = MathF.Max(reversed, -Vector3.Dot(car.Velocity, Vector3.Transform(Vector3.UnitZ, car.Orientation)));
+        }
+        var (s, _) = ai.Pilot.Track(car.Position);
+        log.WriteLine($"backed out at up to {reversed:F1} m/s, along {s:F0} m");
+        Assert.True(reversed > 1, "reversed off the wall");
+        Assert.True(s > 60, $"then drove on: {s:F0} m");
     }
 
     [Fact]
@@ -202,6 +226,6 @@ public class RivalPilotTests(ITestOutputHelper log)
         Assert.True(c1 > c0 && b1 > b0);
         Assert.InRange(c0 / 9.81f, 0.6f, 1.0f); // a beginner: well below the tyres' grip
         Assert.InRange(c1 / 9.81f, 1.4f, 1.5f); // LEGEND: the AE86 at its limit (~1.45 g on the skid pad), like a good player
-        Assert.InRange(b1 / 9.81f, 0.9f, 1.0f);
+        Assert.InRange(b1 / 9.81f, 1.0f, 1.15f); // the AE86's measured straight-line limit (GripLimit.BrakeLimit)
     }
 }

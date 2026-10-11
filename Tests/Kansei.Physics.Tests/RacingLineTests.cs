@@ -92,6 +92,24 @@ public class RacingLineTests(ITestOutputHelper log)
         Assert.Equal(RivalPilot.SlideCarve, RivalPilot.SlideShare(1, spec));
     }
 
+    /// <summary>The course knowledge (<see cref="CornerCalibration"/>) raises a bend's planned speed at the top of the scale only, and no baked row matches a synthetic road.</summary>
+    [Fact]
+    public void Corner_grip_counts_from_the_knowledge_skill_on()
+    {
+        var line = Road();
+        Assert.Null(CornerCalibration.Factors(line, CarSpec.AE86));
+        float Apex(float skill, float f)
+        {
+            var pilot = new RivalPilot(line, new RivalStyle(skill, 0.5f, 0, 0)) { CornerGrip = [f, f] };
+            pilot.Prepare(new Vehicle(CarSpec.AE86), new DriftLineTests.Corridor(line, Half));
+            return pilot.Racing!.SpeedAt(pilot.Map!.Corners[0].Apex); // the hairpin: the medium bend after it is drive-limited
+        }
+        log.WriteLine($"hairpin apex {Apex(1, 1) * 3.6f:F1} / {Apex(1, 1.1f) * 3.6f:F1} km/h");
+        Assert.True(Apex(1, 1.1f) > Apex(1, 1) * 1.02f, "skill 1: +10 % grip, faster");
+        Assert.Equal(Apex(RivalPilot.KnowledgeFrom, 1), Apex(RivalPilot.KnowledgeFrom, 1.1f));
+        Assert.Equal(CornerCalibration.Class.Awd, CornerCalibration.Of(CarSpecs.All["R34"]));
+    }
+
     [Fact]
     public void Mistakes_follow_the_seed()
     {

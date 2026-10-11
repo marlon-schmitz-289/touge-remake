@@ -65,7 +65,8 @@ public class CarSpecsTests(ITestOutputHelper log)
     /// <summary>
     ///     BoP: the driven cars are the real ones with only the torque scaled by the car's factor (weight, grip, gearing,
     ///     drift layer untouched), every car has a factor, and the power-to-weight spread shrinks (stock 4.5 kg/PS Impreza … 11.1 AE85, 10.9
-    ///     Cappuccino; balanced 4.7 S2000 … 7.9 Cappuccino: light cars keep a little less power per kg, they gain it back in the bends).
+    ///     Cappuccino; balanced 5.6 S2000 … 7.5 Cappuccino: light cars keep a little less power per kg, they gain it back in the bends,
+    ///     heavy ones give power for the grip of their bigger tyres).
     /// </summary>
     [Fact]
     public void Bop_scales_only_the_torque()

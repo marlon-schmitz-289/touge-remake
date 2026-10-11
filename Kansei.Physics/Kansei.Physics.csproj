@@ -6,4 +6,8 @@
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
+    <ItemGroup>
+        <EmbeddedResource Include="CornerGrip.csv" LogicalName="Kansei.Physics.CornerGrip.csv" />
+    </ItemGroup>
+
 </Project>
