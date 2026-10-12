@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace Touge;
+namespace Kansei.Graphics;
 
 /// <summary>
 ///     The chase views' camera, fed the interpolated pose once per drawn frame: X/Z sit on the car at once, only the view's

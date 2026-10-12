@@ -1,3 +1,4 @@
+using Kansei.Core;
 using Touge.Ui;
 
 namespace Touge.Tests;

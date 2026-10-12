@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace Touge;
+namespace Kansei.Core;
 
 /// <summary>macOS thermal state (NSProcessInfo.thermalState) for --bench: a fanless Mac throttles from "fair" on.</summary>
 public static class Thermal

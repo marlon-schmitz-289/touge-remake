@@ -26,7 +26,7 @@ public sealed class LauncherScreen(DiscScan scan)
 
     private Browser? _browser;
     private Task<string?>? _dialog;
-    private readonly QuitPrompt _quit = new();
+    private readonly Confirm _quit = new();
     private readonly MenuKeys _keys = new();
     private readonly Canvas _c = new();
     private int _sel, _top;
@@ -96,13 +96,13 @@ public sealed class LauncherScreen(DiscScan scan)
         if (overRow && moved) _sel = _top + hover;
         _sel = Math.Clamp(_sel + k.Y - input.Mouse.ScrollDelta, 0, rows - 1);
         _top = Math.Clamp(_top, Math.Max(0, _sel - Visible + 1), _sel);
-        if (k.Back) _quit.Show();
+        if (k.Back) _quit.Quit();
         else if (k.Ok || click && overRow)
         {
             if (_sel < discs.Count) Picked = discs[_sel].Path;
             else if (_sel == discs.Count) _browser = new Browser(null);
             else if (_sel == discs.Count + 1) _dialog ??= NativeDialog.PickIso();
-            else _quit.Show();
+            else _quit.Quit();
         }
         return Result.None;
     }

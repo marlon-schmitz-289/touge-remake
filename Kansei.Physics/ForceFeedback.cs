@@ -1,8 +1,7 @@
 using System.Numerics;
-using Kansei.Input;
 using Kansei.Physics;
 
-namespace Touge;
+namespace Kansei.Physics;
 
 /// <summary>
 ///     Force feedback from the physics, per frame: −1..1, + = pushes the wheel right. Built like the sim racers do it (GT, AC,
@@ -21,9 +20,9 @@ namespace Touge;
 ///         <item>Kerbs/gutters/grass: a sine rumble at the stripe frequency (speed / 1.2 m, at most 25 Hz – below the 30 Hz Nyquist
 ///         limit of a 60 fps update; a square wave's harmonics alias); tyres past their grip a lighter 20 Hz buzz.</item>
 ///         <item>Wall impacts: a jolt away from the wall, from the closing speed, decaying in ~0.15 s.</item>
-///         <item>Soft lock: past the game's steering lock (<see cref="DriverInput.SteerBeyond"/>) a stiff spring back.</item>
+///         <item>Soft lock: past the game's steering lock (steering beyond ±1) a stiff spring back.</item>
 ///     </list>
-///     Sent as one constant force (<see cref="JoystickState.SetForce"/>, SDL haptics), the rumble on Linux as its own sine
+///     Sent as one constant force (Kansei.Input.JoystickState.SetForce, SDL haptics), the rumble on Linux as its own sine
 ///     (<see cref="Vibration"/>), and on pads as rumble.
 /// </summary>
 public sealed class ForceFeedback
@@ -50,7 +49,7 @@ public sealed class ForceFeedback
 
     /// <summary>
     ///     Advances by <paramref name="dt"/>: the force for <paramref name="car"/> with ground roughness 0..1 per surface id,
-    ///     the wheel's unclamped steering and <see cref="ControlSettings.FfbStrength"/>.
+    ///     the wheel's unclamped steering and the player's strength setting.
     /// </summary>
     public float Update(Vehicle car, Func<int, float> roughness, float steerBeyond, float strength, float dt)
     {

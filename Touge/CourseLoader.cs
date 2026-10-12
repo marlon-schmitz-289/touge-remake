@@ -1,5 +1,6 @@
 using System.Numerics;
 using Kansei.Graphics;
+using Kansei.Physics;
 using Touge.Formats;
 
 namespace Touge;
@@ -101,7 +102,7 @@ public static class CourseLoader
         var cif = Data($"CRS_INFO_{course}.BIN");
         return new Course(world, sky, ReadDrivingLine(iso, course), road, LoadEnv(models, Data($"CRS_ENV_{course}.BIN"), courseTime, road.Length, renderer), lights,
             cif == null ? null : CourseInfo.FogColour(cif, slot), cif == null ? null : CourseInfo.FogRange(cif, slot),
-            cif == null ? null : -CourseInfo.KeyLight(cif, slot).Direction) { Hull = CameraHull.Of(meshes, cutout) };
+            cif == null ? null : -CourseInfo.KeyLight(cif, slot).Direction) { Hull = Opaque(meshes, cutout) };
     }
 
     /// <summary>The <see cref="CameraHull"/> of a course without a renderer (headless measurements): textures decoded only for their alpha.</summary>
@@ -120,7 +121,23 @@ public static class CourseLoader
         byte[]? Data(string name) => data.Find(name) is { } e ? data.Read(e) : null;
         var course = courseTime[..courseTime.LastIndexOf('_')];
         var road = CourseRoad.Read(Data($"CRS_ROAD_{course}.BIN") ?? throw new FileNotFoundException($"CRS_ROAD_{course}.BIN"));
-        return CameraHull.Of([.. Meshes(pac, false).Where(m => RaceGates(m.Name, reverse)), .. Trees(pac, course, Data, road)], cutout);
+        return Opaque([.. Meshes(pac, false).Where(m => RaceGates(m.Name, reverse)), .. Trees(pac, course, Data, road)], cutout);
+    }
+
+    /// <summary>Course triangles of <paramref name="meshes"/> that hide what is behind them (texture not in <paramref name="cutout"/>, vertex alpha 1).</summary>
+    private static CameraHull Opaque(IEnumerable<(string Name, Mesh Mesh)> meshes, IReadOnlySet<string> cutout)
+    {
+        var pts = new List<Vector3>();
+        foreach (var (_, mesh) in meshes)
+            foreach (var m in mesh.Materials)
+            {
+                if (m.Texture >= 0 && m.Texture < mesh.Textures.Length && cutout.Contains(mesh.Textures[m.Texture])) continue;
+                var t = m.Triangles;
+                for (var i = 0; i + 2 < t.Count; i += 3)
+                    if (t[i].Color.W >= 0.99f && t[i + 1].Color.W >= 0.99f && t[i + 2].Color.W >= 0.99f)
+                        pts.AddRange([t[i].Position, t[i + 1].Position, t[i + 2].Position]);
+            }
+        return CameraHull.Of(pts.ToArray());
     }
 
     /// <summary>

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Numerics;
+using Kansei.Net;
 using Touge.Net;
 
 namespace Touge.Tests;

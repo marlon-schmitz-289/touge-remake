@@ -1,4 +1,4 @@
-namespace Touge;
+namespace Kansei.Core;
 
 /// <summary>Console output (and crashes) additionally into a file: a game started by double-click has no console to show it.</summary>
 public static class LogFile
@@ -12,7 +12,7 @@ public static class LogFile
             var file = new StreamWriter(path, false) { AutoFlush = true };
             Console.SetOut(TextWriter.Synchronized(new Tee(Console.Out, file)));
             Console.SetError(TextWriter.Synchronized(new Tee(Console.Error, file)));
-            Console.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss} Touge {Environment.OSVersion} {System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}, log {path}");
+            Console.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name} {Environment.OSVersion} {System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}, log {path}");
             AppDomain.CurrentDomain.UnhandledException += (_, e) => Console.Error.WriteLine($"CRASH: {e.ExceptionObject}");
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)

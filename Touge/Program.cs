@@ -81,8 +81,9 @@ if (args is ["--texts", var textsOp and ("pack" or "unpack"), var textsFrom, var
     else File.WriteAllText(textsTo, Touge.Story.Translation.Unpack(File.ReadAllBytes(textsFrom)));
     return 0;
 }
+(Updater.Repo, Updater.Keep) = ("marlon-schmitz-289/touge-remake", ["Translations"]); // Story/Translation also reads the app folder
 if (args.All(a => a.EndsWith(".iso", StringComparison.OrdinalIgnoreCase)))
-    Touge.LogFile.Start(Path.Combine(Path.GetDirectoryName(Touge.Ui.Settings.FilePath)!, "touge.log"));
+    LogFile.Start(Path.Combine(Path.GetDirectoryName(Touge.Ui.Settings.FilePath)!, "touge.log"));
 var iso = args.Where((a, i) => i == 0 || args[i - 1] is not ("--drop" or "--browse")).FirstOrDefault(a => a.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
           ?? Environment.GetEnvironmentVariable("INITIALD_ISO") ?? "";
 // double-click/drag & drop with only a moved or wrong ISO: the launcher shows why (as if dropped there) instead of a silent exit
@@ -196,7 +197,7 @@ if (args.Contains("--headless"))
 {
     var port = int.Parse(Arg("--port") ?? Touge.Net.NetSession.DefaultPort.ToString());
     System.Net.IPEndPoint? join = null;
-    if (Arg("--join") is { } joinArg && (join = Touge.Net.NetLink.Resolve(joinArg, port)) == null)
+    if (Arg("--join") is { } joinArg && (join = Kansei.Net.NetLink.Resolve(joinArg, port)) == null)
     {
         Console.Error.WriteLine($"--join {joinArg}: Adresse unbekannt");
         return 1;
@@ -210,7 +211,7 @@ if (args.Contains("--headless"))
         Arg("--net-rule") switch { "race" => Touge.Net.NetRule.Race, "free" => Touge.Net.NetRule.Free, _ => Touge.Net.NetRule.Battle }, args.Contains("--ghost-cars"));
     return Touge.Net.Headless.Run(new Touge.Net.Headless.Options(iso, join, port, args.Contains("--bot"), Arg("--name") ?? (join == null ? "HOST" : "BOT"), car, paint, config,
         int.Parse(Arg("--players") ?? "2"), float.Parse(Arg("--seconds") ?? "600", CultureInfo.InvariantCulture),
-        Arg("--net-sim") is { } sim ? Touge.Net.NetSim.Parse(sim) : null, int.Parse(Arg("--races") ?? "1")));
+        Arg("--net-sim") is { } sim ? Kansei.Net.NetSim.Parse(sim) : null, int.Parse(Arg("--races") ?? "1")));
 }
 // --battle <rival|car>[@skill] [--rule race|chase] [--lead player|rival] [--ai-level easy|normal|hard|legend]: quick battle against
 // the AI (Touge/Race), the rival's skill optionally set (takumi@0.9) or as the free battle's AI level sets it
@@ -301,7 +302,7 @@ var shotSize = Arg("--shot-size") is { } size && size.Split('x') is [var sw, var
 TougeGame NewGame(string isoPath, Action? changeDisc) => new TougeGame(isoPath, course.ToUpperInvariant(), shot, at, orbit, autodrive, bench, Arg("--quality") != "off", args.Contains("--drift"), Arg("--flicker"))
     { HudMode = Arg("--hud"), HudScale = Arg("--hud-scale") is { } hs ? float.Parse(hs, CultureInfo.InvariantCulture) / 100 : 1, Reverse = args.Contains("--reverse"), Fog = args.Contains("--fog"), Car = car, Paint = paint, Livery = livery, ContactSheet = Arg("--cars"), LookAtSun = args.Contains("--sun"), OrbitDistance = orbitDistance,
       VersusStart = Arg("--versus"), VersusBot = args.Contains("--bot"), VersusVertical = Arg("--split") == "vertical", Car2 = Arg("--car2"),
-      VersusPlayers = int.Parse(Arg("--players") ?? "2"), NetSim = Arg("--net-sim") is { } vsSim ? Touge.Net.NetSim.Parse(vsSim) : null,
+      VersusPlayers = int.Parse(Arg("--players") ?? "2"), NetSim = Arg("--net-sim") is { } vsSim ? Kansei.Net.NetSim.Parse(vsSim) : null,
       NetPort = Arg("--port") is { } vsPort ? int.Parse(vsPort) : null, PlayerName = Arg("--name"), VersusGhost = args.Contains("--ghost-cars"), VersusRule = Arg("--net-rule") switch { "race" => Touge.Net.NetRule.Race, "free" => Touge.Net.NetRule.Free, _ => Touge.Net.NetRule.Battle },
       ShotAfter = Arg("--shot-after") is { } after ? float.Parse(after, CultureInfo.InvariantCulture) : 0,
       Battle = battle, LegendProgressPath = Arg("--legend-progress"), LegendFlow = args.Contains("--legend"), ShotBattleResult = args.Contains("--battle-result"), Lights = Arg("--lights") is { } lights ? Enum.Parse<Headlights.Mode>(lights, true) : null,

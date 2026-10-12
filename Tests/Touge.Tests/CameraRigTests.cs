@@ -1,4 +1,6 @@
 using System.Numerics;
+using Kansei.Graphics;
+using Kansei.Physics;
 using Touge.Formats;
 using Touge.Ui;
 
@@ -123,5 +125,23 @@ public class CameraRigTests
             Assert.True(m.Eye.X < -0.25f && m.Eye.Y > 0.6f && m.Eye.Y < m.Max.Y - 0.08f && m.Hood.Z > m.Eye.Z + 0.6f, $"{car}: {m}");
             Assert.Single(parts["other00"].Materials, CameraRig.IsDriver);
         }
+    }
+
+    [Fact]
+    public void Body_pitching_on_its_springs_does_not_move_the_view()
+    {
+        var m = new CameraRig.Mounts(default, default, default, default, default, 0.3f);
+        // wheel centres level 0.3 m over the road; the body nosed down (braking): its springs hold the wheels where they were
+        static Vector3 Eye(float pitch, in CameraRig.Mounts m)
+        {
+            var pose = Matrix4x4.CreateRotationX(pitch) * Matrix4x4.CreateTranslation(0, 0.5f, 0);
+            Matrix4x4.Invert(pose, out var inv);
+            var wheels = new WheelState[4];
+            for (var i = 0; i < 4; i++) wheels[i].LocalCenter = Vector3.Transform(new Vector3(i % 2 == 0 ? -0.7f : 0.7f, 0.3f, i < 2 ? 1.2f : -1.2f), inv);
+            var c = new ChaseCamera();
+            return CameraRig.Place(CameraView.Chase, ref c, true, 1 / 60f, pose, pose, Vector3.Zero, m, 1, wheels).Pos;
+        }
+        Assert.True(Vector3.Distance(Eye(0, m), new Vector3(0, 1.7f, -5.4f)) < 1e-4f, $"{Eye(0, m)}");
+        Assert.True(Vector3.Distance(Eye(0.05f, m), Eye(0, m)) < 1e-4f, $"{Eye(0.05f, m)}");
     }
 }

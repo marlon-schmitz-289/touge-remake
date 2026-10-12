@@ -1,10 +1,11 @@
 using System.Numerics;
 using Kansei.Input;
+using Kansei.Physics;
 
-namespace Touge.Replays;
+namespace Kansei.Graphics;
 
 /// <summary>
-///     Free camera of the replay viewer and photo mode, held inside the course (<see cref="Hull"/>). Keyboard: W/A/S/D move, Q/E down/up, I/J/K/L look, Shift fast,
+///     Free camera (replay viewer, photo mode), held inside the course (<see cref="Hull"/>). Keyboard: W/A/S/D move, Q/E down/up, I/J/K/L look, Shift fast,
 ///     right mouse drag look. Pad: left stick move, right stick look, triggers down/up, left stick click fast.
 /// </summary>
 public sealed class FreeCam

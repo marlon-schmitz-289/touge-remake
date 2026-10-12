@@ -25,12 +25,12 @@ public sealed class FrontEnd
     /// <summary>
     ///     Main menu in the original's drum order (sub_1F0E00, wraps 0 ↔ 6), English labels, plus the remake's VERSUS (split screen
     ///     and online, <see cref="Versus"/>) after TIME ATTACK and FREE PLAY (<see cref="FreePlay"/>) after it; on desktop builds the remake's QUIT GAME
-    ///     last (<see cref="QuitPrompt"/>).
+    ///     last (<see cref="Confirm.Quit"/>).
     /// </summary>
     public static readonly string[] Modes =
     [
         "LEGEND OF THE STREETS", "TIME ATTACK", "VERSUS", "FREE PLAY", "STORY", "REPLAY & RECORD", "IKETANI'S CAR GUIDE", "SAVE & LOAD", "OPTIONS",
-        .. QuitPrompt.Available ? new[] { "QUIT GAME" } : [],
+        .. Confirm.QuitAvailable ? new[] { "QUIT GAME" } : [],
     ];
 
     /// <summary>What each mode leads to (Quit asks first).</summary>
@@ -93,7 +93,7 @@ public sealed class FrontEnd
     private bool _fast;
     private Step _next;
     private Result _result;
-    private readonly QuitPrompt _quit = new();
+    private readonly Confirm _quit = new();
 
     public void Open(Step step)
     {
@@ -105,7 +105,7 @@ public sealed class FrontEnd
     public void AskQuit()
     {
         Index = Modes.Length - 1;
-        _quit.Show();
+        _quit.Quit();
     }
 
     /// <summary>Skips the fade-in (screenshots).</summary>
@@ -156,7 +156,7 @@ public sealed class FrontEnd
                     _fast = true;
                     Leave(Step.Modes);
                 }
-                else if (k.Back && QuitPrompt.Available) Leave(Step.Title, Result.Quit);
+                else if (k.Back && Confirm.QuitAvailable) Leave(Step.Title, Result.Quit);
                 else if (_idle >= TitleIdle) Leave(Step.Logo);
                 break;
             case Step.Modes:
@@ -181,7 +181,7 @@ public sealed class FrontEnd
                 else if (k.Ok && RowResult(Index) == Result.Quit)
                 {
                     Sound?.Invoke("SYS006");
-                    _quit.Show();
+                    _quit.Quit();
                 }
                 else if (k.Ok)
                 {

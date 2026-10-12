@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Numerics;
+using Kansei.Graphics;
 using Kansei.Physics;
 using Touge.Formats;
 using Touge.Replays;

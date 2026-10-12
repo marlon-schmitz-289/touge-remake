@@ -49,11 +49,11 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     private const int ResultRows = 8;
     public static float ButtonsAt => RowFirst + RowStep * ResultRows + 0.2f;
 
-    /// <summary>Pause buttons; "Quit Game" only on desktop builds (<see cref="QuitPrompt"/>).</summary>
-    public static readonly string[] PauseButtons = ["Continue", "Retry", "Replay", "Photo", "Exit", .. QuitPrompt.Available ? new[] { "Quit Game" } : []],
+    /// <summary>Pause buttons; "Quit Game" only on desktop builds (<see cref="Confirm.Quit"/>).</summary>
+    public static readonly string[] PauseButtons = ["Continue", "Retry", "Replay", "Photo", "Exit", .. Confirm.QuitAvailable ? new[] { "Quit Game" } : []],
         ResultButtons = ["RETRY", "REPLAY", "COURSE SELECT", "CAR SELECT", "EXIT"],
         /// <summary>Free play's pause: back onto the road, CHANGE (the free play lobby: course, time, weather, car …), photo.</summary>
-        FreePauseButtons = ["Continue", "Reset", "Change", "Turn", "Photo", "Exit", .. QuitPrompt.Available ? new[] { "Quit Game" } : []];
+        FreePauseButtons = ["Continue", "Reset", "Change", "Turn", "Photo", "Exit", .. Confirm.QuitAvailable ? new[] { "Quit Game" } : []];
     private static readonly Dictionary<string, string> PauseCaptions = new()
     {
         ["Continue"] = "Return to the race.", ["Retry"] = "Restart the race from the beginning.", ["Replay"] = "Watch the run so far.",
@@ -63,7 +63,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
     /// <summary>Free play's captions where the race's would say "race".</summary>
     private static readonly Dictionary<string, string> FreeCaptions = new() { ["Continue"] = "Back to driving.", ["Exit"] = "Back to the main menu." };
     private string[] Pause => FreePause ? FreePauseButtons : PauseButtons;
-    private readonly QuitPrompt _quit = new();
+    private readonly Confirm _quit = new();
 
     public Screen Current { get; private set; }
     /// <summary>The OPTIONS sections and pages (<see cref="Ui.Options"/>; other features add their pages here).</summary>
@@ -430,7 +430,7 @@ public sealed partial class Menu(Catalog catalog, Settings settings)
                             Leave(Screen.None, Legend || FreeBattle ? Action.Rivals : Action.Exit);
                             break;
                         default:
-                            _quit.Show();
+                            _quit.Quit();
                             break;
                     }
                 }

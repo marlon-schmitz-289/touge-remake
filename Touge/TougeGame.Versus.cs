@@ -1,3 +1,4 @@
+using Kansei.Net;
 using System.Numerics;
 using System.Text.Json;
 using Kansei.Core;

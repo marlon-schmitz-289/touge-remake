@@ -1,8 +1,6 @@
 using System.Numerics;
-using Kansei.Physics;
-using Touge.Formats;
 
-namespace Touge;
+namespace Kansei.Physics;
 
 /// <summary>
 ///     What the cameras may not pass: the course as drawn (opaque triangles, no foliage/fence cutouts: hills, rock faces,
@@ -19,21 +17,11 @@ public sealed class CameraHull(TriangleGround solid)
 
     public TriangleGround Solid => solid;
 
-    /// <summary>Course triangles of <paramref name="meshes"/> that hide what is behind them (texture not in <paramref name="cutout"/>, vertex alpha 1).</summary>
-    public static CameraHull Of(IEnumerable<(string Name, Mesh Mesh)> meshes, IReadOnlySet<string> cutout)
+    /// <summary>Every triangle of <paramref name="corners"/> (3 per triangle) solid.</summary>
+    public static CameraHull Of(Vector3[] corners)
     {
-        var pts = new List<Vector3>();
-        foreach (var (_, mesh) in meshes)
-            foreach (var m in mesh.Materials)
-            {
-                if (m.Texture >= 0 && m.Texture < mesh.Textures.Length && cutout.Contains(mesh.Textures[m.Texture])) continue;
-                var t = m.Triangles;
-                for (var i = 0; i + 2 < t.Count; i += 3)
-                    if (t[i].Color.W >= 0.99f && t[i + 1].Color.W >= 0.99f && t[i + 2].Color.W >= 0.99f)
-                        pts.AddRange([t[i].Position, t[i + 1].Position, t[i + 2].Position]);
-            }
-        var n = pts.Count / 3;
-        return new CameraHull(new TriangleGround(pts.ToArray(), Enumerable.Range(0, n * 3).ToArray(), new int[n], new bool[n]));
+        var n = corners.Length / 3;
+        return new CameraHull(new TriangleGround(corners, Enumerable.Range(0, n * 3).ToArray(), new int[n], new bool[n]));
     }
 
     /// <summary>First surface on the segment <paramref name="from"/> → <paramref name="to"/> (distance from <paramref name="from"/>), null when clear.</summary>

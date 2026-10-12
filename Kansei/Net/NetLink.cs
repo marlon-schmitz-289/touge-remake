@@ -3,7 +3,7 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 
-namespace Touge.Net;
+namespace Kansei.Net;
 
 /// <summary>
 ///     Simulated bad network on one link (--net-sim latency[:loss[:jitter]]): every packet in either direction is dropped with

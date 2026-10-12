@@ -123,7 +123,7 @@ public class FrontEndTests
     [Fact]
     public void QuitGame_AsksFirst()
     {
-        Assert.True(QuitPrompt.Available);
+        Assert.True(Confirm.QuitAvailable);
         Assert.Equal("QUIT GAME", FrontEnd.Modes[^1]);
         var sounds = new List<string>();
         var f = new FrontEnd { Sound = sounds.Add };
