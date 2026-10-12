@@ -1459,7 +1459,7 @@ public sealed partial class TougeGame(string isoPath, string courseTime, string?
         // Linux drivers smooth constant-force updates: the kerb rumble goes to the wheel's own sine effect there
         var sine = OperatingSystem.IsLinux() && wheel is { HasVibration: true };
         var force = Frozen || _fly ? _menu?.Controls?.TestForce ?? 0 : driving ? sine ? _ffb.Steady : _ffb.Output : 0;
-        wheel?.SetForce(ForceFeedback.Lift(cfg.FfbInvert ? -force : force, cfg.FfbMinForce));
+        wheel?.SetForce(JoystickState.Lift(cfg.FfbInvert ? -force : force, cfg.FfbMinForce));
         if (sine) wheel!.SetVibration(driving ? _ffb.Vibration.Amplitude : 0, _ffb.Vibration.Hz);
         if (Frozen || _fly || _driver.Active != DeviceKind.Pad) return;
         var (low, high) = _ffb.PadRumble(cfg.Rumble);

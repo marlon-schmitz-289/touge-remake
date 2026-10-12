@@ -92,6 +92,9 @@ public sealed unsafe class JoystickState
         Array.Copy(_hats, _previousHats, _hats.Length);
     }
 
+    /// <summary>Lifts a force over the motor's dead band (belt/gear wheels): min + (1 − min)·|f|, faded in over the first 2 % (no square wave around the centre).</summary>
+    public static float Lift(float f, float min) => MathF.CopySign(min * MathF.Min(MathF.Abs(f) / 0.02f, 1) + (1 - min) * MathF.Abs(f), f);
+
     /// <summary>Constant force −1..1 (+ = turn right) on the steering axis; only sent when it changes.</summary>
     public void SetForce(float force)
     {

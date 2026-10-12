@@ -119,7 +119,7 @@ public sealed class ControlSettings
     public float FfbStrength { get; set; } = 0.7f;
     /// <summary>Some drivers report the steering axis the other way round.</summary>
     public bool FfbInvert { get; set; }
-    /// <summary>Least force 0..0.2 any non-zero force is lifted to (<see cref="ForceFeedback.Lift"/>): clears the dead band of belt/gear wheels.</summary>
+    /// <summary>Least force 0..0.2 any non-zero force is lifted to (<see cref="JoystickState.Lift"/>): clears the dead band of belt/gear wheels.</summary>
     public float FfbMinForce { get; set; } = 0.05f;
 
     /// <summary>Wheel degrees lock to lock that give full steering in the game: the car's 900° rack (≈13:1 at 35°), faster with <see cref="Sensitivity"/>, at most the wheel's range.</summary>

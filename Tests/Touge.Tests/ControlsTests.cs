@@ -443,12 +443,12 @@ public class ControlsTests
     }
 
     [Fact]
-    public void ForceFeedback_Lift_ClearsTheDeadBand()
+    public void JoystickState_Lift_ClearsTheDeadBand()
     {
-        Assert.Equal(0, ForceFeedback.Lift(0, 0.05f));
-        Assert.Equal(0.0345f, ForceFeedback.Lift(0.01f, 0.05f), 4);
-        Assert.Equal(-1, ForceFeedback.Lift(-1, 0.05f), 5);
-        Assert.Equal(0.335f, ForceFeedback.Lift(0.3f, 0.05f), 4);
+        Assert.Equal(0, JoystickState.Lift(0, 0.05f));
+        Assert.Equal(0.0345f, JoystickState.Lift(0.01f, 0.05f), 4);
+        Assert.Equal(-1, JoystickState.Lift(-1, 0.05f), 5);
+        Assert.Equal(0.335f, JoystickState.Lift(0.3f, 0.05f), 4);
     }
 
     /// <summary>A T150 (by USB id) gets its own layout while the wheel binds are the untouched defaults; customised binds stay.</summary>

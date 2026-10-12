@@ -125,9 +125,6 @@ public sealed class ForceFeedback
         return a <= Knee ? f : MathF.CopySign(Knee + (1 - Knee) * MathF.Tanh((a - Knee) / (1 - Knee)), f);
     }
 
-    /// <summary>Lifts a force over the motor's dead band (belt/gear wheels): min + (1 − min)·|f|, faded in over the first 2 % (no square wave around the centre).</summary>
-    public static float Lift(float f, float min) => MathF.CopySign(min * MathF.Min(MathF.Abs(f) / 0.02f, 1) + (1 - min) * MathF.Abs(f), f);
-
     /// <summary>Pad rumble (low, high motor) 0..1: impacts on the heavy motor, kerbs on the light one.</summary>
     public (float Low, float High) PadRumble(float strength) => (strength * _jolt, strength * MathF.Abs(Kerb) * 2.4f);
 }
