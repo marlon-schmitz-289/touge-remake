@@ -213,7 +213,7 @@ internal sealed class PostProcess : IDisposable
         MemoryMarshal.Write(push[16..], new Vector4(a.Tint, a.Saturation));
         MemoryMarshal.Write(push[32..], new Vector4(a.Vignette, (float)outW / outH, a.Contrast, 0));
         MemoryMarshal.Write(push[48..], new Vector4(ao ? 1 : 0, near, ssr ? 1 : 0, 1));
-        MemoryMarshal.Write(push[64..], new Vector4(outX, outY, 0, 0));
+        MemoryMarshal.Write(push[64..], new Vector4(outX, outY, _w * 2 < outW ? 1 : 0, 0)); // below half resolution: pixelated upscale
         Pass(encoder, output, keep ? LoadOp.Load : LoadOp.DontCare, outW, outH, _tonemapPipeline, _tonemapGroup, push[..80], -1, outX, outY);
     }
 

@@ -238,7 +238,7 @@ public sealed class Options
                         i => s.FrameCap = Settings.FrameCaps[i], "Frames per second at most (saves power on laptops)."),
                     Row.Choice("RENDER SCALE", [.. Settings.RenderScales.Select(Pct)], () => Array.IndexOf(Settings.RenderScales, s.RenderScale),
                         i => s.RenderScale = Settings.RenderScales[i], "3D resolution in percent of the window; menus and HUD stay sharp.",
-                        "Below 100 % for slower machines, above for supersampling."),
+                        "Below 100 % for slower machines (10–25 %: pixelated), above for supersampling."),
                 },
             },
             new Page("GRAPHICS", "Quality preset and the single effects.")

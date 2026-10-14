@@ -98,7 +98,7 @@ public sealed class WorldRenderer : IDisposable
     public bool Shadows = true, Ao = true, Bloom = true;
     /// <summary>Wet-ground SSR (rain); off in low settings and for measuring (<c>--flicker</c> motion).</summary>
     public bool Reflections = true;
-    /// <summary>Scene resolution relative to the output (0.5 … 2); post and tonemap scale it back up/down, the 2D overlay stays sharp.</summary>
+    /// <summary>Scene resolution relative to the output (0.1 … 2; below 0.5 upscaled pixelated); post and tonemap scale it back up/down, the 2D overlay stays sharp.</summary>
     public float RenderScale = 1;
 
     /// <summary>All of MSAA, shadows, AO, bloom and SSR on (F2 / <c>--quality off</c> switch them together).</summary>
@@ -356,7 +356,7 @@ public sealed class WorldRenderer : IDisposable
     /// </summary>
     public IRenderPassEncoder BeginScene(ICommandEncoder encoder, in Matrix4x4 view, in Matrix4x4 proj, FrameCapture? target = null, Core.Viewport? viewport = null)
     {
-        var scale = Math.Clamp(RenderScale, 0.25f, 2);
+        var scale = Math.Clamp(RenderScale, 0.1f, 2);
         var (ow, oh) = viewport is { } vp ? (vp.Width, vp.Height) : (target?.Width ?? _device.SwapchainWidth, target?.Height ?? _device.SwapchainHeight);
         EnsureTargets(Math.Max(1, (int)(ow * scale)), Math.Max(1, (int)(oh * scale)), Samples(Quality));
         // HDR colour + gbuffer (PostProcess.GbufFormat) + depth; with MSAA all three resolve into PostProcess's single-sample targets

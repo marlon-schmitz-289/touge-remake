@@ -33,7 +33,7 @@ using Touge;
 // --jukebox <s>: Renn-Musik (Jukebox) offline ohne Fenster: Zufallsfolge, Weiterschalten, Songende → nächster Titel, Log.
 // --frontend-capture <wav>: ganzer Menüablauf per Skript offline (Titel → Auswahl → Countdown → Ergebnis mit erfundener Fahrt) mit Original-SE/BGM als WAV, Log aller Auslöser.
 // --shot-size WxH: Größe des --shot-Bildes (Standard 1280x720), z. B. 3200x1800 für die HUD-Skalierung.
-// --render-scale <prozent>: 3D-Auflösung in % des Fensters (50–150, Optionen SCREEN), z. B. mit --bench für GPU-Kosten.
+// --render-scale <prozent>: 3D-Auflösung in % des Fensters (10–150, Optionen SCREEN), z. B. mit --bench für GPU-Kosten.
 // --input-debug: Eingabe-Overlay (Geräte, Rohachsen/-tasten, Lenkung/Pedale wie das Spiel sie liest, Force-Feedback-Anteile); auch beim normalen Start.
 // --sim-wheel: virtuelles Lenkrad (Lenkung pendelt, Pedale pumpen) für Bilder/Tests ohne Hardware; --menu controls:keyboard|pad|wheel öffnet die Steuerungsseite.
 // --battle <rivale|auto> [--rule race|chase] [--lead player|rival]: Schnellbattle gegen die KI (Telop, Countdown, Battle-HUD, Ergebnis);

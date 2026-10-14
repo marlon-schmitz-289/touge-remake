@@ -27,7 +27,7 @@ public sealed class Settings
     public int FrameCap { get; set; }
     /// <summary>3D scene resolution in percent of the window (<see cref="RenderScales"/>).</summary>
     public int RenderScale { get; set; } = 100;
-    public static readonly int[] FrameCaps = [0, 30, 60, 120, 144, 240], RenderScales = [50, 67, 75, 85, 100, 125, 150];
+    public static readonly int[] FrameCaps = [0, 30, 60, 120, 144, 240], RenderScales = [10, 15, 25, 50, 67, 75, 85, 100, 125, 150];
 
     // ------------------------------------------------------------ graphics (Options: GRAPHICS; the preset is derived, <see cref="QualityPreset"/>)
     public enum Preset { Low, Medium, High, Ultra, Custom }
